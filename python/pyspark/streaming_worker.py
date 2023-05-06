@@ -77,14 +77,26 @@ def main(infile, outfile):
     sparkConnectSession._client._session_id = sessionId
 
     func, _ = worker.read_command(pickleSer, infile)
-    print("##### func in python process is", func)
+    print("##### func test test in python process is", func)
 
     write_int(9999, outfile)
+    print("##### write data 9999 to server", func)
+
+    outfile.flush()
+
+    def process(dfRefId, batchId):
+        print('##### start processing dfRefId', dfRefId)
+        batchDf = sparkConnectSession.createRefDataFrame(dfRefId)
+        func(batchDf, batchId)
 
     while True:
         dfRefId = utf8_deserializer.loads(infile)
-        print("##### dfRefId is", dfRefId)
-        # TODO: process dfRefId; return finish signal
+        print("##### dfRefId received from python process is", dfRefId)
+        batchId = read_long(infile)
+        print("##### batchId received from python process is", batchId)
+        process(dfRefId, int(batchId))
+        write_int(SpecialLengths.END_OF_MICRO_BATCH, outfile)
+        outfile.flush()
 
 
 if __name__ == "__main__":

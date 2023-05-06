@@ -207,7 +207,7 @@ def local_connect_and_auth(port, auth_secret):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
-            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            # sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
             sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)

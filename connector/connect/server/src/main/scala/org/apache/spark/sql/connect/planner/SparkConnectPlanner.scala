@@ -18,13 +18,13 @@
 // scalastyle:off println
 package org.apache.spark.sql.connect.planner
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.{Base64, UUID}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.io.Source
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{ByteString, Any => ProtoAny}
@@ -32,7 +32,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 
-import org.apache.spark.api.python.{PythonEvalType, PythonUtils, SimplePythonFunction, StreamingPythonRunner}
+import org.apache.spark.api.python.{PythonEvalType, PythonRDD, SimplePythonFunction, StreamingPythonRunner}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
@@ -2306,6 +2306,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
+    /**
     val forEachBatchFunc: (Dataset[_], Long, PythonUDF) => Unit = {
       (ds: Dataset[_], batchId: Long, udf: PythonUDF) => {
         // Cache the dataframe so that it can be retrieved when calling from spark connect
@@ -2382,6 +2383,22 @@ class SparkConnectPlanner(val session: SparkSession) {
         println(s"##### End processing forEachBatch for batchId=$batchId exitCode=$exitCode")
       }
     }
+    */
+
+    val forEachBatchFunc: (Dataset[_], Long, DataOutputStream, DataInputStream) => Unit = {
+      (ds: Dataset[_], batchId: Long, dataOut: DataOutputStream, dataIn: DataInputStream) => {
+        // Cache the dataframe so that it can be retrieved when calling from spark connect
+        val dfRefId = UUID.randomUUID.toString
+        DataFrameMap.dataFrames(dfRefId) = ds
+
+        PythonRDD.writeUTF(dfRefId, dataOut)
+        dataOut.writeLong(batchId)
+        dataOut.flush()
+
+        val res = dataIn.readInt()
+        println(s"##### server for each batch receive finished signal res=$res")
+      }
+    }
 
     if (writeOp.hasForEachBatch) {
       println("##### write stream has ForEachBatch")
@@ -2389,11 +2406,15 @@ class SparkConnectPlanner(val session: SparkSession) {
       val runner = StreamingPythonRunner(forEachBatchUDF.func)
 
       println("##### start runner init")
-      runner.init(sessionId)
+      val (dataOut, dataIn) = runner.init(sessionId)
 
-      // val func = forEachBatchFunc(_, _, forEachBatchUDF)
+      val func = forEachBatchFunc(_, _, dataOut, dataIn)
 
-      // writer.foreachBatch(func)
+      writer.foreachBatch(func)
+
+      // TODO: how/when to terminate the python process
+      // TODO: handle error where foreachBatch throw exception
+      // TODO: start process within daemon case?
     }
 
     val query = writeOp.getPath match {

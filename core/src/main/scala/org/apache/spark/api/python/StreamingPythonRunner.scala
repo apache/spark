@@ -42,7 +42,7 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) {
   private val pythonExec: String = func.pythonExec
   protected val pythonVer: String = func.pythonVer
 
-  def init(sessionId: String): Unit = {
+  def init(sessionId: String): (DataOutputStream, DataInputStream) = {
     // scalastyle:off println
     println(s"##### init python runner for sessionId=$sessionId")
     println(s"##### init python runner pythonExec=$pythonExec")
@@ -94,6 +94,8 @@ private[spark] class StreamingPythonRunner(func: PythonFunction) {
     // scalastyle:off println
     println(s"##### resFromPython = $resFromPython")
     // scalastyle:on println
+
+    (dataOut, dataIn)
   }
 
 }
