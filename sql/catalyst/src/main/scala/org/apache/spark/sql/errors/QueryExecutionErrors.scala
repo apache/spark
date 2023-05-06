@@ -2819,4 +2819,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "location" -> toSQLValue(location.toString, StringType),
         "identifier" -> toSQLId(tableId.nameParts)))
   }
+
+  def nullPointException(errMsg: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_3043",
+      messageParameters = Map("field" -> errMsg)
+    )
+  }
 }
