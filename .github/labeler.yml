@@ -108,8 +108,8 @@ AVRO:
 DSTREAM:
   - "streaming/**/*"
   - "data/streaming/**/*"
-  - "external/kinesis*"
-  - "external/kafka*"
+  - "connector/kinesis*"
+  - "connector/kafka*"
   - "python/pyspark/streaming/**/*"
 GRAPHX:
   - "graphx/**/*"
