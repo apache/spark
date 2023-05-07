@@ -948,6 +948,15 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val UNREGISTER_OUTPUT_THRESHOLD_ON_FETCH_FAILURE =
+    ConfigBuilder("spark.files.fetchFailure.unRegisterOutputThreshold")
+      .doc("Times of FetchFailure received to un-register map outputs on the executor." +
+        " Setting to 0 to disable un-register map outputs.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(t => t >= 0, "Fetch failure unregister output threshold should be >= 0")
+      .createWithDefault(1)
+
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
       .doc("The default capacity for event queues. Spark will try to initialize " +

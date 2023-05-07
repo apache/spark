@@ -4533,6 +4533,40 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
+  Seq((0, 1), (2, 1), (2, 2)).foreach { case (threshold, numFetchFailures) =>
+    test(s"Unregister map output when threshold is $threshold and " +
+      s"num fetch failures is $numFetchFailures") {
+      conf.set(config.UNREGISTER_OUTPUT_THRESHOLD_ON_FETCH_FAILURE, threshold)
+
+      val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+      val shuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+      val execId = "exec1"
+
+      submit(reduceRdd, Array(0, 1, 2))
+      // Map stage completes successfully,
+      // two tasks are run on an executor on hostA and one on an executor on hostB
+      completeShuffleMapStageSuccessfully(0, 0, 3, Seq("hostA", "hostA", "hostB"))
+
+      // Now a fetch failure from the lost executor occurs
+      complete(taskSets(1),
+        (1 to numFetchFailures).map(i => (FetchFailed(BlockManagerId(execId, "hostA", 12345),
+          shuffleId, 0L, 0, 0, "ignored"), null)))
+
+      val removeTimes = if (threshold == 0) {
+        0
+      } else if (numFetchFailures >= threshold) {
+        1
+      } else {
+        0
+      }
+      // Verify that we are not removing the executor,
+      // and that we are only removing the outputs on the host
+      verify(blockManagerMaster, times(removeTimes)).removeExecutor(execId)
+    }
+  }
+
   Seq(true, false).foreach { registerMergeResults =>
     test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely " +
       s"with registerMergeResults is ${registerMergeResults}") {

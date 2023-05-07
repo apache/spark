@@ -206,6 +206,10 @@ private[spark] class DAGScheduler(
    */
   private val shuffleFileLostEpoch = new HashMap[String, Long]
 
+  // Map of (stageId, executorId) -> fetch failure count
+  private val stageIdToFetchFailures = new mutable.HashMap[(Int, String), Int]()
+    .withDefaultValue(0)
+
   private [scheduler] val outputCommitCoordinator = env.outputCommitCoordinator
 
   // A closure serializer that we reuse.
@@ -224,6 +228,13 @@ private[spark] class DAGScheduler(
    */
   private[scheduler] val unRegisterOutputOnHostOnFetchFailure =
     sc.getConf.get(config.UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE)
+
+  /**
+   * Times of FetchFailure received to un-register map outputs on the executor.
+   * Setting to 0 to disable un-register map outputs.
+   */
+  private[scheduler] val unRegisterOutputOnFetchFailureThreshold =
+    sc.getConf.get(config.UNREGISTER_OUTPUT_THRESHOLD_ON_FETCH_FAILURE)
 
   /**
    * Number of consecutive stage attempts allowed before a stage is aborted.
@@ -2083,8 +2094,10 @@ private[spark] class DAGScheduler(
             }
           }
 
-          // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmAddress != null) {
+          Option(bmAddress).foreach(b => stageIdToFetchFailures((stageId, b.executorId)) += 1)
+
+          if (bmAddress != null &&
+            shouldUnregisterOutputOnExecutor(stageId, bmAddress.executorId)) {
             val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
             val isHostDecommissioned = taskScheduler
               .getExecutorDecommissionState(bmAddress.executorId)
@@ -2919,6 +2932,14 @@ private[spark] class DAGScheduler(
     job.listener.taskSucceeded(0, stats)
     cleanupStateForJobAndIndependentStages(job)
     listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+  }
+
+  private def shouldUnregisterOutputOnExecutor(stageId: Int, executorId: String): Boolean = {
+    if (unRegisterOutputOnFetchFailureThreshold == 0) {
+      false
+    } else {
+      stageIdToFetchFailures((stageId, executorId)) >= unRegisterOutputOnFetchFailureThreshold
+    }
   }
 
   def stop(exitCode: Int = 0): Unit = {
