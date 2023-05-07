@@ -23,7 +23,6 @@ import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants.{ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
-import org.apache.spark.internal.config.EXECUTOR_INSTANCES
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -72,7 +71,6 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
         case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size) =>
           val claimName = conf match {
             case c: KubernetesExecutorConf =>
-              checkPVCClaimName(claimNameTemplate)
               claimNameTemplate
                 .replaceAll(PVC_ON_DEMAND,
                   s"${conf.resourceNamePrefix}-exec-${c.executorId}$PVC_POSTFIX-$i")
@@ -121,20 +119,6 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     additionalResources.toSeq
-  }
-
-  private def checkPVCClaimName(claimName: String): Unit = {
-    val executorInstances = conf.get(EXECUTOR_INSTANCES)
-    if (executorInstances.isDefined && executorInstances.get > 1) {
-      // PVC ClaimName should contain OnDemand or SPARK_EXECUTOR_ID
-      // when requiring multiple executors.
-      // Else, spark continues to try to create the executor pod.
-      if (!claimName.contains(PVC_ON_DEMAND) && !claimName.contains(ENV_EXECUTOR_ID)) {
-        throw new IllegalArgumentException(s"PVC ClaimName: $claimName " +
-          s"should contain $PVC_ON_DEMAND or $ENV_EXECUTOR_ID " +
-          "when requiring multiple executors")
-      }
-    }
   }
 }
 
