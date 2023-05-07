@@ -17,7 +17,7 @@
 package sql
 
 type Row interface {
-	Schema() *StructType
+	Schema() (*StructType, error)
 }
 
 type GenericRowWithSchema struct {
@@ -25,6 +25,6 @@ type GenericRowWithSchema struct {
 	schema *StructType
 }
 
-func (r *GenericRowWithSchema) Schema() *StructType {
-	return r.schema
+func (r *GenericRowWithSchema) Schema() (*StructType, error) {
+	return r.schema, nil
 }

@@ -116,3 +116,19 @@ func (s *sparkSessionImpl) executePlan(plan *proto.Plan) (proto.SparkConnectServ
 	}
 	return executePlanClient, nil
 }
+
+func (s *sparkSessionImpl) analyzePlan(plan *proto.Plan) (*proto.AnalyzePlanResponse, error) {
+	request := proto.AnalyzePlanRequest{
+		SessionId: s.sessionId,
+		Analyze: &proto.AnalyzePlanRequest_Schema_{
+			Schema: &proto.AnalyzePlanRequest_Schema{
+				Plan: plan,
+			},
+		},
+	}
+	response, err := s.client.AnalyzePlan(context.TODO(), &request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call AnalyzePlan in session %s: %w", s.sessionId, err)
+	}
+	return response, nil
+}

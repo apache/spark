@@ -29,6 +29,7 @@ import (
 
 type DataFrame interface {
 	Show(numRows int, truncate bool) error
+	Schema() (*StructType, error)
 	Collect() ([]Row, error)
 }
 
@@ -86,21 +87,21 @@ func (df *dataFrameImpl) Show(numRows int, truncate bool) error {
 	return fmt.Errorf("did not get arrow batch in response")
 }
 
-func (df *dataFrameImpl) Collect() ([]Row, error) {
-	plan := &proto.Plan{
-		OpType: &proto.Plan_Root{
-			Root: &proto.Relation{
-				Common: &proto.RelationCommon{
-					PlanId: newPlanId(),
-				},
-				RelType: df.relation.RelType,
-			},
-		},
+func (df *dataFrameImpl) Schema() (*StructType, error) {
+	response, err := df.sparkSession.analyzePlan(df.createPlan())
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze plan: %w", err)
 	}
 
-	responseClient, err := df.sparkSession.executePlan(plan)
+	responseSchema := response.GetSchema().Schema
+	result := convertProtoDataTypeToStructType(responseSchema)
+	return result, nil
+}
+
+func (df *dataFrameImpl) Collect() ([]Row, error) {
+	responseClient, err := df.sparkSession.executePlan(df.createPlan())
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute plan in Collect: %w", err)
+		return nil, fmt.Errorf("failed to execute plan: %w", err)
 	}
 
 	var schema *StructType = nil
@@ -113,13 +114,7 @@ func (df *dataFrameImpl) Collect() ([]Row, error) {
 
 		dataType := response.GetSchema()
 		if dataType != nil {
-			dataTypeStruct := dataType.GetStruct()
-			if dataTypeStruct == nil {
-				continue
-			}
-			schema = &StructType{
-				Fields: convertProtoStructFields(dataTypeStruct.Fields),
-			}
+			schema = convertProtoDataTypeToStructType(dataType)
 			continue
 		}
 
@@ -138,6 +133,19 @@ func (df *dataFrameImpl) Collect() ([]Row, error) {
 	}
 
 	return nil, fmt.Errorf("did not get arrow batch in response")
+}
+
+func (df *dataFrameImpl) createPlan() *proto.Plan {
+	return &proto.Plan{
+		OpType: &proto.Plan_Root{
+			Root: &proto.Relation{
+				Common: &proto.RelationCommon{
+					PlanId: newPlanId(),
+				},
+				RelType: df.relation.RelType,
+			},
+		},
+	}
 }
 
 func showArrowBatch(arrowBatch *proto.ExecutePlanResponse_ArrowBatch) error {
@@ -178,6 +186,16 @@ func showArrowBatchData(data []byte) error {
 	return nil
 }
 
+func convertProtoDataTypeToStructType(input *proto.DataType) *StructType {
+	dataTypeStruct := input.GetStruct()
+	if dataTypeStruct == nil {
+		panic("dataType.GetStruct() is nil")
+	}
+	return &StructType{
+		Fields: convertProtoStructFields(dataTypeStruct.Fields),
+	}
+}
+
 func convertProtoStructFields(input []*proto.DataType_StructField) []StructField {
 	result := make([]StructField, len(input))
 	for i, f := range input {
@@ -189,11 +207,11 @@ func convertProtoStructFields(input []*proto.DataType_StructField) []StructField
 func convertProtoStructField(field *proto.DataType_StructField) StructField {
 	return StructField{
 		Name:     field.Name,
-		DataType: convertProtoDataType(field.DataType),
+		DataType: convertProtoDataTypeToDataType(field.DataType),
 	}
 }
 
-func convertProtoDataType(input *proto.DataType) DataType {
+func convertProtoDataTypeToDataType(input *proto.DataType) DataType {
 	switch v := input.GetKind().(type) {
 	case *proto.DataType_Integer_:
 		return IntegerType{}
