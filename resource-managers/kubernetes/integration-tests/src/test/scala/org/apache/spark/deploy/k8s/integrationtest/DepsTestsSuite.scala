@@ -129,6 +129,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     Eventually.eventually(TIMEOUT, INTERVAL) (kubernetesTestComponents
       .kubernetesClient
       .services()
+      .inNamespace(kubernetesTestComponents.namespace)
       .create(minioService))
 
     // try until the stateful set of a previous test is deleted
@@ -136,6 +137,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .apps()
       .statefulSets()
+      .inNamespace(kubernetesTestComponents.namespace)
       .create(minioStatefulSet))
   }
 
@@ -144,6 +146,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .apps()
       .statefulSets()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(cName)
       .withGracePeriod(0)
       .delete()
@@ -151,6 +154,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .services()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(svcName)
       .withGracePeriod(0)
       .delete()
@@ -281,7 +285,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       depsFile: Option[String] = None,
       env: Map[String, String] = Map.empty[String, String]): Unit = {
     tryDepsTest {
-      setPythonSparkConfProperties(sparkAppConf)
+      sparkAppConf.set("spark.kubernetes.container.image", pyImage)
       runSparkApplicationAndVerifyCompletion(
         appResource = pySparkFiles,
         mainClass = "",
@@ -368,10 +372,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .set("spark.jars.packages", packages)
       .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
-  }
-
-  private def setPythonSparkConfProperties(conf: SparkAppConf): Unit = {
-    sparkAppConf.set("spark.kubernetes.container.image", pyImage)
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {

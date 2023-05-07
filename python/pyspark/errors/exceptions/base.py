@@ -126,6 +126,12 @@ class ArithmeticException(PySparkException):
     """
 
 
+class UnsupportedOperationException(PySparkException):
+    """
+    Unsupported operation exception thrown from Spark with an error class.
+    """
+
+
 class ArrayIndexOutOfBoundsException(PySparkException):
     """
     Array index out of bounds exception thrown from Spark with an error class.
