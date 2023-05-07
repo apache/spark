@@ -30,8 +30,11 @@ import org.apache.spark.sql.util.ArrowUtils
 
 object ArrowWriter {
 
-  def create(schema: StructType, timeZoneId: String): ArrowWriter = {
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+  def create(
+      schema: StructType,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean = true): ArrowWriter = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames)
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     create(root)
   }

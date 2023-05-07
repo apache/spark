@@ -421,11 +421,26 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "groupIndex" -> "1"
       )
     )
-    checkExceptionInExpression[IllegalArgumentException](
-      expr, row11, "The specified group index cannot be less than zero")
-    checkExceptionInExpression[IllegalArgumentException](
-      expr, row12, "The specified group index cannot be less than zero")
-
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row11,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "2",
+        "groupIndex" -> "-1"
+      )
+    )
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row12,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "0",
+        "groupIndex" -> "-1"
+      )
+    )
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       RegExpExtract(Literal("\"quote"), Literal("\"quote"), Literal(1)) :: Nil)
@@ -499,10 +514,26 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "groupIndex" -> "1"
       )
     )
-    checkExceptionInExpression[IllegalArgumentException](
-      expr, row12, "The specified group index cannot be less than zero")
-    checkExceptionInExpression[IllegalArgumentException](
-      expr, row13, "The specified group index cannot be less than zero")
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row12,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract_all`",
+        "groupCount" -> "2",
+        "groupIndex" -> "-1"
+      )
+    )
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row13,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract_all`",
+        "groupCount" -> "0",
+        "groupIndex" -> "-1"
+      )
+    )
   }
 
   test("SPLIT") {

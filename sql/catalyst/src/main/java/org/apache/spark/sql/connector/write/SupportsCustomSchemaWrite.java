@@ -15,15 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.connector.write;
+
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.StructType;
 
 /**
- * A utility that holds constants for handling deltas of rows.
+ * Trait for tables that support custom schemas for write operations including INSERT INTO commands
+ * whose target table columns have explicit or implicit default values.
+ *
+ * @since 3.4.1
  */
-object RowDeltaUtils {
-  final val OPERATION_COLUMN: String = "__row_operation"
-  final val DELETE_OPERATION: Int = 1
-  final val UPDATE_OPERATION: Int = 2
-  final val INSERT_OPERATION: Int = 3
-  final val ORIGINAL_ROW_ID_VALUE_PREFIX: String = "__original_row_id_"
+@Evolving
+public interface SupportsCustomSchemaWrite {
+    /**
+     * Represents a table with a custom schema to use for resolving DEFAULT column references when
+     * inserting into the table. For example, this can be useful for excluding hidden pseudocolumns.
+     *
+     * @return the new schema to use for this process.
+     */
+    StructType customSchemaForInserts();
 }

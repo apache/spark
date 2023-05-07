@@ -3841,7 +3841,8 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1168",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "sqlState" : "21S01",
   "messageParameters" : {
     "insertedColumns" : "5",
     "staticPartCols" : "0",
