@@ -19,12 +19,13 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/apache/spark/go/v_3_4/generated/proto"
+	"log"
+	"time"
+
+	"github.com/apache/spark/go/v_3_4/pkg/generated/proto"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"log"
-	"time"
 )
 
 var (

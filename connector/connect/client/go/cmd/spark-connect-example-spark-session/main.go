@@ -18,8 +18,9 @@ package main
 
 import (
 	"flag"
-	"github.com/apache/spark/go/v_3_4/spark/sql"
 	"log"
+
+	"github.com/apache/spark/go/v_3_4/pkg/spark/sql"
 )
 
 var (
@@ -62,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed: %s", err.Error())
 	}
-	
+
 	for _, f := range schema.Fields {
 		log.Printf("Field in row: %s - %s", f.Name, f.DataType.TypeName())
 	}
