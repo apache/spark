@@ -3255,9 +3255,10 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  private def testNotSupportedV2Command(sqlCommand: String,
-                                        sqlParams: String,
-                                        expectedArgument: Option[String] = None): Unit = {
+  private def testNotSupportedV2Command(
+      sqlCommand: String,
+      sqlParams: String,
+      expectedArgument: Option[String] = None): Unit = {
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"$sqlCommand $sqlParams")
