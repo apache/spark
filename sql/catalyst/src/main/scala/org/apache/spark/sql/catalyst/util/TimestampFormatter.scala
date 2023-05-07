@@ -369,6 +369,19 @@ class LegacyFastTimestampFormatter(
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
     }
+    extractMicros(cal)
+  }
+
+  override def parseOptional(s: String): Option[Long] = {
+    cal.clear() // Clear the calendar because it can be re-used many times
+    if (fastDateFormat.parse(s, new ParsePosition(0), cal)) {
+      Some(extractMicros(cal))
+    } else {
+      None
+    }
+  }
+
+  private def extractMicros(cal: MicrosCalendar): Long = {
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
     val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
@@ -411,6 +424,15 @@ class LegacySimpleTimestampFormatter(
 
   override def parse(s: String): Long = {
     fromJavaTimestamp(new Timestamp(sdf.parse(s).getTime))
+  }
+
+  override def parseOptional(s: String): Option[Long] = {
+    val date = sdf.parse(s, new ParsePosition(0))
+    if (date == null) {
+      None
+    } else {
+      Some(fromJavaTimestamp(new Timestamp(date.getTime)))
+    }
   }
 
   override def format(us: Long): String = {
