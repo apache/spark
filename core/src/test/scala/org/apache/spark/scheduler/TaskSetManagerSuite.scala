@@ -2212,6 +2212,27 @@ class TaskSetManagerSuite
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
+  test("non-transient errors lead to task set abortion") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    assert(sched.taskSetsFailed.isEmpty)
+
+    val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(
+      offerResult.isDefined,
+      "Expect resource offer on iteration 0 to return a task"
+    )
+    assert(offerResult.get.index === 0)
+    val reason = new ExceptionFailure(
+      new SparkException("DIVIDE_BY_ZERO", Map("config" -> "foo", "a" -> "bar"), null),
+      null
+    )
+    manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
+    assert(sched.taskSetsFailed.contains(taskSet.id))
+  }
+
   test("SPARK-30359: don't clean executorsPendingToRemove " +
     "at the beginning of CoarseGrainedSchedulerBackend.reset") {
     val conf = new SparkConf()
