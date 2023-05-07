@@ -1043,6 +1043,11 @@
           "<value>."
         ]
       },
+      "REGEX_GROUP_INDEX" : {
+        "message" : [
+          "Expects group index between 0 and <groupCount>, but got <groupIndex>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -2993,11 +2998,6 @@
       "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1168" : {
-    "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1169" : {
     "message" : [
       "Requested partitioning does not match the table <tableName>:",
@@ -3771,21 +3771,6 @@
       "Type <dataType> does not support ordered operations."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2006" : {
-    "message" : [
-      "The specified group index cannot be less than zero."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2007" : {
-    "message" : [
-      "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2010" : {
-    "message" : [
-      "Window Functions do not support merging."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>."
@@ -3794,11 +3779,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2014" : {
-    "message" : [
-      "<funcName> is not matched at addNewFunction."
     ]
   },
   "_LEGACY_ERROR_TEMP_2015" : {
