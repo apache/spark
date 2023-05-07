@@ -17,9 +17,14 @@
 package sql
 
 type Row interface {
+	Schema() *StructType
 }
 
 type GenericRowWithSchema struct {
 	Values []any
-	Schema *StructType
+	schema *StructType
+}
+
+func (r *GenericRowWithSchema) Schema() *StructType {
+	return r.schema
 }

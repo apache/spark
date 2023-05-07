@@ -48,6 +48,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed: %s", err.Error())
 	}
+	schema := rows[0].Schema()
+	for _, f := range schema.Fields {
+		log.Printf("Field: %s - %s", f.Name, f.DataType.TypeName())
+	}
 	for _, row := range rows {
 		log.Printf("Row: %v", row)
 	}

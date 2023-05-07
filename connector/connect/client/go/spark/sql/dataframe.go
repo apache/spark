@@ -103,19 +103,38 @@ func (df *dataFrameImpl) Collect() ([]Row, error) {
 		return nil, fmt.Errorf("failed to execute plan in Collect: %w", err)
 	}
 
+	var schema *StructType = nil
+
 	for {
 		response, err := responseClient.Recv()
 		if err != nil {
 			return nil, fmt.Errorf("failed to receive plan execution response: %w", err)
 		}
+
+		dataType := response.GetSchema()
+		if dataType != nil {
+			dataTypeStruct := dataType.GetStruct()
+			if dataTypeStruct == nil {
+				continue
+			}
+			schema = &StructType{
+				Fields: convertProtoStructFields(dataTypeStruct.Fields),
+			}
+			continue
+		}
+
 		arrowBatch := response.GetArrowBatch()
 		if arrowBatch == nil {
 			continue
 		}
 
+		row := GenericRowWithSchema{
+			schema: schema,
+		}
+
 		// TODO convert arrowBatch to []Row
 
-		return nil, nil
+		return []Row{&row}, nil
 	}
 
 	return nil, fmt.Errorf("did not get arrow batch in response")
@@ -157,4 +176,32 @@ func showArrowBatchData(data []byte) error {
 	}
 
 	return nil
+}
+
+func convertProtoStructFields(input []*proto.DataType_StructField) []StructField {
+	result := make([]StructField, len(input))
+	for i, f := range input {
+		result[i] = convertProtoStructField(f)
+	}
+	return result
+}
+
+func convertProtoStructField(field *proto.DataType_StructField) StructField {
+	return StructField{
+		Name:     field.Name,
+		DataType: convertProtoDataType(field.DataType),
+	}
+}
+
+func convertProtoDataType(input *proto.DataType) DataType {
+	switch v := input.GetKind().(type) {
+	case *proto.DataType_Integer_:
+		return IntegerType{}
+	case *proto.DataType_String_:
+		return StringType{}
+	default:
+		return UnsupportedType{
+			TypeInfo: v,
+		}
+	}
 }

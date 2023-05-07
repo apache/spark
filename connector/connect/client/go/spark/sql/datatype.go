@@ -16,13 +16,48 @@
 
 package sql
 
-type StructField struct {
-	Name     string
-	DataType DataType
-	Nullable bool // default should be true
+import (
+	"reflect"
+	"strings"
+)
+
+type DataType interface {
+	TypeName() string
 }
 
-type StructType struct {
-	TypeName string
-	Fields   []StructField
+type IntegerType struct {
+}
+
+func (t IntegerType) TypeName() string {
+	return getDataTypeName(t)
+}
+
+type StringType struct {
+}
+
+func (t StringType) TypeName() string {
+	return getDataTypeName(t)
+}
+
+type UnsupportedType struct {
+	TypeInfo any
+}
+
+func (t UnsupportedType) TypeName() string {
+	return getDataTypeName(t)
+}
+
+func getDataTypeName(dataType DataType) string {
+	t := reflect.TypeOf(dataType)
+	if t == nil {
+		return "(nil)"
+	}
+	var name string
+	if t.Kind() == reflect.Ptr {
+		name = t.Elem().Name()
+	} else {
+		name = t.Name()
+	}
+	name = strings.TrimSuffix(name, "Type")
+	return name
 }
