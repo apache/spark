@@ -25,7 +25,7 @@ import (
 	"github.com/apache/arrow/go/v12/arrow"
 	"github.com/apache/arrow/go/v12/arrow/array"
 	"github.com/apache/arrow/go/v12/arrow/ipc"
-	"github.com/apache/spark/go/v_3_4/pkg/generated/proto"
+	proto "github.com/apache/spark/go/v_3_4/internal/generated"
 )
 
 type DataFrame interface {

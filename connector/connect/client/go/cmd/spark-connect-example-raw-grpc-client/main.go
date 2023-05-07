@@ -22,7 +22,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/apache/spark/go/v_3_4/pkg/generated/proto"
+	proto "github.com/apache/spark/go/v_3_4/internal/generated"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

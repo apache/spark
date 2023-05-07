@@ -26,6 +26,7 @@ import "spark/connect/catalog.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "github.com/apache/spark/go/v_3_4/internal/generated";
 
 // The main [[Relation]] type. Fundamentally, a relation is a typed container
 // that has exactly one explicit relation type set.

@@ -22,13 +22,27 @@ SHELL = bash
 
 BINARIES				  := cmd/spark-connect-example-raw-grpc-client/spark-connect-example-raw-grpc-client cmd/spark-connect-example-spark-session/spark-connect-example-spark-session
 
+# Define the location of SPARK_HOME because we need that to depend on the build paths
+MAKEFILE_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+PROTO_SRC = $(shell find $(MAKEFILE_DIR)/../../common/src/main/protobuf -type f -name *.proto )
+REGEN_SCRIPT = $(MAKEFILE_DIR)/../../../../dev/connect-gen-protos.sh
+
+
 OK := $(shell tput setaf 6; echo ' [OK]'; tput sgr0;)
 
-all: build $(BINARIES)
+all: build
 
-build: $(BUILD_OUTPUT)
+build: $(BUILD_OUTPUT) $(BINARIES) protoc
 
-$(BUILD_OUTPUT): $(GOFILES_BUILD)
+# Build all the protocol buffers, this is a simple rule to generate the code.
+protoc: $(PROTO_SRC)
+	@echo -n ">> BUILD, output = $@"
+	@$(REGEN_SCRIPT)
+	@printf '%s\n' '$(OK)'
+
+
+$(BUILD_OUTPUT): $(GOFILES_BUILD) protoc
 	@echo -n ">> BUILD, output = $@"
 	@$(GO) build -o $@ $(BUILDFLAGS)
 	@printf '%s\n' '$(OK)'
