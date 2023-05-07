@@ -235,23 +235,6 @@
     ],
     "sqlState" : "22018"
   },
-  "INSUFFICIENT_TABLE_PROPERTY": {
-    "message" : [
-      "Can't find table property:"
-    ],
-    "subClass" : {
-      "MISSING_KEY" : {
-        "message" : [
-          "<key>."
-        ]
-      },
-      "MISSING_KEY_PART": {
-        "message" : [
-          "<key>, <totalAmountOfParts> parts are expected..."
-        ]
-      }
-    }
-  },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -794,6 +777,23 @@
       "Cannot find the index <indexName> on table <tableName>."
     ],
     "sqlState" : "42704"
+  },
+  "INSUFFICIENT_TABLE_PROPERTY" : {
+    "message" : [
+      "Can't find table property:"
+    ],
+    "subClass" : {
+      "MISSING_KEY" : {
+        "message" : [
+          "<key>."
+        ]
+      },
+      "MISSING_KEY_PART" : {
+        "message" : [
+          "<key>, <totalAmountOfParts> parts are expected..."
+        ]
+      }
+    }
   },
   "INTERNAL_ERROR" : {
     "message" : [
