@@ -25,7 +25,7 @@ BINARIES				  := cmd/spark-connect-example-raw-grpc-client/spark-connect-example
 # Define the location of SPARK_HOME because we need that to depend on the build paths
 MAKEFILE_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-PROTO_SRC = $(shell find $(MAKEFILE_DIR)/../../common/src/main/protobuf -type f -name *.proto )
+PROTO_SRC = $(shell find internal/generated -type f -name *.proto )
 REGEN_SCRIPT = $(MAKEFILE_DIR)/../../../../dev/connect-gen-protos.sh
 
 
@@ -35,13 +35,15 @@ all: build
 
 build: $(BUILD_OUTPUT) $(BINARIES)
 
-protoc:
+internal/generated.out:
 	@echo -n ">> BUILD, output = $@"
 	@$(REGEN_SCRIPT)
+	@touch internal/generated.out
 	@printf '%s\n' '$(OK)'
 
+$(GOFILES_BUILD): internal/generated.out
 
-$(BUILD_OUTPUT): $(GOFILES_BUILD) protoc
+$(BUILD_OUTPUT): $(GOFILES_BUILD)
 	@echo -n ">> BUILD, output = $@"
 	@$(GO) build -o $@ $(BUILDFLAGS)
 	@printf '%s\n' '$(OK)'
@@ -83,6 +85,8 @@ cmd/spark-connect-example-spark-session/spark-connect-example-spark-session: $(G
 clean:
 	@echo -n ">> CLEAN"
 	@$(GO) clean -i ./...
+	@rm -rf ./internal/generated
+	@rm  -f ./internal/generated.out
 	@rm -f ./coverage-all.html
 	@rm -f ./coverage-all.out
 	@rm -f ./coverage.out
