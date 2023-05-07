@@ -1977,7 +1977,7 @@ class DatasetSuite extends QueryTest
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
     val e = intercept[RuntimeException](ds.as[(Int, Int)].collect())
-    assert(e.getCause.isInstanceOf[NullPointerException])
+    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
