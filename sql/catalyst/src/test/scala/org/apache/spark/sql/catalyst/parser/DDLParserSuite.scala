@@ -23,7 +23,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
@@ -66,7 +66,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "':'", "hint" -> ": extra input ':'"))
+      parameters = Map("error" -> "':'", "hint" -> ""))
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -1464,6 +1464,19 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql8,
         start = 0,
         stop = 52))
+
+    val sql9 = "ALTER TABLE table_name REPLACE COLUMNS (a STRING COMMENT 'x' COMMENT 'y')"
+    checkError(
+      exception = parseException(sql9),
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      parameters = Map(
+        "type" -> "REPLACE",
+        "columnName" -> "a",
+        "optionName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = sql9,
+        start = 0,
+        stop = 72))
   }
 
   test("alter view: rename view") {
@@ -2690,7 +2703,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\" NOT NULL)")),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "NOT NULL"),
@@ -2700,7 +2713,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\")")),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "DEFAULT"),
@@ -2710,11 +2723,126 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\")")),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"", start = 27, stop = 71))
+  }
+
+  test("SPARK-41290: implement parser support for GENERATED ALWAYS AS columns in tables") {
+    val schemaWithGeneratedColumn = new StructType()
+      .add("a", IntegerType, true)
+      .add("b", IntegerType, false,
+        new MetadataBuilder()
+          .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "a+1")
+          .build())
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
+      CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    comparePlans(parsePlan(
+      "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
+      ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    // Two generation expressions
+    checkError(
+      exception = parseException("CREATE TABLE my_tab(a INT, " +
+          "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)) USING PARQUET"),
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      parameters = Map("columnName" -> "b", "optionName" -> "GENERATED ALWAYS AS"),
+      context = ExpectedContext(
+        fragment = "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)",
+        start = 27,
+        stop = 87
+      )
+    )
+    // Empty expression
+    checkError(
+      exception = parseException(
+        "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS ()) USING PARQUET"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "')'", "hint" -> "")
+    )
+    // No parenthesis
+    checkError(
+      exception = parseException(
+        "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS a + 1) USING PARQUET"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'a'", "hint" -> ": missing '('")
+    )
+  }
+
+  test("SPARK-42681: Relax ordering constraint for ALTER TABLE ADD COLUMN options") {
+    // Positive test cases to verify that column definition options could be applied in any order.
+    val expectedPlan = AddColumns(
+      UnresolvedTable(Seq("my_tab"), "ALTER TABLE ... ADD COLUMN", None),
+      Seq(
+        QualifiedColType(
+          path = None,
+          colName = "x",
+          dataType = StringType,
+          nullable = false,
+          comment = Some("a"),
+          position = Some(UnresolvedFieldPosition(first())),
+          default = Some("'abc'")
+        )
+      )
+    )
+    Seq("NOT NULL", "COMMENT \"a\"", "FIRST", "DEFAULT 'abc'").permutations
+      .map(_.mkString(" "))
+      .foreach { element =>
+        parseCompare(s"ALTER TABLE my_tab ADD COLUMN x STRING $element", expectedPlan)
+      }
+
+    // These are negative test cases exercising error cases.
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING NOT NULL DEFAULT \"abc\" NOT NULL")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "NOT NULL"),
+      context = ExpectedContext(
+        fragment = "b STRING NOT NULL DEFAULT \"abc\" NOT NULL",
+        start = 30,
+        stop = 69
+      )
+    )
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"",
+        start = 30,
+        stop = 74
+      )
+    )
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"",
+        start = 30,
+        stop = 74
+      )
+    )
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING FIRST COMMENT \"abc\" AFTER y")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "FIRST|AFTER"),
+      context =
+        ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)
+    )
   }
 }

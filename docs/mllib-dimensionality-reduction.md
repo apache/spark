@@ -76,6 +76,16 @@ passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
 <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [`SingularValueDecomposition` Python docs](api/python/reference/api/pyspark.mllib.linalg.distributed.SingularValueDecomposition.html) for details on the API.
+
+{% include_example python/mllib/svd_example.py %}
+
+The same code applies to `IndexedRowMatrix` if `U` is defined as an
+`IndexedRowMatrix`.
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`SingularValueDecomposition` Scala docs](api/scala/org/apache/spark/mllib/linalg/SingularValueDecomposition.html) for details on the API.
 
@@ -92,14 +102,7 @@ Refer to the [`SingularValueDecomposition` Java docs](api/java/org/apache/spark/
 The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
 </div>
-<div data-lang="python" markdown="1">
-Refer to the [`SingularValueDecomposition` Python docs](api/python/reference/api/pyspark.mllib.linalg.distributed.SingularValueDecomposition.html) for details on the API.
 
-{% include_example python/mllib/svd_example.py %}
-
-The same code applies to `IndexedRowMatrix` if `U` is defined as an
-`IndexedRowMatrix`.
-</div>
 </div>
 
 ## Principal component analysis (PCA)
@@ -112,6 +115,18 @@ the rotation matrix are called principal components. PCA is used widely in dimen
 `spark.mllib` supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+The following code demonstrates how to compute principal components on a `RowMatrix`
+and use them to project the vectors into a low-dimensional space.
+
+Refer to the [`RowMatrix` Python docs](api/python/reference/api/pyspark.mllib.linalg.distributed.RowMatrix.html) for details on the API.
+
+{% include_example python/mllib/pca_rowmatrix_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 The following code demonstrates how to compute principal components on a `RowMatrix`
@@ -141,14 +156,4 @@ Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/dist
 
 </div>
 
-<div data-lang="python" markdown="1">
-
-The following code demonstrates how to compute principal components on a `RowMatrix`
-and use them to project the vectors into a low-dimensional space.
-
-Refer to the [`RowMatrix` Python docs](api/python/reference/api/pyspark.mllib.linalg.distributed.RowMatrix.html) for details on the API.
-
-{% include_example python/mllib/pca_rowmatrix_example.py %}
-
-</div>
 </div>

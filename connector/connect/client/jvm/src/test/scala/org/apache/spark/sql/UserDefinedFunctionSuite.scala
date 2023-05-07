@@ -19,16 +19,14 @@ package org.apache.spark.sql
 import scala.reflect.runtime.universe.typeTag
 
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.UdfPacket
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.util.Utils
 
-class UserDefinedFunctionSuite
-    extends AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterEach {
+class UserDefinedFunctionSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("udf and encoder serialization") {
     def func(x: Int): Int = x + 1

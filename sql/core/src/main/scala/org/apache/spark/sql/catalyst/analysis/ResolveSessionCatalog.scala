@@ -53,9 +53,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         if (c.name.length > 1) {
-          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-            Seq(ident.catalog.get, ident.database.get, ident.table),
-            "ADD COLUMN with qualified column")
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            ident, "ADD COLUMN with qualified column")
         }
         if (!c.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
@@ -64,24 +63,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
 
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        Seq(ident.catalog.get, ident.database.get, ident.table),
-        "REPLACE COLUMNS")
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
     case a @ AlterColumn(ResolvedTable(catalog, ident, table: V1Table, _), _, _, _, _, _, _)
         if isSessionCatalog(catalog) =>
       if (a.column.name.length > 1) {
-        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          Seq(catalog.name, ident.namespace()(0), ident.name),
-          "ALTER COLUMN with qualified column")
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          catalog, ident, "ALTER COLUMN with qualified column")
       }
       if (a.nullable.isDefined) {
         throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
       }
       if (a.position.isDefined) {
-        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          Seq(catalog.name, ident.namespace()(0), ident.name),
-          "ALTER COLUMN ... FIRST | ALTER")
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          catalog, ident, "ALTER COLUMN ... FIRST | ALTER")
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
@@ -105,14 +100,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
 
     case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        Seq(ident.catalog.get, ident.database.get, ident.table),
-        "RENAME COLUMN")
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "RENAME COLUMN")
 
     case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
-      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-        Seq(ident.catalog.get, ident.database.get, ident.table),
-        "DROP COLUMN")
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP COLUMN")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident, props, isView = false)
@@ -204,9 +195,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          Seq(ident.catalog.get, ident.database.get, ident.table),
-          "REPLACE TABLE")
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          ident, "REPLACE TABLE")
       } else {
         c
       }
@@ -214,9 +204,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-          Seq(ident.catalog.get, ident.database.get, ident.table),
-          "REPLACE TABLE AS SELECT")
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          ident, "REPLACE TABLE AS SELECT")
       } else {
         c
       }

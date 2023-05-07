@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+import com.google.protobuf.TypeRegistry
+import com.google.protobuf.util.JsonFormat
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
@@ -36,10 +38,14 @@ import org.apache.spark.unsafe.types.UTF8String
 private[sql] class ProtobufDeserializer(
     rootDescriptor: Descriptor,
     rootCatalystType: DataType,
-    filters: StructFilters) {
+    filters: StructFilters = new NoopFilters,
+    typeRegistry: TypeRegistry = TypeRegistry.getEmptyTypeRegistry,
+    emitDefaultValues: Boolean = false) {
 
   def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
-    this(rootDescriptor, rootCatalystType, new NoopFilters)
+    this(
+      rootDescriptor, rootCatalystType, new NoopFilters, TypeRegistry.getEmptyTypeRegistry, false
+    )
   }
 
   private val converter: Any => Option[InternalRow] =
@@ -69,6 +75,14 @@ private[sql] class ProtobufDeserializer(
     }
 
   def deserialize(data: Message): Option[InternalRow] = converter(data)
+
+  // JsonFormatter used to convert Any fields (if the option is enabled).
+  // This keeps original field names and does not include any extra whitespace in JSON.
+  // If the runtime type for Any field is not found in the registry, it throws an exception.
+  private val jsonPrinter = JsonFormat.printer
+    .omittingInsignificantWhitespace()
+    .preservingProtoFieldNames()
+    .usingTypeRegistry(typeRegistry)
 
   private def newArrayWriter(
       protoField: FieldDescriptor,
@@ -157,9 +171,6 @@ private[sql] class ProtobufDeserializer(
     (protoType.getJavaType, catalystType) match {
 
       case (null, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
-      // It is possible that this will result in data being dropped, This is intentional,
-      // to catch recursive fields and drop them as necessary.
-      case (MESSAGE, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
 
       // TODO: we can avoid boxing if future version of Protobuf provide primitive accessors.
       case (BOOLEAN, BooleanType) =>
@@ -227,6 +238,13 @@ private[sql] class ProtobufDeserializer(
           val micros = DateTimeUtils.millisToMicros(seconds * 1000)
           updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
 
+      case (MESSAGE, StringType)
+          if protoType.getMessageType.getFullName == "google.protobuf.Any" =>
+        (updater, ordinal, value) =>
+          // Convert 'Any' protobuf message to JSON string.
+          val jsonStr = jsonPrinter.print(value.asInstanceOf[DynamicMessage])
+          updater.set(ordinal, UTF8String.fromString(jsonStr))
+
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(
           protoType.getMessageType,
@@ -291,14 +309,37 @@ private[sql] class ProtobufDeserializer(
       var skipRow = false
       while (i < validFieldIndexes.length && !skipRow) {
         val field = validFieldIndexes(i)
-        val value = if (field.isRepeated || field.hasDefaultValue || record.hasField(field)) {
-          record.getField(field)
-        } else null
+        val value = getFieldValue(record, field)
         fieldWriters(i)(fieldUpdater, value)
         skipRow = applyFilters(i)
         i += 1
       }
       skipRow
+    }
+  }
+
+  private def getFieldValue(record: DynamicMessage, field: FieldDescriptor): AnyRef = {
+    // We return a value if one of:
+    // - the field is repeated
+    // - the field is explicitly present in the serialized proto
+    // - the field is proto2 with a default
+    // - emitDefaultValues is set, and the field type is one where default values
+    //   are not present in the wire format. This includes singular proto3 scalars,
+    //   but not messages / oneof / proto2.
+    //   See [[ProtobufOptions]] and https://protobuf.dev/programming-guides/field_presence
+    //   for more information.
+    //
+    // Repeated fields have to be treated separately as they cannot have `hasField`
+    // called on them.
+    if (
+      field.isRepeated
+        || record.hasField(field)
+        || field.hasDefaultValue
+        || (!field.hasPresence && this.emitDefaultValues)
+    ) {
+      record.getField(field)
+    } else {
+      null
     }
   }
 

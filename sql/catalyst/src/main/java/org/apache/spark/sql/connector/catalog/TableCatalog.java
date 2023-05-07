@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Catalog methods for working with Tables.
@@ -77,6 +79,11 @@ public interface TableCatalog extends CatalogPlugin {
    * A prefix used to pass OPTIONS in table properties
    */
   String OPTION_PREFIX = "option.";
+
+  /**
+   * @return the set of capabilities for this TableCatalog
+   */
+  default Set<TableCatalogCapability> capabilities() { return Collections.emptySet(); }
 
   /**
    * List the tables in a namespace from the catalog.

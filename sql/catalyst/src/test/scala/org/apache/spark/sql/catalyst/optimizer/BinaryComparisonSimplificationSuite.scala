@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest {
 
@@ -217,5 +217,15 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     checkCondition(boolRelation, TrueLiteral <=> And($"a", $"b"), TrueLiteral <=> And($"a", $"b"))
     checkCondition(boolRelation, And($"a", $"b") <=> FalseLiteral, And($"a", $"b") <=> FalseLiteral)
     checkCondition(boolRelation, FalseLiteral <=> And($"a", $"b"), FalseLiteral <=> And($"a", $"b"))
+  }
+
+  test("Simplify binary comparison when literal is null") {
+    val nullLit = Literal.create(null, IntegerType)
+    Seq($"a" > nullLit, $"a" >= nullLit, $"a" === nullLit, $"a" < nullLit, $"a" <= nullLit)
+      .foreach { be =>
+        checkCondition(nullableRelation, be, Literal.create(null, BooleanType) && $"a".isNotNull)
+      }
+
+    checkCondition(nullableRelation, $"a" <=> nullLit, $"a".isNull)
   }
 }

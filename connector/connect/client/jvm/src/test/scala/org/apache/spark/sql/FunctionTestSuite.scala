@@ -16,9 +16,12 @@
  */
 package org.apache.spark.sql
 
-import org.scalatest.funsuite.{AnyFunSuite => ConnectFunSuite} // scalastyle:ignore funsuite
+import java.util.Collections
 
+import org.apache.spark.sql.avro.{functions => avroFn}
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Tests for client local function behavior.
@@ -37,6 +40,10 @@ class FunctionTestSuite extends ConnectFunSuite {
   private val a = col("a")
   private val b = col("b")
   private val c = col("c")
+
+  private val schema = new StructType()
+    .add("key", "long")
+    .add("value", "string")
 
   testEquals("col/column", a, column("a"))
   testEquals("asc/asc_nulls_first", asc("a"), asc_nulls_first("a"))
@@ -149,6 +156,96 @@ class FunctionTestSuite extends ConnectFunSuite {
   testEquals("tanh", tanh("a"), tanh(a))
   testEquals("degrees", toDegrees(a), toDegrees("a"), degrees(a), degrees("a"))
   testEquals("radians", toRadians(a), toRadians("a"), radians(a), radians("a"))
+  testEquals(
+    "regexp_replace",
+    regexp_replace(a, lit("foo"), lit("bar")),
+    regexp_replace(a, "foo", "bar"))
+  testEquals("add_months", add_months(a, lit(1)), add_months(a, 1))
+  testEquals("date_add", date_add(a, lit(2)), date_add(a, 2))
+  testEquals("date_sub", date_sub(a, lit(2)), date_sub(a, 2))
+  testEquals("next_day", next_day(a, lit("Mon")), next_day(a, lit("Mon")))
+  testEquals("unix_timestamp", unix_timestamp(), unix_timestamp(current_timestamp()))
+  testEquals(
+    "from_utc_timestamp",
+    from_utc_timestamp(a, "GMT"),
+    from_utc_timestamp(a, lit("GMT")))
+  testEquals("to_utc_timestamp", to_utc_timestamp(a, "GMT"), to_utc_timestamp(a, lit("GMT")))
+  testEquals(
+    "window",
+    window(a, "10 seconds", "10 seconds", "0 second"),
+    window(a, "10 seconds", "10 seconds"),
+    window(a, "10 seconds"))
+  testEquals("session_window", session_window(a, "1 second"), session_window(a, lit("1 second")))
+  testEquals("slice", slice(a, 1, 2), slice(a, lit(1), lit(2)))
+  testEquals("bucket", bucket(lit(3), a), bucket(3, a))
+  testEquals(
+    "lag",
+    lag(a, 1),
+    lag("a", 1),
+    lag(a, 1, null),
+    lag("a", 1, null),
+    lag(a, 1, null, false))
+  testEquals(
+    "lead",
+    lead(a, 2),
+    lead("a", 2),
+    lead(a, 2, null),
+    lead("a", 2, null),
+    lead(a, 2, null, false))
+  testEquals(
+    "aggregate",
+    aggregate(a, lit(0), (l, r) => l + r),
+    aggregate(a, lit(0), (l, r) => l + r, id => id))
+  testEquals(
+    "from_json",
+    from_json(a, schema.asInstanceOf[DataType]),
+    from_json(a, schema),
+    from_json(a, lit(schema.json)),
+    from_json(a, schema.json, Map.empty[String, String]),
+    from_json(a, schema.json, Collections.emptyMap[String, String]),
+    from_json(a, schema.asInstanceOf[DataType], Map.empty[String, String]),
+    from_json(a, schema.asInstanceOf[DataType], Collections.emptyMap[String, String]),
+    from_json(a, schema, Map.empty[String, String]),
+    from_json(a, schema, Collections.emptyMap[String, String]),
+    from_json(a, lit(schema.json), Collections.emptyMap[String, String]))
+  testEquals("schema_of_json", schema_of_json(lit("x,y")), schema_of_json("x,y"))
+  testEquals(
+    "to_json",
+    to_json(a),
+    to_json(a, Collections.emptyMap[String, String]),
+    to_json(a, Map.empty[String, String]))
+  testEquals("sort_array", sort_array(a), sort_array(a, asc = true))
+  testEquals("sequence", sequence(lit(1), lit(10)), sequence(lit(1), lit(10), lit(1L)))
+  testEquals(
+    "from_csv",
+    from_csv(a, lit(schema.toDDL), Collections.emptyMap[String, String]),
+    from_csv(a, schema, Map.empty[String, String]))
+  testEquals(
+    "schema_of_csv",
+    schema_of_csv(lit("x,y")),
+    schema_of_csv("x,y"),
+    schema_of_csv(lit("x,y"), Collections.emptyMap()))
+  testEquals("to_csv", to_csv(a), to_csv(a, Collections.emptyMap[String, String]))
+  testEquals(
+    "from_avro",
+    avroFn.from_avro(a, """{"type": "int", "name": "id"}"""),
+    avroFn.from_avro(
+      a,
+      """{"type": "int", "name": "id"}""",
+      Collections.emptyMap[String, String]))
+
+  test("assert_true no message") {
+    val e = assert_true(a).expr
+    assert(e.hasUnresolvedFunction)
+    val fn = e.getUnresolvedFunction
+    assert(fn.getFunctionName == "assert_true")
+    assert(fn.getArgumentsCount == 1)
+    assert(fn.getArguments(0) == a.expr)
+  }
+
+  test("json_tuple zero args") {
+    intercept[IllegalArgumentException](json_tuple(a))
+  }
 
   test("rand no seed") {
     val e = rand().expr

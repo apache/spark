@@ -398,8 +398,15 @@ object ViewHelper extends SQLConfHelper with Logging {
     val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
       conf.isModifiable(k) && shouldCaptureConfig(k)
     }
+    // Some configs have dynamic default values, such as SESSION_LOCAL_TIMEZONE whose
+    // default value relies on the JVM system timezone. We need to always capture them to
+    // to make sure we apply the same configs when reading the view.
+    val alwaysCaptured = Seq(SQLConf.SESSION_LOCAL_TIMEZONE)
+      .filter(c => !modifiedConfs.contains(c.key))
+      .map(c => (c.key, conf.getConf(c)))
+
     val props = new mutable.HashMap[String, String]
-    for ((key, value) <- modifiedConfs) {
+    for ((key, value) <- modifiedConfs ++ alwaysCaptured) {
       props.put(s"$VIEW_SQL_CONFIG_PREFIX$key", value)
     }
     props.toMap

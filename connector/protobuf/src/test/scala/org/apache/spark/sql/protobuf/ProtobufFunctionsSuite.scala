@@ -21,15 +21,19 @@ import java.time.Duration
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{ByteString, DynamicMessage}
+import com.google.protobuf.{Any => AnyProto, ByteString, DynamicMessage}
+import org.json4s.StringInput
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.{EM, EM2, Employee, EventPerson, EventPersonWrapper, EventRecursiveA, EventRecursiveB, IC, OneOfEvent, OneOfEventWithRecursion, SimpleMessageRepeated}
+import org.apache.spark.sql.functions.{lit, struct, typedLit}
+import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
+import org.apache.spark.sql.protobuf.utils.ProtobufOptions
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -38,6 +42,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   val testFileDesc = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
+
+  val proto2FileDesc = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
 
   private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
 
@@ -54,12 +61,27 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
   }
 
+  private def checkWithProto2FileAndClassName(messageName: String)(
+    fn: (String, Option[String]) => Unit): Unit = {
+    withClue("(With descriptor file)") {
+      fn(messageName, Some(proto2FileDesc))
+    }
+    withClue("(With Java class name)") {
+      fn(s"$proto2JavaClassNamePrefix$messageName", None)
+    }
+  }
+
   // A wrapper to invoke the right variable of from_protobuf() depending on arguments.
   private def from_protobuf_wrapper(
-    col: Column, messageName: String, descFilePathOpt: Option[String]): Column = {
+    col: Column,
+    messageName: String,
+    descFilePathOpt: Option[String],
+    options: Map[String, String] = Map.empty): Column = {
     descFilePathOpt match {
-      case Some(descFilePath) => functions.from_protobuf(col, messageName, descFilePath)
-      case None => functions.from_protobuf(col, messageName)
+      case Some(descFilePath) => functions.from_protobuf(
+        col, messageName, descFilePath, options.asJava
+      )
+      case None => functions.from_protobuf(col, messageName, options.asJava)
     }
   }
 
@@ -71,7 +93,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       case None => functions.to_protobuf(col, messageName)
     }
   }
-
 
   test("roundtrip in to_protobuf and from_protobuf - struct") {
     val df = spark
@@ -352,7 +373,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("roundtrip in from_protobuf and to_protobuf - Multiple Message") {
+  test("round trip in from_protobuf and to_protobuf - Multiple Message") {
     val messageMultiDesc = ProtobufUtils.buildDescriptor(testFileDesc, "MultipleExample")
     val messageIncludeDesc = ProtobufUtils.buildDescriptor(testFileDesc, "IncludedExample")
     val messageOtherDesc = ProtobufUtils.buildDescriptor(testFileDesc, "OtherExample")
@@ -385,10 +406,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
         checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
     }
-  }
 
-  test("Recursive fields in Protobuf should result in an error (B -> A -> B)") {
-    checkWithFileAndClassName("recursiveB") {
+    // Simple recursion
+    checkWithFileAndClassName("recursiveB") { // B -> A -> B
       case (name, descFilePathOpt) =>
         val e = intercept[AnalysisException] {
           emptyBinaryDF.select(
@@ -702,92 +722,44 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           assert(expectedFields.contains(f.getName))
         })
 
-        val jsonSchema =
-          s"""
-             |{
-             |  "type" : "struct",
-             |  "fields" : [ {
-             |    "name" : "sample",
-             |    "type" : {
-             |      "type" : "struct",
-             |      "fields" : [ {
-             |        "name" : "key",
-             |        "type" : "string",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_1",
-             |        "type" : "integer",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_2",
-             |        "type" : "string",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_3",
-             |        "type" : "long",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_4",
-             |        "type" : {
-             |          "type" : "array",
-             |          "elementType" : "string",
-             |          "containsNull" : false
-             |        },
-             |        "nullable" : false
-             |      } ]
-             |    },
-             |    "nullable" : true
-             |  } ]
-             |}
-             |{
-             |  "type" : "struct",
-             |  "fields" : [ {
-             |    "name" : "sample",
-             |    "type" : {
-             |      "type" : "struct",
-             |      "fields" : [ {
-             |        "name" : "key",
-             |        "type" : "string",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_1",
-             |        "type" : "integer",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_2",
-             |        "type" : "string",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_3",
-             |        "type" : "long",
-             |        "nullable" : true
-             |      }, {
-             |        "name" : "col_4",
-             |        "type" : {
-             |          "type" : "array",
-             |          "elementType" : "string",
-             |          "containsNull" : false
-             |        },
-             |        "nullable" : false
-             |      } ]
-             |    },
-             |    "nullable" : true
-             |  } ]
-             |}
-             |""".stripMargin
-        val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
-        val data = Seq(Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))))
+        val schema = DataType.fromJson(
+          """
+            | {
+            |   "type":"struct",
+            |   "fields":[
+            |     {"name":"sample","nullable":true,"type":{
+            |       "type":"struct",
+            |       "fields":[
+            |         {"name":"key","type":"string","nullable":true},
+            |         {"name":"col_1","type":"integer","nullable":true},
+            |         {"name":"col_2","type":"string","nullable":true},
+            |         {"name":"col_3","type":"long","nullable":true},
+            |         {"name":"col_4","nullable":true,"type":{
+            |           "type":"array","elementType":"string","containsNull":false}}
+            |       ]}
+            |     }
+            |   ]
+            | }
+            |""".stripMargin).asInstanceOf[StructType]
+        assert(fromProtoDf.schema == schema)
+
+        val data = Seq(
+          Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))),
+          Row(Row("key2", null, null, null, null)) // Leave the rest null, including "col_4" array.
+        )
         val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
         val dataDfToProto = dataDf.select(
           to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
 
-        val eventFromSparkSchema = OneOfEvent.parseFrom(
-          dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+        val toProtoResults = dataDfToProto.select("toProto").collect()
+        val eventFromSparkSchema = OneOfEvent.parseFrom(toProtoResults(0).getAs[Array[Byte]](0))
         assert(eventFromSparkSchema.getCol2.isEmpty)
         assert(eventFromSparkSchema.getCol3 == 109202L)
         eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
           assert(expectedFields.contains(f.getName))
         })
+        val secondEventFromSpark = OneOfEvent.parseFrom(toProtoResults(1).getAs[Array[Byte]](0))
+        assert(secondEventFromSpark.getKey == "key2")
     }
   }
 
@@ -853,13 +825,13 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       .setKey("keyNested2").setValue("valueNested2").build()
     val nestedOne = EventRecursiveA.newBuilder()
       .setKey("keyNested1")
-      .setRecursiveA(nestedTwo).build()
+      .setRecursiveOneOffInA(nestedTwo).build()
     val oneOfRecursionEvent = OneOfEventWithRecursion.newBuilder()
       .setKey("keyNested0")
       .setValue("valueNested0")
       .setRecursiveA(nestedOne).build()
     val recursiveA = EventRecursiveA.newBuilder().setKey("recursiveAKey")
-      .setRecursiveA(oneOfRecursionEvent).build()
+      .setRecursiveOneOffInA(oneOfRecursionEvent).build()
     val recursiveB = EventRecursiveB.newBuilder()
       .setKey("recursiveBKey")
       .setValue("recursiveBvalue").build()
@@ -872,7 +844,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(oneOfEventWithRecursion.toByteArray).toDF("value")
 
     val options = new java.util.HashMap[String, String]()
-    options.put("recursive.fields.max.depth", "2")
+    options.put("recursive.fields.max.depth", "2") // Recursive fields appear twice.
 
     val fromProtoDf = df.select(
       functions.from_protobuf($"value",
@@ -896,177 +868,60 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val eventFromSpark = OneOfEventWithRecursion.parseFrom(
       toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
 
-    var recursiveField = eventFromSpark.getRecursiveA.getRecursiveA
+    var recursiveField = eventFromSpark.getRecursiveA.getRecursiveOneOffInA
     assert(recursiveField.getKey.equals("keyNested0"))
     assert(recursiveField.getValue.equals("valueNested0"))
     assert(recursiveField.getRecursiveA.getKey.equals("keyNested1"))
-    assert(recursiveField.getRecursiveA.getRecursiveA.getKey.isEmpty())
+    assert(recursiveField.getRecursiveA.getRecursiveOneOffInA.getKey.isEmpty())
 
     val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
     eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
       assert(expectedFields.contains(f.getName))
     })
 
-    val jsonSchema =
-      s"""
-         |{
-         |  "type" : "struct",
-         |  "fields" : [ {
-         |    "name" : "sample",
-         |    "type" : {
-         |      "type" : "struct",
-         |      "fields" : [ {
-         |        "name" : "key",
-         |        "type" : "string",
-         |        "nullable" : true
-         |      }, {
-         |        "name" : "recursiveA",
-         |        "type" : {
-         |          "type" : "struct",
-         |          "fields" : [ {
-         |            "name" : "recursiveA",
-         |            "type" : {
-         |              "type" : "struct",
-         |              "fields" : [ {
-         |                "name" : "key",
-         |                "type" : "string",
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "recursiveA",
-         |                "type" : "void",
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "recursiveB",
-         |                "type" : {
-         |                  "type" : "struct",
-         |                  "fields" : [ {
-         |                    "name" : "key",
-         |                    "type" : "string",
-         |                    "nullable" : true
-         |                  }, {
-         |                    "name" : "value",
-         |                    "type" : "string",
-         |                    "nullable" : true
-         |                  }, {
-         |                    "name" : "recursiveA",
-         |                    "type" : {
-         |                      "type" : "struct",
-         |                      "fields" : [ {
-         |                        "name" : "key",
-         |                        "type" : "string",
-         |                        "nullable" : true
-         |                      }, {
-         |                        "name" : "recursiveA",
-         |                        "type" : "void",
-         |                        "nullable" : true
-         |                      }, {
-         |                        "name" : "recursiveB",
-         |                        "type" : "void",
-         |                        "nullable" : true
-         |                      }, {
-         |                        "name" : "value",
-         |                        "type" : "string",
-         |                        "nullable" : true
-         |                      } ]
-         |                    },
-         |                    "nullable" : true
-         |                  } ]
-         |                },
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "value",
-         |                "type" : "string",
-         |                "nullable" : true
-         |              } ]
-         |            },
-         |            "nullable" : true
-         |          }, {
-         |            "name" : "key",
-         |            "type" : "string",
-         |            "nullable" : true
-         |          } ]
-         |        },
-         |        "nullable" : true
-         |      }, {
-         |        "name" : "recursiveB",
-         |        "type" : {
-         |          "type" : "struct",
-         |          "fields" : [ {
-         |            "name" : "key",
-         |            "type" : "string",
-         |            "nullable" : true
-         |          }, {
-         |            "name" : "value",
-         |            "type" : "string",
-         |            "nullable" : true
-         |          }, {
-         |            "name" : "recursiveA",
-         |            "type" : {
-         |              "type" : "struct",
-         |              "fields" : [ {
-         |                "name" : "key",
-         |                "type" : "string",
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "recursiveA",
-         |                "type" : {
-         |                  "type" : "struct",
-         |                  "fields" : [ {
-         |                    "name" : "recursiveA",
-         |                    "type" : {
-         |                      "type" : "struct",
-         |                      "fields" : [ {
-         |                        "name" : "key",
-         |                        "type" : "string",
-         |                        "nullable" : true
-         |                      }, {
-         |                        "name" : "recursiveA",
-         |                        "type" : "void",
-         |                        "nullable" : true
-         |                      }, {
-         |                        "name" : "recursiveB",
-         |                        "type" : "void",
-         |                        "nullable" : true
-         |                      }, {
-         |                        "name" : "value",
-         |                        "type" : "string",
-         |                        "nullable" : true
-         |                      } ]
-         |                    },
-         |                    "nullable" : true
-         |                  }, {
-         |                    "name" : "key",
-         |                    "type" : "string",
-         |                    "nullable" : true
-         |                  } ]
-         |                },
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "recursiveB",
-         |                "type" : "void",
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "value",
-         |                "type" : "string",
-         |                "nullable" : true
-         |              } ]
-         |            },
-         |            "nullable" : true
-         |          } ]
-         |        },
-         |        "nullable" : true
-         |      }, {
-         |        "name" : "value",
-         |        "type" : "string",
-         |        "nullable" : true
-         |      } ]
-         |    },
-         |    "nullable" : true
-         |  } ]
-         |}
-         |""".stripMargin
-
-    val schema = DataType.fromJson(jsonSchema).asInstanceOf[StructType]
+    val schemaDDL =
+      """
+        | -- OneOfEvenWithRecursion with max depth 2.
+        | sample STRUCT< -- 1st level for OneOffWithRecursion
+        |     key string,
+        |     recursiveA STRUCT< -- 1st level for RecursiveA
+        |         recursiveOneOffInA STRUCT< -- 2st level for OneOffWithRecursion
+        |             key string,
+        |             recursiveA STRUCT< -- 2st level for RecursiveA
+        |                 key string
+        |                 -- Removed recursiveOneOffInA: 3rd level for OneOffWithRecursion
+        |             >,
+        |             recursiveB STRUCT<
+        |                 key string,
+        |                 value string
+        |                 -- Removed recursiveOneOffInB: 3rd level for OneOffWithRecursion
+        |             >,
+        |             value string
+        |         >,
+        |         key string
+        |     >,
+        |     recursiveB STRUCT< -- 1st level for RecursiveB
+        |         key string,
+        |         value string,
+        |         recursiveOneOffInB STRUCT< -- 2st level for OneOffWithRecursion
+        |             key string,
+        |             recursiveA STRUCT< -- 1st level for RecursiveA
+        |                 key string
+        |                 -- Removed recursiveOneOffInA: 3rd level for OneOffWithRecursion
+        |             >,
+        |             recursiveB STRUCT<
+        |                 key string,
+        |                 value string
+        |                 -- Removed recursiveOneOffInB: 3rd level for OneOffWithRecursion
+        |             >,
+        |             value string
+        |         >
+        |     >,
+        |     value string
+        | >
+        |""".stripMargin
+    val schema = structFromDDL(schemaDDL)
+    assert(fromProtoDf.schema == schema)
     val data = Seq(
       Row(
         Row("key1",
@@ -1083,7 +938,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
       dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
-    recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveA
+    recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveOneOffInA
     assert(recursiveField.getKey.equals("keyNested0"))
     assert(recursiveField.getValue.equals("valueNested0"))
     assert(recursiveField.getRecursiveA.getKey.isEmpty())
@@ -1101,166 +956,61 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val optionsZero = new java.util.HashMap[String, String]()
     optionsZero.put("recursive.fields.max.depth", "1")
-    val schemaZero = DataType.fromJson(
-        s"""{
-           |  "type" : "struct",
-           |  "fields" : [ {
-           |    "name" : "sample",
-           |    "type" : {
-           |      "type" : "struct",
-           |      "fields" : [ {
-           |        "name" : "name",
-           |        "type" : "string",
-           |        "nullable" : true
-           |      }, {
-           |        "name" : "bff",
-           |        "type" : "void",
-           |        "nullable" : true
-           |      } ]
-           |    },
-           |    "nullable" : true
-           |  } ]
-           |}""".stripMargin).asInstanceOf[StructType]
-    val expectedDfZero = spark.createDataFrame(
-      spark.sparkContext.parallelize(Seq(Row(Row("person0", null)))), schemaZero)
-
-    testFromProtobufWithOptions(df, expectedDfZero, optionsZero, "EventPerson")
-
-    val optionsOne = new java.util.HashMap[String, String]()
-    optionsOne.put("recursive.fields.max.depth", "2")
-    val schemaOne = DataType.fromJson(
-      s"""{
-         |  "type" : "struct",
-         |  "fields" : [ {
-         |    "name" : "sample",
-         |    "type" : {
-         |      "type" : "struct",
-         |      "fields" : [ {
-         |        "name" : "name",
-         |        "type" : "string",
-         |        "nullable" : true
-         |      }, {
-         |        "name" : "bff",
-         |        "type" : {
-         |          "type" : "struct",
-         |          "fields" : [ {
-         |            "name" : "name",
-         |            "type" : "string",
-         |            "nullable" : true
-         |          }, {
-         |            "name" : "bff",
-         |            "type" : "void",
-         |            "nullable" : true
-         |          } ]
-         |        },
-         |        "nullable" : true
-         |      } ]
-         |    },
-         |    "nullable" : true
-         |  } ]
-         |}""".stripMargin).asInstanceOf[StructType]
+    val schemaOne = structFromDDL(
+      "sample STRUCT<name: STRING>" // 'bff' field is dropped to due to limit of 1.
+    )
     val expectedDfOne = spark.createDataFrame(
-      spark.sparkContext.parallelize(Seq(Row(Row("person0", Row("person1", null))))), schemaOne)
-    testFromProtobufWithOptions(df, expectedDfOne, optionsOne, "EventPerson")
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", null)))), schemaOne)
+    testFromProtobufWithOptions(df, expectedDfOne, optionsZero, "EventPerson")
 
     val optionsTwo = new java.util.HashMap[String, String]()
-    optionsTwo.put("recursive.fields.max.depth", "3")
-    val schemaTwo = DataType.fromJson(
-      s"""{
-         |  "type" : "struct",
-         |  "fields" : [ {
-         |    "name" : "sample",
-         |    "type" : {
-         |      "type" : "struct",
-         |      "fields" : [ {
-         |        "name" : "name",
-         |        "type" : "string",
-         |        "nullable" : true
-         |      }, {
-         |        "name" : "bff",
-         |        "type" : {
-         |          "type" : "struct",
-         |          "fields" : [ {
-         |            "name" : "name",
-         |            "type" : "string",
-         |            "nullable" : true
-         |          }, {
-         |            "name" : "bff",
-         |            "type" : {
-         |              "type" : "struct",
-         |              "fields" : [ {
-         |                "name" : "name",
-         |                "type" : "string",
-         |                "nullable" : true
-         |              }, {
-         |                "name" : "bff",
-         |                "type" : "void",
-         |                "nullable" : true
-         |              } ]
-         |            },
-         |            "nullable" : true
-         |          } ]
-         |        },
-         |        "nullable" : true
-         |      } ]
-         |    },
-         |    "nullable" : true
-         |  } ]
-         |}""".stripMargin).asInstanceOf[StructType]
-    val expectedDfTwo = spark.createDataFrame(spark.sparkContext.parallelize(
-      Seq(Row(Row("person0", Row("person1", Row("person2", null)))))), schemaTwo)
+    optionsTwo.put("recursive.fields.max.depth", "2")
+    val schemaTwo = structFromDDL(
+      """
+        | sample STRUCT<
+        |     name: STRING,
+        |     bff: STRUCT<name: STRING> -- Recursion is terminated here.
+        | >
+        |""".stripMargin)
+    val expectedDfTwo = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", Row("person1", null))))), schemaTwo)
     testFromProtobufWithOptions(df, expectedDfTwo, optionsTwo, "EventPerson")
+
+    val optionsThree = new java.util.HashMap[String, String]()
+    optionsThree.put("recursive.fields.max.depth", "3")
+    val schemaThree = structFromDDL(
+      """
+        | sample STRUCT<
+        |     name: STRING,
+        |     bff: STRUCT<
+        |         name: STRING,
+        |         bff: STRUCT<name: STRING>
+        |     >
+        | >
+        |""".stripMargin)
+    val expectedDfThree = spark.createDataFrame(spark.sparkContext.parallelize(
+      Seq(Row(Row("person0", Row("person1", Row("person2", null)))))), schemaThree)
+    testFromProtobufWithOptions(df, expectedDfThree, optionsThree, "EventPerson")
 
     // Test recursive level 1 with EventPersonWrapper. In this case the top level struct
     // 'EventPersonWrapper' itself does not recurse unlike 'EventPerson'.
     // "bff" appears twice: Once allowed recursion and second time as terminated "null" type.
-    val wrapperSchemaOne = DataType.fromJson(
+    val wrapperSchemaOne = structFromDDL(
       """
-        |{
-        |  "type" : "struct",
-        |  "fields" : [ {
-        |    "name" : "sample",
-        |    "type" : {
-        |      "type" : "struct",
-        |      "fields" : [ {
-        |        "name" : "person",
-        |        "type" : {
-        |          "type" : "struct",
-        |          "fields" : [ {
-        |            "name" : "name",
-        |            "type" : "string",
-        |            "nullable" : true
-        |          }, {
-        |            "name" : "bff",
-        |            "type" : {
-        |              "type" : "struct",
-        |              "fields" : [ {
-        |                "name" : "name",
-        |                "type" : "string",
-        |                "nullable" : true
-        |              }, {
-        |                "name" : "bff",
-        |                "type" : "void",
-        |                "nullable" : true
-        |              } ]
-        |            },
-        |            "nullable" : true
-        |          } ]
-        |        },
-        |        "nullable" : true
-        |      } ]
-        |    },
-        |    "nullable" : true
-        |  } ]
-        |}
+        | sample STRUCT<
+        |     person: STRUCT< -- 1st level
+        |         name: STRING,
+        |         bff: STRUCT<name: STRING> -- 2nd level. Inner 3rd level Person is dropped.
+        |     >
+        | >
         |""".stripMargin).asInstanceOf[StructType]
-    val expectedWrapperDfOne = spark.createDataFrame(
+    val expectedWrapperDfTwo = spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row(Row(Row("person0", Row("person1", null)))))),
       wrapperSchemaOne)
     testFromProtobufWithOptions(
       Seq(EventPersonWrapper.newBuilder().setPerson(eventPerson0).build().toByteArray).toDF(),
-      expectedWrapperDfOne,
-      optionsOne,
+      expectedWrapperDfTwo,
+      optionsTwo,
       "EventPersonWrapper"
     )
   }
@@ -1285,6 +1035,434 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     )
     assert(ex.getCause != null)
     assert(ex.getCause.getMessage.matches(".*No such file.*"), ex.getCause.getMessage())
+  }
+
+  test("Recursive fields in arrays and maps") {
+    // Verifies schema for recursive proto in an array field & map field.
+    val options = Map("recursive.fields.max.depth" -> "3")
+
+    checkWithFileAndClassName("PersonWithRecursiveArray") {
+      case (name, descFilePathOpt) =>
+        val expectedSchema = StructType(
+          // DDL: "proto STRUCT<name: string, friends: array<
+          //    struct<name: string, friends: array<struct<name: string>>>>>"
+          // Can not use DataType.fromDDL(), it does not support "containsNull: false" for arrays.
+          StructField("proto",
+            StructType( // 1st level
+              StructField("name", StringType) :: StructField("friends", // 2nd level
+                ArrayType(
+                  StructType(StructField("name", StringType) :: StructField("friends", // 3rd level
+                    ArrayType(
+                      StructType(StructField("name", StringType) :: Nil), // 4th, array dropped
+                      containsNull = false)
+                  ):: Nil),
+                  containsNull = false)
+              ) :: Nil
+            )
+          ) :: Nil
+        )
+
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
+        )
+        assert(df.schema == expectedSchema)
+    }
+
+    checkWithFileAndClassName("PersonWithRecursiveMap") {
+      case (name, descFilePathOpt) =>
+        val expectedSchema = StructType(
+          // DDL: "proto STRUCT<name: string, groups: map<
+          //    struct<name: string, group: map<struct<name: string>>>>>"
+          StructField("proto",
+            StructType( // 1st level
+              StructField("name", StringType) :: StructField("groups", // 2nd level
+                MapType(
+                  StringType,
+                  StructType(StructField("name", StringType) :: StructField("groups", // 3rd level
+                    MapType(
+                      StringType,
+                      StructType(StructField("name", StringType) :: Nil), // 4th, array dropped
+                      valueContainsNull = false)
+                  ):: Nil),
+                  valueContainsNull = false)
+              ) :: Nil
+            )
+          ) :: Nil
+        )
+
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
+        )
+        assert(df.schema == expectedSchema)
+    }
+  }
+
+  test("Corner case: empty recursive proto fields should be dropped") {
+    // This verifies that a empty proto like 'message A { A a = 1}' are completely dropped
+    // irrespective of max depth setting.
+
+    val options = Map("recursive.fields.max.depth" -> "4")
+
+    // EmptyRecursiveProto at the top level. It will be an empty struct.
+    checkWithFileAndClassName("EmptyRecursiveProto") {
+      case (name, descFilePathOpt) =>
+          val df = emptyBinaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+          )
+        assert(df.schema == structFromDDL("empty_proto struct<>"))
+    }
+
+    // EmptyRecursiveProto at inner level.
+    checkWithFileAndClassName("EmptyRecursiveProtoWrapper") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+        )
+        // 'empty_recursive' field is dropped from the schema. Only "name" is present.
+        assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  test("Converting Any fields to JSON") {
+    // Verifies schema and deserialization when 'convert.any.fields.to.json' is set.
+    checkWithFileAndClassName("ProtoWithAny") {
+      case (name, descFilePathOpt) =>
+
+        // proto: 'message { string event_name = 1; google.protobuf.Any details = 2 }'
+
+        val simpleProto = SimpleMessage // Json: {"id":10,"string_value":"galaxy"}
+          .newBuilder()
+          .setId(10)
+          .setStringValue("galaxy")
+          .build()
+
+        val protoWithAnyBytes = ProtoWithAny
+          .newBuilder()
+          .setEventName("click")
+          .setDetails(AnyProto.pack(simpleProto))
+          .build()
+          .toByteArray
+
+        val inputDF = Seq(protoWithAnyBytes).toDF("binary")
+
+        // Check schema with default options where Any field not converted to json.
+        val df = inputDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt).as("proto")
+        )
+        // Default behavior: 'details' is a struct with 'type_url' and binary 'value'.
+        assert(df.schema.toDDL ==
+          "proto STRUCT<event_name: STRING, details: STRUCT<type_url: STRING, value: BINARY>>"
+        )
+
+        // Enable option to convert to json.
+        val options = Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true")
+        val dfJson = inputDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
+        )
+        // Now 'details' should be a string.
+        assert(dfJson.schema.toDDL == "proto STRUCT<event_name: STRING, details: STRING>")
+
+        // Verify Json value for details
+
+        val row = dfJson.collect()(0).getStruct(0)
+
+        val expectedJson = """{"@type":""" + // The json includes "@type" field as well.
+            """"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",""" +
+            """"id":"10","string_value":"galaxy"}"""
+
+        assert(row.getString(0) == "click")
+        assert(row.getString(1) == expectedJson)
+    }
+  }
+
+  test("Converting nested Any fields to JSON") {
+    // This is a more involved version of the previous test with nested Any field inside an array.
+
+    // Takes json string and return a json with all the extra whitespace removed.
+    def compactJson(json: String): String = {
+      val jsonValue = JsonMethods.parse(StringInput(json))
+      JsonMethods.compact(jsonValue)
+    }
+
+    checkWithFileAndClassName("ProtoWithAnyArray") { case (name, descFilePathOpt) =>
+
+      // proto: message { string description = 1; repeated google.protobuf.Any items = 2;
+
+      // Use two different types of protos for 'items'. One with an Any field, and one without.
+
+      val simpleProto = SimpleMessage.newBuilder() // Json: {"id":10,"string_value":"galaxy"}
+        .setId(10)
+        .setStringValue("galaxy")
+        .build()
+
+      val protoWithAny = ProtoWithAny.newBuilder()
+        .setEventName("click")
+        .setDetails(AnyProto.pack(simpleProto))
+        .build()
+
+      val protoWithAnyArrayBytes = ProtoWithAnyArray.newBuilder()
+        .setDescription("nested any demo")
+        .addItems(AnyProto.pack(simpleProto)) // A simple proto
+        .addItems(AnyProto.pack(protoWithAny)) // A proto with any field inside it.
+        .build()
+        .toByteArray
+
+      val inputDF = Seq(protoWithAnyArrayBytes).toDF("binary")
+
+      // check default schema
+      val df = inputDF.select(
+        from_protobuf_wrapper($"binary", name, descFilePathOpt).as("proto")
+      )
+      // Default behavior: 'details' is a struct with 'type_url' and binary 'value'.
+      assert(df.schema.toDDL == "proto STRUCT<description: STRING, " +
+        "items: ARRAY<STRUCT<type_url: STRING, value: BINARY>>>"
+      )
+
+      // String for items with 'convert.to.json' option enabled.
+      val options = Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true")
+      val dfJson = inputDF.select(from_protobuf_wrapper(
+        $"binary", name, descFilePathOpt, options).as("proto")
+      )
+      // Now 'details' should be a string.
+      assert(dfJson.schema.toDDL == "proto STRUCT<description: STRING, items: ARRAY<STRING>>")
+
+      val row = dfJson.collect()(0).getStruct(0)
+      val items = row.getList[String](1)
+
+      assert(row.getString(0) == "nested any demo")
+      assert(items.get(0) == compactJson(
+        """
+          | {
+          |   "@type":"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",
+          |   "id":"10",
+          |   "string_value":"galaxy"
+          | }""".stripMargin))
+      assert(items.get(1) == compactJson(
+        """
+          | {
+          |   "@type":"type.googleapis.com/org.apache.spark.sql.protobuf.protos.ProtoWithAny",
+          |   "event_name":"click",
+          |   "details": {
+          |     "@type":"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",
+          |     "id":"10",
+          |     "string_value":"galaxy"
+          |   }
+          | }""".stripMargin))
+    }
+  }
+
+  test("test explicitly set zero values - proto3") {
+    // All fields explicitly zero. Message, map, repeated, and oneof fields
+    // are left unset, as null is their zero value.
+    val explicitZero = spark.range(1).select(
+      lit(
+        Proto3AllTypes.newBuilder()
+          .setInt(0)
+          .setText("")
+          .setEnumVal(Proto3AllTypes.NestedEnum.NOTHING)
+          .setOptionalInt(0)
+          .setOptionalText("")
+          .setOptionalEnumVal(Proto3AllTypes.NestedEnum.NOTHING)
+          .setOptionA(0)
+          .build()
+          .toByteArray).as("raw_proto"))
+
+    // By default, we deserialize zero values for fields without
+    // field presence (i.e. most primitives in proto3) as null.
+    // For fields with field presence, (explicitly optional, oneof, etc)
+    // we're able to get the explicitly set zero value.
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("int"),
+        lit(null).as("text"),
+        lit(null).as("enum_val"),
+        lit(null).as("message"),
+        lit(0).as("optional_int"),
+        lit("").as("optional_text"),
+        lit("NOTHING").as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(0).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    // With the emit.default.values flag set, we'll fill in
+    // the fields without presence info.
+    val expectedWithFlag = spark.range(1).select(
+      struct(
+        lit(0).as("int"),
+        lit("").as("text"),
+        lit("NOTHING").as("enum_val"),
+        lit(null).as("message"),
+        lit(0).as("optional_int"),
+        lit("").as("optional_text"),
+        lit("NOTHING").as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(0).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("Proto3AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        explicitZero.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+      checkAnswer(
+        explicitZero.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expectedWithFlag)
+    }
+  }
+
+  test("test unset values - proto3") {
+    // Test how we deserialize fields not being present at all.
+    val empty = spark.range(1)
+      .select(lit(
+        Proto3AllTypes.newBuilder().build().toByteArray
+      ).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("int"),
+        lit(null).as("text"),
+        lit(null).as("enum_val"),
+        lit(null).as("message"),
+        lit(null).as("optional_int"),
+        lit(null).as("optional_text"),
+        lit(null).as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(null).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    // With the emit.default.values flag set, we'll fill in
+    // the fields without presence info.
+    val expectedWithFlag = spark.range(1).select(
+      struct(
+        lit(0).as("int"),
+        lit("").as("text"),
+        lit("NOTHING").as("enum_val"),
+        lit(null).as("message"),
+        lit(null).as("optional_int"),
+        lit(null).as("optional_text"),
+        lit(null).as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(null).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("Proto3AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        empty.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+      checkAnswer(
+        empty.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expectedWithFlag)
+    }
+  }
+
+  test("test explicitly set zero values - proto2") {
+    // All fields explicitly zero. Message, map, repeated, and oneof fields
+    // are left unset, as null is their zero value.
+    val explicitZero = spark.range(1).select(
+      lit(
+        Proto2AllTypes.newBuilder()
+          .setInt(0)
+          .setText("")
+          .setEnumVal(Proto2AllTypes.NestedEnum.NOTHING)
+          .setOptionA(0)
+          .build()
+          .toByteArray).as("raw_proto"))
+
+    // We are able to get the zero value back when deserializing since
+    // most proto2 fields have field presence information.
+    val expected = spark.range(1).select(
+      struct(
+        lit(0).as("int"),
+        lit("").as("text"),
+        lit("NOTHING").as("enum_val"),
+        lit(null).as("message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(0).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        explicitZero.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+      checkAnswer(
+        explicitZero.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expected)
+    }
+  }
+
+  test("test unset fields - proto2 types") {
+    // All fields explicitly zero. Message, map, repeated, and oneof fields
+    // have null, i.e. not set, as their empty versions.
+    val empty = spark.range(1).select(
+      lit(Proto2AllTypes.newBuilder().build().toByteArray).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("int"),
+        lit(null).as("text"),
+        lit(null).as("enum_val"),
+        lit(null).as("message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(null).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    // emit.default.values will not materialize values for fields with presence
+    // info available, which is most fields within proto2.
+    checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        empty.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+      checkAnswer(
+        empty.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expected)
+    }
   }
 
   def testFromProtobufWithOptions(

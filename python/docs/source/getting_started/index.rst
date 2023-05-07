@@ -28,6 +28,7 @@ at `the Spark documentation <https://spark.apache.org/docs/latest/index.html#whe
 There are live notebooks where you can try PySpark out without any other step:
 
 * |binder_df|_
+* |binder_connect|_
 * |binder_ps|_
 
 The list below is the contents of this quickstart page:
@@ -37,4 +38,5 @@ The list below is the contents of this quickstart page:
 
    install
    quickstart_df
+   quickstart_connect
    quickstart_ps

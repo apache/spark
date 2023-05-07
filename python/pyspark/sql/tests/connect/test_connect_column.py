@@ -18,12 +18,10 @@
 import decimal
 import datetime
 
-from pyspark.sql import functions as SF
 from pyspark.sql.types import (
     Row,
     StructField,
     StructType,
-    ArrayType,
     MapType,
     NullType,
     DateType,
@@ -41,6 +39,7 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
@@ -48,9 +47,10 @@ from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
     import pandas as pd
+    from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
-    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.expressions import DistributedSequenceID, LiteralExpression
     from pyspark.sql.connect.types import (
         JVM_BYTE_MIN,
         JVM_BYTE_MAX,
@@ -133,6 +133,33 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             df4.filter(df4.name.isNotNull()).toPandas(),
         )
 
+        # check error
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.name.substr(df.id, 10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_SAME_TYPE",
+            message_parameters={
+                "arg_name1": "startPos",
+                "arg_name2": "length",
+                "arg_type1": "Column",
+                "arg_type2": "int",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.name.substr(10.5, 10.5)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT",
+            message_parameters={
+                "arg_name": "length",
+                "arg_type": "float",
+            },
+        )
+
     def test_column_with_null(self):
         # SPARK-41751: test isNull, isNotNull, eqNullSafe
 
@@ -145,8 +172,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  1|   1|null|
-        # |  2|null|null|
+        # |  1|   1|NULL|
+        # |  2|NULL|NULL|
         # |  3|   3|   1|
         # +---+----+----+
 
@@ -223,9 +250,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # |                  a|         b|   c|
         # +-------------------+----------+----+
         # |2022-12-22 15:50:00|2022-12-25| 1.1|
-        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-22 18:50:00|      NULL| 2.2|
         # |2022-12-23 15:50:00|2022-12-24| 3.3|
-        # |               null|2022-12-22|null|
+        # |               NULL|2022-12-22|NULL|
         # +-------------------+----------+----+
 
         cdf = self.connect.sql(query)
@@ -281,8 +308,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+---+----+
         # |  a|   b|  c|   d|
         # +---+----+---+----+
-        # |  1|   1|  0|null|
-        # |  2|null|  1| 2.0|
+        # |  1|   1|  0|NULL|
+        # |  2|NULL|  1| 2.0|
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
@@ -322,9 +349,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +----+----+----+
         # |   a|   b|   c|
         # +----+----+----+
-        # |   1|   1|null|
-        # |   2|null|   1|
-        # |null|   3|   4|
+        # |   1|   1|NULL|
+        # |   2|NULL|   1|
+        # |NULL|   3|   4|
         # +----+----+----+
 
         cdf = self.connect.sql(query)
@@ -409,7 +436,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             (0.1, DecimalType()),
             (datetime.date(2022, 12, 13), TimestampType()),
             (datetime.timedelta(1, 2, 3), DateType()),
-            ([1, 2, 3], ArrayType(IntegerType())),
             ({1: 2}, MapType(IntegerType(), IntegerType())),
             (
                 {"a": "xyz", "b": 1},
@@ -446,7 +472,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         for value, dataType in [
             ("123", NullType()),
             (123, NullType()),
-            (None, ArrayType(IntegerType())),
             (None, MapType(IntegerType(), IntegerType())),
             (None, StructType([StructField("a", StringType())])),
         ]:
@@ -456,9 +481,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
     def test_literal_integers(self):
         cdf = self.connect.range(0, 1)
         sdf = self.spark.range(0, 1)
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
 
         cdf1 = cdf.select(
             CF.lit(0),
@@ -491,17 +513,24 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf1.schema, sdf1.schema)
         self.assert_eq(cdf1.toPandas(), sdf1.toPandas())
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "integer 9223372036854775808 out of bounds",
-        ):
+        # negative test for incorrect type
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.lit(JVM_LONG_MAX + 1)).show()
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "integer -9223372036854775809 out of bounds",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_BETWEEN",
+            message_parameters={"arg_name": "value", "min": "-9223372036854775808", "max": "32767"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.lit(JVM_LONG_MIN - 1)).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_BETWEEN",
+            message_parameters={"arg_name": "value", "min": "-9223372036854775808", "max": "32767"},
+        )
 
     def test_cast(self):
         # SPARK-41412: test basic Column.cast
@@ -532,6 +561,15 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
                 df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
             )
 
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.id.cast(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DATATYPE_OR_STR",
+            message_parameters={"arg_name": "dataType", "arg_type": "int"},
+        )
+
     def test_isin(self):
         # SPARK-41526: test Column.isin
         query = """
@@ -542,8 +580,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+---+----+
         # |  a|   b|  c|   d|
         # +---+----+---+----+
-        # |  1|   1|  0|null|
-        # |  2|null|  1| 2.0|
+        # |  1|   1|  0|NULL|
+        # |  2|NULL|  1| 2.0|
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
@@ -598,9 +636,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # |                  a|         b|   c|
         # +-------------------+----------+----+
         # |2022-12-22 15:50:00|2022-12-25| 1.1|
-        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-22 18:50:00|      NULL| 2.2|
         # |2022-12-23 15:50:00|2022-12-24| 3.3|
-        # |               null|2022-12-22|null|
+        # |               NULL|2022-12-22|NULL|
         # +-------------------+----------+----+
 
         cdf = self.connect.sql(query)
@@ -645,9 +683,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_column_bitwise_ops(self):
         # SPARK-41751: test bitwiseAND, bitwiseOR, bitwiseXOR
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (1, 1, 0), (2, NULL, 1), (3, 3, 4)
@@ -658,7 +693,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # |  a|   b|  c|
         # +---+----+---+
         # |  1|   1|  0|
-        # |  2|null|  1|
+        # |  2|NULL|  1|
         # |  3|   3|  4|
         # +---+----+---+
 
@@ -684,9 +719,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         )
 
     def test_column_accessor(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT STRUCT(a, b, c) AS x, y, z, c FROM VALUES
             (float(1.0), double(1.0), '2022', MAP('b', '123', 'a', 'kk'), ARRAY(1, 2, 3)),
@@ -700,7 +732,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +----------------+-------------------+------------+----+
         # |{1.0, 1.0, 2022}|{b -> 123, a -> kk}|   [1, 2, 3]|2022|
         # |{2.0, 2.0, 2018}|          {a -> xy}|[-1, -2, -3]|2018|
-        # |{3.0, 3.0, null}|          {a -> ab}|  [-1, 0, 1]|null|
+        # |{3.0, 3.0, null}|          {a -> ab}|  [-1, 0, 1]|NULL|
         # +----------------+-------------------+------------+----+
 
         cdf = self.connect.sql(query)
@@ -764,8 +796,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+---+----+
         # |  a|   b|  c|   d|
         # +---+----+---+----+
-        # |  1|   1|  0|null|
-        # |  2|null|  1| 2.0|
+        # |  1|   1|  0|NULL|
+        # |  2|NULL|  1| 2.0|
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
@@ -806,10 +838,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_column_field_ops(self):
         # SPARK-41767: test withField, dropFields
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT STRUCT(a, b, c, d) AS x, e FROM VALUES
             (float(1.0), double(1.0), '2022', 1, 0),
@@ -823,7 +851,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +----------------------+----+
         # |   {1.0, 1.0, 2022, 1}|   0|
         # |{2.0, 2.0, 2018, null}|   2|
-        # |   {3.0, 3.0, null, 3}|null|
+        # |   {3.0, 3.0, null, 3}|NULL|
         # +----------------------+----+
 
         cdf = self.connect.sql(query)
@@ -893,29 +921,41 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException):
             cdf.select(cdf.x.dropFields("a", "b", "c", "d")).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "fieldName should be a string",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(cdf.x.withField(CF.col("a"), cdf.e)).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "col should be a Column",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "fieldName", "arg_type": "Column"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(cdf.x.withField("a", 2)).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "fieldName should be a string",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN",
+            message_parameters={"arg_name": "col", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(cdf.x.dropFields("a", 1, 2)).show()
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "dropFields requires at least 1 field",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "fieldName", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(cdf.x.dropFields()).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "dropFields"},
+        )
 
     def test_column_string_ops(self):
         # SPARK-41764: test string ops
@@ -974,6 +1014,14 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf1.schema, sdf1.schema)
         self.assertEqual(cdf1.collect(), sdf1.collect())
+
+    def test_distributed_sequence_id(self):
+        cdf = self.connect.range(10)
+        expected = self.connect.range(0, 10).selectExpr("id as index", "id")
+        self.assertEqual(
+            cdf.select(Column(DistributedSequenceID()).alias("index"), "*").collect(),
+            expected.collect(),
+        )
 
 
 if __name__ == "__main__":

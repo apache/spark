@@ -1,0 +1,4 @@
+Project [id#0L]
++- Aggregate [id#0L], [id#0L, pivotfirst(a#0, count(b)#0L, 0, 0) AS __pivot_count(b) AS `count(b)`#0]
+   +- Aggregate [id#0L, a#0], [id#0L, a#0, count(b#0) AS count(b)#0L]
+      +- LocalRelation <empty>, [id#0L, a#0, b#0]

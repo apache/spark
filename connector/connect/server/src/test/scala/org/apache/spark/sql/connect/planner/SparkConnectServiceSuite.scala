@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import io.grpc.StatusRuntimeException
@@ -26,9 +27,9 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
+import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.execution.ExplainMode
+import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -43,21 +44,30 @@ class SparkConnectServiceSuite extends SharedSparkSession {
           | USING parquet
           |""".stripMargin)
 
-      val instance = new SparkConnectService(false)
-      val relation = proto.Relation
+      val plan = proto.Plan
         .newBuilder()
-        .setRead(
-          proto.Read
+        .setRoot(
+          proto.Relation
             .newBuilder()
-            .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build())
+            .setRead(
+              proto.Read
+                .newBuilder()
+                .setNamedTable(
+                  proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build())
+                .build())
             .build())
         .build()
 
-      val response =
-        instance.handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("simple"))
+      val handler = new SparkConnectAnalyzeHandler(null)
 
-      assert(response.getSchema.hasStruct)
-      val schema = response.getSchema.getStruct
+      val request1 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setSchema(proto.AnalyzePlanRequest.Schema.newBuilder().setPlan(plan).build())
+        .build()
+      val response1 = handler.process(request1, spark)
+      assert(response1.hasSchema)
+      assert(response1.getSchema.getSchema.hasStruct)
+      val schema = response1.getSchema.getSchema.getStruct
       assert(schema.getFieldsCount == 2)
       assert(
         schema.getFields(0).getName == "col1"
@@ -66,14 +76,53 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         schema.getFields(1).getName == "col2"
           && schema.getFields(1).getDataType.getKindCase == proto.DataType.KindCase.STRING)
 
-      assert(!response.getIsLocal)
-      assert(!response.getIsLocal)
+      val request2 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE)
+            .build())
+        .build()
+      val response2 = handler.process(request2, spark)
+      assert(response2.hasExplain)
+      assert(response2.getExplain.getExplainString.size > 0)
 
-      assert(response.getTreeString.contains("root"))
-      assert(response.getTreeString.contains("|-- col1: integer (nullable = true)"))
-      assert(response.getTreeString.contains("|-- col2: string (nullable = true)"))
+      val request3 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setIsLocal(proto.AnalyzePlanRequest.IsLocal.newBuilder().setPlan(plan).build())
+        .build()
+      val response3 = handler.process(request3, spark)
+      assert(response3.hasIsLocal)
+      assert(!response3.getIsLocal.getIsLocal)
 
-      assert(response.getInputFilesCount === 0)
+      val request4 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setIsStreaming(proto.AnalyzePlanRequest.IsStreaming.newBuilder().setPlan(plan).build())
+        .build()
+      val response4 = handler.process(request4, spark)
+      assert(response4.hasIsStreaming)
+      assert(!response4.getIsStreaming.getIsStreaming)
+
+      val request5 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setTreeString(proto.AnalyzePlanRequest.TreeString.newBuilder().setPlan(plan).build())
+        .build()
+      val response5 = handler.process(request5, spark)
+      assert(response5.hasTreeString)
+      val treeString = response5.getTreeString.getTreeString
+      assert(treeString.contains("root"))
+      assert(treeString.contains("|-- col1: integer (nullable = true)"))
+      assert(treeString.contains("|-- col2: string (nullable = true)"))
+
+      val request6 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setInputFiles(proto.AnalyzePlanRequest.InputFiles.newBuilder().setPlan(plan).build())
+        .build()
+      val response6 = handler.process(request6, spark)
+      assert(response6.hasInputFiles)
+      assert(response6.getInputFiles.getFilesCount === 0)
     }
   }
 
@@ -111,18 +160,22 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     assert(done)
 
     // 4 Partitions + Metrics
-    assert(responses.size == 5)
+    assert(responses.size == 6)
+
+    // Make sure the first response is schema only
+    val head = responses.head
+    assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
     // Make sure the last response is metrics only
     val last = responses.last
-    assert(last.hasMetrics && !last.hasArrowBatch)
+    assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
 
     val allocator = new RootAllocator()
 
     // Check the 'data' batches
     var expectedId = 0L
     var previousEId = 0.0d
-    responses.dropRight(1).foreach { response =>
+    responses.tail.dropRight(1).foreach { response =>
       assert(response.hasArrowBatch)
       val batch = response.getArrowBatch
       assert(batch.getData != null)
@@ -172,7 +225,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
-      .setClientId("session")
+      .setSessionId("session")
       .build()
 
     // The observer is executed inside this thread. So
@@ -200,7 +253,6 @@ class SparkConnectServiceSuite extends SharedSparkSession {
           | CREATE TABLE test (col1 INT, col2 STRING)
           | USING parquet
           |""".stripMargin)
-      val instance = new SparkConnectService(false)
       val relation = proto.Relation
         .newBuilder()
         .setProject(
@@ -225,14 +277,97 @@ class SparkConnectServiceSuite extends SharedSparkSession {
                     proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build()))))
         .build()
 
-      val response =
-        instance
-          .handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("extended"))
-          .build()
-      assert(response.getExplainString.contains("Parsed Logical Plan"))
-      assert(response.getExplainString.contains("Analyzed Logical Plan"))
-      assert(response.getExplainString.contains("Optimized Logical Plan"))
-      assert(response.getExplainString.contains("Physical Plan"))
+      val plan = proto.Plan.newBuilder().setRoot(relation).build()
+
+      val handler = new SparkConnectAnalyzeHandler(null)
+
+      val request = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED)
+            .build())
+        .build()
+
+      val response = handler.process(request, spark)
+
+      assert(response.getExplain.getExplainString.contains("Parsed Logical Plan"))
+      assert(response.getExplain.getExplainString.contains("Analyzed Logical Plan"))
+      assert(response.getExplain.getExplainString.contains("Optimized Logical Plan"))
+      assert(response.getExplain.getExplainString.contains("Physical Plan"))
+    }
+  }
+
+  test("Test observe response") {
+    withTable("test") {
+      spark.sql("""
+                  | CREATE TABLE test (col1 INT, col2 STRING)
+                  | USING parquet
+                  |""".stripMargin)
+
+      val instance = new SparkConnectService(false)
+
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val collectMetrics = proto.Relation
+        .newBuilder()
+        .setCollectMetrics(
+          proto.CollectMetrics
+            .newBuilder()
+            .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
+            .setName("my_metric")
+            .addAllMetrics(Seq(
+              proto_min("id".protoAttr).as("min_val"),
+              proto_max("id".protoAttr).as("max_val")).asJava))
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(collectMetrics)
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .build()
+
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+
+          override def onError(throwable: Throwable): Unit = throw throwable
+
+          override def onCompleted(): Unit = done = true
+        })
+
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
+
+      assert(responses.size == 7)
+
+      // Make sure the first response is schema only
+      val head = responses.head
+      assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
+
+      // Make sure the last response is observed metrics only
+      val last = responses.last
+      assert(last.getObservedMetricsCount == 1 && !last.hasSchema && !last.hasArrowBatch)
+
+      val observedMetricsList = last.getObservedMetricsList.asScala
+      val observedMetric = observedMetricsList.head
+      assert(observedMetric.getName == "my_metric")
+      assert(observedMetric.getValuesCount == 2)
+      val valuesList = observedMetric.getValuesList.asScala
+      assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
+      assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
     }
   }
 }

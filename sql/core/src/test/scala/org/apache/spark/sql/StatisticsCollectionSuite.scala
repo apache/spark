@@ -571,6 +571,30 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-42777: describe column stats (min, max) for timestamp_ntz column") {
+    val table = "insert_desc_same_time_zone"
+    val tsCol = "timestamp_ntz_typed_col"
+    withTable(table) {
+      val minTimestamp = "make_timestamp_ntz(2022, 1, 1, 0, 0, 1.123456)"
+      val maxTimestamp = "make_timestamp_ntz(2022, 1, 3, 0, 0, 2.987654)"
+      sql(s"CREATE TABLE $table ($tsCol timestamp_ntz) USING parquet")
+      sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+      checkDescTimestampColStats(
+        tableName = table,
+        timestampColumn = tsCol,
+        expectedMinTimestamp = "2022-01-01 00:00:01.123456",
+        expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
+
+      // Converting TimestampNTZ catalog stats to plan stats
+      val columnStat = getCatalogTable(table)
+        .stats.get.colStats(tsCol).toPlanStat(tsCol, TimestampNTZType)
+      assert(columnStat.min.contains(1640995201123456L))
+      assert(columnStat.max.contains(1641168002987654L))
+    }
+  }
+
   private def getStatAttrNames(tableName: String): Set[String] = {
     val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
     queryStats.map(_._1.name).toSet

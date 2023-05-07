@@ -299,21 +299,27 @@ abstract class AvroSuite
 
   test("Complex Union Type") {
     withTempPath { dir =>
-      val fixedSchema = Schema.createFixed("fixed_name", "doc", "namespace", 4)
-      val enumSchema = Schema.createEnum("enum_name", "doc", "namespace", List("e1", "e2").asJava)
-      val complexUnionType = Schema.createUnion(
-        List(Schema.create(Type.INT), Schema.create(Type.STRING), fixedSchema, enumSchema).asJava)
-      val fields = Seq(
-        new Field("field1", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
-        new Field("field2", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
-        new Field("field3", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
-        new Field("field4", complexUnionType, "doc", null.asInstanceOf[AnyVal])
-      ).asJava
-      val schema = Schema.createRecord("name", "docs", "namespace", false)
-      schema.setFields(fields)
+      val nativeWriterPath = s"$dir.avro"
+      val sparkWriterPath = s"$dir/spark"
+      val fixedSchema = SchemaBuilder.fixed("fixed_name").size(4)
+      val enumSchema = SchemaBuilder.enumeration("enum_name").symbols("e1", "e2")
+      val complexUnionType = SchemaBuilder.unionOf()
+          .intType().and()
+          .stringType().and()
+          .`type`(fixedSchema).and()
+          .`type`(enumSchema).and()
+          .nullType()
+        .endUnion()
+      val schema = SchemaBuilder.record("name").fields()
+          .name("field1").`type`(complexUnionType).noDefault()
+          .name("field2").`type`(complexUnionType).noDefault()
+          .name("field3").`type`(complexUnionType).noDefault()
+          .name("field4").`type`(complexUnionType).noDefault()
+          .name("field5").`type`(complexUnionType).noDefault()
+        .endRecord()
       val datumWriter = new GenericDatumWriter[GenericRecord](schema)
       val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-      dataFileWriter.create(schema, new File(s"$dir.avro"))
+      dataFileWriter.create(schema, new File(nativeWriterPath))
       val avroRec = new GenericData.Record(schema)
       val field1 = 1234
       val field2 = "Hope that was not load bearing"
@@ -323,15 +329,32 @@ abstract class AvroSuite
       avroRec.put("field2", field2)
       avroRec.put("field3", new Fixed(fixedSchema, field3))
       avroRec.put("field4", new EnumSymbol(enumSchema, field4))
+      avroRec.put("field5", null)
       dataFileWriter.append(avroRec)
       dataFileWriter.flush()
       dataFileWriter.close()
 
-      val df = spark.sqlContext.read.format("avro").load(s"$dir.avro")
-      assertResult(field1)(df.selectExpr("field1.member0").first().get(0))
-      assertResult(field2)(df.selectExpr("field2.member1").first().get(0))
-      assertResult(field3)(df.selectExpr("field3.member2").first().get(0))
-      assertResult(field4)(df.selectExpr("field4.member3").first().get(0))
+      val df = spark.sqlContext.read.format("avro").load(nativeWriterPath)
+      assertResult(Row(field1, null, null, null))(df.selectExpr("field1.*").first())
+      assertResult(Row(null, field2, null, null))(df.selectExpr("field2.*").first())
+      assertResult(Row(null, null, field3, null))(df.selectExpr("field3.*").first())
+      assertResult(Row(null, null, null, field4))(df.selectExpr("field4.*").first())
+      assertResult(Row(null, null, null, null))(df.selectExpr("field5.*").first())
+
+      df.write.format("avro").option("avroSchema", schema.toString).save(sparkWriterPath)
+
+      val df2 = spark.sqlContext.read.format("avro").load(nativeWriterPath)
+      assertResult(Row(field1, null, null, null))(df2.selectExpr("field1.*").first())
+      assertResult(Row(null, field2, null, null))(df2.selectExpr("field2.*").first())
+      assertResult(Row(null, null, field3, null))(df2.selectExpr("field3.*").first())
+      assertResult(Row(null, null, null, field4))(df2.selectExpr("field4.*").first())
+      assertResult(Row(null, null, null, null))(df2.selectExpr("field5.*").first())
+
+      val reader = openDatumReader(new File(sparkWriterPath))
+      assert(reader.hasNext)
+      assertResult(avroRec)(reader.next())
+      assert(!reader.hasNext)
+      reader.close()
     }
   }
 
@@ -1143,32 +1166,81 @@ abstract class AvroSuite
     }
   }
 
-  test("unsupported nullable avro type") {
+  test("int/long double/float conversion") {
     val catalystSchema =
       StructType(Seq(
-        StructField("Age", IntegerType, nullable = false),
-        StructField("Name", StringType, nullable = false)))
+        StructField("Age", LongType),
+        StructField("Length", DoubleType),
+        StructField("Name", StringType)))
 
-    for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
+    for (optionalNull <- Seq(""""null",""", "")) {
       val avroSchema = s"""
         |{
         |  "type" : "record",
         |  "name" : "test_schema",
         |  "fields" : [
-        |    {"name": "Age", "type": $unsupportedAvroType},
+        |    {"name": "Age", "type": [$optionalNull "int", "long"]},
+        |    {"name": "Length", "type": [$optionalNull "float", "double"]},
         |    {"name": "Name", "type": ["null", "string"]}
         |  ]
         |}
       """.stripMargin
 
       val df = spark.createDataFrame(
-        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+        spark.sparkContext.parallelize(Seq(Row(2L, 1.8D, "Aurora"), Row(1L, 0.9D, null))),
+        catalystSchema)
 
       withTempPath { tempDir =>
-        val message = intercept[SparkException] {
+        df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+        checkAnswer(
+          spark.read
+            .format("avro")
+            .option("avroSchema", avroSchema)
+            .load(tempDir.getPath),
+          df)
+      }
+    }
+  }
+
+  test("non-matching complex union types") {
+    val catalystSchema = new StructType().add("Union", new StructType()
+      .add("member0", IntegerType)
+      .add("member1", new StructType().add("f1", StringType, nullable = false))
+    )
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row(1, null)))), catalystSchema)
+
+    val recordS = SchemaBuilder.record("r").fields().requiredString("f1").endRecord()
+    val intS = Schema.create(Schema.Type.INT)
+    val nullS = Schema.create(Schema.Type.NULL)
+    for ((unionTypes, compatible) <- Seq(
+      (Seq(nullS, intS, recordS), true),
+      (Seq(intS, nullS, recordS), true),
+      (Seq(intS, recordS, nullS), true),
+      (Seq(intS, recordS), true),
+      (Seq(nullS, recordS, intS), false),
+      (Seq(nullS, recordS), false),
+      (Seq(nullS, SchemaBuilder.record("r").fields().requiredString("f2").endRecord()), false)
+    )) {
+      val avroSchema = SchemaBuilder.record("test_schema").fields()
+        .name("union").`type`(Schema.createUnion(unionTypes: _*)).noDefault()
+        .endRecord().toString()
+
+      withTempPath { tempDir =>
+        if (!compatible) {
+          intercept[SparkException] {
+            df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+          }
+        } else {
           df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
-        }.getMessage
-        assert(message.contains("Only UNION of a null type and a non-null type is supported"))
+          checkAnswer(
+            spark.read
+              .format("avro")
+              .option("avroSchema", avroSchema)
+              .load(tempDir.getPath),
+            df)
+        }
       }
     }
   }
@@ -2104,12 +2176,15 @@ abstract class AvroSuite
   }
 
   private def checkMetaData(path: java.io.File, key: String, expectedValue: String): Unit = {
+    val value = openDatumReader(path).asInstanceOf[DataFileReader[_]].getMetaString(key)
+    assert(value === expectedValue)
+  }
+
+  private def openDatumReader(path: File): org.apache.avro.file.FileReader[GenericRecord] = {
     val avroFiles = path.listFiles()
       .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
     assert(avroFiles.length === 1)
-    val reader = DataFileReader.openReader(avroFiles(0), new GenericDatumReader[GenericRecord]())
-    val value = reader.asInstanceOf[DataFileReader[_]].getMetaString(key)
-    assert(value === expectedValue)
+    DataFileReader.openReader(avroFiles(0), new GenericDatumReader[GenericRecord]())
   }
 
   test("SPARK-31327: Write Spark version into Avro file metadata") {

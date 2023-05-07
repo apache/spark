@@ -47,7 +47,8 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
 from pandas._libs import lib
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql.column import Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DayTimeIntervalType,
     FractionalType,
@@ -645,6 +646,8 @@ class Index(IndexOpsMixin):
         .. note:: This method should only be used if the resulting NumPy ndarray is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        .. deprecated:: 3.4.0
+
         Returns
         -------
         numpy.ndarray
@@ -660,7 +663,11 @@ class Index(IndexOpsMixin):
         >>> ps.Index(['a', 'b', 'c']).asi8 is None
         True
         """
-        warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
+        warnings.warn(
+            "Index.asi8 is deprecated and will be removed in a future version. "
+            "We recommend using `{}.to_numpy()` instead.".format(type(self).__name__),
+            FutureWarning,
+        )
         if isinstance(self.spark.data_type, IntegralType):
             return self.to_numpy()
         elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
@@ -1128,6 +1135,8 @@ class Index(IndexOpsMixin):
         """
         Whether the index type is compatible with the provided type.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> psidx = ps.Index([1, 2, 3])
@@ -1140,6 +1149,10 @@ class Index(IndexOpsMixin):
         >>> psidx.is_type_compatible('floating')
         True
         """
+        warnings.warn(
+            "Index.is_type_compatible is deprecated and will be removed in a " "future version",
+            FutureWarning,
+        )
         return kind == self.inferred_type
 
     def dropna(self, how: str = "any") -> "Index":
@@ -1808,7 +1821,7 @@ class Index(IndexOpsMixin):
         # when self._scol has name of '__index_level_0__'
         index_value_column_format = "__index_value_{}__"
 
-        sdf = self._internal._sdf
+        sdf = self._internal._sdf  # type: ignore[has-type]
         index_value_column_names = [
             verify_temp_column_name(sdf, index_value_column_format.format(i))
             for i in range(self._internal.index_level)
@@ -2075,11 +2088,10 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
-        if isinstance(self, MultiIndex):
-            if level is not None:
-                self_names = self.names
-                self_names[level] = names  # type: ignore[index]
-                names = self_names
+        if isinstance(self, MultiIndex) and level is not None:
+            self_names = self.names
+            self_names[level] = names  # type: ignore[index]
+            names = self_names
         return self.rename(name=names, inplace=inplace)
 
     def difference(self, other: "Index", sort: Optional[bool] = None) -> "Index":
@@ -2185,6 +2197,8 @@ class Index(IndexOpsMixin):
         remember that since pandas-on-Spark does not support multiple data types in an index,
         so it returns True if any type of data is datetime.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> from datetime import datetime
@@ -2210,6 +2224,11 @@ class Index(IndexOpsMixin):
         >>> idx.is_all_dates
         False
         """
+        warnings.warn(
+            "Index.is_all_dates is deprecated, will be removed in a future version.  "
+            "check index.inferred_type instead",
+            FutureWarning,
+        )
         return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":

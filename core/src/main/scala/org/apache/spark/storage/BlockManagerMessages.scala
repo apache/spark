@@ -48,6 +48,9 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerMasterStorageEndpoint
 
+  // Mark a rdd block as visible.
+  case class MarkRDDBlockAsVisible(blockId: RDDBlockId) extends ToBlockManagerMasterStorageEndpoint
+
   /**
    * Driver to Executor message to trigger a thread dump.
    */
@@ -94,6 +97,12 @@ private[spark] object BlockManagerMessages {
       diskSize = in.readLong()
     }
   }
+
+  case class UpdateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long) extends ToBlockManagerMaster
+
+  case class UpdateRDDBlockVisibility(taskId: Long, visible: Boolean) extends ToBlockManagerMaster
+
+  case class GetRDDBlockVisibility(blockId: RDDBlockId) extends ToBlockManagerMaster
 
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 

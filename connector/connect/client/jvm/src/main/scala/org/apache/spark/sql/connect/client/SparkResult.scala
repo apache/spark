@@ -26,38 +26,57 @@ import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
-private[sql] class SparkResult(
+private[sql] class SparkResult[T](
     responses: java.util.Iterator[proto.ExecutePlanResponse],
-    allocator: BufferAllocator)
+    allocator: BufferAllocator,
+    encoder: AgnosticEncoder[T])
     extends AutoCloseable
     with Cleanable {
 
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
-  private[this] var encoder: ExpressionEncoder[Row] = _
+  private[this] var boundEncoder: ExpressionEncoder[T] = _
   private[this] val batches = mutable.Buffer.empty[ColumnarBatch]
+
+  private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
+    val agnosticEncoder = if (encoder == UnboundRowEncoder) {
+      // Create a row encoder based on the schema.
+      RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
+    } else {
+      encoder
+    }
+    ExpressionEncoder(agnosticEncoder)
+  }
 
   private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
     while (responses.hasNext) {
       val response = responses.next()
-      if (response.hasArrowBatch) {
+      if (response.hasSchema) {
+        // The original schema should arrive before ArrowBatches.
+        structType =
+          DataTypeProtoConverter.toCatalystType(response.getSchema).asInstanceOf[StructType]
+      } else if (response.hasArrowBatch) {
         val ipcStreamBytes = response.getArrowBatch.getData
         val reader = new ArrowStreamReader(ipcStreamBytes.newInput(), allocator)
         try {
           val root = reader.getVectorSchemaRoot
           if (batches.isEmpty) {
-            structType = ArrowUtils.fromArrowSchema(root.getSchema)
+            if (structType == null) {
+              // If the schema is not available yet, fallback to the schema from Arrow.
+              structType = ArrowUtils.fromArrowSchema(root.getSchema)
+            }
             // TODO: create encoders that directly operate on arrow vectors.
-            encoder = RowEncoder(structType).resolveAndBind(structType.toAttributes)
+            boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
           }
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
@@ -108,8 +127,8 @@ private[sql] class SparkResult(
   /**
    * Create an Array with the contents of the result.
    */
-  def toArray: Array[Row] = {
-    val result = new Array[Row](length)
+  def toArray: Array[T] = {
+    val result = encoder.clsTag.newArray(length)
     val rows = iterator
     var i = 0
     while (rows.hasNext) {
@@ -123,11 +142,11 @@ private[sql] class SparkResult(
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[Row] with AutoCloseable = {
-    new java.util.Iterator[Row] with AutoCloseable {
+  def iterator: java.util.Iterator[T] with AutoCloseable = {
+    new java.util.Iterator[T] with AutoCloseable {
       private[this] var batchIndex: Int = -1
       private[this] var iterator: java.util.Iterator[InternalRow] = Collections.emptyIterator()
-      private[this] var deserializer: Deserializer[Row] = _
+      private[this] var deserializer: Deserializer[T] = _
       override def hasNext: Boolean = {
         if (iterator.hasNext) {
           return true
@@ -142,13 +161,13 @@ private[sql] class SparkResult(
           batchIndex = nextBatchIndex
           iterator = batches(nextBatchIndex).rowIterator()
           if (deserializer == null) {
-            deserializer = encoder.createDeserializer()
+            deserializer = boundEncoder.createDeserializer()
           }
         }
         hasNextBatch
       }
 
-      override def next(): Row = {
+      override def next(): T = {
         if (!hasNext) {
           throw new NoSuchElementException
         }

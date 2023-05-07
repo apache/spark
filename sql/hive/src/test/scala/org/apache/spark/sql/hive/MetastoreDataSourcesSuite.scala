@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -776,7 +777,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           })
       // Make sure partition columns are correctly stored in metastore.
       assert(
-        expectedPartitionColumns.sameType(actualPartitionColumns),
+        DataTypeUtils.sameType(expectedPartitionColumns, actualPartitionColumns),
         s"Partitions columns stored in metastore $actualPartitionColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedPartitionColumns.")
 
@@ -818,7 +819,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           })
       // Make sure bucketBy columns are correctly stored in metastore.
       assert(
-        expectedBucketByColumns.sameType(actualBucketByColumns),
+        DataTypeUtils.sameType(expectedBucketByColumns, actualBucketByColumns),
         s"Partitions columns stored in metastore $actualBucketByColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedBucketByColumns.")
 
@@ -829,7 +830,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           })
       // Make sure sortBy columns are correctly stored in metastore.
       assert(
-        expectedSortByColumns.sameType(actualSortByColumns),
+        DataTypeUtils.sameType(expectedSortByColumns, actualSortByColumns),
         s"Partitions columns stored in metastore $actualSortByColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedSortByColumns.")
 

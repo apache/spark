@@ -42,9 +42,11 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+@ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
   import StateStoreTestsHelper._
@@ -1103,11 +1105,16 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "3", 33, 300)
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
-      val expected = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300)  // The final state.
+      val intermediateState = Set(("1", 11) -> 100, ("2", 22) -> 200) // The intermediate state.
+      val finalState = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300) // The final state.
       // Itr1 does not see any updates - original state of the store (SPARK-38320)
       assert(rowPairsToDataSet(itr1) === Set.empty[Set[((String, Int), Int)]])
-      assert(rowPairsToDataSet(itr2) === expected)
-      assert(rowPairsToDataSet(itr3) === expected)
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(rowPairsToDataSet(itr2) === intermediateState)
+      } else {
+        assert(rowPairsToDataSet(itr2) === finalState)
+      }
+      assert(rowPairsToDataSet(itr3) === finalState)
 
       version = store.commit()
     }
@@ -1125,6 +1132,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "5", 55, 500)
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
+      // The intermediate state
+      val intermediate = Set(
+        ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 400)
       // The final state.
       val expected = Set(
         ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 401, ("5", 55) -> 500)
@@ -1135,7 +1145,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       } else {
         assert(rowPairsToDataSet(itr1) === expected)
       }
-      assert(rowPairsToDataSet(itr2) === expected)
+
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(rowPairsToDataSet(itr2) === intermediate)
+      } else {
+        assert(rowPairsToDataSet(itr2) === expected)
+      }
+
       assert(rowPairsToDataSet(itr3) === expected)
 
       version = store.commit()
@@ -1251,6 +1267,31 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(sqlMetric != null)
       assert(sqlMetric.name === Some("desc1"))
     }
+  }
+
+  test("SPARK-42572: StateStoreProvider.validateStateRowFormat shouldn't check" +
+    " value row format when SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED is false") {
+    // By default, when there is an invalid pair of value row and value schema, it should throw
+    val keyRow = dataToKeyRow("key", 1)
+    val valueRow = dataToValueRow(2)
+    val e = intercept[InvalidUnsafeRowException] {
+      // Here valueRow doesn't match with prefixKeySchema
+      StateStoreProvider.validateStateRowFormat(
+        keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
+    }
+    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+
+    // When sqlConf.stateStoreFormatValidationEnabled is set to false and
+    // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
+    // don't check value row
+    val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
+    sqlConf.setConf(SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED, false)
+    val storeConf = new StateStoreConf(sqlConf,
+      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "true"))
+    // Shouldn't throw
+    StateStoreProvider.validateStateRowFormat(
+      keyRow, keySchema, valueRow, keySchema, storeConf)
   }
 
   /** Return a new provider with a random id */

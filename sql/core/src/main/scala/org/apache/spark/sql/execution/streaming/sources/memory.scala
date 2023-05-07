@@ -143,6 +143,8 @@ class MemoryStreamingWrite(
     MemoryWriterFactory(schema)
   }
 
+  override def useCommitCoordinator(): Boolean = false
+
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data

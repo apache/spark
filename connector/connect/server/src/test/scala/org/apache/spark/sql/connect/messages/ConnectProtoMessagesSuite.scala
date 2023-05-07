@@ -20,6 +20,8 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.types.IntegerType
 
 class ConnectProtoMessagesSuite extends SparkFunSuite {
   test("UserContext can deal with extensions") {
@@ -61,7 +63,7 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     val pythonUdf = proto.PythonUDF
       .newBuilder()
       .setEvalType(100)
-      .setOutputType("\"integer\"")
+      .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType))
       .setCommand(ByteString.copyFrom("command".getBytes()))
       .setPythonVer("3.10")
       .build()

@@ -73,3 +73,51 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c);
 -- inline_outer
 select * from inline_outer(array(struct(1, 'a'), struct(2, 'b')));
 select * from inline_outer(array_remove(array(struct(1, 'a')), struct(1, 'a')));
+
+-- posexplode
+select * from posexplode(array());
+select * from posexplode(array(1, 2));
+select * from posexplode(array(1, 2)) t(pos, x);
+select * from posexplode(map());
+select * from posexplode(map('a', 1, 'b', 2));
+select * from posexplode(map('a', 1, 'b', 2)) t(pos, k, v);
+
+-- posexplode with erroneous input
+select * from posexplode(1);
+select * from posexplode(1, 2);
+select * from posexplode(explode(array(1)));
+select * from posexplode(array(1, 2)) t(x);
+
+-- posexplode
+select * from posexplode_outer(array());
+select * from posexplode_outer(array(1, 2));
+select * from posexplode_outer(map());
+select * from posexplode_outer(map('a', 1, 'b', 2));
+
+-- json_tuple
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b');
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'c');
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'a');
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x, y);
+select * from json_tuple('{"a": bad, "b": string}', 'a', 'b');
+
+-- json_tuple with erroneous input
+select * from json_tuple();
+select * from json_tuple('{"a": 1}');
+select * from json_tuple('{"a": 1}', 1);
+select * from json_tuple('{"a": 1}', null);
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x);
+
+-- stack
+select * from stack(1, 1, 2, 3);
+select * from stack(2, 1, 2, 3);
+select * from stack(3, 1, 2, 3) t(x);
+select * from stack(4, 1, 2, 3) t(x);
+select * from stack(2, 1, 1.1, 'a', 2, 2.2, 'b') t(a, b, c);
+select * from stack(2, 1, 1.1, null, 2, null, 'b') t(a, b, c);
+
+-- stack with erroneous input
+select * from stack();
+select * from stack(2, 1, 2, 3) t(a, b, c);
+select * from stack(2, 1, '1.1', 'a', 2, 2.2, 'b');
+select * from stack(2, explode(array(1, 2, 3)));

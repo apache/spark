@@ -400,7 +400,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
+        if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
@@ -453,6 +453,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplicate(keys, child) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
+
+      case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
+        StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
     }
@@ -522,12 +525,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
-        val aggregateExpressions = aggExpressions.map(expr =>
-          expr.asInstanceOf[AggregateExpression])
-
+        if !aggExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
         val (functionsWithDistinct, functionsWithoutDistinct) =
-          aggregateExpressions.partition(_.isDistinct)
+          aggExpressions.partition(_.isDistinct)
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
           ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
         }.distinct
@@ -552,7 +552,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if (functionsWithDistinct.isEmpty) {
             AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
-              aggregateExpressions,
+              aggExpressions,
               resultExpressions,
               planLater(child))
           } else {
@@ -592,19 +592,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         aggregateOperator
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
-        val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
-
+          if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
         Seq(execution.python.AggregateInPandasExec(
           groupingExpressions,
-          udfExpressions,
+          aggExpressions,
           resultExpressions,
           planLater(child)))
 
       case PhysicalAggregation(_, aggExpressions, _, _) =>
         val groupAggPandasUDFNames = aggExpressions
-          .filter(_.isInstanceOf[PythonUDF])
-          .map(_.asInstanceOf[PythonUDF].name)
+          .map(_.aggregateFunction)
+          .filter(_.isInstanceOf[PythonUDAF])
+          .map(_.asInstanceOf[PythonUDAF].name)
         // If cannot match the two cases above, then it's an error
         throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
 
@@ -624,6 +623,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.WindowInPandasExec(
           windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
+      case _ => Nil
+    }
+  }
+
+  object WindowGroupLimit extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
+        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
+          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
+        val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
+          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
+        finalWindowGroupLimit :: Nil
       case _ => Nil
     }
   }
@@ -794,10 +805,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.FlatMapCoGroupsInPandasExec(
           f.leftAttributes, f.rightAttributes,
           func, output, planLater(left), planLater(right)) :: Nil
-      case logical.MapInPandas(func, output, child) =>
-        execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
-      case logical.PythonMapInArrow(func, output, child) =>
-        execution.python.PythonMapInArrowExec(func, output, planLater(child)) :: Nil
+      case logical.MapInPandas(func, output, child, isBarrier) =>
+        execution.python.MapInPandasExec(func, output, planLater(child), isBarrier) :: Nil
+      case logical.PythonMapInArrow(func, output, child, isBarrier) =>
+        execution.python.PythonMapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
@@ -881,14 +892,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           REPARTITION_BY_NUM
         }
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child),
+          shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case r: logical.RebalancePartitions =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty) {
           REBALANCE_PARTITIONS_BY_NONE
         } else {
           REBALANCE_PARTITIONS_BY_COL
         }
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child),
+          shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

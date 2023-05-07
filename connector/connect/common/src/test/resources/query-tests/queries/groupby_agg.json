@@ -1,6 +1,12 @@
 {
+  "common": {
+    "planId": "1"
+  },
   "aggregate": {
     "input": {
+      "common": {
+        "planId": "0"
+      },
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
@@ -16,7 +22,8 @@
         "functionName": "max",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
+            "unparsedIdentifier": "a",
+            "planId": "0"
           }
         }]
       }
@@ -25,7 +32,8 @@
         "functionName": "stddev",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "b",
+            "planId": "0"
           }
         }]
       }
@@ -34,7 +42,8 @@
         "functionName": "stddev",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "b",
+            "planId": "0"
           }
         }]
       }
@@ -43,7 +52,8 @@
         "functionName": "avg",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "b",
+            "planId": "0"
           }
         }]
       }
@@ -52,7 +62,8 @@
         "functionName": "avg",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "b",
+            "planId": "0"
           }
         }]
       }
@@ -61,7 +72,8 @@
         "functionName": "avg",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
+            "unparsedIdentifier": "b",
+            "planId": "0"
           }
         }]
       }
@@ -78,7 +90,8 @@
         "functionName": "count",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
+            "unparsedIdentifier": "a",
+            "planId": "0"
           }
         }]
       }

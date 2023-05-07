@@ -1,0 +1,2 @@
+Project [xxhash64(id#0L, a#0, d#0, g#0, 42) AS xxhash64(id, a, d, g)#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

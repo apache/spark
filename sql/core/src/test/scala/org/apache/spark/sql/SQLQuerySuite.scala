@@ -3972,9 +3972,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = e,
           errorClass = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
-            "obj" -> "view",
+            "obj" -> "VIEW",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
-            "tempObj" -> "view",
+            "tempObj" -> "VIEW",
             "tempObjName" -> s"`$tempViewName`"))
 
         val e2 = intercept[AnalysisException] {
@@ -3991,9 +3991,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = e2,
           errorClass = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
-            "obj" -> "view",
+            "obj" -> "VIEW",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
-            "tempObj" -> "function",
+            "tempObj" -> "FUNCTION",
             "tempObjName" -> s"`$tempFuncName`"))
       }
     }
@@ -4647,6 +4647,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
       sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
     }
+  }
+
+  test("SPARK-43199: InlineCTE is idempotent") {
+    sql(
+      """
+        |WITH
+        |  x(r) AS (SELECT random()),
+        |  y(r) AS (SELECT * FROM x),
+        |  z(r) AS (SELECT * FROM x)
+        |SELECT * FROM z
+        |""".stripMargin).collect()
   }
 }
 

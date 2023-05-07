@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark import StorageLevel
 from pyspark.errors import AnalysisException
 from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -24,7 +25,7 @@ class CatalogTestsMixin:
         spark = self.spark
         with self.database("some_db"):
             self.assertEqual(spark.catalog.currentDatabase(), "default")
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             spark.catalog.setCurrentDatabase("some_db")
             self.assertEqual(spark.catalog.currentDatabase(), "some_db")
             self.assertRaisesRegex(
@@ -38,7 +39,7 @@ class CatalogTestsMixin:
         with self.database("some_db"):
             databases = [db.name for db in spark.catalog.listDatabases()]
             self.assertEqual(databases, ["default"])
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             databases = [db.name for db in spark.catalog.listDatabases()]
             self.assertEqual(sorted(databases), ["default", "some_db"])
 
@@ -47,7 +48,7 @@ class CatalogTestsMixin:
         spark = self.spark
         with self.database("some_db"):
             self.assertFalse(spark.catalog.databaseExists("some_db"))
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             self.assertTrue(spark.catalog.databaseExists("some_db"))
             self.assertTrue(spark.catalog.databaseExists("spark_catalog.some_db"))
             self.assertFalse(spark.catalog.databaseExists("spark_catalog.some_db2"))
@@ -55,7 +56,7 @@ class CatalogTestsMixin:
     def test_get_database(self):
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             db = spark.catalog.getDatabase("spark_catalog.some_db")
             self.assertEqual(db.name, "some_db")
             self.assertEqual(db.catalog, "spark_catalog")
@@ -65,16 +66,14 @@ class CatalogTestsMixin:
 
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2", "tab3_via_catalog"):
                 with self.tempView("temp_tab"):
                     self.assertEqual(spark.catalog.listTables(), [])
                     self.assertEqual(spark.catalog.listTables("some_db"), [])
                     spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
-                    spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet").collect()
-                    spark.sql(
-                        "CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet"
-                    ).collect()
+                    spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                    spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
 
                     schema = StructType([StructField("a", IntegerType(), True)])
                     description = "this a table created via Catalog.createTable()"
@@ -187,7 +186,7 @@ class CatalogTestsMixin:
     def test_list_functions(self):
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             functions = dict((f.name, f) for f in spark.catalog.listFunctions())
             functionsDefault = dict((f.name, f) for f in spark.catalog.listFunctions("default"))
             self.assertTrue(len(functions) > 200)
@@ -215,10 +214,8 @@ class CatalogTestsMixin:
 
                 if support_udf:
                     spark.udf.register("temp_func", lambda x: str(x))
-                spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'").collect()
-                spark.sql(
-                    "CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'"
-                ).collect()
+                spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
+                spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
                 newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
                 newFunctionsSomeDb = dict(
                     (f.name, f) for f in spark.catalog.listFunctions("some_db")
@@ -247,7 +244,7 @@ class CatalogTestsMixin:
             self.assertFalse(spark.catalog.functionExists("default.func1"))
             self.assertFalse(spark.catalog.functionExists("spark_catalog.default.func1"))
             self.assertFalse(spark.catalog.functionExists("func1", "default"))
-            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'").collect()
+            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
             self.assertTrue(spark.catalog.functionExists("func1"))
             self.assertTrue(spark.catalog.functionExists("default.func1"))
             self.assertTrue(spark.catalog.functionExists("spark_catalog.default.func1"))
@@ -256,7 +253,7 @@ class CatalogTestsMixin:
     def test_get_function(self):
         spark = self.spark
         with self.function("func1"):
-            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'").collect()
+            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
             func1 = spark.catalog.getFunction("spark_catalog.default.func1")
             self.assertTrue(func1.name == "func1")
             self.assertTrue(func1.namespace == ["default"])
@@ -269,12 +266,12 @@ class CatalogTestsMixin:
 
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2"):
-                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet").collect()
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                 spark.sql(
                     "CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet"
-                ).collect()
+                )
                 columns = sorted(
                     spark.catalog.listColumns("spark_catalog.default.tab1"), key=lambda c: c.name
                 )
@@ -343,36 +340,45 @@ class CatalogTestsMixin:
     def test_table_cache(self):
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             with self.table("tab1"):
-                spark.sql(
-                    "CREATE TABLE some_db.tab1 (name STRING, age INT) USING parquet"
-                ).collect()
-                self.assertFalse(spark.catalog.isCached("some_db.tab1"))
-                self.assertFalse(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                spark.sql("CREATE TABLE some_db.tab1 (name STRING, age INT) USING parquet")
+
+                def if_cached(x):
+                    return spark.catalog.isCached(x)
+
+                names = ["some_db.tab1", "spark_catalog.some_db.tab1"]
+
+                def assert_cached(c: bool):
+                    if c:
+                        self.assertTrue(all(map(if_cached, names)))
+                    else:
+                        self.assertFalse(any(map(if_cached, names)))
+
+                assert_cached(False)
                 spark.catalog.cacheTable("spark_catalog.some_db.tab1")
-                self.assertTrue(spark.catalog.isCached("some_db.tab1"))
-                self.assertTrue(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                assert_cached(True)
                 spark.catalog.uncacheTable("spark_catalog.some_db.tab1")
-                self.assertFalse(spark.catalog.isCached("some_db.tab1"))
-                self.assertFalse(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                assert_cached(False)
+                spark.catalog.cacheTable("spark_catalog.some_db.tab1", StorageLevel.MEMORY_ONLY)
+                assert_cached(True)
+                spark.catalog.clearCache()
+                assert_cached(False)
 
     def test_table_exists(self):
         # SPARK-36176: testing that table_exists returns correct boolean
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2"):
                 self.assertFalse(spark.catalog.tableExists("tab1"))
                 self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
-                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet").collect()
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                 self.assertTrue(spark.catalog.tableExists("tab1"))
                 self.assertTrue(spark.catalog.tableExists("default.tab1"))
                 self.assertTrue(spark.catalog.tableExists("spark_catalog.default.tab1"))
                 self.assertTrue(spark.catalog.tableExists("tab1", "default"))
-                spark.sql(
-                    "CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet"
-                ).collect()
+                spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
                 self.assertFalse(spark.catalog.tableExists("tab2"))
                 self.assertTrue(spark.catalog.tableExists("some_db.tab2"))
                 self.assertTrue(spark.catalog.tableExists("spark_catalog.some_db.tab2"))
@@ -381,9 +387,9 @@ class CatalogTestsMixin:
     def test_get_table(self):
         spark = self.spark
         with self.database("some_db"):
-            spark.sql("CREATE DATABASE some_db").collect()
+            spark.sql("CREATE DATABASE some_db")
             with self.table("tab1"):
-                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet").collect()
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                 self.assertEqual(spark.catalog.getTable("tab1").database, "default")
                 self.assertEqual(spark.catalog.getTable("default.tab1").catalog, "spark_catalog")
                 self.assertEqual(spark.catalog.getTable("spark_catalog.default.tab1").name, "tab1")
@@ -397,8 +403,8 @@ class CatalogTestsMixin:
             with self.table("my_tab"):
                 spark.sql(
                     "CREATE TABLE my_tab (col STRING) USING TEXT LOCATION '{}'".format(tmp_dir)
-                ).collect()
-                spark.sql("INSERT INTO my_tab SELECT 'abc'").collect()
+                )
+                spark.sql("INSERT INTO my_tab SELECT 'abc'")
                 spark.catalog.cacheTable("my_tab")
                 self.assertEqual(spark.table("my_tab").count(), 1)
 

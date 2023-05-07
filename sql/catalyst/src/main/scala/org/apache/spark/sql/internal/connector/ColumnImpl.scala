@@ -27,4 +27,5 @@ case class ColumnImpl(
     nullable: Boolean,
     comment: String,
     defaultValue: ColumnDefaultValue,
+    generationExpression: String,
     metadataInJSON: String) extends Column

@@ -1482,24 +1482,6 @@ struct<INTERVAL '16 01:03:02.1002' DAY TO SECOND:interval day to second>
 
 
 -- !query
-select interval
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_0025",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 15,
-    "fragment" : "interval"
-  } ]
-}
-
-
--- !query
 select interval 1 fake_unit
 -- !query schema
 struct<>

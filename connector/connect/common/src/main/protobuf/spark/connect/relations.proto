@@ -60,6 +60,15 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
+    MapPartitions map_partitions = 28;
+    CollectMetrics collect_metrics = 29;
+    Parse parse = 30;
+    GroupMap group_map = 31;
+    CoGroupMap co_group_map = 32;
+    WithWatermark with_watermark = 33;
+    ApplyInPandasWithState apply_in_pandas_with_state = 34;
+    HtmlString html_string = 35;
+    CachedLocalRelation cached_local_relation = 36;
 
     // NA functions
     NAFill fill_na = 90;
@@ -103,8 +112,8 @@ message SQL {
   // (Required) The SQL query.
   string query = 1;
 
-  // (Optional) A map of parameter names to literal values.
-  map<string, string> args = 2;
+  // (Optional) A map of parameter names to literal expressions.
+  map<string, Expression.Literal> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -115,14 +124,22 @@ message Read {
     DataSource data_source = 2;
   }
 
+  // (Optional) Indicates if this is a streaming read.
+  bool is_streaming = 3;
+
   message NamedTable {
     // (Required) Unparsed identifier for the table.
     string unparsed_identifier = 1;
+
+    // Options for the named table. The map key is case insensitive.
+    map<string, string> options = 2;
   }
 
   message DataSource {
-    // (Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
-    string format = 1;
+    // (Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    //
+    // If not set, the value from SQL conf 'spark.sql.sources.default' will be used.
+    optional string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
     //
@@ -136,6 +153,11 @@ message Read {
 
     // (Optional) A list of path for file-system backed data sources.
     repeated string paths = 4;
+
+    // (Optional) Condition in the where clause for each partition.
+    //
+    // This is only supported by the JDBC data source.
+    repeated string predicates = 5;
   }
 }
 
@@ -318,10 +340,11 @@ message Drop {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required) columns to drop.
-  //
-  // Should contain at least 1 item.
-  repeated Expression cols = 2;
+  // (Optional) columns to drop.
+  repeated Expression columns = 2;
+
+  // (Optional) names of columns to drop.
+  repeated string column_names = 3;
 }
 
 
@@ -340,6 +363,9 @@ message Deduplicate {
   //
   // This field does not co-use with `column_names`.
   optional bool all_columns_as_keys = 3;
+
+  // (Optional) Deduplicate within the time range of watermark.
+  optional bool within_watermark = 4;
 }
 
 // A relation that does not need to be qualified by name.
@@ -354,6 +380,18 @@ message LocalRelation {
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
   optional string schema = 2;
+}
+
+// A local relation that has been cached already.
+message CachedLocalRelation {
+  // (Required) An identifier of the user which created the local relation
+  string userId = 1;
+
+  // (Required) An identifier of the Spark SQL session in which the user created the local relation.
+  string sessionId = 2;
+
+  // (Required) A sha-256 hash of the serialized local relation.
+  string hash = 3;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
@@ -434,6 +472,20 @@ message ShowString {
 
   // (Required) If set to true, prints output rows vertically (one line per column value).
   bool vertical = 4;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.htmlString' to compute the results.
+message HtmlString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  int32 num_rows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  int32 truncate = 3;
 }
 
 // Computes specified statistics for numeric and string columns.
@@ -710,6 +762,18 @@ message WithColumns {
   repeated Expression.Alias aliases = 2;
 }
 
+message WithWatermark {
+
+  // (Required) The input relation
+  Relation input = 1;
+
+  // (Required) Name of the column containing event time.
+  string event_time = 2;
+
+  // (Required)
+  string delay_threshold = 3;
+}
+
 // Specify a hint over a relation. Hint should have a name and optional parameters.
 message Hint {
   // (Required) The input relation.
@@ -767,4 +831,105 @@ message RepartitionByExpression {
 
   // (Optional) number of partitions, must be positive.
   optional int32 num_partitions = 3;
+}
+
+message MapPartitions {
+  // (Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow.
+  Relation input = 1;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 2;
+
+  // (Optional) Whether to use barrier mode execution or not.
+  optional bool is_barrier = 3;
+}
+
+message GroupMap {
+  // (Required) Input relation for Group Map API: apply, applyInPandas.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
+  repeated Expression sorting_expressions = 4;
+}
+
+message CoGroupMap {
+  // (Required) One input relation for CoGroup Map API - applyInPandas.
+  Relation input = 1;
+
+  // Expressions for grouping keys of the first input relation.
+  repeated Expression input_grouping_expressions = 2;
+
+  // (Required) The other input relation.
+  Relation other = 3;
+
+  // Expressions for grouping keys of the other input relation.
+  repeated Expression other_grouping_expressions = 4;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 5;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression input_sorting_expressions = 6;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression other_sorting_expressions = 7;
+}
+
+message ApplyInPandasWithState {
+  // (Required) Input relation for applyInPandasWithState.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Required) Schema for the output DataFrame.
+  string output_schema = 4;
+
+  // (Required) Schema for the state.
+  string state_schema = 5;
+
+  // (Required) The output mode of the function.
+  string output_mode = 6;
+
+  // (Required) Timeout configuration for groups that do not receive data for a while.
+  string timeout_conf = 7;
+}
+
+// Collect arbitrary (named) metrics from a dataset.
+message CollectMetrics {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Name of the metrics.
+  string name = 2;
+
+  // (Required) The metric sequence.
+  repeated Expression metrics = 3;
+}
+
+message Parse {
+  // (Required) Input relation to Parse. The input is expected to have single text column.
+  Relation input = 1;
+  // (Required) The expected format of the text.
+  ParseFormat format = 2;
+
+  // (Optional) DataType representing the schema. If not set, Spark will infer the schema.
+  optional DataType schema = 3;
+
+  // Options for the csv/json parser. The map key is case insensitive.
+  map<string, string> options = 4;
+  enum ParseFormat {
+    PARSE_FORMAT_UNSPECIFIED = 0;
+    PARSE_FORMAT_CSV = 1;
+    PARSE_FORMAT_JSON = 2;
+  }
 }

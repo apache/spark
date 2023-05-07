@@ -372,10 +372,12 @@ abstract class RDD[T: ClassTag](
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
-      readCachedBlock = false
-      computeOrReadCheckpoint(partition, context)
-    }) match {
+    SparkEnv.get.blockManager.getOrElseUpdateRDDBlock(
+      context.taskAttemptId(), blockId, storageLevel, elementClassTag, () => {
+        readCachedBlock = false
+        computeOrReadCheckpoint(partition, context)
+      }
+    ) match {
       // Block hit.
       case Left(blockResult) =>
         if (readCachedBlock) {
@@ -904,6 +906,31 @@ abstract class RDD[T: ClassTag](
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
       preservesPartitioning)
+  }
+
+  /**
+   * Return a new RDD by applying an evaluator to each partition of this RDD. The given evaluator
+   * factory will be serialized and sent to executors, and each task will create an evaluator with
+   * the factory, and use the evaluator to transform the data of the input partition.
+   */
+  @DeveloperApi
+  @Since("3.5.0")
+  def mapPartitionsWithEvaluator[U: ClassTag](
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory)
+  }
+
+  /**
+   * Zip this RDD's partitions with another RDD and return a new RDD by applying an evaluator to
+   * the zipped partitions. Assumes that the two RDDs have the *same number of partitions*, but
+   * does *not* require them to have the same number of elements in each partition.
+   */
+  @DeveloperApi
+  @Since("3.5.0")
+  def zipPartitionsWithEvaluator[U: ClassTag](
+      rdd2: RDD[T],
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new ZippedPartitionsWithEvaluatorRDD(this, rdd2, evaluatorFactory)
   }
 
   /**

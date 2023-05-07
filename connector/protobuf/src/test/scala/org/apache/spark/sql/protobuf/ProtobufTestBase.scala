@@ -18,6 +18,7 @@
 package org.apache.spark.sql.protobuf
 
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{DataType, StructType}
 
 trait ProtobufTestBase extends SQLTestUtils {
 
@@ -34,4 +35,7 @@ trait ProtobufTestBase extends SQLTestUtils {
     }
     ret.replace("file:/", "/")
   }
+
+  protected def structFromDDL(ddl: String): StructType =
+    DataType.fromDDL(ddl).asInstanceOf[StructType]
 }

@@ -1030,4 +1030,24 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
     assert(npeCounter.intValue() == 0)
   }
+
+  test("SPARK-42719: `MapOutputTracker#getMapLocation` should respect the config option") {
+    val rpcEnv = createRpcEnv("test")
+    val newConf = new SparkConf
+    newConf.set(SHUFFLE_REDUCE_LOCALITY_ENABLE, false)
+    val tracker = newTrackerMaster(newConf)
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
+      tracker.registerShuffle(10, 6, 1)
+      tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+        Array(2L), 5))
+      val mockShuffleDep = mock(classOf[ShuffleDependency[Int, Int, _]])
+      when(mockShuffleDep.shuffleId).thenReturn(10)
+      assert(tracker.getMapLocation(mockShuffleDep, 0, 1) === Nil)
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
 }

@@ -127,7 +127,7 @@ object SchemaConverters {
       case UNION =>
         if (avroSchema.getTypes.asScala.exists(_.getType == NULL)) {
           // In case of a union with null, eliminate it and make a recursive call
-          val remainingUnionTypes = avroSchema.getTypes.asScala.filterNot(_.getType == NULL)
+          val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
           if (remainingUnionTypes.size == 1) {
             toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames).copy(nullable = true)
           } else {

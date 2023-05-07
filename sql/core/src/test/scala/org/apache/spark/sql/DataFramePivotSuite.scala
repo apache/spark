@@ -356,4 +356,19 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
         Row(LocalDateTime.of(2013, 1, 1, 0, 0, 0, 0), 48000.0, 30000.0) :: Nil
     )
   }
+
+  test("using pivot in streaming is not supported") {
+    val df = spark
+      .readStream
+      .format("rate")
+      .load()
+      .withColumn("key", expr(s"MOD(value, 10)"))
+      .groupBy($"key")
+
+    val e = intercept[AnalysisException] {
+      df.pivot("value").count()
+    }
+
+    assert(e.getMessage.contains("pivot is not supported on a streaming DataFrames/Datasets"))
+  }
 }

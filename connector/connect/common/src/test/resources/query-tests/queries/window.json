@@ -1,0 +1,211 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "expressions": [{
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "min",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        },
+        "partitionSpec": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "min",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        },
+        "partitionSpec": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "min",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        },
+        "orderSpec": [{
+          "child": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "a"
+            }
+          },
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
+        }, {
+          "child": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "b"
+            }
+          },
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
+        }]
+      }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "min",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        },
+        "orderSpec": [{
+          "child": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "a"
+            }
+          },
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
+        }, {
+          "child": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "b"
+            }
+          },
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
+        }]
+      }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "min",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        },
+        "orderSpec": [{
+          "child": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "a"
+            }
+          },
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
+        }],
+        "frameSpec": {
+          "frameType": "FRAME_TYPE_ROW",
+          "lower": {
+            "value": {
+              "literal": {
+                "integer": 2
+              }
+            }
+          },
+          "upper": {
+            "value": {
+              "literal": {
+                "integer": 3
+              }
+            }
+          }
+        }
+      }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "min",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        },
+        "orderSpec": [{
+          "child": {
+            "unresolvedAttribute": {
+              "unparsedIdentifier": "a"
+            }
+          },
+          "direction": "SORT_DIRECTION_ASCENDING",
+          "nullOrdering": "SORT_NULLS_FIRST"
+        }],
+        "frameSpec": {
+          "frameType": "FRAME_TYPE_RANGE",
+          "lower": {
+            "value": {
+              "literal": {
+                "long": "2"
+              }
+            }
+          },
+          "upper": {
+            "value": {
+              "literal": {
+                "long": "3"
+              }
+            }
+          }
+        }
+      }
+    }, {
+      "window": {
+        "windowFunction": {
+          "unresolvedFunction": {
+            "functionName": "count",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "id"
+              }
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

@@ -1,4 +1,10 @@
 {
+  "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
+    "message" : [
+      "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
+    ],
+    "sqlState" : "42710"
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -26,6 +32,12 @@
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22003"
+  },
+  "BINARY_ARITHMETIC_OVERFLOW" : {
+    "message" : [
+      "<value1> <symbol> <value2> caused overflow."
     ],
     "sqlState" : "22003"
   },
@@ -82,6 +94,16 @@
     ],
     "sqlState" : "42825"
   },
+  "CANNOT_MERGE_SCHEMAS" : {
+    "message" : [
+      "Failed merging schemas:",
+      "Initial schema:",
+      "<left>",
+      "Schema that cannot be merged with the initial schema:",
+      "<right>."
+    ],
+    "sqlState" : "42KD9"
+  },
   "CANNOT_MODIFY_CONFIG" : {
     "message" : [
       "Cannot modify the value of the Spark config: <key>.",
@@ -122,6 +144,12 @@
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
     ],
     "sqlState" : "429BB"
+  },
+  "CANNOT_RENAME_ACROSS_SCHEMA" : {
+    "message" : [
+      "Renaming a <type> across schemas is not allowed."
+    ],
+    "sqlState" : "0AKD0"
   },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
@@ -207,9 +235,9 @@
     ],
     "sqlState" : "22018"
   },
-  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+  "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
-      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid."
+      "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
     ],
     "sqlState" : "42710"
   },
@@ -333,6 +361,11 @@
       "INVALID_ORDERING_TYPE" : {
         "message" : [
           "The <functionName> does not support ordering on type <dataType>."
+        ]
+      },
+      "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
+        "message" : [
+          "<errors>"
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -512,6 +545,11 @@
     ],
     "sqlState" : "22012"
   },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <fieldNames>."
+    ]
+  },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
       "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
@@ -523,12 +561,6 @@
       "Found duplicate keys <keyColumn>."
     ],
     "sqlState" : "23505"
-  },
-  "ELEMENT_AT_BY_INDEX_ZERO" : {
-    "message" : [
-      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
-    ],
-    "sqlState" : "22003"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -570,6 +602,11 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
+    "message" : [
+      "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
+    ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
@@ -746,7 +783,25 @@
     ],
     "sqlState" : "42704"
   },
+  "INSERT_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+    ],
+    "sqlState" : "21S01"
+  },
   "INTERNAL_ERROR" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_BROADCAST" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_EXECUTOR" : {
     "message" : [
       "<message>"
     ],
@@ -898,6 +953,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_INDEX_OF_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -955,9 +1016,19 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "AES_SALTED_MAGIC" : {
+        "message" : [
+          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
+        ]
+      },
+      "REGEX_GROUP_INDEX" : {
+        "message" : [
+          "Expects group index between 0 and <groupCount>, but got <groupIndex>."
         ]
       },
       "ZERO_INDEX" : {
@@ -1036,7 +1107,7 @@
   },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
-      "Cannot create a persistent <obj> <objName> by referencing a temporary <tempObj> <tempObjName>. Please make the temporary <tempObj> persistent, or make the persistent <obj> temporary."
+      "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ]
   },
   "INVALID_TYPED_LITERAL" : {
@@ -1045,12 +1116,39 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_URL" : {
+    "message" : [
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
       "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
     ],
     "sqlState" : "42903"
+  },
+  "INVALID_WRITE_DISTRIBUTION" : {
+    "message" : [
+      "The requested write distribution is invalid."
+    ],
+    "subClass" : {
+      "PARTITION_NUM_AND_SIZE" : {
+        "message" : [
+          "The partition number and advisory partition size can't be specified at the same time."
+        ]
+      },
+      "PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION" : {
+        "message" : [
+          "The number of partitions can't be specified with unspecified distribution."
+        ]
+      },
+      "PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION" : {
+        "message" : [
+          "The advisory partition size can't be specified with unspecified distribution."
+        ]
+      }
+    }
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -1375,6 +1473,11 @@
       "sortBy must be used together with bucketBy."
     ]
   },
+  "SQL_CONF_NOT_FOUND" : {
+    "message" : [
+      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
+    ]
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -1496,7 +1599,7 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type <typeName>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
     ],
     "sqlState" : "42704"
   },
@@ -1607,6 +1710,11 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
+    "message" : [
+      "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."
+    ]
+  },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
       "A query operator contains one or more unsupported expressions. Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
@@ -1712,6 +1820,11 @@
       "PANDAS_UDAF_IN_PIVOT" : {
         "message" : [
           "Pandas user defined aggregate function in the PIVOT clause."
+        ]
+      },
+      "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
+        "message" : [
+          "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -2015,11 +2128,6 @@
   "_LEGACY_ERROR_TEMP_0024" : {
     "message" : [
       "Can only have a single from-to unit in the interval literal syntax."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0025" : {
-    "message" : [
-      "At least one time unit should be given for interval literal."
     ]
   },
   "_LEGACY_ERROR_TEMP_0026" : {
@@ -2873,11 +2981,6 @@
       "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1168" : {
-    "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1169" : {
     "message" : [
       "Requested partitioning does not match the table <tableName>:",
@@ -2913,11 +3016,6 @@
   "_LEGACY_ERROR_TEMP_1175" : {
     "message" : [
       "Unsupported data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1178" : {
-    "message" : [
-      "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
     ]
   },
   "_LEGACY_ERROR_TEMP_1181" : {
@@ -3656,34 +3754,9 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2006" : {
-    "message" : [
-      "The specified group index cannot be less than zero."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2007" : {
-    "message" : [
-      "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2008" : {
-    "message" : [
-      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2010" : {
-    "message" : [
-      "Window Functions do not support merging."
     ]
   },
   "_LEGACY_ERROR_TEMP_2011" : {
@@ -3694,11 +3767,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2014" : {
-    "message" : [
-      "<funcName> is not matched at addNewFunction."
     ]
   },
   "_LEGACY_ERROR_TEMP_2015" : {
@@ -3729,11 +3797,6 @@
   "_LEGACY_ERROR_TEMP_2021" : {
     "message" : [
       "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2022" : {
-    "message" : [
-      "Unsupported natural join type <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {
@@ -3839,11 +3902,6 @@
   "_LEGACY_ERROR_TEMP_2043" : {
     "message" : [
       "- <sqlValue> caused overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2044" : {
-    "message" : [
-      "<sqlValue1> <symbol> <sqlValue2> caused overflow."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {
@@ -4765,12 +4823,6 @@
   "_LEGACY_ERROR_TEMP_2246" : {
     "message" : [
       "Table does not support dynamic partition overwrite: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2247" : {
-    "message" : [
-      "Failed merging schema:",
-      "<schema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2248" : {

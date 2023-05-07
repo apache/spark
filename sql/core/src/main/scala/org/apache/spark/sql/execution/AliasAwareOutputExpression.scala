@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 
@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
 trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    if (hasAlias) {
+    val partitionings: Seq[Partitioning] = if (hasAlias) {
       flattenPartitioning(child.outputPartitioning).flatMap {
         case e: Expression =>
           // We need unique partitionings but if the input partitioning is
@@ -44,13 +44,19 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
             .take(aliasCandidateLimit)
             .asInstanceOf[Stream[Partitioning]]
         case o => Seq(o)
-      } match {
-        case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
-        case Seq(p) => p
-        case ps => PartitioningCollection(ps)
       }
     } else {
-      child.outputPartitioning
+      // Filter valid partitiongs (only reference output attributes of the current plan node)
+      val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+      flattenPartitioning(child.outputPartitioning).filter {
+        case e: Expression => e.references.subsetOf(outputSet)
+        case _ => true
+      }
+    }
+    partitionings match {
+      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+      case Seq(p) => p
+      case ps => PartitioningCollection(ps)
     }
   }
 

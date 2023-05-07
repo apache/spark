@@ -18,8 +18,13 @@
 import unittest
 from typing import Optional
 
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 import pyspark.sql.connect.proto as proto
+from pyspark.testing.connectutils import should_test_connect
+
+if should_test_connect:
+    import pandas as pd
+    import pyarrow as pa
 
 
 class SparkConnectClientTestCase(unittest.TestCase):
@@ -45,6 +50,32 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
         self.assertEqual(mock.req.client_type, "_SPARK_CONNECT_PYTHON")
 
+    def test_properties(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+        self.assertEqual(client.token, "bar")
+        self.assertEqual(client.host, "foo")
+
+        client = SparkConnectClient("sc://foo/")
+        self.assertIsNone(client.token)
+
+    def test_channel_builder(self):
+        class CustomChannelBuilder(ChannelBuilder):
+            @property
+            def userId(self) -> Optional[str]:
+                return "abc"
+
+        client = SparkConnectClient(CustomChannelBuilder("sc://foo/"))
+
+        self.assertEqual(client._user_id, "abc")
+
+    def test_interrupt_all(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        client.interrupt_all()
+        self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
+
 
 class MockService:
     # Simplest mock of the SparkConnectService.
@@ -59,8 +90,26 @@ class MockService:
     def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
         self.req = req
         resp = proto.ExecutePlanResponse()
-        resp.client_id = self._session_id
+        resp.session_id = self._session_id
+
+        pdf = pd.DataFrame(data={"col1": [1, 2]})
+        schema = pa.Schema.from_pandas(pdf)
+        table = pa.Table.from_pandas(pdf)
+        sink = pa.BufferOutputStream()
+
+        writer = pa.ipc.new_stream(sink, schema=schema)
+        writer.write(table)
+        writer.close()
+
+        buf = sink.getvalue()
+        resp.arrow_batch.data = buf.to_pybytes()
         return [resp]
+
+    def Interrupt(self, req: proto.InterruptRequest, metadata):
+        self.req = req
+        resp = proto.InterruptResponse()
+        resp.session_id = self._session_id
+        return resp
 
 
 if __name__ == "__main__":

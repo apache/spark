@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.TestOptionsSource
@@ -770,6 +774,167 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       df,
       FormattedMode,
       statistics)
+  }
+
+  test("SPARK-42753: Process subtree for ReusedExchange with unknown child") {
+    // Simulate a simplified subtree with a ReusedExchange pointing to an Exchange node that has
+    // no ID. This is a rare edge case that could arise during AQE if there are multiple
+    // ReusedExchanges. We check to make sure the child Exchange gets an ID and gets printed
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused = ReusedExchangeExec(exchange.output, exchange)
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+    ExplainUtils.processPlan[SparkPlan](reused, appendStr(_))
+
+    val expectedTree = """|ReusedExchange (1)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 3]
+                          |Output [1]: [id#xL]
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (3)
+                          |+- Range (2)
+                          |
+                          |
+                          |(2) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(3) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |""".stripMargin
+
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
+  }
+
+  test("SPARK-42753: Two ReusedExchange Sharing Same Subtree") {
+    // Simulate a simplified subtree with a two ReusedExchange reusing the same exchange
+    // Only one exchange node should be printed
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused1 = ReusedExchangeExec(exchange.output, exchange)
+    val reused2 = ReusedExchangeExec(exchange.output, exchange)
+    val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
+
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+
+    ExplainUtils.processPlan[SparkPlan](join, appendStr(_))
+
+    val expectedTree = """|SortMergeJoin Inner (3)
+                          |:- ReusedExchange (1)
+                          |+- ReusedExchange (2)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 5]
+                          |Output [1]: [id#xL]
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 5]
+                          |Output [1]: [id#xL]
+                          |
+                          |(3) SortMergeJoin
+                          |Left keys [1]: [id#xL]
+                          |Right keys [1]: [id#xL]
+                          |Join type: Inner
+                          |Join condition: None
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (5)
+                          |+- Range (4)
+                          |
+                          |
+                          |(4) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(5) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |""".stripMargin
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
+  }
+
+  test("SPARK-42753: Correctly separate two ReusedExchange not sharing subtree") {
+    // Simulate two ReusedExchanges reusing two different Exchanges that appear similar
+    // The two exchanges should have separate IDs and printed separately
+    val exchange1 = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused1 = ReusedExchangeExec(exchange1.output, exchange1)
+    val exchange2 = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused2 = ReusedExchangeExec(exchange2.output, exchange2)
+    val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
+
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+
+    ExplainUtils.processPlan[SparkPlan](join, appendStr(_))
+
+    val expectedTree = """|SortMergeJoin Inner (3)
+                          |:- ReusedExchange (1)
+                          |+- ReusedExchange (2)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 5]
+                          |Output [1]: [id#xL]
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 7]
+                          |Output [1]: [id#xL]
+                          |
+                          |(3) SortMergeJoin
+                          |Left keys [1]: [id#xL]
+                          |Right keys [1]: [id#xL]
+                          |Join type: Inner
+                          |Join condition: None
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (5)
+                          |+- Range (4)
+                          |
+                          |
+                          |(4) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(5) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |Subplan:2
+                          |Exchange (7)
+                          |+- Range (6)
+                          |
+                          |
+                          |(6) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(7) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |""".stripMargin
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
   }
 }
 

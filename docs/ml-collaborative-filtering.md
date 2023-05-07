@@ -105,6 +105,33 @@ above) and "drop". Further strategies may be supported in future.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+In the following example, we load ratings data from the
+[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
+consisting of a user, a movie, a rating and a timestamp.
+We then train an ALS model which assumes, by default, that the ratings are
+explicit (`implicitPrefs` is `False`).
+We evaluate the recommendation model by measuring the root-mean-square error of
+rating prediction.
+
+Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.ml.recommendation.ALS.html)
+for more details on the API.
+
+{% include_example python/ml/als_example.py %}
+
+If the rating matrix is derived from another source of information (i.e. it is
+inferred from other signals), you can set `implicitPrefs` to `True` to get
+better results:
+
+{% highlight python %}
+als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
+          userCol="userId", itemCol="movieId", ratingCol="rating")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 In the following example, we load ratings data from the
@@ -163,32 +190,6 @@ ALS als = new ALS()
   .setUserCol("userId")
   .setItemCol("movieId")
   .setRatingCol("rating");
-{% endhighlight %}
-
-</div>
-
-<div data-lang="python" markdown="1">
-
-In the following example, we load ratings data from the
-[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
-consisting of a user, a movie, a rating and a timestamp.
-We then train an ALS model which assumes, by default, that the ratings are
-explicit (`implicitPrefs` is `False`).
-We evaluate the recommendation model by measuring the root-mean-square error of
-rating prediction.
-
-Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.ml.recommendation.ALS.html)
-for more details on the API.
-
-{% include_example python/ml/als_example.py %}
-
-If the rating matrix is derived from another source of information (i.e. it is
-inferred from other signals), you can set `implicitPrefs` to `True` to get
-better results:
-
-{% highlight python %}
-als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
-          userCol="userId", itemCol="movieId", ratingCol="rating")
 {% endhighlight %}
 
 </div>

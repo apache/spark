@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
@@ -615,9 +616,9 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
             },
             errorClass = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
-              "obj" -> "view",
+              "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
-              "tempObj" -> "view",
+              "tempObj" -> "VIEW",
               "tempObjName" -> "`v2`"))
           val tempFunctionName = "temp_udf"
           val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
@@ -629,9 +630,9 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
               },
               errorClass = "INVALID_TEMP_OBJ_REFERENCE",
               parameters = Map(
-                "obj" -> "view",
+                "obj" -> "VIEW",
                 "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
-                "tempObj" -> "function",
+                "tempObj" -> "FUNCTION",
                 "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
@@ -710,6 +711,22 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
           " AS SELECT 1 AS c1, '2' AS c2"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  test("capture the session time zone config while creating a view") {
+    val viewName = "v1_capture_test"
+    withView(viewName) {
+      assert(get.sessionLocalTimeZone === "America/Los_Angeles")
+      createView(viewName,
+        """select hour(ts) as H from (
+          |  select cast('2022-01-01T00:00:00.000 America/Los_Angeles' as timestamp) as ts
+          |)""".stripMargin, Seq("H"))
+      withDefaultTimeZone(java.time.ZoneId.of("UTC-09:00")) {
+        withSQLConf(SESSION_LOCAL_TIMEZONE.key -> "UTC-10:00") {
+          checkAnswer(sql(s"select H from $viewName"), Row(0))
+        }
       }
     }
   }

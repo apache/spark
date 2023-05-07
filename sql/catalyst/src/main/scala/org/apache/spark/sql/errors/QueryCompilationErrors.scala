@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
@@ -749,13 +749,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def operationOnlySupportedWithV2TableError(
-      nameParts: Seq[String],
+  def unsupportedTableOperationError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      operation: String): Throwable = {
+    unsupportedTableOperationError(
+      catalog.name +: ident.namespace :+ ident.name, operation)
+  }
+
+  def unsupportedTableOperationError(
+      ident: TableIdentifier,
+      operation: String): Throwable = {
+    unsupportedTableOperationError(
+      Seq(ident.catalog.get, ident.database.get, ident.table), operation)
+  }
+
+  private def unsupportedTableOperationError(
+      qualifiedTableName: Seq[String],
       operation: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
-        "tableName" -> toSQLId(nameParts),
+        "tableName" -> toSQLId(qualifiedTableName),
         "operation" -> operation))
   }
 
@@ -1702,7 +1717,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def mismatchedInsertedDataColumnNumberError(
       tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
       messageParameters = Map(
         "tableName" -> tableName,
         "targetColumns" -> insert.table.output.size.toString,
@@ -1788,7 +1803,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1178",
+      errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION",
+      messageParameters = Map.empty)
+  }
+
+  def partitionSizeNotAllowedWithUnspecifiedDistributionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION",
+      messageParameters = Map.empty)
+  }
+
+  def numberAndSizeOfPartitionsNotAllowedTogether(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_AND_SIZE",
       messageParameters = Map.empty)
   }
 
@@ -2055,6 +2082,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tableName" -> tableName,
         "errors" -> errors.mkString("\n- ")))
+  }
+
+  def invalidRowLevelOperationAssignments(
+      assignments: Seq[Assignment],
+      errors: Seq[String]): Throwable = {
+
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
+      messageParameters = Map(
+        "sqlExpr" -> assignments.map(toSQLExpr).mkString(", "),
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
   }
 
   def secondArgumentOfFunctionIsNotIntegerError(
@@ -2692,9 +2730,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "obj" -> "view",
+        "obj" -> "VIEW",
         "objName" -> toSQLId(name.nameParts),
-        "tempObj" -> "view",
+        "tempObj" -> "VIEW",
         "tempObjName" -> toSQLId(nameParts)))
   }
 
@@ -2704,9 +2742,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
      new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "obj" -> "view",
+        "obj" -> "VIEW",
         "objName" -> toSQLId(name.nameParts),
-        "tempObj" -> "function",
+        "tempObj" -> "FUNCTION",
         "tempObjName" -> toSQLId(funcName)))
   }
 
@@ -3465,5 +3503,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
       messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
+  }
+
+  def cannotRenameTableAcrossSchemaError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
+    )
   }
 }

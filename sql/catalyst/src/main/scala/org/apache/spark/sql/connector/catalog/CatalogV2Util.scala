@@ -22,9 +22,11 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
+import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -246,8 +248,9 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
-    constantFoldCurrentDefaultsToExistDefaults(
+    validateTableProviderForDefaultValue(
       newSchema, tableProvider, statementType, addNewColumnToExistingTable)
+    constantFoldCurrentDefaultsToExistDefaults(newSchema, statementType)
   }
 
   private def replace(
@@ -471,43 +474,62 @@ private[sql] object CatalogV2Util {
 
   /**
    * Converts a StructType to DS v2 columns, which decodes the StructField metadata to v2 column
-   * comment and default value. This is mainly used to generate DS v2 columns from table schema in
-   * DDL commands, so that Spark can pass DS v2 columns to DS v2 createTable and related APIs.
+   * comment and default value or generation expression. This is mainly used to generate DS v2
+   * columns from table schema in DDL commands, so that Spark can pass DS v2 columns to DS v2
+   * createTable and related APIs.
    */
   def structTypeToV2Columns(schema: StructType): Array[Column] = {
     schema.fields.map(structFieldToV2Column)
   }
 
   private def structFieldToV2Column(f: StructField): Column = {
-    def createV2Column(defaultValue: ColumnDefaultValue, metadata: Metadata): Column = {
-      val metadataJSON = if (metadata == Metadata.empty) {
+    def metadataAsJson(metadata: Metadata): String = {
+      if (metadata == Metadata.empty) {
         null
       } else {
         metadata.json
       }
-      Column.create(
-        f.name, f.dataType, f.nullable, f.getComment().orNull, defaultValue, metadataJSON)
     }
-    if (f.getCurrentDefaultValue().isDefined && f.getExistenceDefaultValue().isDefined) {
+    def metadataWithKeysRemoved(keys: Seq[String]): Metadata = {
+      keys.foldLeft(new MetadataBuilder().withMetadata(f.metadata)) {
+        (builder, key) => builder.remove(key)
+      }.build()
+    }
+
+    val isDefaultColumn = f.getCurrentDefaultValue().isDefined &&
+      f.getExistenceDefaultValue().isDefined
+    val isGeneratedColumn = GeneratedColumn.isGeneratedColumn(f)
+    if (isDefaultColumn && isGeneratedColumn) {
+      throw new AnalysisException(
+        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> f.name,
+          "defaultValue" -> f.getCurrentDefaultValue().get,
+          "genExpr" -> GeneratedColumn.getGenerationExpression(f).get
+        )
+      )
+    }
+
+    if (isDefaultColumn) {
       val e = analyze(f, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
       assert(e.resolved && e.foldable,
         "The existence default value must be a simple SQL string that is resolved and foldable, " +
           "but got: " + f.getExistenceDefaultValue().get)
       val defaultValue = new ColumnDefaultValue(
         f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
-      val cleanedMetadata = new MetadataBuilder()
-        .withMetadata(f.metadata)
-        .remove("comment")
-        .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-        .remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-        .build()
-      createV2Column(defaultValue, cleanedMetadata)
+      val cleanedMetadata = metadataWithKeysRemoved(
+        Seq("comment", CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+      Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull, defaultValue,
+        metadataAsJson(cleanedMetadata))
+    } else if (isGeneratedColumn) {
+      val cleanedMetadata = metadataWithKeysRemoved(
+        Seq("comment", GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
+      Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
+        GeneratedColumn.getGenerationExpression(f).get, metadataAsJson(cleanedMetadata))
     } else {
-      val cleanedMetadata = new MetadataBuilder()
-        .withMetadata(f.metadata)
-        .remove("comment")
-        .build()
-      createV2Column(null, cleanedMetadata)
+      val cleanedMetadata = metadataWithKeysRemoved(Seq("comment"))
+      Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
+        metadataAsJson(cleanedMetadata))
     }
   }
 }

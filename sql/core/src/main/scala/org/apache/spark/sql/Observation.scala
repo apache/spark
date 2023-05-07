@@ -45,7 +45,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
  * @param name name of the metric
  * @since 3.3.0
  */
-class Observation(name: String) {
+class Observation(val name: String) {
 
   if (name.isEmpty) throw new IllegalArgumentException("Name must not be empty")
 

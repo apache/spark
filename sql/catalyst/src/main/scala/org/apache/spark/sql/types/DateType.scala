@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerType}
 
 /**
  * The date type represents a valid date in the proleptic Gregorian calendar.
@@ -33,21 +29,9 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerTyp
 @Stable
 class DateType private() extends DatetimeType {
   /**
-   * Internally, a date is stored as a simple incrementing count of days
-   * where day 0 is 1970-01-01. Negative numbers represent earlier days.
-   */
-  private[sql] type InternalType = Int
-
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-
-  /**
    * The default size of a value of the DateType is 4 bytes.
    */
   override def defaultSize: Int = 4
-
-  override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   private[spark] override def asNullable: DateType = this
 }

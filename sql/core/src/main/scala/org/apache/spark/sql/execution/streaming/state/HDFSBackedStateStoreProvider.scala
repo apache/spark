@@ -544,11 +544,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       if (rawStream != null) rawStream.cancel()
       IOUtils.closeQuietly(compressedStream)
     } catch {
+      // Closing the compressedStream causes the stream to write/flush flush data into the
+      // rawStream. Since the rawStream is already closed, there may be errors.
+      // Usually its an IOException. However, Hadoop's RawLocalFileSystem wraps
+      // IOException into FSError.
       case e: FSError if e.getCause.isInstanceOf[IOException] =>
-        // Closing the compressedStream causes the stream to write/flush flush data into the
-        // rawStream. Since the rawStream is already closed, there may be errors.
-        // Usually its an IOException. However, Hadoop's RawLocalFileSystem wraps
-        // IOException into FSError.
+
+      // SPARK-42668 - Catch and log any other exception thrown while trying to cancel
+      // raw stream or close compressed stream.
+      case NonFatal(ex) =>
+        logInfo(s"Failed to cancel delta file for provider=$stateStoreId " +
+          s"with exception=$ex")
     }
   }
 

@@ -212,6 +212,8 @@ class MicroBatchExecution(
     logInfo(s"Query $prettyIdString was stopped")
   }
 
+  private val watermarkPropagator = WatermarkPropagator(sparkSession.sessionState.conf)
+
   override def cleanup(): Unit = {
     super.cleanup()
 
@@ -713,7 +715,8 @@ class MicroBatchExecution(
         runId,
         currentBatchId,
         offsetLog.offsetSeqMetadataForBatchId(currentBatchId - 1),
-        offsetSeqMetadata)
+        offsetSeqMetadata,
+        watermarkPropagator)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -789,6 +792,9 @@ class MicroBatchExecution(
       val prevBatchOff = offsetLog.get(currentBatchId - 1)
       if (prevBatchOff.isDefined) {
         commitSources(prevBatchOff.get)
+        // The watermark for each batch is given as (prev. watermark, curr. watermark), hence
+        // we can't purge the previous version of watermark.
+        watermarkPropagator.purge(currentBatchId - 2)
       } else {
         throw new IllegalStateException(s"batch ${currentBatchId - 1} doesn't exist")
       }

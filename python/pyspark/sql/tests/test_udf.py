@@ -38,7 +38,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DayTimeIntervalType,
 )
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
 
@@ -74,6 +74,7 @@ class BaseUDFTestsMixin(object):
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
 
+    def test_udf_on_sql_context(self):
         # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
@@ -105,10 +106,20 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_registration_return_type_not_none(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "Invalid return type"):
-                self.spark.catalog.registerFunction(
-                    "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType()
-                )
+            self.check_udf_registration_return_type_not_none()
+
+    def check_udf_registration_return_type_not_none(self):
+        # negative test for incorrect type
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.catalog.registerFunction(
+                "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType()
+            )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+            message_parameters={"arg_name": "f", "return_type": "StringType()"},
+        )
 
     def test_nondeterministic_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
@@ -153,17 +164,20 @@ class BaseUDFTestsMixin(object):
         self.assertFalse(deterministic)
 
     def test_nondeterministic_udf_in_aggregate(self):
+        with QuietTest(self.sc):
+            self.check_nondeterministic_udf_in_aggregate()
+
+    def check_nondeterministic_udf_in_aggregate(self):
         from pyspark.sql.functions import sum
         import random
 
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
-                df.groupby("id").agg(sum(udf_random_col())).collect()
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
-                df.agg(sum(udf_random_col())).collect()
+        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            df.groupby("id").agg(sum(udf_random_col())).collect()
+        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
         self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
@@ -369,6 +383,9 @@ class BaseUDFTestsMixin(object):
             df.select(add_three("id").alias("plus_three")).collect(),
         )
 
+    def test_udf_registration_returns_udf_on_sql_context(self):
+        df = self.spark.range(10)
+
         # This is to check if a 'SQLContext.udf' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
@@ -416,6 +433,7 @@ class BaseUDFTestsMixin(object):
             lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"),
         )
 
+    def test_non_existed_udf_with_sql_context(self):
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         self.assertRaisesRegex(
@@ -827,47 +845,6 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 
-def test_use_arrow(self):
-    # useArrow=True
-    row_true = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=True)("array"),
-        )
-        .first()
-    )
-    # The input is a NumPy array when the Arrow optimization is on.
-    self.assertEquals(row_true[0], "[1 2 3]")
-
-    # useArrow=None
-    row_none = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=None)("array"),
-        )
-        .first()
-    )
-
-    # useArrow=False
-    row_false = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=False)("array"),
-        )
-        .first()
-    )
-    self.assertEquals(row_false[0], row_none[0])  # "[1, 2, 3]"
-
-
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
         if SparkSession._instantiatedSession is not None:
@@ -887,6 +864,13 @@ class UDFInitializationTests(unittest.TestCase):
             SparkSession._instantiatedSession,
             "SparkSession shouldn't be initialized when UserDefinedFunction is created.",
         )
+
+    def test_err_parse_type_when_no_sc(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "SparkContext or SparkSession should be created first",
+        ):
+            udf(lambda x: x, "integer")
 
 
 if __name__ == "__main__":

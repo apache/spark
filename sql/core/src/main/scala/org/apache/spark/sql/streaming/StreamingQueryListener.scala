@@ -56,6 +56,12 @@ abstract class StreamingQueryListener {
   def onQueryProgress(event: QueryProgressEvent): Unit
 
   /**
+   * Called when the query is idle and waiting for new data to process.
+   * @since 3.5.0
+   */
+  def onQueryIdle(event: QueryIdleEvent): Unit = {}
+
+  /**
    * Called when a query is stopped, with or without error.
    * @since 2.0.0
    */
@@ -72,6 +78,8 @@ private[spark] trait PythonStreamingQueryListener {
 
   def onQueryProgress(event: QueryProgressEvent): Unit
 
+  def onQueryIdle(event: QueryIdleEvent): Unit
+
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
 }
 
@@ -82,6 +90,8 @@ private[spark] class PythonStreamingQueryListenerWrapper(
   def onQueryStarted(event: QueryStartedEvent): Unit = listener.onQueryStarted(event)
 
   def onQueryProgress(event: QueryProgressEvent): Unit = listener.onQueryProgress(event)
+
+  override def onQueryIdle(event: QueryIdleEvent): Unit = listener.onQueryIdle(event)
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
 }
@@ -122,6 +132,20 @@ object StreamingQueryListener {
    */
   @Evolving
   class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
+
+  /**
+   * Event representing that query is idle and waiting for new data to process.
+   *
+   * @param id    A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param timestamp The timestamp when the latest no-batch trigger happened.
+   * @since 3.5.0
+   */
+  @Evolving
+  class QueryIdleEvent private[sql](
+      val id: UUID,
+      val runId: UUID,
+      val timestamp: String) extends Event
 
   /**
    * Event representing that termination of a query.

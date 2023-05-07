@@ -233,24 +233,30 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-33428 conv function shouldn't raise error if input string is too big") {
-    val df = Seq((
-      "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)), Row("18446744073709551615"))
-    checkAnswer(df.select(conv($"num", 16, -10)), Row("-1"))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq((
+        "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)), Row("18446744073709551615"))
+      checkAnswer(df.select(conv($"num", 16, -10)), Row("-1"))
+    }
   }
 
   test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
-    val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
-    val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
-    checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
-    checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
+      val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
+      checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
+      checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
+    }
   }
 
   test("SPARK-36229 conv should return result equal to -1 in base of toBase") {
-    val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)),
-      Seq(Row("18446744073709551615"), Row("12297829339523361440")))
-    checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)),
+        Seq(Row("18446744073709551615"), Row("12297829339523361440")))
+      checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    }
   }
 
   test("floor") {

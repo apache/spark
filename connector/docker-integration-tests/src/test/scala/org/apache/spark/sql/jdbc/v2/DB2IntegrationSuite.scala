@@ -38,6 +38,17 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
+
+  override def excluded: Seq[String] = Seq(
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: CORR without DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+
   override val catalogName: String = "db2"
   override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DatabaseOnDocker {
@@ -63,6 +74,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.db2.pushDownAggregate", "true")
     .set("spark.sql.catalog.db2.pushDownLimit", "true")
+    .set("spark.sql.catalog.db2.pushDownOffset", "true")
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
@@ -96,19 +108,4 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
-
-  testVarPop()
-  testVarPop(true)
-  testVarSamp()
-  testVarSamp(true)
-  testStddevPop()
-  testStddevPop(true)
-  testStddevSamp()
-  testStddevSamp(true)
-  testCovarPop()
-  testCovarSamp()
-  testRegrIntercept()
-  testRegrSlope()
-  testRegrR2()
-  testRegrSXY()
 }

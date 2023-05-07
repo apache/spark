@@ -18,14 +18,17 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.types.{DataType, Metadata}
+import org.apache.spark.sql.types._
 
 /**
  * A column that will be computed based on the data in a `DataFrame`.
@@ -48,7 +51,13 @@ import org.apache.spark.sql.types.{DataType, Metadata}
  *
  * @since 3.4.0
  */
-class Column private[sql] (private[sql] val expr: proto.Expression) extends Logging {
+class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Logging {
+
+  private[sql] def this(name: String, planId: Option[Long]) =
+    this(Column.nameToExpression(name, planId))
+
+  private[sql] def this(name: String) =
+    this(name, None)
 
   private def fn(name: String): Column = Column.fn(name, this)
   private def fn(name: String, other: Column): Column = Column.fn(name, this, other)
@@ -62,6 +71,17 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   }
 
   override def hashCode: Int = expr.hashCode()
+
+  /**
+   * Provides a type hint about the expected return value of this column. This information can be
+   * used by operations such as `select` on a [[Dataset]] to automatically convert the results
+   * into the correct JVM types.
+   * @since 3.4.0
+   */
+  def as[U: Encoder]: TypedColumn[Any, U] = {
+    val encoder = implicitly[Encoder[U]].asInstanceOf[AgnosticEncoder[U]]
+    new TypedColumn[Any, U](expr, encoder)
+  }
 
   /**
    * Extracts a value or values from a complex type. The following types of extraction are
@@ -1233,25 +1253,69 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @since 3.4.0
    */
   def bitwiseXOR(other: Any): Column = fn("^", other)
+
+  /**
+   * Defines a windowing column.
+   *
+   * {{{
+   *   val w = Window.partitionBy("name").orderBy("id")
+   *   df.select(
+   *     sum("price").over(w.rangeBetween(Window.unboundedPreceding, 2)),
+   *     avg("price").over(w.rowsBetween(Window.currentRow, 4))
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
+
+  /**
+   * Defines an empty analytic clause. In this case the analytic function is applied and presented
+   * for all rows in the result set.
+   *
+   * {{{
+   *   df.select(
+   *     sum("price").over(),
+   *     avg("price").over()
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  def over(): Column = over(Window.spec)
 }
 
 private[sql] object Column {
 
-  def apply(name: String): Column = Column { builder =>
+  def apply(name: String): Column = new Column(name)
+
+  def apply(name: String, planId: Option[Long]): Column = new Column(name, planId)
+
+  def nameToExpression(name: String, planId: Option[Long] = None): proto.Expression = {
+    val builder = proto.Expression.newBuilder()
     name match {
       case "*" =>
         builder.getUnresolvedStarBuilder
       case _ if name.endsWith(".*") =>
         builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>
-        builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
+        val attributeBuilder = builder.getUnresolvedAttributeBuilder.setUnparsedIdentifier(name)
+        planId.foreach(attributeBuilder.setPlanId)
     }
+    builder.build()
   }
 
   private[sql] def apply(f: proto.Expression.Builder => Unit): Column = {
     val builder = proto.Expression.newBuilder()
     f(builder)
     new Column(builder.build())
+  }
+
+  @DeveloperApi
+  def apply(extension: com.google.protobuf.Any): Column = {
+    apply(_.setExtension(extension))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
@@ -1265,4 +1329,150 @@ private[sql] object Column {
         .setIsDistinct(isDistinct)
         .addAllArguments(inputs.map(_.expr).asJava)
   }
+}
+
+/**
+ * A convenient class used for constructing schema.
+ *
+ * @since 3.4.0
+ */
+class ColumnName(name: String) extends Column(name) {
+
+  /**
+   * Creates a new `StructField` of type boolean.
+   * @since 3.4.0
+   */
+  def boolean: StructField = StructField(name, BooleanType)
+
+  /**
+   * Creates a new `StructField` of type byte.
+   * @since 3.4.0
+   */
+  def byte: StructField = StructField(name, ByteType)
+
+  /**
+   * Creates a new `StructField` of type short.
+   * @since 3.4.0
+   */
+  def short: StructField = StructField(name, ShortType)
+
+  /**
+   * Creates a new `StructField` of type int.
+   * @since 3.4.0
+   */
+  def int: StructField = StructField(name, IntegerType)
+
+  /**
+   * Creates a new `StructField` of type long.
+   * @since 3.4.0
+   */
+  def long: StructField = StructField(name, LongType)
+
+  /**
+   * Creates a new `StructField` of type float.
+   * @since 3.4.0
+   */
+  def float: StructField = StructField(name, FloatType)
+
+  /**
+   * Creates a new `StructField` of type double.
+   * @since 3.4.0
+   */
+  def double: StructField = StructField(name, DoubleType)
+
+  /**
+   * Creates a new `StructField` of type string.
+   * @since 3.4.0
+   */
+  def string: StructField = StructField(name, StringType)
+
+  /**
+   * Creates a new `StructField` of type date.
+   * @since 3.4.0
+   */
+  def date: StructField = StructField(name, DateType)
+
+  /**
+   * Creates a new `StructField` of type decimal.
+   * @since 3.4.0
+   */
+  def decimal: StructField = StructField(name, DecimalType.USER_DEFAULT)
+
+  /**
+   * Creates a new `StructField` of type decimal.
+   * @since 3.4.0
+   */
+  def decimal(precision: Int, scale: Int): StructField =
+    StructField(name, DecimalType(precision, scale))
+
+  /**
+   * Creates a new `StructField` of type timestamp.
+   * @since 3.4.0
+   */
+  def timestamp: StructField = StructField(name, TimestampType)
+
+  /**
+   * Creates a new `StructField` of type binary.
+   * @since 3.4.0
+   */
+  def binary: StructField = StructField(name, BinaryType)
+
+  /**
+   * Creates a new `StructField` of type array.
+   * @since 3.4.0
+   */
+  def array(dataType: DataType): StructField = StructField(name, ArrayType(dataType))
+
+  /**
+   * Creates a new `StructField` of type map.
+   * @since 3.4.0
+   */
+  def map(keyType: DataType, valueType: DataType): StructField =
+    map(MapType(keyType, valueType))
+
+  /**
+   * Creates a new `StructField` of type map.
+   * @since 3.4.0
+   */
+  def map(mapType: MapType): StructField = StructField(name, mapType)
+
+  /**
+   * Creates a new `StructField` of type struct.
+   * @since 3.4.0
+   */
+  def struct(fields: StructField*): StructField = struct(StructType(fields))
+
+  /**
+   * Creates a new `StructField` of type struct.
+   * @since 3.4.0
+   */
+  def struct(structType: StructType): StructField = StructField(name, structType)
+}
+
+/**
+ * A [[Column]] where an [[Encoder]] has been given for the expected input and return type. To
+ * create a [[TypedColumn]], use the `as` function on a [[Column]].
+ *
+ * @tparam T
+ *   The input type expected for this expression. Can be `Any` if the expression is type checked
+ *   by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
+ * @tparam U
+ *   The output type of this column.
+ *
+ * @since 3.4.0
+ */
+class TypedColumn[-T, U] private[sql] (
+    expr: proto.Expression,
+    private[sql] val encoder: AgnosticEncoder[U])
+    extends Column(expr) {
+
+  /**
+   * Gives the [[TypedColumn]] a name (alias). If the current `TypedColumn` has metadata
+   * associated with it, this metadata will be propagated to the new column.
+   *
+   * @group expr_ops
+   * @since 3.4.0
+   */
+  override def name(alias: String): TypedColumn[T, U] =
+    new TypedColumn[T, U](super.name(alias).expr, encoder)
 }

@@ -96,6 +96,18 @@
       <version>${netty.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.lihaoyi</groupId>
+      <artifactId>ammonite_${scala.version}</artifactId>
+      <version>${ammonite.version}</version>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-xml_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
       <version>${project.version}</version>

@@ -18,6 +18,7 @@
 """
 Base and utility classes for pandas-on-Spark objects.
 """
+import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
@@ -544,6 +545,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
             for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
 
+        .. deprecated:: 3.4.0
+
         Returns
         -------
         is_monotonic : bool
@@ -605,9 +608,88 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> midx.is_monotonic
         False
         """
+        warnings.warn(
+            "is_monotonic is deprecated and will be removed in a future version. "
+            "Use is_monotonic_increasing instead.",
+            FutureWarning,
+        )
         return self._is_monotonic("increasing")
 
-    is_monotonic_increasing = is_monotonic
+    @property
+    def is_monotonic_increasing(self) -> bool:
+        """
+        Return boolean if values in the object are monotonically increasing.
+
+        .. note:: the current implementation of is_monotonic_increasing requires to shuffle
+            and aggregate multiple times to check the order locally and globally,
+            which is potentially expensive. In case of multi-index, all data is
+            transferred to a single node which can easily cause out-of-memory errors.
+
+        .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
+            for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
+
+        Returns
+        -------
+        is_monotonic : bool
+
+        Examples
+        --------
+        >>> ser = ps.Series(['1/1/2018', '3/1/2018', '4/1/2018'])
+        >>> ser.is_monotonic_increasing
+        True
+
+        >>> df = ps.DataFrame({'dates': [None, '1/1/2018', '2/1/2018', '3/1/2018']})
+        >>> df.dates.is_monotonic_increasing
+        False
+
+        >>> df.index.is_monotonic_increasing
+        True
+
+        >>> ser = ps.Series([1])
+        >>> ser.is_monotonic_increasing
+        True
+
+        >>> ser = ps.Series([])
+        >>> ser.is_monotonic_increasing
+        True
+
+        >>> ser.rename("a").to_frame().set_index("a").index.is_monotonic_increasing
+        True
+
+        >>> ser = ps.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
+        >>> ser.is_monotonic_increasing
+        False
+
+        >>> ser.index.is_monotonic_increasing
+        True
+
+        Support for MultiIndex
+
+        >>> midx = ps.MultiIndex.from_tuples(
+        ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
+        >>> midx  # doctest: +SKIP
+        MultiIndex([('x', 'a'),
+                    ('x', 'b'),
+                    ('y', 'c'),
+                    ('y', 'd'),
+                    ('z', 'e')],
+                   )
+        >>> midx.is_monotonic_increasing
+        True
+
+        >>> midx = ps.MultiIndex.from_tuples(
+        ... [('z', 'a'), ('z', 'b'), ('y', 'c'), ('y', 'd'), ('x', 'e')])
+        >>> midx  # doctest: +SKIP
+        MultiIndex([('z', 'a'),
+                    ('z', 'b'),
+                    ('y', 'c'),
+                    ('y', 'd'),
+                    ('x', 'e')],
+                   )
+        >>> midx.is_monotonic_increasing
+        False
+        """
+        return self._is_monotonic("increasing")
 
     @property
     def is_monotonic_decreasing(self) -> bool:
@@ -1540,6 +1622,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         na_sentinel : int or None, default -1
             Value to mark "not found". If None, will not drop the NaN
             from the uniques of the values.
+
+            .. deprecated:: 3.4.0
 
         Returns
         -------

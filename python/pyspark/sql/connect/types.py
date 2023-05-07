@@ -16,13 +16,13 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import json
 
 import pyarrow as pa
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pyspark.sql.types import (
     DataType,
@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    YearMonthIntervalType,
     MapType,
     StringType,
     CharType,
@@ -49,9 +50,9 @@ from pyspark.sql.types import (
     NullType,
     UserDefinedType,
 )
+from pyspark.errors import PySparkAssertionError
 
 import pyspark.sql.connect.proto as pb2
-from pyspark.sql.utils import is_remote
 
 
 JVM_BYTE_MIN: int = -(1 << 7)
@@ -62,6 +63,75 @@ JVM_INT_MIN: int = -(1 << 31)
 JVM_INT_MAX: int = (1 << 31) - 1
 JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
+
+
+class UnparsedDataType(DataType):
+    """
+    Unparsed data type.
+
+    The data type string will be parsed later.
+
+    Parameters
+    ----------
+    data_type_string : str
+        The data type string format equals :class:`DataType.simpleString`,
+        except that the top level struct type can omit the ``struct<>``.
+        This also supports a schema in a DDL-formatted string and case-insensitive strings.
+
+    Examples
+    --------
+    >>> from pyspark.sql.connect.types import UnparsedDataType
+
+    >>> UnparsedDataType("int ")
+    UnparsedDataType('int ')
+    >>> UnparsedDataType("INT ")
+    UnparsedDataType('INT ')
+    >>> UnparsedDataType("a: byte, b: decimal(  16 , 8   ) ")
+    UnparsedDataType('a: byte, b: decimal(  16 , 8   ) ')
+    >>> UnparsedDataType("a DOUBLE, b STRING")
+    UnparsedDataType('a DOUBLE, b STRING')
+    >>> UnparsedDataType("a DOUBLE, b CHAR( 50 )")
+    UnparsedDataType('a DOUBLE, b CHAR( 50 )')
+    >>> UnparsedDataType("a DOUBLE, b VARCHAR( 50 )")
+    UnparsedDataType('a DOUBLE, b VARCHAR( 50 )')
+    >>> UnparsedDataType("a: array< short>")
+    UnparsedDataType('a: array< short>')
+    >>> UnparsedDataType(" map<string , string > ")
+    UnparsedDataType(' map<string , string > ')
+    """
+
+    def __init__(self, data_type_string: str):
+        self.data_type_string = data_type_string
+
+    def simpleString(self) -> str:
+        return "unparsed(%s)" % repr(self.data_type_string)
+
+    def __repr__(self) -> str:
+        return "UnparsedDataType(%s)" % repr(self.data_type_string)
+
+    def jsonValue(self) -> Dict[str, Any]:
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "jsonValue"},
+        )
+
+    def needConversion(self) -> bool:
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "needConversion"},
+        )
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "fromInternal"},
+        )
 
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
@@ -87,7 +157,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DoubleType):
         ret.double.CopyFrom(pb2.DataType.Double())
     elif isinstance(data_type, DecimalType):
-        ret.decimal.CopyFrom(pb2.DataType.Decimal())
+        ret.decimal.scale = data_type.scale
+        ret.decimal.precision = data_type.precision
     elif isinstance(data_type, DateType):
         ret.date.CopyFrom(pb2.DataType.Date())
     elif isinstance(data_type, TimestampType):
@@ -97,6 +168,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
+    elif isinstance(data_type, YearMonthIntervalType):
+        ret.year_month_interval.start_field = data_type.startField
+        ret.year_month_interval.end_field = data_type.endField
     elif isinstance(data_type, StructType):
         for field in data_type.fields:
             struct_field = pb2.DataType.StructField()
@@ -124,6 +198,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
             ret.udt.serialized_python_class = json_value["serializedClass"]
         ret.udt.python_class = json_value["pyClass"]
         ret.udt.sql_type.CopyFrom(pyspark_types_to_proto_types(data_type.sqlType()))
+    elif isinstance(data_type, UnparsedDataType):
+        data_type_string = data_type.data_type_string
+        ret.unparsed.data_type_string = data_type_string
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
@@ -176,6 +253,18 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             else None
         )
         return DayTimeIntervalType(startField=start, endField=end)
+    elif schema.HasField("year_month_interval"):
+        start: Optional[int] = (  # type: ignore[no-redef]
+            schema.year_month_interval.start_field
+            if schema.year_month_interval.HasField("start_field")
+            else None
+        )
+        end: Optional[int] = (  # type: ignore[no-redef]
+            schema.year_month_interval.end_field
+            if schema.year_month_interval.HasField("end_field")
+            else None
+        )
+        return YearMonthIntervalType(startField=start, endField=end)
     elif schema.HasField("array"):
         return ArrayType(
             proto_schema_to_pyspark_data_type(schema.array.element_type),
@@ -249,9 +338,12 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+        field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
+        arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
+        key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
+        value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
+        arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
         fields = [
             pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
@@ -260,6 +352,8 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.struct(fields)
     elif type(dt) == NullType:
         arrow_type = pa.null()
+    elif isinstance(dt, UserDefinedType):
+        arrow_type = to_arrow_type(dt.sqlType())
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -338,21 +432,3 @@ def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
             for field in arrow_schema
         ]
     )
-
-
-def parse_data_type(data_type: str) -> DataType:
-    # Currently we don't have a way to have a current Spark session in Spark Connect, and
-    # pyspark.sql.SparkSession has a centralized logic to control the session creation.
-    # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
-    # Spark session for Spark Connect in the future.
-    from pyspark.sql import SparkSession as PySparkSession
-
-    assert is_remote()
-    return_type_schema = (
-        PySparkSession.builder.getOrCreate().createDataFrame(data=[], schema=data_type).schema
-    )
-    if len(return_type_schema.fields) == 1:
-        return_type = return_type_schema.fields[0].dataType
-    else:
-        return_type = return_type_schema
-    return return_type

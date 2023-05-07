@@ -16,13 +16,14 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 import warnings
 import pandas as pd
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import StructType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.catalog import (
@@ -278,8 +279,8 @@ class Catalog:
 
     isCached.__doc__ = PySparkCatalog.isCached.__doc__
 
-    def cacheTable(self, tableName: str) -> None:
-        self._execute_and_fetch(plan.CacheTable(table_name=tableName))
+    def cacheTable(self, tableName: str, storageLevel: Optional[StorageLevel] = None) -> None:
+        self._execute_and_fetch(plan.CacheTable(table_name=tableName, storage_level=storageLevel))
 
     cacheTable.__doc__ = PySparkCatalog.cacheTable.__doc__
 
@@ -330,9 +331,6 @@ def _test() -> None:
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
     )
-
-    # TODO(SPARK-41818): java.lang.ClassNotFoundException) .DefaultSource
-    del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.catalog,

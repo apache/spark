@@ -22,21 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41868): Support data type Duration(NANOSECOND)
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_day_time_interval(self):
-        super().test_create_dataframe_from_pandas_with_day_time_interval()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_dst(self):
-        super().test_create_dataframe_from_pandas_with_dst()
-
-    # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_duplicated_column_names(self):
-        super().test_duplicated_column_names()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
@@ -45,11 +30,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_invalid_join_method(self):
         super().test_invalid_join_method()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_join_without_on(self):
-        super().test_join_without_on()
 
     # TODO(SPARK-41527): Implement DataFrame.observe
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -70,18 +50,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_repr_behaviors(self):
-        super().test_repr_behaviors()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_require_cross(self):
-        super().test_require_cross()
-
-    # TODO(SPARK-41874): Implement DataFrame `sameSemantics`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
 
@@ -93,54 +62,27 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_local_iterator(self):
-        super().test_to_local_iterator()
-
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_local_iterator_not_fully_consumed(self):
-        super().test_to_local_iterator_not_fully_consumed()
-
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_local_iterator_prefetch(self):
-        super().test_to_local_iterator_prefetch()
-
-    # TODO(SPARK-41884): DataFrame `toPandas` parity in return types
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas(self):
-        super().test_to_pandas()
+        self.check_to_local_iterator_not_fully_consumed()
 
     def test_to_pandas_for_array_of_struct(self):
         # Spark Connect's implementation is based on Arrow.
         super().check_to_pandas_for_array_of_struct(True)
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas_from_empty_dataframe(self):
-        super().test_to_pandas_from_empty_dataframe()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas_from_mixed_dataframe(self):
-        super().test_to_pandas_from_mixed_dataframe()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_from_null_dataframe(self):
-        super().test_to_pandas_from_null_dataframe()
+        self.check_to_pandas_from_null_dataframe()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_on_cross_join(self):
-        super().test_to_pandas_on_cross_join()
+        self.check_to_pandas_on_cross_join()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_to_pandas_from_empty_dataframe(self):
+        self.check_to_pandas_from_empty_dataframe()
+
     def test_to_pandas_with_duplicated_column_names(self):
-        super().test_to_pandas_with_duplicated_column_names()
+        self.check_to_pandas_with_duplicated_column_names()
+
+    def test_to_pandas_from_mixed_dataframe(self):
+        self.check_to_pandas_from_mixed_dataframe()
 
 
 if __name__ == "__main__":

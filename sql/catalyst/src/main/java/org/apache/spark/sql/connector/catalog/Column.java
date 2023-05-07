@@ -33,6 +33,8 @@ import org.apache.spark.sql.types.DataType;
  * {@link TableCatalog#createTable(Identifier, Column[], Transform[], Map)}, and report it in
  * {@link Table#columns()} by calling the static {@code create} functions of this interface to
  * create it.
+ * <p>
+ * A column cannot have both a default value and a generation expression.
  */
 @Evolving
 public interface Column {
@@ -42,7 +44,16 @@ public interface Column {
   }
 
   static Column create(String name, DataType dataType, boolean nullable) {
-    return create(name, dataType, nullable, null, null, null);
+    return create(name, dataType, nullable, null, null);
+  }
+
+  static Column create(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      String metadataInJSON) {
+    return new ColumnImpl(name, dataType, nullable, comment, null, null, metadataInJSON);
   }
 
   static Column create(
@@ -52,7 +63,18 @@ public interface Column {
       String comment,
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, defaultValue, metadataInJSON);
+    return new ColumnImpl(name, dataType, nullable, comment, defaultValue, null, metadataInJSON);
+  }
+
+  static Column create(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      String generationExpression,
+      String metadataInJSON) {
+    return new ColumnImpl(name, dataType, nullable, comment, null,
+            generationExpression, metadataInJSON);
   }
 
   /**
@@ -81,6 +103,15 @@ public interface Column {
    */
   @Nullable
   ColumnDefaultValue defaultValue();
+
+  /**
+   * Returns the generation expression of this table column. Null means no generation expression.
+   * <p>
+   * The generation expression is stored as spark SQL dialect. It is up to the data source to verify
+   * expression compatibility and reject writes as necessary.
+   */
+  @Nullable
+  String generationExpression();
 
   /**
    * Returns the column metadata in JSON format.
