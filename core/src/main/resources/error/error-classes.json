@@ -235,10 +235,22 @@
     ],
     "sqlState" : "22018"
   },
-  "CORRUPTED_TABLE_PROPERTY" : {
+  "INSUFFICIENT_TABLE_PROPERTY": {
     "message" : [
-      "Cannot read table property <key> as it's corrupted.<details>"
-    ]
+      "Can't find table property:"
+    ],
+    "subClass" : {
+      "TABLE_PROPERTY_MISSING" : {
+        "message" : [
+          "<key>."
+        ]
+      },
+      "TABLE_PROPERTY_PART_MISSING": {
+        "message" : [
+          "<key>, <totalAmountOfParts> parts are expected..."
+        ]
+      }
+    }
   },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [

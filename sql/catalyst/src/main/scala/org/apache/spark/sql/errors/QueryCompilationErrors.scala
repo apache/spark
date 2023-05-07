@@ -1033,12 +1033,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("colName" -> colName, "dataType" -> dataType.toString))
   }
 
-  def cannotReadCorruptedTablePropertyError(key: String,
-                                            details: Option[String] = None): Throwable = {
-    val detailsMessage = details.map(msg => s" $msg").getOrElse("")
+  def insufficientTablePropertyError(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "CORRUPTED_TABLE_PROPERTY",
-      messageParameters = Map("key" -> toSQLId(key), "details" -> detailsMessage))
+      errorClass = "INSUFFICIENT_TABLE_PROPERTY.TABLE_PROPERTY_MISSING",
+      messageParameters = Map("key" -> toSQLId(key)))
+  }
+
+  def insufficientTablePropertyPartError(
+      key: String, totalAmountOfParts: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INSUFFICIENT_TABLE_PROPERTY.TABLE_PROPERTY_PART_MISSING",
+      messageParameters = Map(
+        "key" -> toSQLId(key),
+        "totalAmountOfParts" -> totalAmountOfParts))
   }
 
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
@@ -1352,7 +1359,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_OPERATION_FOR_V2_TABLE",
-      messageParameters = Map("cmd" -> cmd))
+      messageParameters = Map("cmd" -> toSQLStmt(cmd)))
   }
 
   def analyzeTableNotSupportedForV2TablesError(): Throwable = {
@@ -2404,8 +2411,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
   }
 
-  def unsetNonExistentPropertiesError(properties: Seq[String],
-                                      table: TableIdentifier): Throwable = {
+  def unsetNonExistentPropertiesError(
+      properties: Seq[String], table: TableIdentifier): Throwable = {
     new AnalysisException(
       errorClass = "UNSET_NONEXISTENT_PROPERTIES",
       messageParameters = Map(

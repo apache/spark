@@ -1356,10 +1356,8 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sharedState.externalCatalog.getTable("default", "t")
         },
-        errorClass = "CORRUPTED_TABLE_PROPERTY",
-        parameters = Map(
-          "key" -> toSQLId("spark.sql.sources.schema"),
-          "details" -> "")
+        errorClass = "INSUFFICIENT_TABLE_PROPERTY.TABLE_PROPERTY_MISSING",
+        parameters = Map("key" -> toSQLId("spark.sql.sources.schema"))
       )
 
       val hiveTableWithNumPartsProp = CatalogTable(
@@ -1379,10 +1377,10 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sharedState.externalCatalog.getTable("default", "t2")
         },
-        errorClass = "CORRUPTED_TABLE_PROPERTY",
+        errorClass = "INSUFFICIENT_TABLE_PROPERTY.TABLE_PROPERTY_PART_MISSING",
         parameters = Map(
-          "key" -> toSQLId("spark.sql.sources.schema"),
-          "details" -> " Missing part 1, 3 parts are expected.")
+          "key" -> toSQLId("spark.sql.sources.schema.part.1"),
+          "totalAmountOfParts" -> "3")
       )
 
       withDebugMode {

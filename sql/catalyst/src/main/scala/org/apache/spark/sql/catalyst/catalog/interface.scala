@@ -499,12 +499,12 @@ object CatalogTable {
     props.get(key).orElse {
       if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
         props.get(s"$key.numParts") match {
-          case None => throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
+          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
           case Some(numParts) =>
             val parts = (0 until numParts.toInt).map { index =>
-              props.getOrElse(s"$key.part.$index", {
-                throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
-                  key, Some(s"Missing part $index, $numParts parts are expected."))
+              val keyPart = s"$key.part.$index"
+              props.getOrElse(keyPart, {
+                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
               })
             }
             Some(parts.mkString)
