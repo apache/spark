@@ -73,30 +73,27 @@ go run examples/spark-connect-example-spark-session/main.go
 
 ## How to Generate protobuf Go Binding
 
-1. Prepare your environment for protobuf: https://grpc.io/docs/languages/go/quickstart/
+```
+make internal/generated.out
+```
 
-2. Command example to generate protobuf Go files:
+## Inner Development Loop
+
+Build all targets:
 
 ```
-gen_package=connector/connect/client/go/generated/proto
-protoc -I=./connector/connect/common/src/main/protobuf/ \
-  --go_out=./ \
-  --go_opt=Mspark/connect/base.proto=$gen_package \
-  --go_opt=Mspark/connect/catalog.proto=$gen_package \
-  --go_opt=Mspark/connect/commands.proto=$gen_package \
-  --go_opt=Mspark/connect/common.proto=$gen_package \
-  --go_opt=Mspark/connect/example_plugins.proto=$gen_package \
-  --go_opt=Mspark/connect/expressions.proto=$gen_package \
-  --go_opt=Mspark/connect/relations.proto=$gen_package \
-  --go_opt=Mspark/connect/types.proto=$gen_package \
-  --go-grpc_out=./ \
-  --go-grpc_opt=Mspark/connect/base.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/catalog.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/commands.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/common.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/example_plugins.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/expressions.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/relations.proto=$gen_package \
-  --go-grpc_opt=Mspark/connect/types.proto=$gen_package \
-  ./connector/connect/common/src/main/protobuf/spark/connect/*.proto
+make
+```
+
+Run all tests:
+
+```
+make test
+```
+
+
+Run all tests with code coverage:
+
+```
+make fulltest
 ```

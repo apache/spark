@@ -96,5 +96,12 @@ for f in `find gen/proto/python -name "*.py*"`; do
   cp $f $OUTPUT_PATH
 done
 
+# Copy the generated Go files to the right place for the build
+GO_OUTPUT_PATH=${SPARK_HOME}/connector/connect/client/go/internal/generated
+mkdir -p $GO_OUTPUT_PATH
+for f in `find gen/proto/go -name "*.go"`; do
+  cp $f $GO_OUTPUT_PATH
+done
+
 # Clean up everything.
 rm -Rf gen

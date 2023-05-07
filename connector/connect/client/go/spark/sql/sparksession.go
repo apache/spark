@@ -19,7 +19,7 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/apache/spark/go/v_3_4/generated/proto"
+	proto "github.com/apache/spark/go/v_3_4/internal/generated"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

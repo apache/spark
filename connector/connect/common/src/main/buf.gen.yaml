@@ -33,4 +33,7 @@ plugins:
     out: gen/proto/python
   - name: mypy
     out: gen/proto/python
-
+  - plugin: buf.build/protocolbuffers/go:v1.30.0
+    out: gen/proto/go
+  - plugin: buf.build/grpc/go:v1.3.0
+    out: gen/proto/go
