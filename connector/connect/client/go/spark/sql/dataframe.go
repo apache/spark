@@ -104,12 +104,17 @@ func (df *dataFrameImpl) Collect() ([]Row, error) {
 		return nil, fmt.Errorf("failed to execute plan: %w", err)
 	}
 
-	var schema *StructType = nil
+	var schema *StructType
+	var allRows []Row
 
 	for {
 		response, err := responseClient.Recv()
 		if err != nil {
-			return nil, fmt.Errorf("failed to receive plan execution response: %w", err)
+			if errors.Is(err, io.EOF) {
+				return allRows, nil
+			} else {
+				return nil, fmt.Errorf("failed to receive plan execution response: %w", err)
+			}
 		}
 
 		dataType := response.GetSchema()
@@ -123,16 +128,18 @@ func (df *dataFrameImpl) Collect() ([]Row, error) {
 			continue
 		}
 
-		row := GenericRowWithSchema{
-			schema: schema,
+		rowBatch, err := readArrowBatchData(arrowBatch.Data, schema)
+		if err != nil {
+			return nil, err
 		}
 
-		// TODO convert arrowBatch to []Row
-
-		return []Row{&row}, nil
+		if allRows == nil {
+			allRows = make([]Row, 0, len(rowBatch))
+		}
+		allRows = append(allRows, rowBatch...)
 	}
 
-	return nil, fmt.Errorf("did not get arrow batch in response")
+	return allRows, nil
 }
 
 func (df *dataFrameImpl) createPlan() *proto.Plan {
@@ -153,37 +160,87 @@ func showArrowBatch(arrowBatch *proto.ExecutePlanResponse_ArrowBatch) error {
 }
 
 func showArrowBatchData(data []byte) error {
+	rows, err := readArrowBatchData(data, nil)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		values, err := row.Values()
+		if err != nil {
+			return fmt.Errorf("failed to get values in the row: %w", err)
+		}
+		fmt.Println(values...)
+	}
+	return nil
+}
+
+func readArrowBatchData(data []byte, schema *StructType) ([]Row, error) {
 	reader := bytes.NewReader(data)
 	arrowReader, err := ipc.NewReader(reader)
 	if err != nil {
-		return fmt.Errorf("failed to create arrow reader: %w", err)
+		return nil, fmt.Errorf("failed to create arrow reader: %w", err)
 	}
 	defer arrowReader.Release()
 
-	record, err := arrowReader.Read()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil
+	var rows []Row
+
+	for {
+		record, err := arrowReader.Read()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return rows, nil
+			} else {
+				return nil, fmt.Errorf("failed to read arrow: %w", err)
+			}
 		}
-		return fmt.Errorf("failed to read arrow: %w", err)
-	}
-	numRows := record.NumRows()
-	arrayData := record.Column(0).Data()
-	typeId := arrayData.DataType().ID()
-	if typeId != arrow.STRING {
-		return fmt.Errorf("arrow column type is not string")
-	}
-	stringData := array.NewStringData(arrayData)
-	for i := int64(0); i < numRows; i++ {
-		v := stringData.Value(int(i))
-		fmt.Println(v)
+		numColumns := len(arrowReader.Schema().Fields())
+		numRows := int(record.NumRows())
+		if rows == nil {
+			rows = make([]Row, 0, numRows)
+		}
+		values := make([][]any, numRows)
+		for i := range values {
+			values[i] = make([]any, numColumns)
+		}
+		for columnIndex := 0; columnIndex < numColumns; columnIndex++ {
+			columnData := record.Column(columnIndex).Data()
+			dataTypeId := columnData.DataType().ID()
+			switch dataTypeId {
+			case arrow.STRING:
+				vector := array.NewStringData(columnData)
+				for rowIndex := 0; rowIndex < numRows; rowIndex++ {
+					values[rowIndex][columnIndex] = vector.Value(rowIndex)
+				}
+			case arrow.INT32:
+				vector := array.NewInt32Data(columnData)
+				for rowIndex := 0; rowIndex < numRows; rowIndex++ {
+					values[rowIndex][columnIndex] = vector.Value(rowIndex)
+				}
+			case arrow.INT64:
+				vector := array.NewInt64Data(columnData)
+				for rowIndex := 0; rowIndex < numRows; rowIndex++ {
+					values[rowIndex][columnIndex] = vector.Value(rowIndex)
+				}
+			default:
+				return nil, fmt.Errorf("unsupported arrow data type %s in column %d", dataTypeId.String(), columnIndex)
+			}
+		}
+
+		for _, v := range values {
+			row := &GenericRowWithSchema{
+				schema: schema,
+				values: v,
+			}
+			rows = append(rows, row)
+		}
+
+		hasNext := arrowReader.Next()
+		if !hasNext {
+			break
+		}
 	}
 
-	// TODO handle next?
-	for arrowReader.Next() {
-	}
-
-	return nil
+	return rows, nil
 }
 
 func convertProtoDataTypeToStructType(input *proto.DataType) *StructType {

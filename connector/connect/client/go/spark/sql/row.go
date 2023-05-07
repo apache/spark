@@ -18,13 +18,18 @@ package sql
 
 type Row interface {
 	Schema() (*StructType, error)
+	Values() ([]any, error)
 }
 
 type GenericRowWithSchema struct {
-	Values []any
+	values []any
 	schema *StructType
 }
 
 func (r *GenericRowWithSchema) Schema() (*StructType, error) {
 	return r.schema, nil
+}
+
+func (r *GenericRowWithSchema) Values() ([]any, error) {
+	return r.values, nil
 }
