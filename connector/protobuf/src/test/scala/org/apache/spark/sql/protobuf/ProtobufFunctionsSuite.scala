@@ -1136,22 +1136,23 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     checkWithFileAndClassName("ProtoWithAny") {
       case (name, descFilePathOpt) =>
 
+        // Json: {"key":"k", "value"":"v", "basic_enum": "FIRST"}
+        val simpleEnumProto = SimpleMessageEnum
+          .newBuilder()
+          .setKey("k")
+          .setValue("v")
+          .setBasicEnum(BasicEnumMessage.BasicEnum.FIRST)
+          .build()
+
         // proto: 'message { string event_name = 1; google.protobuf.Any details = 2 }'
-
-        val simpleProto = SimpleMessage // Json: {"id":10,"string_value":"galaxy"}
-          .newBuilder()
-          .setId(10)
-          .setStringValue("galaxy")
-          .build()
-
-        val protoWithAnyBytes = ProtoWithAny
-          .newBuilder()
-          .setEventName("click")
-          .setDetails(AnyProto.pack(simpleProto))
-          .build()
-          .toByteArray
-
-        val inputDF = Seq(protoWithAnyBytes).toDF("binary")
+        val inputDF = Seq(
+          ProtoWithAny
+            .newBuilder()
+            .setEventName("click")
+            .setDetails(AnyProto.pack(simpleEnumProto))
+            .build()
+            .toByteArray
+        ).toDF("binary")
 
         // Check schema with default options where Any field not converted to json.
         val df = inputDF.select(
@@ -1162,24 +1163,34 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           "proto STRUCT<event_name: STRING, details: STRUCT<type_url: STRING, value: BINARY>>"
         )
 
-        // Enable option to convert to json.
-        val options = Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true")
-        val dfJson = inputDF.select(
-          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
-        )
-        // Now 'details' should be a string.
-        assert(dfJson.schema.toDDL == "proto STRUCT<event_name: STRING, details: STRING>")
+        val expectedJson =
+          """{"@type":""" + // The json includes "@type" field as well.
+            """"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessageEnum",""" +
+            """"key":"k","value":"v","basic_enum":"FIRST"}"""
 
-        // Verify Json value for details
+        val expectedJsonWithEnumsAsInts =
+          """{"@type":""" + // The json includes "@type" field as well.
+            """"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessageEnum",""" +
+            """"key":"k","value":"v","basic_enum":1}"""
 
-        val row = dfJson.collect()(0).getStruct(0)
+        List(
+          (Map.empty[String, String], expectedJson),
+          (Map("enums.as.ints" -> "true"), expectedJsonWithEnumsAsInts)
+        ).foreach { case (additionalOptions, expected) =>
+          val options =
+            Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true") ++ additionalOptions
+          val dfJson = inputDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
+          )
 
-        val expectedJson = """{"@type":""" + // The json includes "@type" field as well.
-            """"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",""" +
-            """"id":"10","string_value":"galaxy"}"""
+          // Now 'details' should be a string.
+          assert(dfJson.schema.toDDL == "proto STRUCT<event_name: STRING, details: STRING>")
 
-        assert(row.getString(0) == "click")
-        assert(row.getString(1) == expectedJson)
+          // Verify Json value for details
+          val row = dfJson.collect()(0).getStruct(0)
+          assert(row.getString(0) == "click")
+          assert(row.getString(1) == expected)
+        }
     }
   }
 

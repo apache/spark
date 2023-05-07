@@ -163,6 +163,9 @@ private[sql] class ProtobufOptions(
   //
   // But with this option set the deserialization will be:
   // `{"job": 1}`
+  //
+  // Please note the output struct type will now contain an int column
+  // instead of string, so use caution if changing existing parsing logic.
   val enumsAsInts: Boolean =
     parameters.getOrElse("enums.as.ints", false.toString).toBoolean
 }
