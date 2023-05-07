@@ -33,10 +33,9 @@ OK := $(shell tput setaf 6; echo ' [OK]'; tput sgr0;)
 
 all: build
 
-build: $(BUILD_OUTPUT) $(BINARIES) protoc
+build: $(BUILD_OUTPUT) $(BINARIES)
 
-# Build all the protocol buffers, this is a simple rule to generate the code.
-protoc: $(PROTO_SRC)
+protoc:
 	@echo -n ">> BUILD, output = $@"
 	@$(REGEN_SCRIPT)
 	@printf '%s\n' '$(OK)'
@@ -55,10 +54,20 @@ fmt:
 	@gofumpt -extra -w $(ALLGOFILES)
 
 test: $(BUILD_OUTPUT)
-	@echo ">> TEST, \"fast-mode\": race detector off"
+	@echo ">> TEST, \"verbose\""
 	@$(foreach pkg, $(PKGS),\
 	    @echo -n "     ";\
-		$(GO) test -test.short -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) $(pkg) || exit 1)
+		$(GO) test -v -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) $(pkg) || exit 1)
+
+fulltest: $(BUILD_OUTPUT)
+	@echo ">> TEST, \"coverage\""
+	@echo "mode: atomic" > coverage-all.out
+	@$(foreach pkg, $(PKGS),\
+	    echo -n "     ";\
+		go test -run '(Test|Example)' $(BUILDFLAGS) $(TESTFLAGS) -coverprofile=coverage.out -covermode=atomic $(pkg) || exit 1;\
+		tail -n +2 coverage.out >> coverage-all.out;)
+	@$(GO) tool cover -html=coverage-all.out -o coverage-all.html
+
 
 cmd/spark-connect-example-raw-grpc-client/spark-connect-example-raw-grpc-client: $(GOFILES_BUILD)
 	@echo ">> BUILD, output = $@"
