@@ -240,12 +240,12 @@
       "Can't find table property:"
     ],
     "subClass" : {
-      "TABLE_PROPERTY_MISSING" : {
+      "MISSING_KEY" : {
         "message" : [
           "<key>."
         ]
       },
-      "TABLE_PROPERTY_PART_MISSING": {
+      "MISSING_KEY_PART": {
         "message" : [
           "<key>, <totalAmountOfParts> parts are expected..."
         ]

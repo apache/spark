@@ -1356,7 +1356,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sharedState.externalCatalog.getTable("default", "t")
         },
-        errorClass = "INSUFFICIENT_TABLE_PROPERTY.TABLE_PROPERTY_MISSING",
+        errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
         parameters = Map("key" -> toSQLId("spark.sql.sources.schema"))
       )
 
@@ -1377,7 +1377,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sharedState.externalCatalog.getTable("default", "t2")
         },
-        errorClass = "INSUFFICIENT_TABLE_PROPERTY.TABLE_PROPERTY_PART_MISSING",
+        errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
         parameters = Map(
           "key" -> toSQLId("spark.sql.sources.schema.part.1"),
           "totalAmountOfParts" -> "3")
