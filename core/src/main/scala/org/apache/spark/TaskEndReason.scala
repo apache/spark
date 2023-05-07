@@ -133,7 +133,7 @@ case class ExceptionFailure(
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
     private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil,
     private[spark] var metricPeaks: Seq[Long] = Seq.empty,
-    private[spark] var isTransient : Boolean = false)
+    private[spark] var isTransient : Boolean = true)
   extends TaskFailedReason {
 
   /**

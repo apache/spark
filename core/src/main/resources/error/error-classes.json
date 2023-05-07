@@ -16,7 +16,7 @@
       "Lateral column alias <name> is ambiguous and has <n> matches."
     ],
     "sqlState" : "42702",
-    "isTransient": false
+    "isTransient" : false
   },
   "AMBIGUOUS_REFERENCE" : {
     "message" : [
@@ -117,7 +117,7 @@
       "Cannot parse decimal."
     ],
     "sqlState" : "22018",
-    "isTransient": false
+    "isTransient" : false
   },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
@@ -247,7 +247,6 @@
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
-    "isTransient": false,
     "subClass" : {
       "ARRAY_FUNCTION_DIFF_TYPES" : {
         "message" : [
@@ -510,7 +509,8 @@
         ]
       }
     },
-    "sqlState" : "42K09"
+    "sqlState" : "42K09",
+    "isTransient" : false
   },
   "DATATYPE_MISSING_SIZE" : {
     "message" : [
@@ -547,7 +547,7 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012",
-    "isTransient": false
+    "isTransient" : false
   },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
@@ -5588,6 +5588,6 @@
     "message" : [
       "Null value appeared in non-nullable field: <field> If the schema is inferred from a Scala tuple case class, or a Java bean, please try to use scala.Option[_] or other nullable types (e.g. java.lang.Integer instead of int/scala.Int)."
     ],
-    "isTransient": false
+    "isTransient" : false
   }
 }
