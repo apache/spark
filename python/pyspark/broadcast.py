@@ -103,7 +103,7 @@ class Broadcast(Generic[T]):
     def __init__(self: "Broadcast[Any]", *, sock_file: str):
         ...
 
-    def __init__(
+    def __init__(  # type: ignore[misc]
         self,
         sc: Optional["SparkContext"] = None,
         value: Optional[T] = None,
