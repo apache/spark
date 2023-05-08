@@ -798,6 +798,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)), EmptyRow,
         s"Too long sequence: ${BigInt(Long.MaxValue) - BigInt{Long.MinValue} + 1}. " +
         s"Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)), EmptyRow,
+        s"Too long sequence: ${BigInt(Long.MaxValue) - BigInt{-1L} + 1}. " +
+        s"Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
 
     // test sequence with one element (zero step or equal start and stop)
 
