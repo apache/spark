@@ -438,7 +438,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       query: String,
       output: ExecutionOutput): Unit = {
     val logicalPlan: LogicalPlan = session.sessionState.sqlParser.parsePlan(query)
-    // For non-command query with CTE, compare the results of selecting from view created on the original query.
+    // For non-command query with CTE, compare the results of selecting from view created on the
+    // original query.
     if (!logicalPlan.isInstanceOf[Command] && output.schema.get != emptySchema) {
       val createView = s"CREATE temporary VIEW cte_view AS $query"
       val selectFromView = "SELECT * FROM cte_view"
