@@ -76,13 +76,14 @@ class TypedColumn[-T, U](
   extends Column(expr) {
 
   /**
-   * Obtain the named expression ([[Column.named]]) with the specific input type and schema added
-   * for typed aggregate operations if any.
+   * Inserts the specific input type and schema into any expressions that are expected to operate
+   * on a decoded object.
    */
-  private[sql] def namedWithInputType(
+  private[sql] def withInputType(
       inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): NamedExpression = {
-    TypedAggUtils.namedWithInputType(expr, inputEncoder, inputAttributes)
+      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
+    val newExpr = TypedAggUtils.withInputType(expr, inputEncoder, inputAttributes)
+    new TypedColumn[T, U](newExpr, encoder)
   }
 
   /**

@@ -1282,13 +1282,22 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def reduce(func: (T, T) => T): T = {
-    // TODO: avoid passing the groupByKey udf.
-    val list = this
-      .groupByKey(UdfUtils.groupAllUnderBoolTrue())(PrimitiveBooleanEncoder)
-      .reduceGroups(func)
-      .collectAsList()
-    assert(list.size() == 1)
-    list.get(0)._2
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: encoder :: Nil,
+      outputEncoder = encoder)
+    val reduceExpr = Column.fn("reduce", udf.apply(col("*"))).expr
+
+    val result = sparkSession
+      .newDataset(encoder) { builder =>
+        builder.getAggregateBuilder
+          .setInput(plan.getRoot)
+          .addAggregateExpressions(reduceExpr)
+          .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+      }
+      .collect()
+    assert(result.length == 1)
+    result(0)
   }
 
   /**

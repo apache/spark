@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,14 +39,16 @@ private[sql] object TypedAggUtils {
     }
   }
 
+  /**
+   * Insert inputs into typed aggregate expressions. For untyped aggregate expressions,
+   * the resolving is handled in the analyzer directly.
+   */
   private[sql] def withInputType(
       expr: Expression,
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): Expression = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
 
-    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
-    // the resolving is handled in the analyzer directly.
     expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
@@ -56,17 +57,6 @@ private[sql] object TypedAggUtils {
           schema = inputEncoder.schema
         )
     }
-  }
-
-  /**
-   * Inserts the specific input type and schema into any expressions that are expected to operate
-   * on a decoded object. Returns a named expression of the updated expression.
-   */
-  private[sql] def namedWithInputType(
-      expr: Expression,
-      inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): NamedExpression = {
-    new Column(withInputType(expr, inputEncoder, inputAttributes)).named
   }
 }
 

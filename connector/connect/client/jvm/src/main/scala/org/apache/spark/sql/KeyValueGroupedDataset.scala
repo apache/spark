@@ -470,7 +470,6 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
  * [[KeyValueGroupedDataset]] behaves on the server.
  */
 private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
-    // TODO: passing ds directly and get rid of keysFunc
     private val sparkSession: SparkSession,
     private val plan: proto.Plan,
     private val ikEncoder: AgnosticEncoder[IK],
@@ -550,7 +549,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    // TODO: For each column, apply the valueMap func first
+    // TODO(SPARK-43415): For each column, apply the valueMap func first
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(_.encoder)) // apply keyAs change
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder

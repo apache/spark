@@ -22,11 +22,12 @@ import io.grpc.StatusRuntimeException
 
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 /**
  * All tests in this class requires client UDF artifacts synced with the server.
  */
-class KeyValueGroupedDatasetE2ETestSuite extends QueryTest {
+class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
 
   lazy val session: SparkSession = spark
   import session.implicits._
@@ -323,6 +324,92 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest {
       ("a", 30L, 32L, 2L, 15.0, 2L, 20L, 10L, 15.0),
       ("b", 3L, 5L, 2L, 1.5, 2L, 2L, 1L, 1.5),
       ("c", 1L, 2L, 1L, 1.0, 1L, 1L, 1L, 1.0))
+  }
+
+  test("SPARK-24762: Enable top-level Option of Product encoders") {
+    val data = Seq(Some((1, "a")), Some((2, "b")), None)
+    val ds = data.toDS()
+
+    checkDataset(ds, data: _*)
+
+    val schema = new StructType().add(
+      "value",
+      new StructType()
+        .add("_1", IntegerType, nullable = false)
+        .add("_2", StringType, nullable = true),
+      nullable = true)
+
+    assert(ds.schema == schema)
+
+    val nestedOptData = Seq(Some((Some((1, "a")), 2.0)), Some((Some((2, "b")), 3.0)))
+    val nestedDs = nestedOptData.toDS()
+
+    checkDataset(nestedDs, nestedOptData: _*)
+
+    val nestedSchema = StructType(
+      Seq(StructField(
+        "value",
+        StructType(Seq(
+          StructField(
+            "_1",
+            StructType(Seq(
+              StructField("_1", IntegerType, nullable = false),
+              StructField("_2", StringType, nullable = true)))),
+          StructField("_2", DoubleType, nullable = false))),
+        nullable = true)))
+    assert(nestedDs.schema == nestedSchema)
+  }
+
+  test("SPARK-24762: Resolving Option[Product] field") {
+    val ds = Seq((1, ("a", 1.0)), (2, ("b", 2.0)), (3, null))
+      .toDS()
+      .as[(Int, Option[(String, Double)])]
+    checkDataset(ds, (1, Some(("a", 1.0))), (2, Some(("b", 2.0))), (3, None))
+  }
+
+  test("SPARK-24762: select Option[Product] field") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    val ds1 = ds.select(expr("struct(_2, _2 + 1)").as[Option[(Int, Int)]])
+    checkDataset(ds1, Some((1, 2)), Some((2, 3)), Some((3, 4)))
+
+    val ds2 = ds.select(expr("if(_2 > 2, struct(_2, _2 + 1), null)").as[Option[(Int, Int)]])
+    checkDataset(ds2, None, None, Some((3, 4)))
+  }
+
+  test("SPARK-24762: typed agg on Option[Product] type") {
+    val ds = Seq(Some((1, 2)), Some((2, 3)), Some((1, 3))).toDS()
+    assert(ds.groupByKey(_.get._1).count().collect() === Seq((1, 2), (2, 1)))
+
+    assert(
+      ds.groupByKey(x => x).count().collect() ===
+        Seq((Some((1, 2)), 1), (Some((2, 3)), 1), (Some((1, 3)), 1)))
+  }
+
+  test("SPARK-25942: typed aggregation on primitive type") {
+    val ds = Seq(1, 2, 3).toDS()
+
+    val agg = ds
+      .groupByKey(_ >= 2)
+      .agg(sum("value").as[Long], sum($"value" + 1).as[Long])
+    checkDatasetUnorderly(agg, (false, 1L, 2L), (true, 5L, 7L))
+  }
+
+  test("SPARK-25942: typed aggregation on product type") {
+    val ds = Seq((1, 2), (2, 3), (3, 4)).toDS()
+    val agg = ds.groupByKey(x => x).agg(sum("_1").as[Long], sum($"_2" + 1).as[Long])
+    checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
+  }
+
+  test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
+    // TODO(SPARK-43416): Recursively rename the position based tuple to the schema name from the
+    //  server.
+    val ds = Seq(1, 2, 3).toDS()
+    assert(ds.groupByKey(x => x).count().schema.head.name == "_1")
+
+    // Enable legacy flag to follow previous Spark behavior
+    withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
+      assert(ds.groupByKey(x => x).count().schema.head.name == "_1")
+    }
   }
 
   test("reduceGroups") {

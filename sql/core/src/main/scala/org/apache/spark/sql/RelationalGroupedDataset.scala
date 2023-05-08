@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -243,7 +242,7 @@ class RelationalGroupedDataset protected[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map {
       case typed: TypedColumn[_, _] =>
-        TypedAggUtils.withInputType(typed.expr, df.exprEnc, df.logicalPlan.output)
+        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
       case c => c.expr
     })
   }

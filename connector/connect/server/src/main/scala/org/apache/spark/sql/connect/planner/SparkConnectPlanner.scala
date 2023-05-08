@@ -1596,20 +1596,6 @@ class SparkConnectPlanner(val session: SparkSession) {
         val expr = transformExpression(fun.getArguments(0))
         Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
 
-      case "reduce" =>
-        if (fun.getArgumentsCount != 1) {
-          throw InvalidPlanInput("reduce requires single child expression")
-        }
-        val udf = fun.getArgumentsList.asScala.toSeq.head match {
-          case expr
-              if expr.hasCommonInlineUserDefinedFunction
-                && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
-            TypedScalaUdf(expr.getCommonInlineUserDefinedFunction)
-          case other =>
-            throw InvalidPlanInput(s"reduce should be a scalar scala udf, but got $other")
-        }
-        Some(ReduceAggregator(udf.function)(udf.outEnc).toColumn.expr)
-
       case _ => None
     }
   }
@@ -1908,18 +1894,6 @@ class SparkConnectPlanner(val session: SparkSession) {
     output.logicalPlan
   }
 
-  def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
-    val ds = UntypedKeyValueGroupedDataset(
-      rel.getInput,
-      rel.getGroupingExpressionsList,
-      java.util.Collections.emptyList())
-
-    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq.map(expr =>
-      TypedAggUtils.namedWithInputType(transformExpression(expr), ds.vEncoder, ds.dataAttributes))
-    val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
-    logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
-  }
-
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     rel.getGroupType match {
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBYKEY =>
@@ -1929,6 +1903,19 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
+  private def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
+    val ds = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getGroupingExpressionsList,
+      java.util.Collections.emptyList())
+
+    val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
+    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
+      .map(expr => transformExpressionWithTypedReduceExpression(expr, ds.dataAttributes))
+      .map(toNamedExpression)
+    logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
+  }
+
   private def transformRelationalGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Aggregate needs a plan input")
@@ -1936,7 +1923,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     val input = transformRelation(rel.getInput)
 
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
-    val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq.map(transformExpression)
+    val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
+      .map(expr => transformExpressionWithTypedReduceExpression(expr, input.output))
     val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
@@ -1991,6 +1979,37 @@ class SparkConnectPlanner(val session: SparkSession) {
           child = input)
 
       case other => throw InvalidPlanInput(s"Unknown Group Type $other")
+    }
+  }
+
+  private def transformTypedReduceExpression(
+      fun: proto.Expression.UnresolvedFunction,
+      dataAttributes: Seq[Attribute]): Expression = {
+    assert(fun.getFunctionName == "reduce")
+    if (fun.getArgumentsCount != 1) {
+      throw InvalidPlanInput("reduce requires single child expression")
+    }
+    val udf = fun.getArgumentsList.asScala.toSeq.head match {
+      case expr
+          if expr.hasCommonInlineUserDefinedFunction
+            && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
+        TypedScalaUdf(expr.getCommonInlineUserDefinedFunction)
+      case other =>
+        throw InvalidPlanInput(s"reduce should be a scalar scala udf, but got $other")
+    }
+    val reduce = ReduceAggregator(udf.function)(udf.outEnc).toColumn.expr
+    TypedAggUtils.withInputType(reduce, udf.inEnc, dataAttributes)
+  }
+
+  private def transformExpressionWithTypedReduceExpression(
+      expr: proto.Expression,
+      dataAttributes: Seq[Attribute]): Expression = {
+    expr.getExprTypeCase match {
+      case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
+          if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
+        // The reduce func needs the input data attribute, thus handle it specially here
+        transformTypedReduceExpression(expr.getUnresolvedFunction, dataAttributes)
+      case _ => transformExpression(expr)
     }
   }
 
