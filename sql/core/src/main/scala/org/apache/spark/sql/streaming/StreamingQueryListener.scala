@@ -123,7 +123,19 @@ object StreamingQueryListener {
       val id: UUID,
       val runId: UUID,
       val name: String,
-      val timestamp: String) extends Event
+      val timestamp: String) extends Event {
+
+    def toJSON: String = {
+      s"""
+         |{
+         |  "id": "$id",
+         |  "runId": "$runId",
+         |  "name": "$name",
+         |  "timestamp": "$timestamp"
+         |}
+       """.stripMargin
+    }
+  }
 
   /**
    * Event representing any progress updates in a query.

@@ -57,13 +57,18 @@ class PythonStreamingQueryListener(
 
   // TODO(Wei): serialize and deserialize events
 
-    override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
-      val id = event.id.toString
-      val runId = event.runId.toString
-      val name = event.name
-      val ts = event.timestamp
+  private def toJSON(event: StreamingQueryListener.QueryStartedEvent): String =
+    s"""
+       |{
+       |  "id": "${event.id}",
+       |  "runId": "${event.runId}",
+       |  "name": "${event.name}",
+       |  "timestamp": "${event.timestamp}"
+       |}
+       """.stripMargin
 
-      // pb.command(pythonExec, "-c", pythonScript, dfRefId, batchId.toString, forEachBatchStr)
+    override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
+      val eventJson = toJSON(event)
       val pythonScript = s"""
       |print('###### Start running onQueryStarted ######')
       |from pyspark.sql import SparkSession
@@ -79,8 +84,9 @@ class PythonStreamingQueryListener(
       |)
       |import sys
       |import base64
+      |import json
       |
-      |startEvent = QueryStartedEvent('$id', '$runId', '$name', '$ts')
+      |startEvent = QueryStartedEvent.fromJson(json.loads('''$eventJson'''))
       |sessionId = '$sessionId'
       |sparkConnectSession = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
       |sparkConnectSession._client._session_id = sessionId
