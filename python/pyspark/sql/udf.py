@@ -87,7 +87,6 @@ def _create_udf(
 def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
-    evalType: int,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     """Create a regular/Arrow-optimized Python UDF."""
@@ -129,8 +128,7 @@ def _create_py_udf(
             if useArrow is None
             else useArrow
         )
-
-    regular_udf = _create_udf(f, returnType, evalType)
+    regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
     return_type = regular_udf.returnType
     try:
         is_func_with_args = len(getfullargspec(f).args) > 0

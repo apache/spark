@@ -10391,7 +10391,6 @@ def udf(
     # Note: 'X' means it throws an exception during the conversion.
 
     # decorator @udf, @udf(), @udf(dataType())
-    # TODO: it's confusing that evalType will be updated later when _create_arrow_py_udf
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
@@ -10399,13 +10398,10 @@ def udf(
         return functools.partial(
             _create_py_udf,
             returnType=return_type,
-            evalType=PythonEvalType.SQL_BATCHED_UDF,
             useArrow=useArrow,
         )
     else:
-        return _create_py_udf(
-            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
-        )
+        return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
 def _test() -> None:
