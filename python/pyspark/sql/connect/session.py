@@ -47,7 +47,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 
 from pyspark import SparkContext, SparkConf, __version__
-from pyspark.sql.connect import proto
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
@@ -210,6 +209,7 @@ class SparkSession:
             takes precedence.
         """
         self._client = SparkConnectClient(connection=connection, userId=userId)
+        self._session_id = self._client._session_id
 
     def table(self, tableName: str) -> DataFrame:
         return self.read.table(tableName)
@@ -226,11 +226,6 @@ class SparkSession:
     def readStream(self) -> "DataStreamReader":
         return DataStreamReader(self)
 
-    def _get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
-        op = proto.ConfigRequest.Operation(get=proto.ConfigRequest.Get(keys=keys))
-        configs = dict(self._client.config(op).pairs)
-        return tuple(configs.get(key) for key in keys)
-
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
     ) -> StructType:
@@ -244,7 +239,7 @@ class SparkSession:
             infer_dict_as_struct,
             infer_array_from_first_element,
             prefer_timestamp_ntz,
-        ) = self._get_configs(
+        ) = self._client.get_configs(
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
             "spark.sql.timestampType",
@@ -334,7 +329,7 @@ class SparkSession:
                     for t in data.dtypes
                 ]
 
-            timezone, safecheck = self._get_configs(
+            timezone, safecheck = self._client.get_configs(
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
@@ -711,6 +706,10 @@ class SparkSession:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
             raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

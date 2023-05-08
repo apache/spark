@@ -71,6 +71,9 @@ class SparkSession private[sql] (
 
   private[this] val allocator = new RootAllocator()
 
+  // a unique session ID for this session from client.
+  private[sql] def sessionId: String = client.sessionId
+
   lazy val version: String = {
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
   }
@@ -121,7 +124,8 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val (arrowData, arrowDataSize) = ConvertToArrow(encoder, data, timeZoneId, allocator)
+        val (arrowData, arrowDataSize) =
+          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
         if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)

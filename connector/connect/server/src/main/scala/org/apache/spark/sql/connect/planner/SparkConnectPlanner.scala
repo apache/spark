@@ -68,6 +68,7 @@ import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
@@ -401,13 +402,10 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformStatCov(rel: proto.StatCov): LogicalPlan = {
-    val cov = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .stat
-      .cov(rel.getCol1, rel.getCol2)
-    LocalRelation.fromProduct(
-      output = AttributeReference("cov", DoubleType, false)() :: Nil,
-      data = Tuple1.apply(cov) :: Nil)
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    StatFunctions
+      .calculateCovImpl(df, Seq(rel.getCol1, rel.getCol2))
+      .logicalPlan
   }
 
   private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
@@ -1993,14 +1991,18 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     // Convert the data.
     val bytes = if (rows.isEmpty) {
-      ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
+      ArrowConverters.createEmptyArrowBatch(
+        schema,
+        timeZoneId,
+        errorOnDuplicatedFieldNames = false)
     } else {
       val batches = ArrowConverters.toBatchWithSchemaIterator(
         rows.iterator,
         schema,
         maxRecordsPerBatch,
         maxBatchSize,
-        timeZoneId)
+        timeZoneId,
+        errorOnDuplicatedFieldNames = false)
       assert(batches.hasNext)
       val bytes = batches.next()
       assert(!batches.hasNext, s"remaining batches: ${batches.size}")
@@ -2464,16 +2466,18 @@ class SparkConnectPlanner(val session: SparkSession) {
             .toIterable
             .asJava)
 
-      case StreamingQueryManagerCommand.CommandCase.GET =>
-        val query = session.streams.get(command.getGet)
-        respBuilder.getQueryBuilder
-          .setId(
-            StreamingQueryInstanceId
-              .newBuilder()
-              .setId(query.id.toString)
-              .setRunId(query.runId.toString)
-              .build())
-          .setName(SparkConnectService.convertNullString(query.name))
+      case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
+        val query = session.streams.get(command.getGetQuery)
+        if (query != null) {
+          respBuilder.getQueryBuilder
+            .setId(
+              StreamingQueryInstanceId
+                .newBuilder()
+                .setId(query.id.toString)
+                .setRunId(query.runId.toString)
+                .build())
+            .setName(SparkConnectService.convertNullString(query.name))
+        }
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {
