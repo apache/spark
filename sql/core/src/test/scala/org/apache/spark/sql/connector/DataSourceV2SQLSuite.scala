@@ -3280,5 +3280,5 @@ class FakeV2Provider extends SimpleTableProvider {
 }
 
 class TestCreateTableReserveSchemaNullabilityCatalog extends InMemoryCatalog {
-  override def createTableReserveSchemaNullability(): Boolean = true
+  override def useNullableQuerySchema(): Boolean = false
 }

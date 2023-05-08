@@ -82,7 +82,7 @@ case class CreateTableAsSelectExec(
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
     val table = catalog.createTable(
-      ident, getV2Columns(query.schema, catalog.createTableReserveSchemaNullability),
+      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident, query)
   }
@@ -116,7 +116,7 @@ case class AtomicCreateTableAsSelectExec(
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
     val stagedTable = catalog.stageCreate(
-      ident, getV2Columns(query.schema, catalog.createTableReserveSchemaNullability),
+      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
     writeToTable(catalog, stagedTable, writeOptions, ident, query)
   }
@@ -162,7 +162,7 @@ case class ReplaceTableAsSelectExec(
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     val table = catalog.createTable(
-      ident, getV2Columns(query.schema, catalog.createTableReserveSchemaNullability),
+      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
       partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident, query)
   }
@@ -194,7 +194,7 @@ case class AtomicReplaceTableAsSelectExec(
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
-    val columns = getV2Columns(query.schema, catalog.createTableReserveSchemaNullability)
+    val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
       invalidateCache(catalog, table, ident)
@@ -558,9 +558,9 @@ case class DeltaWithMetadataWritingSparkTask(
 private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
 
-  protected def getV2Columns(schema: StructType, reserveNullability: Boolean): Array[Column] = {
+  protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
     val rawSchema = CharVarcharUtils.getRawSchema(removeInternalMetadata(schema), conf)
-    val tableSchema = if (reserveNullability) rawSchema else rawSchema.asNullable
+    val tableSchema = if (forceNullable) rawSchema.asNullable else rawSchema
     CatalogV2Util.structTypeToV2Columns(tableSchema)
   }
 

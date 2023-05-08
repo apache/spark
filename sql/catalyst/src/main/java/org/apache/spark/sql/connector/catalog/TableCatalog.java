@@ -200,11 +200,11 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
-   * Return whether to reserve schema nullability of query output or forcibly use nullable schema
-   * on creating table implicitly, e.g. CTAS/RTAS.
+   * If true, mark all the fields of the query schema as nullable when executing
+   * CREATE/REPLACE TABLE ... AS SELECT ... and creating the table.
    */
-  default boolean createTableReserveSchemaNullability() {
-    return false;
+  default boolean useNullableQuerySchema() {
+    return true;
   }
 
   /**
