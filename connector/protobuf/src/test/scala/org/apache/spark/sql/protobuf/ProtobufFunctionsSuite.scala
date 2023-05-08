@@ -1572,6 +1572,46 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("test unsigned integer types") {
+    // The java type for uint32 and uint64 is signed integer and long respectively.
+    // Let's check that we're converting correctly
+    val sample = spark.range(1).select(
+      lit(
+        SimpleMessage
+          .newBuilder()
+          .setUint32Value(Integer.MIN_VALUE)
+          .setUint64Value(Long.MinValue)
+          .build()
+          .toByteArray
+      ).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      lit(Integer.toUnsignedLong(Integer.MIN_VALUE).longValue).as("uint32_value"),
+      lit(BigDecimal(java.lang.Long.toUnsignedString(Long.MinValue))).as("uint64_value")
+    )
+
+    val expectedWithLegacy = spark.range(1).select(
+      lit(Integer.MIN_VALUE).as("uint32_value"),
+      lit(Long.MinValue).as("uint64_value")
+    )
+
+    checkWithFileAndClassName("SimpleMessage") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        sample.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto"))
+          .select("proto.uint32_value", "proto.uint64_value"),
+        expected)
+      checkAnswer(
+        sample.select(
+          from_protobuf_wrapper(
+            $"raw_proto",
+            name,
+            descFilePathOpt,
+            Map("unsigned.as.signed.primitive" -> "true")).as("proto"))
+          .select("proto.uint32_value", "proto.uint64_value"),
+        expectedWithLegacy)
+    }
+  }
 
   def testFromProtobufWithOptions(
     df: DataFrame,

@@ -18,7 +18,7 @@ package org.apache.spark.sql.protobuf
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{Duration, DynamicMessage, Timestamp}
+import com.google.protobuf.{Duration, DynamicMessage, Timestamp, WireFormat}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
@@ -91,8 +91,22 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) => {
           getter.getInt(ordinal)
         }
+
+      // uint32 is represented as Long so convert it back correctly.
+      case (LongType, INT) if fieldDescriptor.getLiteType == WireFormat.FieldType.UINT32 =>
+        (getter, ordinal) => {
+          getter.getLong(ordinal).toInt
+        }
+
       case (LongType, LONG) =>
         (getter, ordinal) => getter.getLong(ordinal)
+
+      // uint64 is represented as Decimal so convert it back correctly here
+      case (DecimalType(), LONG)
+        if fieldDescriptor.getLiteType == WireFormat.FieldType.UINT64 =>
+        (getter, ordinal) => {
+          getter.getDecimal(ordinal, 20, 0).toUnscaledLong // todo make constant
+        }
       case (FloatType, FLOAT) =>
         (getter, ordinal) => getter.getFloat(ordinal)
       case (DoubleType, DOUBLE) =>

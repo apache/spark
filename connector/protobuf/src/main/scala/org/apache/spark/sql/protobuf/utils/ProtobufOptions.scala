@@ -168,6 +168,17 @@ private[sql] class ProtobufOptions(
   // instead of string, so use caution if changing existing parsing logic.
   val enumsAsInts: Boolean =
     parameters.getOrElse("enums.as.ints", false.toString).toBoolean
+
+  // Protobuf supports unsigned integer types uint32 and uint64. By default this library
+  // will serialize them as LongType and Decimal(20, 0) so that large unsigned values
+  // can fit into the resulting type.
+  //
+  // Previously, this library used to take uint32 and uint64 into IntegerType and
+  // LongType respectively. Large unsigned values would overflow as negative numbers,
+  // since Integer and Long are signed. If you would like to preserve that older behavior,
+  // you can set this flag.
+  val unsignedAsSignedPrimitive: Boolean =
+    parameters.getOrElse("unsigned.as.signed.primitive", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {
