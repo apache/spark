@@ -4195,8 +4195,8 @@ object SQLConf {
       .doc("When set to false, if types in Avro are encoded in the same format, but " +
         "the type in the Avro schema explicitly says that the data types are different, " +
         "reject reading the data type in the format to avoid returning incorrect results." +
-        "When set to true, it restores the legacy behavior of allow reading the data in the format," +
-        " which may return incorrect results.")
+        "When set to true, it restores the legacy behavior of allow reading the data in the" +
+        " format, which may return incorrect results.")
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
