@@ -191,9 +191,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionSet.contains)
       // Scalar subquery can be pushed down as data filter at runtime, since we always
       // execute subquery first.
-      val normalizedFiltersWithScalarSubqueries =
-        normalizedFilters.filterNot(e => e.containsPattern(PLAN_EXPRESSION) &&
-          !e.containsPattern(SCALAR_SUBQUERY))
+      // It has no meaning to push down bloom filter, so skip it.
+      val normalizedFiltersWithScalarSubqueries = normalizedFilters
+        .filterNot(e => e.containsPattern(PLAN_EXPRESSION) && !e.containsPattern(SCALAR_SUBQUERY))
+        .filterNot(_.isInstanceOf[BloomFilterMightContain])
       val dataFilters = normalizedFiltersWithScalarSubqueries.flatMap { f =>
         if (f.references.intersect(partitionSet).nonEmpty) {
           extractPredicatesWithinOutputSet(f, AttributeSet(dataColumnsWithoutPartitionCols))
