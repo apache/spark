@@ -228,4 +228,31 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
 
     checkCondition(nullableRelation, $"a" <=> nullLit, $"a".isNull)
   }
+
+  test("IN subquery nullability") {
+    // Should not optimize, since the IN subquery is nullable
+    {
+      val expr = InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral
+      checkCondition(nonNullableRelation, expr, expr)
+    }
+    {
+      val expr = InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral
+      checkCondition(nonNullableRelation, expr, expr)
+    }
+    // Should not optimize, since the left-hand-side of the IN is nullable
+    {
+      val expr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> FalseLiteral
+      checkCondition(nullableRelation, expr, expr)
+    }
+
+    // Should optimize, since the IN is non-nullable
+    {
+      val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+      checkCondition(nonNullableRelation, inExpr <=> FalseLiteral, Not(inExpr))
+    }
+    {
+      val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+      checkCondition(nonNullableRelation, inExpr <=> TrueLiteral, inExpr)
+    }
+  }
 }
