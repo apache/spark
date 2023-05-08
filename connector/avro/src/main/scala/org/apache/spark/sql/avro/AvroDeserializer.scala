@@ -32,6 +32,7 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -122,7 +123,7 @@ private[sql] class AvroDeserializer(
     val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA
     val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
     def isNotExactType: Boolean = {
-      preventReadingIncorrectType && !realDataType.acceptsType(catalystType)
+      preventReadingIncorrectType && !DataTypeUtils.sameType(realDataType, catalystType)
     }
     def incorrectTypeException(provided: DataType): IncompatibleSchemaException = {
       new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
