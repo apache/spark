@@ -192,7 +192,6 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
     # Keep the attributes as if this is a regular Python UDF.
     pudf.func = f
     pudf.returnType = return_type
-    pudf.evalType = regular_udf.evalType
     return pudf
 
 
