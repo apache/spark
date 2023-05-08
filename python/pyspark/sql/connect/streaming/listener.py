@@ -117,6 +117,7 @@ class QueryStartedEvent:
         self._name = name
         self._timestamp = timestamp
 
+    # TODO (wei): change back to UUID? what about connect/StreamingQuery
     @property
     def id(self) -> str:
         """
@@ -146,3 +147,78 @@ class QueryStartedEvent:
         The timestamp to start a query.
         """
         return self._timestamp
+
+    @classmethod
+    def fromJson(cls, j) -> 'QueryStartedEvent':
+        return cls(j["id"], j["runId"], j["name"], j["timestamp"])
+
+
+class QueryIdleEvent:
+    """
+    Event representing that query is idle and waiting for new data to process.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    This API is evolving.
+    """
+
+    @property
+    def id(self) -> str:
+        """
+        A unique query id that persists across restarts. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
+        """
+        return self._id
+
+    @property
+    def runId(self) -> str:
+        """
+        A query id that is unique for every start/restart. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
+        """
+        return self._runId
+
+    @property
+    def name(self) -> Optional[str]:
+        """
+        User-specified name of the query, `None` if not specified.
+        """
+        return self._name
+
+    @property
+    def timestamp(self) -> str:
+        """
+        The timestamp to start a query.
+        """
+        return self._timestamp
+
+    @classmethod
+    def fromJson(cls, j) -> 'QueryStartedEvent':
+        return cls(j["id"], j["runId"], j["name"], j["timestamp"])
+
+# class QueryProgressEvent:
+#     """
+#     Event representing any progress updates in a query.
+#
+#     .. versionadded:: 3.4.0
+#
+#     Notes
+#     -----
+#     This API is evolving.
+#     """
+#
+#     def __init__(self, progress: "StreamingQueryProgress") -> None:
+#         self._progress = progress
+#
+#     @property
+#     def progress(self) -> "StreamingQueryProgress":
+#         """
+#         The query progress updates.
+#         """
+#         return self._progress
+#
+#     @classmethod
+#     def fromJson(cls, j) -> "QueryProgressEvent":
+#         return cls(QueryProgressEvent.fromJson(j["progress"]))

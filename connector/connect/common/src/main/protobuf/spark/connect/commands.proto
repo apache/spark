@@ -374,7 +374,7 @@ message StreamingQueryManagerCommandResult {
 message AddStreamingQueryListenerCommand {
   bytes on_query_started = 1;
   bytes on_query_progress = 2;
-  bytes on_query_terminated = 2;
+  bytes on_query_terminated = 3;
   // TODO: deserialize in python or in scala?
 }
 

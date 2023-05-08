@@ -70,7 +70,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
-import org.apache.spark.sql.streaming.{StreamingQueryListener, Trigger}
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
@@ -2490,7 +2490,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         respBuilder.setResetTerminated(true)
 
       case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
-        val listener = PythonStreamingQueryListener(command.getAddListener, sessionId, pythonExec)
+        val listener = new PythonStreamingQueryListener(
+          command.getAddListener, sessionId, pythonExec)
         session.streams.addListener(listener)
 
       case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
@@ -2792,9 +2793,5 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
     session.catalog.listCatalogs().logicalPlan
-  }
-
-  private def createPythonStreamingQueryListener(): StreamingQueryListener = {
-
   }
 }

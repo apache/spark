@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.Base64
 
-import scala.collection.JavaConverters._
 import scala.io.Source
 
 import org.apache.spark.api.python.PythonUtils
@@ -40,7 +39,7 @@ class PythonStreamingQueryListener(
     val pbEnv = pb.environment()
     val pythonPath = PythonUtils.mergePythonPaths(
       PythonUtils.sparkPythonPath,
-      envVars.getOrElse("PYTHONPATH", ""),
+//      envVars.getOrElse("PYTHONPATH", ""),
       sys.env.getOrElse("PYTHONPATH", ""))
     pbEnv.put("PYTHONPATH", pythonPath)
 //    pbEnv.putAll(envVars.asJava)
@@ -49,7 +48,7 @@ class PythonStreamingQueryListener(
 
     // Encode serialized func as string so that it can be passed into the process through
     // arguments
-    val onQueryStartedBytes = listener.getOnQueryStarted.toByteArray.asJava
+    val onQueryStartedBytes = listener.getOnQueryStarted.toByteArray
     val onQueryStartedStr = Base64.getEncoder().encodeToString(onQueryStartedBytes)
 
   // Output for debug for now.
@@ -69,7 +68,15 @@ class PythonStreamingQueryListener(
       |print('###### Start running onQueryStarted ######')
       |from pyspark.sql import SparkSession
       |from pyspark.serializers import CloudPickleSerializer
-      |from pyspark.sql.connect.streaming.listener import StreamingQueryListener
+      |from pyspark.sql.connect.streaming.listener import (
+      |    StreamingQueryListener,
+      |    QueryStartedEvent
+      |)
+      |from pyspark.sql.streaming.listener import (
+      |    QueryProgressEvent,
+      |    QueryTerminatedEvent,
+      |    QueryIdleEvent
+      |)
       |import sys
       |import base64
       |
@@ -78,7 +85,7 @@ class PythonStreamingQueryListener(
       |sparkConnectSession = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
       |sparkConnectSession._client._session_id = sessionId
       |
-      |bytes = base64.b64decode(onQueryStartedStr)
+      |bytes = base64.b64decode('$onQueryStartedStr')
       |func = CloudPickleSerializer().loads(bytes)
       |# forEachBatchFunc = unpickledCode[0]
       |func(startEvent)
@@ -89,7 +96,9 @@ class PythonStreamingQueryListener(
       // Output for debug for now.
       // TODO: redirect the output stream
       // TODO: handle error
+      // TODO(WEI): python ver?
       val is = process.getInputStream()
+      // scalastyle:off println
       val out = Source.fromInputStream(is).mkString
       println(s"##### Python out for query start event is: out=$out")
 
@@ -99,6 +108,7 @@ class PythonStreamingQueryListener(
 
       val exitCode = process.waitFor()
       println(s"##### End processing query start event exitCode=$exitCode")
+      // scalastyle:on println
     }
 
     override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
