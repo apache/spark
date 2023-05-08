@@ -76,7 +76,7 @@ class FileStreamSource(
       } else {
         Map()
       }
-    pathOption ++ Map (DataSource.GLOB_PATHS_KEY -> "false")
+    pathOption ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
   }
 
   private val metadataLog =

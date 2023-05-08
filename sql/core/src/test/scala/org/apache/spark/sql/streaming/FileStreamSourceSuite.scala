@@ -513,17 +513,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             query.stop()
           }
 
-          // We cannot put "[" as part of the input path as it will be intepreted as glob pattern,
-          // so use replace it with "*".
-          val input_path =
-            if (special_str == " ") {
-              output.getCanonicalPath
-            } else {
-              output
-                .getCanonicalPath
-                .replace('[', '*')
-                .replace(']', '*')
-            }
+          // '[' and ']' need to be escaped. Otherwise, it will be treated as glob pattern
+	  // and won't match the file.
+          val input_path = output
+              .getCanonicalPath
+              .replace("[", "\\[")
+              .replace("]", "\\]")
           val df2 = spark.readStream.format("text").load(input_path)
           val query2 = df2.writeStream.format("memory").queryName(testTableName).start()
           try {
