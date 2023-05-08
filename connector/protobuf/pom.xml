@@ -82,6 +82,12 @@
       <version>${protobuf.version}</version>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
+      <version>${protobuf.version}</version>
+      <scope>compile</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -145,6 +151,7 @@
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
                   <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
                 </configuration>
               </execution>
             </executions>
