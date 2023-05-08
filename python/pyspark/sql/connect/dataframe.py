@@ -52,7 +52,12 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkAttributeError,
+    PySparkValueError,
+    PySparkNotImplementedError,
+)
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -106,7 +111,7 @@ class DataFrame:
                 repl_eager_eval_enabled,
                 repl_eager_eval_max_num_rows,
                 repl_eager_eval_truncate,
-            ) = self._session._get_configs(
+            ) = self._session._client.get_configs(
                 "spark.sql.repl.eagerEval.enabled",
                 "spark.sql.repl.eagerEval.maxNumRows",
                 "spark.sql.repl.eagerEval.truncate",
@@ -126,7 +131,7 @@ class DataFrame:
             repl_eager_eval_enabled,
             repl_eager_eval_max_num_rows,
             repl_eager_eval_truncate,
-        ) = self._session._get_configs(
+        ) = self._session._client.get_configs(
             "spark.sql.repl.eagerEval.enabled",
             "spark.sql.repl.eagerEval.maxNumRows",
             "spark.sql.repl.eagerEval.truncate",
@@ -1594,6 +1599,13 @@ class DataFrame:
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
+    def __dir__(self) -> List[str]:
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
+    __dir__.__doc__ = PySparkDataFrame.__dir__.__doc__
+
     def _print_plan(self) -> str:
         if self._plan:
             return self._plan.print()
@@ -1801,7 +1813,10 @@ class DataFrame:
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "RDD Support for Spark Connect"},
+        )
 
     def cache(self) -> "DataFrame":
         if self._plan is None:
@@ -1853,10 +1868,16 @@ class DataFrame:
         return self.storageLevel != StorageLevel.NONE
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreach() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreach()"},
+        )
 
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreachPartition() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreachPartition()"},
+        )
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
@@ -1882,10 +1903,16 @@ class DataFrame:
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
 
     def checkpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("checkpoint() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "checkpoint()"},
+        )
 
     def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("localCheckpoint() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "localCheckpoint()"},
+        )
 
     def to_pandas_on_spark(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -1972,7 +1999,10 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("toJSON() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "toJSON()"},
+        )
 
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
