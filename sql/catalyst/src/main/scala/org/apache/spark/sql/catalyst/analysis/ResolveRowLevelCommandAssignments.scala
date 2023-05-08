@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, In
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -40,8 +39,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
-    case u: UpdateTable if !u.skipSchemaResolution && u.resolved &&
-        supportsRowLevelOperations(u.table) && !u.aligned =>
+    case u: UpdateTable if !u.skipSchemaResolution && u.resolved && u.rewritable && !u.aligned =>
       validateStoreAssignmentPolicy()
       val newTable = cleanAttrMetadata(u.table)
       val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments)
@@ -50,8 +48,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
 
-    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved &&
-        supportsRowLevelOperations(m.targetTable) && !m.aligned =>
+    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && m.rewritable && !m.aligned =>
       validateStoreAssignmentPolicy()
       m.copy(
         targetTable = cleanAttrMetadata(m.targetTable),
@@ -74,13 +71,6 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     table.transform {
       case r: DataSourceV2Relation =>
         r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
-    }
-  }
-
-  private def supportsRowLevelOperations(table: LogicalPlan): Boolean = {
-    EliminateSubqueryAliases(table) match {
-      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
-      case _ => false
     }
   }
 

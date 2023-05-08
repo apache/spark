@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExprId, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.ORIGINAL_ROW_ID_VALUE_PREFIX
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
@@ -102,7 +103,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       None
     }
 
-    val rowIdProjection = newLazyProjection(plan, rowIdAttrs)
+    val rowIdProjection = newLazyRowIdProjection(plan, rowIdAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       Some(newLazyProjection(plan, metadataAttrs))
@@ -117,8 +118,26 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       attrs: Seq[Attribute]): ProjectingInternalRow = {
 
-    val colOrdinals = attrs.map(attr => plan.output.indexWhere(_.exprId == attr.exprId))
+    val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
     val schema = StructType.fromAttributes(attrs)
     ProjectingInternalRow(schema, colOrdinals)
+  }
+
+  // if there are assignment to row ID attributes, original values are projected as special columns
+  // this method honors such special columns if present
+  private def newLazyRowIdProjection(
+      plan: LogicalPlan,
+      rowIdAttrs: Seq[Attribute]): ProjectingInternalRow = {
+
+    val colOrdinals = rowIdAttrs.map { attr =>
+      val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
+      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
+    }
+    val schema = StructType.fromAttributes(rowIdAttrs)
+    ProjectingInternalRow(schema, colOrdinals)
+  }
+
+  private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
+    plan.output.indexWhere(attr => conf.resolver(attr.name, name))
   }
 }

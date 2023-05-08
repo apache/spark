@@ -49,7 +49,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
-    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), channel)
+    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), "", channel)
   }
 
   override def beforeEach(): Unit = {

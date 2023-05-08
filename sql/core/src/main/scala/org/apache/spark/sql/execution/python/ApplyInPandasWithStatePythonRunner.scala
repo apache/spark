@@ -70,6 +70,8 @@ class ApplyInPandasWithStatePythonRunner(
 
   override protected val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
 
+  override val errorOnDuplicatedFieldNames: Boolean = true
+
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
 
   override val bufferSize: Int = {

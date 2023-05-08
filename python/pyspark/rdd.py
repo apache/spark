@@ -87,6 +87,7 @@ from pyspark.shuffle import (
 )
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import fail_on_stopiteration, _parse_memory
+from pyspark.errors import PySparkRuntimeError
 
 
 if TYPE_CHECKING:
@@ -167,7 +168,10 @@ def portable_hash(x: Hashable) -> int:
     """
 
     if "PYTHONHASHSEED" not in os.environ:
-        raise RuntimeError("Randomness of hash of string should be disabled via PYTHONHASHSEED")
+        raise PySparkRuntimeError(
+            error_class="PYTHON_HASH_SEED_NOT_SET",
+            message_parameters={},
+        )
 
     if x is None:
         return 0
@@ -368,13 +372,9 @@ class RDD(Generic[T_co]):
 
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle an RDD, which is always an error:
-        raise RuntimeError(
-            "It appears that you are attempting to broadcast an RDD or reference an RDD from an "
-            "action or transformation. RDD transformations and actions can only be invoked by the "
-            "driver, not inside of other transformations; for example, "
-            "rdd1.map(lambda x: rdd2.values.count() * x) is invalid because the values "
-            "transformation and count action cannot be performed inside of the rdd1.map "
-            "transformation. For more information, see SPARK-5063."
+        raise PySparkRuntimeError(
+            error_class="RDD_TRANSFORM_ONLY_VALID_ON_DRIVER",
+            message_parameters={},
         )
 
     @property
@@ -1699,9 +1699,12 @@ class RDD(Generic[T_co]):
             def check_return_code() -> Iterable[int]:
                 pipe.wait()
                 if checkCode and pipe.returncode:
-                    raise RuntimeError(
-                        "Pipe function `%s' exited "
-                        "with error code %d" % (command, pipe.returncode)
+                    raise PySparkRuntimeError(
+                        error_class="PIPE_FUNCTION_EXITED",
+                        message_parameters={
+                            "func_name": command,
+                            "error_code": str(pipe.returncode),
+                        },
                     )
                 else:
                     for i in range(0):
@@ -5215,7 +5218,13 @@ class RDD(Generic[T_co]):
     def toDF(
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
     ) -> "DataFrame":
-        raise RuntimeError("""RDD.toDF was called before SparkSession was initialized.""")
+        raise PySparkRuntimeError(
+            error_class="CALL_BEFORE_INITIALIZE",
+            message_parameters={
+                "func_name": "RDD.toDF",
+                "object": "SparkSession",
+            },
+        )
 
 
 def _prepare_for_python_RDD(sc: "SparkContext", command: Any) -> Tuple[bytes, Any, Any, Any]:

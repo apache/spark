@@ -68,7 +68,8 @@ message Relation {
     WithWatermark with_watermark = 33;
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
-    FlatMapGroupsWithState flat_map_groups_with_state = 36;
+    CachedLocalRelation cached_local_relation = 36;
+    FlatMapGroupsWithState flat_map_groups_with_state = 37;
 
     // NA functions
     NAFill fill_na = 90;
@@ -380,6 +381,18 @@ message LocalRelation {
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
   optional string schema = 2;
+}
+
+// A local relation that has been cached already.
+message CachedLocalRelation {
+  // (Required) An identifier of the user which created the local relation
+  string userId = 1;
+
+  // (Required) An identifier of the Spark SQL session in which the user created the local relation.
+  string sessionId = 2;
+
+  // (Required) A sha-256 hash of the serialized local relation.
+  string hash = 3;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
