@@ -456,7 +456,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       assertResult(
         output.output,
         s"Result did not match for CTE query and select from its view: \n${output.sql}") {
-        selectViewOutput
+        selectViewOutput.mkString("\n").replaceAll("\\s+$", "")
       }
       // Drop view.
       session.sql(dropViewIfExists)
