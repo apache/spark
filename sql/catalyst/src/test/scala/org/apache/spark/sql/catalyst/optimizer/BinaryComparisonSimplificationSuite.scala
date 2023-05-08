@@ -229,30 +229,35 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     checkCondition(nullableRelation, $"a" <=> nullLit, $"a".isNull)
   }
 
-  test("IN subquery nullability") {
-    // Should not optimize, since the IN subquery is nullable
-    {
-      val expr = InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral
-      checkCondition(nonNullableRelation, expr, expr)
-    }
-    {
-      val expr = InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral
-      checkCondition(nonNullableRelation, expr, expr)
-    }
-    // Should not optimize, since the left-hand-side of the IN is nullable
-    {
-      val expr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> FalseLiteral
-      checkCondition(nullableRelation, expr, expr)
+  test("SPARK-43413: IN subquery nullability") {
+    // The following cases are pairs of (relation, expression)
+    // Cases we should not optimize because the IN subquery is nullable
+    Seq(
+      // IN subquery right-hand-side (ListQuery) is nullable
+      (nonNullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
+      (nonNullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral),
+      // Left-hand-side of the IN is nullable
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> TrueLiteral),
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a"))) <=> FalseLiteral),
+      // Both sides of the IN are nullable
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> TrueLiteral),
+      (nullableRelation,
+        InSubquery(Seq($"a"), ListQuery(nullableRelation.select($"a"))) <=> FalseLiteral)
+    ).foreach {
+      case (relation, expr) =>
+      checkCondition(relation, expr, expr)
     }
 
     // Should optimize, since the IN is non-nullable
-    {
-      val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
-      checkCondition(nonNullableRelation, inExpr <=> FalseLiteral, Not(inExpr))
-    }
-    {
-      val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
-      checkCondition(nonNullableRelation, inExpr <=> TrueLiteral, inExpr)
-    }
+    val inExpr = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+    checkCondition(nonNullableRelation, inExpr <=> FalseLiteral, Not(inExpr))
+
+    val inExpr2 = InSubquery(Seq($"a"), ListQuery(nonNullableRelation.select($"a")))
+    checkCondition(nonNullableRelation, inExpr2 <=> TrueLiteral, inExpr2)
   }
 }
