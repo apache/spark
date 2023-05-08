@@ -1036,7 +1036,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def insufficientTablePropertyError(key: String): Throwable = {
     new AnalysisException(
       errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
-      messageParameters = Map("key" -> toSQLId(key)))
+      messageParameters = Map("key" -> toSQLConf(key)))
   }
 
   def insufficientTablePropertyPartError(
@@ -1044,7 +1044,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
       messageParameters = Map(
-        "key" -> toSQLId(key),
+        "key" -> toSQLConf(key),
         "totalAmountOfParts" -> totalAmountOfParts))
   }
 

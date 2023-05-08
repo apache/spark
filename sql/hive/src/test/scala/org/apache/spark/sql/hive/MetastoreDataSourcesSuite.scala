@@ -1357,7 +1357,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           sharedState.externalCatalog.getTable("default", "t")
         },
         errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
-        parameters = Map("key" -> toSQLId("spark.sql.sources.schema"))
+        parameters = Map("key" -> toSQLConf("spark.sql.sources.schema"))
       )
 
       val hiveTableWithNumPartsProp = CatalogTable(
@@ -1379,7 +1379,7 @@ class MetastoreDataSourcesSuite extends QueryTest
         },
         errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
         parameters = Map(
-          "key" -> toSQLId("spark.sql.sources.schema.part.1"),
+          "key" -> toSQLConf("spark.sql.sources.schema.part.1"),
           "totalAmountOfParts" -> "3")
       )
 
