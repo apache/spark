@@ -2260,6 +2260,16 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(0)
 
+  private[spark] val SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedUnknownDecommissionExecutors")
+      .internal()
+      .doc("Max number of unknown executors by decommission to retain. This affects " +
+        "whether executor could receive decommission request sent before its registration.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(0)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
@@ -2507,4 +2517,13 @@ package object config {
       .version("3.5.0")
       .intConf
       .createWithDefault(Int.MaxValue)
+
+  private[spark] val SHUFFLE_SERVER_RECOVERY_DISABLED =
+    ConfigBuilder("spark.yarn.shuffle.server.recovery.disabled")
+      .internal()
+      .doc("Set to true for applications that prefer to disable recovery when the External " +
+        "Shuffle Service restarts. This configuration only takes effect on YARN.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 }

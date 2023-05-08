@@ -507,6 +507,8 @@ object FunctionRegistry {
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
     expression[Mode]("mode"),
+    expression[HllSketchAgg]("hll_sketch_agg"),
+    expression[HllUnionAgg]("hll_union_agg"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -743,6 +745,8 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[HllSketchEstimate]("hll_sketch_estimate"),
+    expression[HllUnion]("hll_union"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -994,7 +998,8 @@ object TableFunctionRegistry {
     generator[JsonTuple]("json_tuple"),
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
-    generator[Stack]("stack")
+    generator[Stack]("stack"),
+    generator[SQLKeywords]("sql_keywords")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

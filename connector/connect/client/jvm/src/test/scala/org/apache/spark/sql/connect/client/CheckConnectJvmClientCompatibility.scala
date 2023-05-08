@@ -121,12 +121,18 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.DataFrameWriterV2.*"),
       IncludeByName("org.apache.spark.sql.Dataset.*"),
       IncludeByName("org.apache.spark.sql.functions.*"),
+      IncludeByName("org.apache.spark.sql.KeyValueGroupedDataset.*"),
       IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
       IncludeByName("org.apache.spark.sql.SparkSession.*"),
       IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
       IncludeByName("org.apache.spark.sql.TypedColumn.*"),
       IncludeByName("org.apache.spark.sql.SQLImplicits.*"),
-      IncludeByName("org.apache.spark.sql.DatasetHolder.*"))
+      IncludeByName("org.apache.spark.sql.DatasetHolder.*"),
+      IncludeByName("org.apache.spark.sql.streaming.DataStreamReader.*"),
+      IncludeByName("org.apache.spark.sql.streaming.DataStreamWriter.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQuery.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryProgress.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
@@ -140,6 +146,7 @@ object CheckConnectJvmClientCompatibility {
 
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
 
       // DataFrameStatFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
@@ -159,12 +166,10 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
 
       // functions
@@ -175,6 +180,23 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
+
+      // KeyValueGroupedDataset
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.mapGroupsWithState"
+      ), // streaming
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.flatMapGroupsWithState"
+      ), // streaming
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.reduceGroups"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.agg"),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.aggUntyped"
+      ), // protected internal
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.count"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.this"),
 
       // RelationalGroupedDataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
@@ -197,7 +219,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
       // RuntimeConfig
@@ -205,6 +226,27 @@ object CheckConnectJvmClientCompatibility {
 
       // TypedColumn
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
+
+      // DataStreamReader
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamReader.table" // TODO( SPARK-43144)
+      ),
+
+      // DataStreamWriter
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.foreach" // TODO(SPARK-43133)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
+      ),
+
+      // StreamingQuery
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
+      ),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),

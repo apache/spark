@@ -30,6 +30,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     SortOrder,
@@ -37,15 +38,12 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.udf import UserDefinedFunction
-
-
-class InputValidationError(Exception):
-    pass
 
 
 class LogicalPlan:
@@ -431,8 +429,9 @@ class Project(LogicalPlan):
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._columns:
             if not isinstance(c, (Column, str)):
-                raise InputValidationError(
-                    f"Only Column or String can be used for projections: '{c}'."
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "columns"},
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -608,16 +607,19 @@ class Deduplicate(LogicalPlan):
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
         column_names: Optional[List[str]] = None,
+        within_watermark: bool = False,
     ) -> None:
         super().__init__(child)
         self.all_columns_as_keys = all_columns_as_keys
         self.column_names = column_names
+        self.within_watermark = within_watermark
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.deduplicate.input.CopyFrom(self._child.plan(session))
         plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
+        plan.deduplicate.within_watermark = self.within_watermark
         if self.column_names is not None:
             plan.deduplicate.column_names.extend(self.column_names)
         return plan
@@ -800,15 +802,9 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise NotImplementedError(
-                """
-                Unsupported join type: %s. Supported join types include:
-                "inner", "outer", "full", "fullouter", "full_outer",
-                "leftouter", "left", "left_outer", "rightouter",
-                "right", "right_outer", "leftsemi", "left_semi",
-                "semi", "leftanti", "left_anti", "anti", "cross",
-                """
-                % how
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_JOIN_TYPE",
+                message_parameters={"join_type": how},
             )
         self.how = join_type
 
@@ -883,11 +879,9 @@ class SetOperation(LogicalPlan):
         elif self.set_op == "except":
             plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
-            raise NotImplementedError(
-                """
-                Unsupported set operation type: %s.
-                """
-                % plan.set_op.set_op_type
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"feature": self.set_op},
             )
 
         plan.set_op.is_all = self.is_all
@@ -1896,15 +1890,7 @@ class CacheTable(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         _cache_table = proto.CacheTable(table_name=self._table_name)
         if self._storage_level:
-            _cache_table.storage_level.CopyFrom(
-                proto.StorageLevel(
-                    use_disk=self._storage_level.useDisk,
-                    use_memory=self._storage_level.useMemory,
-                    use_off_heap=self._storage_level.useOffHeap,
-                    deserialized=self._storage_level.deserialized,
-                    replication=self._storage_level.replication,
-                )
-            )
+            _cache_table.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
         plan = proto.Relation(catalog=proto.Catalog(cache_table=_cache_table))
         return plan
 

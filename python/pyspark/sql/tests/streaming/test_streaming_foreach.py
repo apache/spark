@@ -243,14 +243,12 @@ class StreamingTestsForeach(ReusedSQLTestCase):
             def open(self, partition):
                 pass
 
-        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+        tester.assert_invalid_writer(WriterWithoutProcess(), "ATTRIBUTE_NOT_CALLABLE")
 
         class WriterWithNonCallableProcess:
             process = True
 
-        tester.assert_invalid_writer(
-            WriterWithNonCallableProcess(), "'process' in provided object is not callable"
-        )
+        tester.assert_invalid_writer(WriterWithNonCallableProcess(), "ATTRIBUTE_NOT_CALLABLE")
 
         class WriterWithNoParamProcess:
             def process(self):
@@ -266,9 +264,7 @@ class StreamingTestsForeach(ReusedSQLTestCase):
         class WriterWithNonCallableOpen(WithProcess):
             open = True
 
-        tester.assert_invalid_writer(
-            WriterWithNonCallableOpen(), "'open' in provided object is not callable"
-        )
+        tester.assert_invalid_writer(WriterWithNonCallableOpen(), "ATTRIBUTE_NOT_CALLABLE")
 
         class WriterWithNoParamOpen(WithProcess):
             def open(self):
@@ -279,9 +275,7 @@ class StreamingTestsForeach(ReusedSQLTestCase):
         class WriterWithNonCallableClose(WithProcess):
             close = True
 
-        tester.assert_invalid_writer(
-            WriterWithNonCallableClose(), "'close' in provided object is not callable"
-        )
+        tester.assert_invalid_writer(WriterWithNonCallableClose(), "ATTRIBUTE_NOT_CALLABLE")
 
 
 if __name__ == "__main__":

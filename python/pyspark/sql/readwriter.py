@@ -24,7 +24,7 @@ from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
@@ -1281,7 +1281,12 @@ class DataFrameWriter(OptionUtils):
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
@@ -1358,7 +1363,12 @@ class DataFrameWriter(OptionUtils):
         """
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 

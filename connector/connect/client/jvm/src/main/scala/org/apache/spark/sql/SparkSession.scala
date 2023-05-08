@@ -28,6 +28,7 @@ import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
@@ -37,6 +38,7 @@ import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, Spa
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -117,12 +119,24 @@ class SparkSession private[sql] (
 
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
-      val localRelationBuilder = builder.getLocalRelationBuilder
-        .setSchema(encoder.schema.json)
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
-        localRelationBuilder.setData(arrowData)
+        val (arrowData, arrowDataSize) =
+          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
+        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+          builder.getLocalRelationBuilder
+            .setSchema(encoder.schema.json)
+            .setData(arrowData)
+        } else {
+          val hash = client.cacheLocalRelation(arrowDataSize, arrowData, encoder.schema.json)
+          builder.getCachedLocalRelationBuilder
+            .setUserId(client.userId)
+            .setSessionId(client.sessionId)
+            .setHash(hash)
+        }
+      } else {
+        builder.getLocalRelationBuilder
+          .setSchema(encoder.schema.json)
       }
     }
   }
@@ -286,6 +300,17 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
+   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 3.5.0
+   */
+  def readStream: DataStreamReader = new DataStreamReader(this)
 
   /**
    * Interface through which the user may create, drop, alter or query underlying databases,
@@ -453,9 +478,9 @@ class SparkSession private[sql] (
     client.execute(plan).asScala.foreach(_ => ())
   }
 
-  private[sql] def execute(command: proto.Command): Unit = {
+  private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    client.execute(plan).asScala.toSeq
   }
 
   @DeveloperApi
@@ -510,6 +535,19 @@ class SparkSession private[sql] (
    */
   private[sql] def resetPlanIdGenerator(): Unit = {
     planIdGenerator.set(0)
+  }
+
+  /**
+   * Interrupt all operations of this session currently running on the connected server.
+   *
+   * TODO/WIP: Currently it will interrupt the Spark Jobs running on the server, triggered from
+   * ExecutePlan requests. If an operation is not running a Spark Job, it becomes an noop and the
+   * operation will continue afterwards, possibly with more Spark Jobs.
+   *
+   * @since 3.5.0
+   */
+  def interruptAll(): Unit = {
+    client.interruptAll()
   }
 
   /**

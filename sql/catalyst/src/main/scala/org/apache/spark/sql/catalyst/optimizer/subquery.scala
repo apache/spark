@@ -346,10 +346,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         Exists(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
-      case ListQuery(sub, children, exprId, childOutputs, conditions, hint) if children.nonEmpty =>
+      case ListQuery(sub, children, exprId, numCols, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         val joinCond = getJoinCondition(newCond, conditions)
-        ListQuery(newPlan, children, exprId, childOutputs, joinCond, hint)
+        ListQuery(newPlan, children, exprId, numCols, joinCond, hint)
       case LateralSubquery(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBug = true)
         LateralSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
@@ -459,7 +459,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case alias @ Alias(_: AttributeReference, _) =>
         (alias.exprId, Literal.create(null, alias.dataType))
       case alias @ Alias(l: Literal, _) =>
-        (alias.exprId, l.copy(value = null))
+        // SPARK-43156: return literal real value, count bug does not apply to the count
+        // function only, but all expressions in Aggregate that return non-null value for
+        // empty input. So we return the real value of the literal here, then the literal
+        // can be used for aggregate query result.
+        (alias.exprId, l)
       case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
     }.toMap
   }

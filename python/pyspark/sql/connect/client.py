@@ -19,8 +19,6 @@ __all__ = [
     "SparkConnectClient",
 ]
 
-import string
-
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -60,6 +58,7 @@ from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
 from pyspark.resource.information import ResourceInformation
+from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
@@ -73,10 +72,11 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert_map_items_to_dict
-from pyspark.sql.types import DataType, MapType, StructType, TimestampType
+from pyspark.sql.pandas.types import _create_converter_to_pandas
+from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
+from pyspark.errors import PySparkValueError, PySparkRuntimeError
 
 
 if TYPE_CHECKING:
@@ -170,15 +170,25 @@ class ChannelBuilder:
         """
         # Explicitly check the scheme of the URL.
         if url[:5] != "sc://":
-            raise AttributeError("URL scheme must be set to `sc`.")
+            raise PySparkValueError(
+                error_class="INVALID_CONNECT_URL",
+                message_parameters={
+                    "detail": "The URL must start with 'sc://'. Please update the URL to "
+                    "follow the correct format, e.g., 'sc://hostname:port'.",
+                },
+            )
         # Rewrite the URL to use http as the scheme so that we can leverage
         # Python's built-in parser.
         tmp_url = "http" + url[2:]
         self.url = urllib.parse.urlparse(tmp_url)
         self.params: Dict[str, str] = {}
         if len(self.url.path) > 0 and self.url.path != "/":
-            raise AttributeError(
-                f"Path component for connection URI must be empty: {self.url.path}"
+            raise PySparkValueError(
+                error_class="INVALID_CONNECT_URL",
+                message_parameters={
+                    "detail": f"The path component '{self.url.path}' must be empty. Please update "
+                    f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
+                },
             )
         self._extract_attributes()
 
@@ -198,7 +208,14 @@ class ChannelBuilder:
             for p in parts:
                 kv = p.split("=")
                 if len(kv) != 2:
-                    raise AttributeError(f"Parameter '{p}' is not a valid parameter key-value pair")
+                    raise PySparkValueError(
+                        error_class="INVALID_CONNECT_URL",
+                        message_parameters={
+                            "detail": f"Parameter '{p}' should be provided as a "
+                            f"key-value pair separated by an equal sign (=). Please update "
+                            f"the parameter to follow the correct format, e.g., 'key=value'.",
+                        },
+                    )
                 self.params[kv[0]] = urllib.parse.unquote(kv[1])
 
         netloc = self.url.netloc.split(":")
@@ -209,8 +226,13 @@ class ChannelBuilder:
             self.host = netloc[0]
             self.port = int(netloc[1])
         else:
-            raise AttributeError(
-                f"Target destination {self.url.netloc} does not match '<host>:<port>' pattern"
+            raise PySparkValueError(
+                error_class="INVALID_CONNECT_URL",
+                message_parameters={
+                    "detail": f"Target destination '{self.url.netloc}' should match the "
+                    f"'<host>:<port>' pattern. Please update the destination to follow "
+                    f"the correct format, e.g., 'hostname:port'.",
+                },
             )
 
     def metadata(self) -> Iterable[Tuple[str, str]]:
@@ -269,16 +291,13 @@ class ChannelBuilder:
         user_agent : str
             The user_agent parameter specified in the connection string,
             or "_SPARK_CONNECT_PYTHON" when not specified.
+            The returned value will be percent encoded.
         """
         user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
-        allowed_chars = string.ascii_letters + string.punctuation
-        if len(user_agent) > 200:
+        ua_len = len(urllib.parse.quote(user_agent))
+        if ua_len > 2048:
             raise SparkConnectException(
-                "'user_agent' parameter cannot exceed 200 characters in length"
-            )
-        if set(user_agent).difference(allowed_chars):
-            raise SparkConnectException(
-                "Only alphanumeric and common punctuations are allowed for 'user_agent'"
+                f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
         return user_agent
 
@@ -469,13 +488,7 @@ class AnalyzeResult:
         elif pb.HasField("unpersist"):
             pass
         elif pb.HasField("get_storage_level"):
-            storage_level = StorageLevel(
-                useDisk=pb.get_storage_level.storage_level.use_disk,
-                useMemory=pb.get_storage_level.storage_level.use_memory,
-                useOffHeap=pb.get_storage_level.storage_level.use_off_heap,
-                deserialized=pb.get_storage_level.storage_level.deserialized,
-                replication=pb.get_storage_level.storage_level.replication,
-            )
+            storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -523,7 +536,7 @@ class SparkConnectClient(object):
 
     def __init__(
         self,
-        connectionString: str,
+        connection: Union[str, ChannelBuilder],
         userId: Optional[str] = None,
         channelOptions: Optional[List[Tuple[str, Any]]] = None,
         retryPolicy: Optional[Dict[str, Any]] = None,
@@ -533,9 +546,10 @@ class SparkConnectClient(object):
 
         Parameters
         ----------
-        connectionString: Optional[str]
+        connection: Union[str,ChannelBuilder]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection. Defaults to `sc://localhost`.
+            the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
+            Defaults to `sc://localhost`.
         userId : Optional[str]
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
@@ -543,7 +557,11 @@ class SparkConnectClient(object):
             takes precedence.
         """
         # Parse the connection string.
-        self._builder = ChannelBuilder(connectionString, channelOptions)
+        self._builder = (
+            connection
+            if isinstance(connection, ChannelBuilder)
+            else ChannelBuilder(connection, channelOptions)
+        )
         self._user_id = None
         self._retry_policy = {
             "max_retries": 15,
@@ -691,17 +709,35 @@ class SparkConnectClient(object):
         schema = schema or types.from_arrow_schema(table.schema)
         assert schema is not None and isinstance(schema, StructType)
 
-        pdf = table.to_pandas()
-        pdf.columns = schema.fieldNames()
+        # Rename columns to avoid duplicated column names.
+        pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
+        pdf.columns = schema.names
 
-        for field, pa_field in zip(schema, table.schema):
-            if isinstance(field.dataType, TimestampType):
-                assert pa_field.type.tz is not None
-                pdf[field.name] = _check_series_localize_timestamps(
-                    pdf[field.name], pa_field.type.tz
-                )
-            elif isinstance(field.dataType, MapType):
-                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
+        timezone: Optional[str] = None
+        struct_in_pandas: Optional[str] = None
+        error_on_duplicated_field_names: bool = False
+        if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
+            timezone, struct_in_pandas = self.get_configs(
+                "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+            )
+
+            if struct_in_pandas == "legacy":
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
+
+        pdf = pd.concat(
+            [
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(pser)
+                for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
+            ],
+            axis="columns",
+        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -830,11 +866,11 @@ class SparkConnectClient(object):
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
             if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
-                raise ValueError(
-                    f"""
-                    Unknown explain mode: {explain_mode}. Accepted "
-                    "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
-                    """
+                raise PySparkValueError(
+                    error_class="UNKNOWN_EXPLAIN_MODE",
+                    message_parameters={
+                        "explain_mode": str(explain_mode),
+                    },
                 )
             if explain_mode == "simple":
                 req.explain.explain_mode = (
@@ -858,6 +894,9 @@ class SparkConnectClient(object):
                 )
         elif method == "tree_string":
             req.tree_string.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+            level = kwargs.get("level")
+            if level and isinstance(level, int):
+                req.tree_string.level = level
         elif method == "is_local":
             req.is_local.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
         elif method == "is_streaming":
@@ -877,15 +916,7 @@ class SparkConnectClient(object):
             req.persist.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
             if kwargs.get("storage_level", None) is not None:
                 storage_level = cast(StorageLevel, kwargs.get("storage_level"))
-                req.persist.storage_level.CopyFrom(
-                    pb2.StorageLevel(
-                        use_disk=storage_level.useDisk,
-                        use_memory=storage_level.useMemory,
-                        use_off_heap=storage_level.useOffHeap,
-                        deserialized=storage_level.deserialized,
-                        replication=storage_level.replication,
-                    )
-                )
+                req.persist.storage_level.CopyFrom(storage_level_to_proto(storage_level))
         elif method == "unpersist":
             req.unpersist.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
             if kwargs.get("blocking", None) is not None:
@@ -893,7 +924,12 @@ class SparkConnectClient(object):
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         else:
-            raise ValueError(f"Unknown Analyze method: {method}")
+            raise PySparkValueError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={
+                    "operation": method,
+                },
+            )
 
         try:
             for attempt in Retrying(
@@ -981,6 +1017,9 @@ class SparkConnectClient(object):
                             yield {
                                 "streaming_query_command_result": b.streaming_query_command_result
                             }
+                        if b.HasField("streaming_query_manager_command_result"):
+                            cmd_result = b.streaming_query_manager_command_result
+                            yield {"streaming_query_manager_command_result": cmd_result}
                         if b.HasField("get_resources_command_result"):
                             resources = {}
                             for key, resource in b.get_resources_command_result.resources.items():
@@ -1030,7 +1069,12 @@ class SparkConnectClient(object):
             elif isinstance(response, dict):
                 properties.update(**response)
             else:
-                raise ValueError(f"Unknown response: {response}")
+                raise PySparkValueError(
+                    error_class="UNKNOWN_RESPONSE",
+                    message_parameters={
+                        "response": response,
+                    },
+                )
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
@@ -1045,6 +1089,11 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
+
+    def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
+        op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
+        configs = dict(self.config(op).pairs)
+        return tuple(configs.get(key) for key in keys)
 
     def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """
@@ -1073,6 +1122,48 @@ class SparkConnectClient(object):
                             f"{resp.session_id} != {self._session_id}"
                         )
                     return ConfigResult.fromProto(resp)
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
+    def _interrupt_request(self, interrupt_type: str) -> pb2.InterruptRequest:
+        req = pb2.InterruptRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if interrupt_type == "all":
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
+        else:
+            raise PySparkValueError(
+                error_class="UNKNOWN_INTERRUPT_TYPE",
+                message_parameters={
+                    "interrupt_type": str(interrupt_type),
+                },
+            )
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        return req
+
+    def interrupt_all(self) -> None:
+        """
+        Call the interrupt RPC of Spark Connect to interrupt all executions in this session.
+
+        Returns
+        -------
+        None
+        """
+        req = self._interrupt_request("all")
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
@@ -1247,7 +1338,10 @@ class Retrying:
                 if e is not None:
                     raise e
                 else:
-                    raise ValueError("Retries exceeded but no exception caught.")
+                    raise PySparkRuntimeError(
+                        error_class="EXCEED_RETRY",
+                        message_parameters={},
+                    )
 
             # Do backoff
             if retry_state.count() > 0:
