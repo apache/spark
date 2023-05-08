@@ -264,8 +264,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   }
 
   /** A CTE test case with special handling */
-  protected case class CTETestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with CTETest {
+  protected case class CTETestCase(name: String, inputFile: String, resultFile: String)
+      extends TestCase
+      with CTETest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
       CTEAnalyzerTestCase(newName, inputFile, newResultFile)
   }
@@ -432,7 +433,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
-  def expandCTEQueryAndCompareResult(session: SparkSession, query: String, output: ExecutionOutput): Unit = {
+  def expandCTEQueryAndCompareResult(
+      session: SparkSession,
+      query: String,
+      output: ExecutionOutput): Unit = {
     val logicalPlan: LogicalPlan = session.sessionState.sqlParser.parsePlan(query)
     // For non-command query with CTE, compare the results of selecting from view created on the original query.
     if (!logicalPlan.isInstanceOf[Command] && output.schema.get != emptySchema) {
@@ -443,11 +447,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val (selectViewSchema, selectViewOutput) =
         handleExceptions(getNormalizedQueryExecutionResult(session, selectFromView))
       // Compare results.
-      assertResult(output.schema.get,
+      assertResult(
+        output.schema.get,
         s"Schema did not match for CTE query and select from its view: \n$output") {
         selectViewSchema
       }
-      assertResult(output.output,
+      assertResult(
+        output.output,
         s"Result did not match for CTE query and select from its view: \n${output.sql}") {
         selectViewOutput
       }
