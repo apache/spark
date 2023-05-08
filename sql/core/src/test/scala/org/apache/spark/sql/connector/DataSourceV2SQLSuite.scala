@@ -781,7 +781,7 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("CreateTableAsSelect: nullable schema") {
-    registerCatalog("testcat_nullability", classOf[TestCreateTableReserveSchemaNullabilityCatalog])
+    registerCatalog("testcat_nullability", classOf[ReserveSchemaNullabilityCatalog])
 
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
@@ -3279,6 +3279,6 @@ class FakeV2Provider extends SimpleTableProvider {
   }
 }
 
-class TestCreateTableReserveSchemaNullabilityCatalog extends InMemoryCatalog {
+class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
   override def useNullableQuerySchema(): Boolean = false
 }
