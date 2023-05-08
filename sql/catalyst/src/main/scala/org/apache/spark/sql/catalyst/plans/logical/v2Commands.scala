@@ -687,6 +687,13 @@ case class UpdateTable(
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 
+  lazy val rewritable: Boolean = {
+    EliminateSubqueryAliases(table) match {
+      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case _ => false
+    }
+  }
+
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
@@ -708,6 +715,28 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
+
+  lazy val aligned: Boolean = {
+    val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
+    actions.forall {
+      case UpdateAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _: DeleteAction =>
+        true
+      case InsertAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _ =>
+        false
+    }
+  }
+
+  lazy val rewritable: Boolean = {
+    EliminateSubqueryAliases(targetTable) match {
+      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case _ => false
+    }
+  }
+
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
   def skipSchemaResolution: Boolean = targetTable match {

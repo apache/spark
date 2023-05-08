@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDAF, PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -36,14 +41,25 @@ object PythonUDF {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
   }
 
-  def isGroupedAggPandasUDF(e: Expression): Boolean = {
-    e.isInstanceOf[PythonUDF] &&
-      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+  def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {
+    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF), but we might
+    // support new types in the future, e.g, N -> N transform.
+    e.isInstanceOf[PythonUDAF]
   }
+}
 
-  // This is currently same as GroupedAggPandasUDF, but we might support new types in the future,
-  // e.g, N -> N transform.
-  def isWindowPandasUDF(e: Expression): Boolean = isGroupedAggPandasUDF(e)
+
+trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression { self: Expression =>
+  def name: String
+  def func: PythonFunction
+  def udfDeterministic: Boolean
+  def resultId: ExprId
+
+  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+
+  override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
+
+  override def nullable: Boolean = true
 }
 
 /**
@@ -58,18 +74,12 @@ case class PythonUDF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
-
-  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
-
-  override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
+  extends Expression with PythonFuncExpression with Unevaluable {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
 
-  override def nullable: Boolean = true
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
@@ -81,6 +91,55 @@ case class PythonUDF(
     copy(children = newChildren)
 }
 
+abstract class UnevaluableAggregateFunc extends AggregateFunction {
+  override def aggBufferSchema: StructType = throw internalError(
+    "UnevaluableAggregateFunc.aggBufferSchema should not be called.")
+  override def aggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "UnevaluableAggregateFunc.aggBufferAttributes should not be called.")
+  override def inputAggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "UnevaluableAggregateFunc.inputAggBufferAttributes should not be called.")
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+}
+
+/**
+ * A serialized version of a Python lambda function for aggregation. This is a special expression,
+ * which needs a dedicated physical operator to execute it, instead of the normal Aggregate
+ * operator.
+ */
+case class PythonUDAF(
+    name: String,
+    func: PythonFunction,
+    dataType: DataType,
+    children: Seq[Expression],
+    udfDeterministic: Boolean,
+    resultId: ExprId = NamedExpression.newExprId)
+  extends UnevaluableAggregateFunc with PythonFuncExpression {
+
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$name($distinct${children.mkString(", ")})"
+  }
+
+  override def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    name + children.mkString(start, ", ", ")") + s"#${resultId.id}$typeSuffix"
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDAF)
+
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    // `resultId` can be seen as cosmetic variation in PythonUDAF, as it doesn't affect the result.
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDAF =
+    copy(children = newChildren)
+}
+
 /**
  * A place holder used when printing expressions without debugging information such as the
  * result id.
@@ -89,9 +148,19 @@ case class PrettyPythonUDF(
     name: String,
     dataType: DataType,
     children: Seq[Expression])
-  extends Expression with Unevaluable with NonSQLExpression {
+  extends UnevaluableAggregateFunc with NonSQLExpression {
 
   override def toString: String = s"$name(${children.mkString(", ")})"
+
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$name($distinct${children.mkString(", ")})"
+  }
+
+  override def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    name + children.mkString(start, ", ", ")")
+  }
 
   override def nullable: Boolean = true
 

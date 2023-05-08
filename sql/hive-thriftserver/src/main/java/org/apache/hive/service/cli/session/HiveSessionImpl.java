@@ -252,7 +252,7 @@ public class HiveSessionImpl implements HiveSession {
       ss.getHiveVariables().put(propName, substitution.substitute(ss.getConf(),varvalue));
     } else if (varname.startsWith(METACONF_PREFIX)) {
       String propName = varname.substring(METACONF_PREFIX.length());
-      Hive hive = Hive.get(ss.getConf());
+      Hive hive = Hive.getWithoutRegisterFns(ss.getConf());
       hive.setMetaConf(propName, substitution.substitute(ss.getConf(), varvalue));
     } else {
       setConf(varname, varname, varvalue, true);
@@ -413,7 +413,7 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public IMetaStoreClient getMetaStoreClient() throws HiveSQLException {
     try {
-      return Hive.get(getHiveConf()).getMSC();
+      return Hive.getWithoutRegisterFns(getHiveConf()).getMSC();
     } catch (HiveException e) {
       throw new HiveSQLException("Failed to get metastore connection", e);
     } catch (MetaException e) {

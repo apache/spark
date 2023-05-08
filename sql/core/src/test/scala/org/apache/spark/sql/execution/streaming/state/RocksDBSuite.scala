@@ -557,7 +557,7 @@ class RocksDBSuite extends SparkFunSuite {
         db.get("a") // this is found in-memory writebatch - no get triggered in db
         db.get("b") // key doesn't exists - triggers db get
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 2, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metrics)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
@@ -683,6 +683,123 @@ class RocksDBSuite extends SparkFunSuite {
             db.commit()
             assert(toStr(db.get("a")) === "1")
           }
+        }
+      }
+    }
+  }
+
+ /** RocksDB memory management tests for bounded memory usage */
+  test("Memory mgmt - invalid config") {
+    withTempDir { dir =>
+      try {
+        RocksDBMemoryManager.resetWriteBufferManagerAndCache
+        val sqlConf = new SQLConf
+        sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+          + RocksDBConf.BOUNDED_MEMORY_USAGE_CONF_KEY, "true")
+        sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+          + RocksDBConf.MAX_MEMORY_USAGE_MB_CONF_KEY, "100")
+        sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+          + RocksDBConf.WRITE_BUFFER_CACHE_RATIO_CONF_KEY, "0.7")
+        sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+          + RocksDBConf.HIGH_PRIORITY_POOL_RATIO_CONF_KEY, "0.6")
+
+        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+        assert(dbConf.boundedMemoryUsage === true)
+        assert(dbConf.totalMemoryUsageMB === 100)
+        assert(dbConf.writeBufferCacheRatio === 0.7)
+        assert(dbConf.highPriorityPoolRatio === 0.6)
+
+        val ex = intercept[Exception] {
+          val remoteDir = dir.getCanonicalPath
+          withDB(remoteDir, conf = dbConf) { db =>
+            db.load(0)
+            db.put("a", "1")
+            db.commit()
+          }
+        }
+        assert(ex.isInstanceOf[IllegalArgumentException])
+        assert(ex.getMessage.contains("should be less than 1.0"))
+      } finally {
+        RocksDBMemoryManager.resetWriteBufferManagerAndCache
+      }
+    }
+  }
+
+  Seq("true", "false").foreach { boundedMemoryUsage =>
+    test(s"Memory mgmt - Cache reuse for RocksDB with boundedMemoryUsage=$boundedMemoryUsage") {
+      withTempDir { dir1 =>
+        withTempDir { dir2 =>
+          try {
+            val sqlConf = new SQLConf
+            sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+              + RocksDBConf.BOUNDED_MEMORY_USAGE_CONF_KEY, boundedMemoryUsage)
+
+            val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+            assert(dbConf.boundedMemoryUsage === boundedMemoryUsage.toBoolean)
+
+            val remoteDir1 = dir1.getCanonicalPath
+            val (writeManager1, cache1) = withDB(remoteDir1, conf = dbConf) { db =>
+              db.load(0)
+              db.put("a", "1")
+              db.commit()
+              db.getWriteBufferManagerAndCache
+            }
+
+            val remoteDir2 = dir2.getCanonicalPath
+            val (writeManager2, cache2) = withDB(remoteDir2, conf = dbConf) { db =>
+              db.load(0)
+              db.put("a", "1")
+              db.commit()
+              db.getWriteBufferManagerAndCache
+            }
+
+            if (boundedMemoryUsage == "true") {
+              assert(writeManager1 === writeManager2)
+              assert(cache1 === cache2)
+            } else {
+              assert(writeManager1 === null)
+              assert(writeManager2 === null)
+              assert(cache1 != cache2)
+            }
+          } finally {
+            RocksDBMemoryManager.resetWriteBufferManagerAndCache
+          }
+        }
+      }
+    }
+  }
+
+  Seq("100", "1000", "100000").foreach { totalMemorySizeMB =>
+    test(s"Memory mgmt - valid config with totalMemorySizeMB=$totalMemorySizeMB") {
+      withTempDir { dir =>
+        try {
+          val sqlConf = new SQLConf
+          sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+            + RocksDBConf.BOUNDED_MEMORY_USAGE_CONF_KEY, "true")
+          sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+            + RocksDBConf.MAX_MEMORY_USAGE_MB_CONF_KEY, totalMemorySizeMB)
+          sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+            + RocksDBConf.WRITE_BUFFER_CACHE_RATIO_CONF_KEY, "0.4")
+          sqlConf.setConfString(RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "."
+            + RocksDBConf.HIGH_PRIORITY_POOL_RATIO_CONF_KEY, "0.1")
+
+          val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+          assert(dbConf.boundedMemoryUsage === true)
+          assert(dbConf.totalMemoryUsageMB === totalMemorySizeMB.toLong)
+          assert(dbConf.writeBufferCacheRatio === 0.4)
+          assert(dbConf.highPriorityPoolRatio === 0.1)
+
+          val remoteDir = dir.getCanonicalPath
+          withDB(remoteDir, conf = dbConf) { db =>
+            db.load(0)
+            db.put("a", "1")
+            db.put("b", "2")
+            db.remove("a")
+            db.put("c", "3")
+            db.commit()
+          }
+        } finally {
+          RocksDBMemoryManager.resetWriteBufferManagerAndCache
         }
       }
     }

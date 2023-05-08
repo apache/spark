@@ -21,7 +21,7 @@ from typing import cast
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
-from pyspark.errors import ParseException, PythonException
+from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -133,17 +133,29 @@ class PandasUDFTestsMixin:
                 def foo(x):
                     return x
 
-            with self.assertRaisesRegex(ValueError, "Invalid return type.*None"):
+            with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf(functionType=PandasUDFType.SCALAR)
                 def foo(x):
                     return x
 
-            with self.assertRaisesRegex(ValueError, "Invalid function"):
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_BE_NONE",
+                message_parameters={"arg_name": "returnType"},
+            )
+
+            with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf("double", 100)
                 def foo(x):
                     return x
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="INVALID_PANDAS_UDF_TYPE",
+                message_parameters={"arg_name": "functionType", "arg_type": "100"},
+            )
 
             with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
                 pandas_udf(lambda: 1, LongType(), PandasUDFType.SCALAR)
@@ -153,17 +165,33 @@ class PandasUDFTestsMixin:
                 def zero_with_type():
                     return 1
 
-            with self.assertRaisesRegex(TypeError, "Invalid return type"):
+            with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
 
-            with self.assertRaisesRegex(TypeError, "Invalid return type"):
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "returnType", "arg_type": "int"},
+            )
+
+            with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf(returnType="double", functionType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
+                message_parameters={
+                    "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF "
+                    "or SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
+                    "return_type": "DoubleType()",
+                },
+            )
 
             with self.assertRaisesRegex(ValueError, "Invalid function"):
 
