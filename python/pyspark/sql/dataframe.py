@@ -3033,6 +3033,40 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.apply(name)
         return Column(jc)
 
+    def __dir__(self) -> List[str]:
+        """
+        Examples
+        --------
+        >>> from pyspark.sql.functions import lit
+
+        Create a dataframe with a column named 'id'.
+
+        >>> df = spark.range(3)
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes column id
+        ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming']
+
+        Add a column named 'i_like_pancakes'.
+
+        >>> df = df.withColumn('i_like_pancakes', lit(1))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes columns i_like_pancakes, id
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add an existed column 'inputFiles'.
+
+        >>> df = df.withColumn('inputFiles', lit(2))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't duplicate inputFiles
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add a column named 'id2'.
+
+        >>> df = df.withColumn('id2', lit(3))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+        """
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
     @overload
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
         ...
@@ -4416,9 +4450,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             and not isinstance(to_replace, dict)
         ):
             raise PySparkTypeError(
-                "If to_replace is not a dict, value should be "
-                "a bool, float, int, string, list, tuple or None. "
-                "Got {0}".format(type(value))
+                error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE",
+                message_parameters={
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
             )
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
@@ -4611,7 +4647,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
         if relativeError < 0:
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="NEGATIVE_VALUE",
                 message_parameters={
                     "arg_name": "relativeError",
@@ -4672,7 +4708,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not method:
             method = "pearson"
         if not method == "pearson":
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="VALUE_NOT_PEARSON",
                 message_parameters={"arg_name": "method", "arg_value": method},
             )
