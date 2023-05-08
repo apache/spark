@@ -1139,17 +1139,14 @@ class StreamingQueryManagerCommand(google___protobuf___message___Message):
             ],
         ) -> None: ...
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]
-        ) -> typing_extensions.Literal["timeout_ms"] | None: ...
+            self, oneof_group: typing_extensions___Literal["_timeout_ms", b"_timeout_ms"]
+        ) -> typing_extensions___Literal["timeout_ms"]: ...
+    type___AwaitAnyTerminationCommand = AwaitAnyTerminationCommand
 
-    ACTIVE_FIELD_NUMBER: builtins.int
-    GET_QUERY_FIELD_NUMBER: builtins.int
-    AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
-    RESET_TERMINATED_FIELD_NUMBER: builtins.int
-    active: builtins.bool
-    """active() API, returns a list of active queries."""
-    get_query: builtins.str
-    """get() API, returns the StreamingQuery identified by id."""
+    active: builtin___bool = ...
+    get_query: typing___Text = ...
+    reset_terminated: builtin___bool = ...
+
     @property
     def await_any_termination(
         self,
@@ -1157,11 +1154,12 @@ class StreamingQueryManagerCommand(google___protobuf___message___Message):
     def __init__(
         self,
         *,
-        active: builtins.bool = ...,
-        get_query: builtins.str = ...,
-        await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
-        | None = ...,
-        reset_terminated: builtins.bool = ...,
+        active: typing___Optional[builtin___bool] = None,
+        get_query: typing___Optional[typing___Text] = None,
+        await_any_termination: typing___Optional[
+            type___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
+        ] = None,
+        reset_terminated: typing___Optional[builtin___bool] = None,
     ) -> None: ...
     def HasField(
         self,
@@ -1194,12 +1192,10 @@ class StreamingQueryManagerCommand(google___protobuf___message___Message):
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> typing_extensions.Literal[
+        self, oneof_group: typing_extensions___Literal["command", b"command"]
+    ) -> typing_extensions___Literal[
         "active", "get_query", "await_any_termination", "reset_terminated"
-    ] | None: ...
-
-global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
+    ]: ...
 
 type___StreamingQueryManagerCommand = StreamingQueryManagerCommand
 
