@@ -22,9 +22,11 @@ import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
@@ -87,11 +89,28 @@ class SparkConnectArtifactManager private[connect] {
    * @param serverLocalStagingPath
    */
   private[connect] def addArtifact(
-      session: SparkSession,
+      sessionHolder: SessionHolder,
       remoteRelativePath: Path,
       serverLocalStagingPath: Path): Unit = {
     require(!remoteRelativePath.isAbsolute)
-    if (remoteRelativePath.startsWith("classes/")) {
+    if (remoteRelativePath.startsWith("cache/")) {
+      val tmpFile = serverLocalStagingPath.toFile
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        val blockManager = sessionHolder.session.sparkContext.env.blockManager
+        val blockId = CacheId(
+          userId = sessionHolder.userId,
+          sessionId = sessionHolder.sessionId,
+          hash = remoteRelativePath.toString.stripPrefix("cache/"))
+        val updater = blockManager.TempFileBasedBlockStoreUpdater(
+          blockId = blockId,
+          level = StorageLevel.MEMORY_AND_DISK_SER,
+          classTag = implicitly[ClassTag[Array[Byte]]],
+          tmpFile = tmpFile,
+          blockSize = tmpFile.length(),
+          tellMaster = false)
+        updater.save()
+      }(catchBlock = { tmpFile.delete() })
+    } else if (remoteRelativePath.startsWith("classes/")) {
       // Move class files to common location (shared among all users)
       val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))
       Files.createDirectories(target.getParent)
@@ -110,7 +129,7 @@ class SparkConnectArtifactManager private[connect] {
       Files.move(serverLocalStagingPath, target)
       if (remoteRelativePath.startsWith("jars")) {
         // Adding Jars to the underlying spark context (visible to all users)
-        session.sessionState.resourceLoader.addJar(target.toString)
+        sessionHolder.session.sessionState.resourceLoader.addJar(target.toString)
         jarsList.add(target)
       }
     }

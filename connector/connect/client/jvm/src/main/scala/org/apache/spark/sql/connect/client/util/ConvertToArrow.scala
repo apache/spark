@@ -34,14 +34,16 @@ import org.apache.spark.sql.util.ArrowUtils
 private[sql] object ConvertToArrow {
 
   /**
-   * Convert an iterator of common Scala objects into a sinlge Arrow IPC Stream.
+   * Convert an iterator of common Scala objects into a single Arrow IPC Stream.
    */
   def apply[T](
       encoder: AgnosticEncoder[T],
       data: Iterator[T],
       timeZoneId: String,
-      bufferAllocator: BufferAllocator): ByteString = {
-    val arrowSchema = ArrowUtils.toArrowSchema(encoder.schema, timeZoneId)
+      errorOnDuplicatedFieldNames: Boolean,
+      bufferAllocator: BufferAllocator): (ByteString, Int) = {
+    val arrowSchema =
+      ArrowUtils.toArrowSchema(encoder.schema, timeZoneId, errorOnDuplicatedFieldNames)
     val root = VectorSchemaRoot.create(arrowSchema, bufferAllocator)
     val writer: ArrowWriter = ArrowWriter.create(root)
     val unloader = new VectorUnloader(root)
@@ -64,7 +66,7 @@ private[sql] object ConvertToArrow {
       ArrowStreamWriter.writeEndOfStream(channel, IpcOption.DEFAULT)
 
       // Done
-      bytes.toByteString
+      (bytes.toByteString, bytes.size)
     } finally {
       root.close()
     }

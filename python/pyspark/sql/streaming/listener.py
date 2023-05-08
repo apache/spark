@@ -228,6 +228,7 @@ class QueryIdleEvent:
     def __init__(self, jevent: JavaObject) -> None:
         self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
         self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
+        self._timestamp: str = jevent.timestamp()
 
     @property
     def id(self) -> uuid.UUID:
@@ -244,6 +245,13 @@ class QueryIdleEvent:
         py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
         return self._runId
+
+    @property
+    def timestamp(self) -> str:
+        """
+        The timestamp when the latest no-batch trigger happened.
+        """
+        return self._timestamp
 
 
 class QueryTerminatedEvent:

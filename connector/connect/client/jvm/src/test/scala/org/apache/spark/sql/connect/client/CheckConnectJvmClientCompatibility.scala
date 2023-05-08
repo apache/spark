@@ -121,6 +121,7 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.DataFrameWriterV2.*"),
       IncludeByName("org.apache.spark.sql.Dataset.*"),
       IncludeByName("org.apache.spark.sql.functions.*"),
+      IncludeByName("org.apache.spark.sql.KeyValueGroupedDataset.*"),
       IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
       IncludeByName("org.apache.spark.sql.SparkSession.*"),
       IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
@@ -164,7 +165,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
@@ -179,6 +179,23 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
+
+      // KeyValueGroupedDataset
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.mapGroupsWithState"
+      ), // streaming
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.flatMapGroupsWithState"
+      ), // streaming
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.reduceGroups"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.agg"),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.KeyValueGroupedDataset.aggUntyped"
+      ), // protected internal
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.count"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.this"),
 
       // RelationalGroupedDataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
@@ -226,12 +243,6 @@ object CheckConnectJvmClientCompatibility {
       ),
 
       // StreamingQuery
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.StreamingQuery.awaitTermination" // TODO(SPARK-43143)
-      ),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.StreamingQuery.exception" // TODO(SPARK-43134)
-      ),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
       ),

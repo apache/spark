@@ -39,6 +39,8 @@ class ArrowPythonRunner(
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
+  override val errorOnDuplicatedFieldNames: Boolean = true
+
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize

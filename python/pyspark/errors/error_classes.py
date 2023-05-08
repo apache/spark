@@ -19,6 +19,11 @@ import json
 
 ERROR_CLASSES_JSON = """
 {
+  "APPLICATION_NAME_NOT_SET" : {
+    "message" : [
+      "An application name must be set in your configuration."
+    ]
+  },
   "ARGUMENT_REQUIRED": {
     "message": [
       "Argument `<arg_name>` is required when <condition>."
@@ -27,6 +32,26 @@ ERROR_CLASSES_JSON = """
   "ATTRIBUTE_NOT_CALLABLE" : {
     "message" : [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
+    ]
+  },
+  "ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported."
+    ]
+  },
+  "BROADCAST_VARIABLE_NOT_LOADED": {
+    "message": [
+      "Broadcast variable `<variable>` not loaded."
+    ]
+  },
+  "CALL_BEFORE_INITIALIZE": {
+    "message": [
+      "Not supported to call `<func_name>` before initialize <object>."
+    ]
+  },
+  "CANNOT_ACCEPT_OBJECT_IN_TYPE": {
+    "message": [
+      "`<data_type>` can not accept object `<obj_name>` in type `<obj_type>`."
     ]
   },
   "CANNOT_ACCESS_TO_DUNDER": {
@@ -54,14 +79,44 @@ ERROR_CLASSES_JSON = """
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
+  "CANNOT_CONVERT_TYPE": {
+    "message": [
+      "Cannot convert <from_type> into <to_type>."
+    ]
+  },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
     ]
   },
+  "CANNOT_INFER_SCHEMA_FOR_TYPE": {
+    "message": [
+      "Can not infer schema for type: `<data_type>`."
+    ]
+  },
+  "CANNOT_INFER_TYPE_FOR_FIELD": {
+    "message": [
+      "Unable to infer the type of the field `<field_name>`."
+    ]
+  },
+  "CANNOT_MERGE_TYPE": {
+    "message": [
+      "Can not merge type `<data_type1>` and `<data_type2>`."
+    ]
+  },
+  "CANNOT_OPEN_SOCKET": {
+    "message": [
+      "Can not open socket: <errors>."
+    ]
+  },
   "CANNOT_PARSE_DATATYPE": {
     "message": [
-      "Unable to parse datatype from schema. <error>."
+      "Unable to parse datatype. <msg>."
     ]
   },
   "CANNOT_PROVIDE_METADATA": {
@@ -84,9 +139,29 @@ ERROR_CLASSES_JSON = """
       "`<func_name>` does not allow a Column in a list."
     ]
   },
+  "CONTEXT_ONLY_VALID_ON_DRIVER" : {
+    "message" : [
+      "It appears that you are attempting to reference SparkContext from a broadcast variable, action, or transformation. SparkContext can only be used on the driver, not in code that it run on workers. For more information, see SPARK-5063."
+    ]
+  },
+  "CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT" : {
+    "message" : [
+      "Remote client cannot create a SparkContext. Create SparkSession instead."
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
+    ]
+  },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
+    ]
+  },
+  "EXCEED_RETRY" : {
+    "message" : [
+      "Retries exceeded but no exception caught."
     ]
   },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
@@ -94,14 +169,40 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "INCORRECT_CONF_FOR_PROFILE" : {
+    "message" : [
+      "`spark.python.profile` or `spark.python.profile.memory` configuration",
+      " must be set to `true` to enable Python profile."
+    ]
+  },
+  "INVALID_BROADCAST_OPERATION": {
+    "message": [
+      "Broadcast can only be <operation> in driver."
+    ]
+  },
   "INVALID_CALL_ON_UNRESOLVED_OBJECT": {
     "message": [
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_CONNECT_URL" : {
+    "message" : [
+      "Invalid URL for Spark Connect: <detail>"
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_PANDAS_UDF" : {
+    "message" : [
+      "Invalid function: <detail>"
+    ]
+  },
+  "INVALID_PANDAS_UDF_TYPE" : {
+    "message" : [
+      "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -114,9 +215,14 @@ ERROR_CLASSES_JSON = """
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
     ]
   },
+  "INVALID_TYPENAME_CALL" : {
+    "message" : [
+      "StructField does not have typeName. Use typeName on its type explicitly instead."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
-      "Eval type for UDF must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF."
+      "Eval type for UDF must be <eval_type>."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -124,14 +230,39 @@ ERROR_CLASSES_JSON = """
       "when() can only be applied on a Column previously generated by when() function, and cannot be applied once otherwise() is applied."
     ]
   },
+  "INVALID_WINDOW_BOUND_TYPE" : {
+    "message" : [
+      "Invalid window bound type: <window_bound_type>."
+    ]
+  },
+  "JAVA_GATEWAY_EXITED" : {
+    "message" : [
+      "Java gateway process exited before sending its port number."
+    ]
+  },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
     ]
   },
+  "KEY_VALUE_PAIR_REQUIRED" : {
+    "message" : [
+      "Key-value pair or a list of pairs is required."
+    ]
+  },
   "LENGTH_SHOULD_BE_THE_SAME" : {
     "message" : [
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
+    ]
+  },
+  "MASTER_URL_NOT_SET" : {
+    "message" : [
+      "A master URL must be set in your configuration."
+    ]
+  },
+  "MISSING_LIBRARY_FOR_PROFILER" : {
+    "message" : [
+      "Install the 'memory_profiler' library in the cluster to enable memory profiling."
     ]
   },
   "MISSING_VALID_PLAN" : {
@@ -224,6 +355,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
     ]
   },
+  "NOT_COLUMN_OR_LIST_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Column, list or str, got <arg_type>."
+    ]
+  },
   "NOT_COLUMN_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a Column or str, got <arg_type>."
@@ -259,9 +395,29 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_IMPLEMENTED" : {
+    "message" : [
+      "<feature> is not implemented."
+    ]
+  },
+  "NOT_INSTANCE_OF" : {
+    "message" : [
+      "<value> is not an instance of type <data_type>."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
+    ]
+  },
+  "NOT_INT_OR_SLICE_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
+    ]
+  },
+  "NOT_IN_BARRIER_STAGE" : {
+    "message" : [
+      "It is not in a barrier stage."
     ]
   },
   "NOT_ITERABLE" : {
@@ -269,7 +425,17 @@ ERROR_CLASSES_JSON = """
       "<objectName> is not iterable."
     ]
   },
+  "NOT_LIST" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, got <arg_type>."
+    ]
+  },
   "NOT_LIST_OF_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[Column]."
+    ]
+  },
+  "NOT_LIST_OF_COLUMN_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a list[Column]."
     ]
@@ -292,6 +458,11 @@ ERROR_CLASSES_JSON = """
   "NOT_LIST_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_NUMERIC_COLUMNS" : {
+    "message" : [
+      "Numeric aggregation function can only be applied on numeric columns, got <invalid_columns>."
     ]
   },
   "NOT_OBSERVATION_OR_STR" : {
@@ -339,6 +510,52 @@ ERROR_CLASSES_JSON = """
       "Only a single trigger is allowed."
     ]
   },
+  "PIPE_FUNCTION_EXITED" : {
+    "message" : [
+      "Pipe function `<func_name>` exited with error code <error_code>."
+    ]
+  },
+  "PYTHON_HASH_SEED_NOT_SET" : {
+    "message" : [
+      "Randomness of hash of string should be disabled via PYTHONHASHSEED."
+    ]
+  },
+  "PYTHON_VERSION_MISMATCH" : {
+    "message" : [
+      "Python in worker has different version <worker_version> than that in driver <driver_version>, PySpark cannot run with different minor versions.",
+      "Please check environment variables PYSPARK_PYTHON and PYSPARK_DRIVER_PYTHON are correctly set."
+    ]
+  },
+  "RDD_TRANSFORM_ONLY_VALID_ON_DRIVER" : {
+    "message" : [
+      "It appears that you are attempting to broadcast an RDD or reference an RDD from an ",
+      "action or transformation. RDD transformations and actions can only be invoked by the ",
+      "driver, not inside of other transformations; for example, ",
+      "rdd1.map(lambda x: rdd2.values.count() * x) is invalid because the values ",
+      "transformation and count action cannot be performed inside of the rdd1.map ",
+      "transformation. For more information, see SPARK-5063."
+    ]
+  },
+  "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF" : {
+    "message" : [
+      "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
+    ]
+  },
+  "RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF" : {
+    "message" : [
+      "Number of columns of the returned pandas.DataFrame doesn't match specified schema. Expected: <expected> Actual: <actual>"
+    ]
+  },
+  "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF" : {
+    "message" : [
+      "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
+    ]
+  },
+  "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
+    "message" : [
+      "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
@@ -349,9 +566,64 @@ ERROR_CLASSES_JSON = """
       "State is either not defined or has already been removed."
     ]
   },
+  "STOP_ITERATION_OCCURRED" : {
+    "message" : [
+      "Caught StopIteration thrown from user's code; failing the task: <exc>"
+    ]
+  },
+  "STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF" : {
+    "message" : [
+      "pandas iterator UDF should exhaust the input iterator."
+    ]
+  },
+  "TOO_MANY_VALUES" : {
+    "message" : [
+      "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
+  "UNEXPECTED_RESPONSE_FROM_SERVER" : {
+    "message" : [
+      "Unexpected response from iterator server."
+    ]
+  },
+  "UNEXPECTED_TUPLE_WITH_STRUCT" : {
+    "message" : [
+      "Unexpected tuple <tuple> with StructType."
+    ]
+  },
+  "UNKNOWN_EXPLAIN_MODE" : {
+    "message" : [
+      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+    ]
+  },
+  "UNKNOWN_INTERRUPT_TYPE" : {
+    "message" : [
+      "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
+    ]
+  },
+  "UNKNOWN_RESPONSE" : {
+    "message" : [
+      "Unknown response: <response>."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {
+    "message" : [
+      "<data_type> is not supported in conversion to Arrow."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
+    "message" : [
+      "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type: <join_type>. Supported join types include: \\"inner\\", \\"outer\\", \\"full\\", \\"fullouter\\", \\"full_outer\\", \\"leftouter\\", \\"left\\", \\"left_outer\\", \\"rightouter\\", \\"right\\", \\"right_outer\\", \\"leftsemi\\", \\"left_semi\\", \\"semi\\", \\"leftanti\\", \\"left_anti\\", \\"anti\\", \\"cross\\"."
     ]
   },
   "UNSUPPORTED_LITERAL" : {
@@ -364,14 +636,39 @@ ERROR_CLASSES_JSON = """
       "The type of array scalar '<dtype>' is not supported."
     ]
   },
+  "UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operation> is not supported."
+    ]
+  },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
     ]
   },
+  "UNSUPPORTED_SIGNATURE" : {
+    "message" : [
+      "Unsupported signature: <signature>."
+    ]
+  },
+  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
+    "message" : [
+      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."
+    ]
+  },
+  "VALUE_NOT_ACCESSIBLE": {
+    "message": [
+      "Value `<value>` cannot be accessed inside tasks."
+    ]
+  },
   "VALUE_NOT_ANY_OR_ALL" : {
     "message" : [
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_BETWEEN" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
     ]
   },
   "VALUE_NOT_NON_EMPTY_STR" : {
@@ -396,7 +693,7 @@ ERROR_CLASSES_JSON = """
   },
   "VALUE_OUT_OF_BOUND" : {
     "message" : [
-      "Value for `<arg_name>` must be between <min> and <max>."
+      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {

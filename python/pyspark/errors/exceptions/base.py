@@ -126,6 +126,12 @@ class ArithmeticException(PySparkException):
     """
 
 
+class UnsupportedOperationException(PySparkException):
+    """
+    Unsupported operation exception thrown from Spark with an error class.
+    """
+
+
 class ArrayIndexOutOfBoundsException(PySparkException):
     """
     Array index out of bounds exception thrown from Spark with an error class.
@@ -198,7 +204,19 @@ class PySparkAttributeError(PySparkException, AttributeError):
     """
 
 
+class PySparkRuntimeError(PySparkException, RuntimeError):
+    """
+    Wrapper class for RuntimeError to support error classes.
+    """
+
+
 class PySparkAssertionError(PySparkException, AssertionError):
     """
     Wrapper class for AssertionError to support error classes.
+    """
+
+
+class PySparkNotImplementedError(PySparkException, NotImplementedError):
+    """
+    Wrapper class for NotImplementedError to support error classes.
     """
