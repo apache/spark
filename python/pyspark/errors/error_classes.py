@@ -89,6 +89,11 @@ ERROR_CLASSES_JSON = """
       "Some of types cannot be determined after inferring."
     ]
   },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
@@ -121,7 +126,7 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_PARSE_DATATYPE": {
     "message": [
-      "Unable to parse datatype from schema. <error>."
+      "Unable to parse datatype. <msg>."
     ]
   },
   "CANNOT_PROVIDE_METADATA": {
@@ -157,6 +162,11 @@ ERROR_CLASSES_JSON = """
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
+    ]
+  },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
   "EXCEED_RETRY" : {
@@ -405,6 +415,11 @@ ERROR_CLASSES_JSON = """
       "<feature> is not implemented."
     ]
   },
+  "NOT_INSTANCE_OF" : {
+    "message" : [
+      "<value> is not an instance of type <data_type>."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -431,6 +446,11 @@ ERROR_CLASSES_JSON = """
     ]
   },
   "NOT_LIST_OF_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[Column]."
+    ]
+  },
+  "NOT_LIST_OF_COLUMN_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a list[Column]."
     ]
@@ -586,9 +606,19 @@ ERROR_CLASSES_JSON = """
       "pandas iterator UDF should exhaust the input iterator."
     ]
   },
+  "TOO_MANY_VALUES" : {
+    "message" : [
+      "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
+    ]
+  },
+  "UNEXPECTED_TUPLE_WITH_STRUCT" : {
+    "message" : [
+      "Unexpected tuple <tuple> with StructType."
     ]
   },
   "UNKNOWN_EXPLAIN_MODE" : {
@@ -666,6 +696,11 @@ ERROR_CLASSES_JSON = """
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
     ]
   },
+  "VALUE_NOT_BETWEEN" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
+    ]
+  },
   "VALUE_NOT_NON_EMPTY_STR" : {
     "message" : [
       "Value for `<arg_name>` must be a non empty string, got '<arg_value>'."
@@ -688,7 +723,7 @@ ERROR_CLASSES_JSON = """
   },
   "VALUE_OUT_OF_BOUND" : {
     "message" : [
-      "Value for `<arg_name>` must be between <min> and <max>."
+      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {

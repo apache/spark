@@ -687,6 +687,13 @@ case class UpdateTable(
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 
+  lazy val rewritable: Boolean = {
+    EliminateSubqueryAliases(table) match {
+      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case _ => false
+    }
+  }
+
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
@@ -720,6 +727,13 @@ case class MergeIntoTable(
         AssignmentUtils.aligned(targetTable.output, assignments)
       case _ =>
         false
+    }
+  }
+
+  lazy val rewritable: Boolean = {
+    EliminateSubqueryAliases(targetTable) match {
+      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case _ => false
     }
   }
 

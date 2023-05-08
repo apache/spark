@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
@@ -823,21 +823,33 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-19993 subquery with cached underlying relation") {
     withTempView("t1") {
-      Seq(1).toDF("c1").createOrReplaceTempView("t1")
-      spark.catalog.cacheTable("t1")
+      Seq(false, true).foreach { enabled =>
+        withSQLConf(
+          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> enabled.toString,
+          SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+            AQEPropagateEmptyRelation.ruleName) {
 
-      // underlying table t1 is cached as well as the query that refers to it.
-      val sqlText =
-        """
-          |SELECT * FROM t1
-          |WHERE
-          |NOT EXISTS (SELECT * FROM t1)
-        """.stripMargin
-      val ds = sql(sqlText)
-      assert(getNumInMemoryRelations(ds) == 2)
+          Seq(1).toDF("c1").createOrReplaceTempView("t1")
+          spark.catalog.cacheTable("t1")
 
-      val cachedDs = sql(sqlText).cache()
-      assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.sparkPlan) == 3)
+          // underlying table t1 is cached as well as the query that refers to it.
+          val sqlText =
+            """
+              |SELECT * FROM t1
+              |WHERE
+              |NOT EXISTS (SELECT * FROM t1)
+            """.stripMargin
+          val ds = sql(sqlText)
+          assert(getNumInMemoryRelations(ds) == 2)
+
+          val cachedDs = sql(sqlText).cache()
+          cachedDs.collect()
+          assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.executedPlan) == 3)
+
+          cachedDs.unpersist()
+          spark.catalog.uncacheTable("t1")
+        }
+      }
     }
   }
 

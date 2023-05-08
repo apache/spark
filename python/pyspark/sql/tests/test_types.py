@@ -26,7 +26,7 @@ import unittest
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
-from pyspark.errors import AnalysisException, PySparkTypeError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
     ByteType,
     ShortType,
@@ -1338,10 +1338,15 @@ class DataTypeTests(unittest.TestCase):
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):
-        self.assertRaisesRegex(
-            ValueError,
-            "test_name",
-            lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None),
+        with self.assertRaises(PySparkValueError) as pe:
+            _make_type_verifier(StringType(), nullable=False, name="test_name")(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_NONE",
+            message_parameters={
+                "arg_name": "obj",
+            },
         )
 
         schema = StructType([StructField("a", StructType([StructField("b", IntegerType())]))])

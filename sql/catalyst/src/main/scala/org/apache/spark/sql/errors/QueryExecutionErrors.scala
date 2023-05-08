@@ -357,13 +357,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> dataType))
   }
 
-  def regexGroupIndexLessThanZeroError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2006",
-      messageParameters = Map.empty)
-  }
-
-  def regexGroupIndexExceedGroupCountError(
+  def invalidRegexGroupIndexError(
       funcName: String,
       groupCount: Int,
       groupIndex: Int): RuntimeException = {
@@ -1142,6 +1136,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_DATATYPE",
       messageParameters = Map("typeName" -> toSQLType(typeName)))
+  }
+
+  def duplicatedFieldNameInArrowStructError(
+      fieldNames: Seq[String]): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+      messageParameters = Map("fieldNames" -> fieldNames.mkString("[", ", ", "]")))
   }
 
   def notSupportTypeError(dataType: DataType): Throwable = {
