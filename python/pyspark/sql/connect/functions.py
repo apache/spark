@@ -2504,8 +2504,6 @@ def udf(
     returnType: "DataTypeOrString" = StringType(),
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
-    from pyspark.rdd import PythonEvalType
-
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType

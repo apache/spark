@@ -41,7 +41,6 @@ from py4j.java_gateway import JVMView
 
 from pyspark import SparkContext
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
