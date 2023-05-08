@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedDropPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
@@ -123,6 +122,12 @@ object DataSourceV2Implicits {
       partSpecs.map(_.asInstanceOf[UnresolvedPartitionSpec])
 
     def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
+
+    def asUnresolvedDropPartitionSpecs: Seq[UnresolvedDropPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[UnresolvedDropPartitionSpec])
+
+    def asResolvedDropPartitionSpecs: Seq[ResolvedPartitionSpec] =
       partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
   }
 }

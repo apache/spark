@@ -342,9 +342,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case DropPartitions(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
-      AlterTableDropPartitionCommand(
+      AlterTableDropMutiplePartitionCommand(
         ident,
-        specs.asUnresolvedPartitionSpecs.map(_.spec),
+        specs.asUnresolvedDropPartitionSpecs.map(_.spec),
         ifExists,
         purge,
         retainData = false)

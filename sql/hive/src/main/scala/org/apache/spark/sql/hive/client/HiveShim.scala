@@ -102,6 +102,11 @@ private[client] sealed abstract class Shim {
   def getAllPartitions(hive: Hive, table: Table): Seq[Partition]
 
   def getPartitionsByFilter(
+       hive: Hive,
+       table: Table,
+       filter: String): Seq[Partition]
+
+  def getPartitionsByFilter(
       hive: Hive,
       table: Table,
       predicates: Seq[Expression],
@@ -650,6 +655,14 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       forceCreate: Boolean): Partition = {
     recordHiveCall()
     hive.getPartition(table, partSpec, forceCreate)
+  }
+
+  override def getPartitionsByFilter(
+      hive: Hive,
+      table: Table,
+      filter: String): Seq[Partition] = {
+    recordHiveCall()
+    hive.getPartitionsByFilter(table, filter).asScala.toSeq
   }
 
   override def getPartitions(

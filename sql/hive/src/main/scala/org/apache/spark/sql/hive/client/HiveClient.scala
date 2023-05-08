@@ -18,10 +18,9 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{DropTablePartitionSpec, TablePartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
 
@@ -168,6 +167,17 @@ private[hive] trait HiveClient {
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit
+
+  /**
+   * Drop one or many partitions in the given table, assuming they exist.
+   */
+  def dropMutiplePartitions(
+      db: String,
+      table: String,
+      specs: Seq[DropTablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): Unit
 
   /**
    * Drop one or many partitions in the given table, assuming they exist.

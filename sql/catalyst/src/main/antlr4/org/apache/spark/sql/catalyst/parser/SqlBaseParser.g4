@@ -145,7 +145,7 @@ statement
     | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER (TABLE | VIEW) multipartIdentifier
-        DROP (IF EXISTS)? partitionSpec (COMMA partitionSpec)* PURGE?  #dropTablePartitions
+        DROP (IF EXISTS)? dropPartitionSpec (COMMA dropPartitionSpec)* PURGE?  #dropTablePartitions
     | ALTER TABLE multipartIdentifier
         (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
@@ -336,6 +336,20 @@ partitionVal
     : identifier (EQ constant)?
     | identifier EQ DEFAULT
     ;
+
+dropPartitionSpec
+    : PARTITION LEFT_PAREN dropPartitionVal (COMMA dropPartitionVal)* RIGHT_PAREN
+    ;
+
+dropPartitionVal
+    : identifier (dropPartitionComparisonOperator constant)
+    | identifier EQ DEFAULT
+    ;
+
+dropPartitionComparisonOperator
+    : EQ | GTE | GT | LTE | LT | NEQJ
+    ;
+
 
 namespace
     : NAMESPACE

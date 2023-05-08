@@ -21,22 +21,20 @@ import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.util
 import java.util.Locale
-
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.DropTablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
@@ -972,6 +970,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Partitions
   // --------------------------------------------------------------------------
 
+  private def toMetaStoreDropPartitionSpec(spec: DropTablePartitionSpec): DropTablePartitionSpec = {
+    // scalastyle:off caselocale
+    val lowNames = spec.map { case (k, o, v) => (k.toLowerCase, o, v) }
+    ExternalCatalogUtils.convertNullDropPartitionValues(lowNames)
+    // scalastyle:on caselocale
+  }
+
   // Hive metastore is not case preserving and the partition columns are always lower cased. We need
   // to lower case the column names in partition specification before calling partition related Hive
   // APIs, to match this behaviour.
@@ -1030,6 +1035,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val metaStoreParts = partsWithLocation
       .map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
     client.createPartitions(db, table, metaStoreParts, ignoreIfExists)
+  }
+
+  override def dropMutiplePartitions(
+       db: String,
+       table: String,
+       parts: Seq[DropTablePartitionSpec],
+       ignoreIfNotExists: Boolean,
+       purge: Boolean,
+       retainData: Boolean): Unit = withClient {
+    requireTableExists(db, table)
+    client.dropMutiplePartitions(
+      db, table, parts.map(toMetaStoreDropPartitionSpec), ignoreIfNotExists, purge, retainData)
   }
 
   override def dropPartitions(

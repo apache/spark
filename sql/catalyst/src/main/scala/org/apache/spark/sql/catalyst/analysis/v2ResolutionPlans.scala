@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{TablePartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
@@ -85,6 +85,12 @@ sealed trait PartitionSpec extends LeafExpression with Unevaluable {
     "PartitionSpec.dataType should not be called.")
   override def nullable: Boolean = throw new IllegalStateException(
     "PartitionSpec.nullable should not be called.")
+}
+
+case class UnresolvedDropPartitionSpec(
+    spec: Seq[(String, String, String)],
+    location: Option[String] = None) extends PartitionSpec {
+  override lazy val resolved = false
 }
 
 case class UnresolvedPartitionSpec(

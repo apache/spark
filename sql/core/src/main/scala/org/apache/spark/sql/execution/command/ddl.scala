@@ -19,22 +19,19 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
-
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{DropTablePartitionSpec, TablePartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
@@ -579,6 +576,39 @@ case class AlterTableRenamePartitionCommand(
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    Seq.empty[Row]
+  }
+
+}
+
+case class AlterTableDropMutiplePartitionCommand(
+     tableName: TableIdentifier,
+     specs: Seq[DropTablePartitionSpec],
+     ifExists: Boolean,
+     purge: Boolean,
+     retainData: Boolean)
+  extends LeafRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
+
+    val normalizedSpecs = specs.map { spec =>
+      PartitioningUtils.normalizeDropPartitionSpec(
+        spec,
+        table.partitionSchema,
+        table.identifier.quotedString,
+        sparkSession.sessionState.conf.resolver)
+    }
+
+    catalog.dropMutiplePartitions(
+      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
+      retainData = retainData)
+
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    CommandUtils.updateTableStats(sparkSession, table)
+
     Seq.empty[Row]
   }
 

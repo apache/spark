@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.DropTablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ListenerBus
@@ -199,6 +200,16 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
     delegate.createPartitions(db, table, parts, ignoreIfExists)
+  }
+
+  override def dropMutiplePartitions(
+      db: String,
+      table: String,
+      partSpecsWithOp: Seq[DropTablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): Unit = {
+    delegate.dropMutiplePartitions(db, table, partSpecsWithOp, ignoreIfNotExists, purge, retainData)
   }
 
   override def dropPartitions(

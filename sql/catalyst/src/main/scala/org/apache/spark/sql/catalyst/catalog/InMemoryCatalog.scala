@@ -18,20 +18,19 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.io.IOException
-
 import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.DropTablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -441,6 +440,17 @@ class InMemoryCatalog(
         p.spec,
         p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri))))
     }
+  }
+
+  override def dropMutiplePartitions(
+       db: String,
+       table: String,
+       specsWithOp: Seq[DropTablePartitionSpec],
+       ignoreIfNotExists: Boolean,
+       purge: Boolean,
+       retainData: Boolean): Unit = synchronized {
+    val specs = PartitioningUtils.eliminatePartitionOp(specsWithOp)
+    dropPartitions(db, table, specs, ignoreIfNotExists, purge, retainData)
   }
 
   override def dropPartitions(

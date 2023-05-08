@@ -18,7 +18,7 @@
 package org.apache.spark.sql.util
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{DropTablePartitionSpec, TablePartitionSpec}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
@@ -59,6 +59,61 @@ private[sql] object PartitioningUtils {
     } else {
       null
     }
+  }
+
+  def eliminatePartitionOp(specWithOp: DropTablePartitionSpec): TablePartitionSpec = {
+    val specSeq = specWithOp.map {specWithOp => specWithOp._1 -> specWithOp._3}
+      specSeq.toMap
+  }
+
+  def eliminatePartitionOp(specsWithOp: Seq[DropTablePartitionSpec]): Seq[TablePartitionSpec] = {
+    specsWithOp.map {specWithOp =>
+      val specsSeq = specWithOp.map { case (key, op, value) => key -> value}
+      specsSeq.toMap
+    }
+  }
+
+  def normalizeDropPartitionSpec[T](
+             partitionSpec: Seq[(String, String, T)],
+             partCols: StructType,
+             tblName: String,
+             resolver: Resolver): Seq[(String, String, T)] = {
+    val rawSchema = CharVarcharUtils.getRawSchema(partCols, SQLConf.get)
+    val normalizedPartSpec = partitionSpec.map { case (key, op, value) =>
+      val normalizedFiled = rawSchema.find(f => resolver(f.name, key)).getOrElse {
+        throw QueryCompilationErrors.invalidPartitionColumnKeyInTableError(key, tblName)
+      }
+
+      val normalizedVal =
+        if (SQLConf.get.charVarcharAsString) value else normalizedFiled.dataType match {
+          case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+            val v = value match {
+              case Some(str: String) => Some(charTypeWriteSideCheck(str, len))
+              case str: String => charTypeWriteSideCheck(str, len)
+              case other => other
+            }
+            v.asInstanceOf[T]
+          case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+            val v = value match {
+              case Some(str: String) => Some(varcharTypeWriteSideCheck(str, len))
+              case str: String => varcharTypeWriteSideCheck(str, len)
+              case other => other
+            }
+            v.asInstanceOf[T]
+          case _ if !SQLConf.get.getConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION) &&
+            value != null && value != DEFAULT_PARTITION_NAME =>
+            val v = value match {
+              case Some(str: String) => Some(normalizePartitionStringValue(str, normalizedFiled))
+              case str: String => normalizePartitionStringValue(str, normalizedFiled)
+              case other => other
+            }
+            v.asInstanceOf[T]
+          case _ => value
+        }
+      (normalizedFiled.name, op, normalizedVal)
+    }
+
+    normalizedPartSpec
   }
 
   /**

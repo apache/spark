@@ -774,6 +774,11 @@ case class CatalogDatabase(
 
 object CatalogTypes {
   /**
+   * Specifications of a drop table partition. Mapping column name to operator and column value.
+   */
+  type DropTablePartitionSpec = Seq[(String, String, String)]
+
+  /**
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]

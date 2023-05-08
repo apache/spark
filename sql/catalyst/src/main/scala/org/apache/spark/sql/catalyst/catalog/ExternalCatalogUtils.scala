@@ -18,13 +18,11 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
-
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{TablePartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -204,6 +202,13 @@ object ExternalCatalogUtils {
         isNullPartitionValue(spec2(partitionColumn))
       case (partitionColumn, value) => spec2(partitionColumn) == value
     }
+  }
+
+  def convertNullDropPartitionValues
+    (specs: Seq[(String, String, String)]): Seq[(String, String, String)] = {
+    specs.map(spec =>
+      if (spec._3 == null) (spec._1, spec._2, DEFAULT_PARTITION_NAME)
+      else (spec._1, spec._2, spec._3))
   }
 
   def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {

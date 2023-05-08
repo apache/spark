@@ -22,18 +22,16 @@ import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
-
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.DropTablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
@@ -1167,6 +1165,27 @@ class SessionCatalog(
     requireNonEmptyValueInPartitionSpec(parts.map(_.spec))
     externalCatalog.createPartitions(
       db, qualifiedIdent.table, partitionWithQualifiedPath(qualifiedIdent, parts), ignoreIfExists)
+  }
+
+  /**
+   * Drop Mutiple partitions from a table, assuming they exist.
+   * If no database is specified, assume the table is in the current database.
+   */
+  def dropMutiplePartitions(
+      tableName: TableIdentifier,
+      specsWithOp: Seq[DropTablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): Unit = {
+    val qualifiedIdent = qualifyIdentifier(tableName)
+    val db = qualifiedIdent.database.get
+    requireDbExists(db)
+    requireTableExists(qualifiedIdent)
+    val specs = PartitioningUtils.eliminatePartitionOp(specsWithOp)
+    requirePartialMatchedPartitionSpec(specs, getTableMetadata(qualifiedIdent))
+    requireNonEmptyValueInPartitionSpec(specs)
+    externalCatalog.dropMutiplePartitions(
+      db, qualifiedIdent.table, specsWithOp, ignoreIfNotExists, purge, retainData)
   }
 
   /**

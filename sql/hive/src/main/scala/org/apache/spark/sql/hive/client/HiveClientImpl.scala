@@ -21,13 +21,11 @@ import java.io.PrintStream
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.{HashMap => JHashMap, Locale, Map => JMap}
+import java.util.{Locale, HashMap => JHashMap, Map => JMap}
 import java.util.concurrent.TimeUnit._
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -44,7 +42,6 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.Logging
@@ -52,7 +49,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{DropTablePartitionSpec, TablePartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -63,6 +60,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -652,6 +650,66 @@ private[hive] class HiveClientImpl(
     } catch {
       case e: InvocationTargetException => replaceExistException(e.getCause)
       case e: Throwable => replaceExistException(e)
+    }
+  }
+
+  def getFilters(spec: DropTablePartitionSpec): String = {
+    "( " + spec.map(k => k._1 + k._2 + k._3).toSeq.mkString(" and ") + " )"
+  }
+
+  override def dropMutiplePartitions(
+       db: String,
+       table: String,
+       specsWithOp: Seq[DropTablePartitionSpec],
+       ignoreIfNotExists: Boolean,
+       purge: Boolean,
+       retainData: Boolean): Unit = withHiveState {
+    // TODO: figure out how to drop multiple partitions in one call
+    // do the check at first and collect all the matching partitions
+    val matchingParts =
+    specsWithOp.flatMap { s =>
+      val specSeq = PartitioningUtils.eliminatePartitionOp(s)
+      assert(s.forall(_._3.nonEmpty), s"partition spec '$s' is invalid")
+      // The provided spec here can be a partial spec, i.e. it will match all partitions
+      // whose specs are supersets of this partial spec. E.g. If a table has partitions
+      // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
+      val dropPartitionByName = SQLConf.get.metastoreDropPartitionsByName
+      if (dropPartitionByName) {
+        val partitionNames = shim.getPartitionNames(client, db, table, specSeq.asJava, -1)
+        if (partitionNames.isEmpty && !ignoreIfNotExists) {
+          throw new NoSuchPartitionsException(db, table, Seq(specSeq))
+        }
+        partitionNames.map(HiveUtils.partitionNameToValues(_).toList.asJava)
+      } else {
+        val hiveTable = shim.getTable(client, db, table, true /* throw exception */)
+        val parts = shim.getPartitionsByFilter(client, hiveTable, getFilters(s))
+        if (parts.isEmpty && !ignoreIfNotExists) {
+          throw new NoSuchPartitionsException(db, table, Seq(specSeq))
+        }
+        parts.map(_.getValues)
+      }
+    }.distinct
+    val droppedParts = ArrayBuffer.empty[java.util.List[String]]
+    matchingParts.foreach { partition =>
+      try {
+        shim.dropPartition(client, db, table, partition, !retainData, purge)
+      } catch {
+        case e: Exception =>
+          val remainingParts = matchingParts.toBuffer --= droppedParts
+          logError(
+            s"""
+               |======================
+               |Attempt to drop the partition specs in table '$table' database '$db':
+               |${specsWithOp.mkString("\n")}
+               |In this attempt, the following partitions have been dropped successfully:
+               |${droppedParts.mkString("\n")}
+               |The remaining partitions have not been dropped:
+               |${remainingParts.mkString("\n")}
+               |======================
+             """.stripMargin)
+          throw e
+      }
+      droppedParts += partition
     }
   }
 
