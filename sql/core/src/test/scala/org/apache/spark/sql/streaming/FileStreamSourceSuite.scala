@@ -514,7 +514,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           }
 
           // '[' and ']' need to be escaped. Otherwise, it will be treated as glob pattern
-	  // and won't match the file.
+          // and won't match the file.
           val input_path = output
               .getCanonicalPath
               .replace("[", "\\[")
