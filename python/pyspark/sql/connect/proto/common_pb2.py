@@ -30,7 +30,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1aspark/connect/common.proto\x12\rspark.connect"\xb0\x01\n\x0cStorageLevel\x12\x19\n\x08use_disk\x18\x01 \x01(\x08R\x07useDisk\x12\x1d\n\nuse_memory\x18\x02 \x01(\x08R\tuseMemory\x12 \n\x0cuse_off_heap\x18\x03 \x01(\x08R\nuseOffHeap\x12"\n\x0c\x64\x65serialized\x18\x04 \x01(\x08R\x0c\x64\x65serialized\x12 \n\x0breplication\x18\x05 \x01(\x05R\x0breplication"G\n\x13ResourceInformation\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n\taddresses\x18\x02 \x03(\tR\taddressesBW\n\x1eorg.apache.spark.connect.protoP\x01Z3github.com/apache/spark/go/v_3_4/internal/generatedb\x06proto3'
+    b'\n\x1aspark/connect/common.proto\x12\rspark.connect"\xb0\x01\n\x0cStorageLevel\x12\x19\n\x08use_disk\x18\x01 \x01(\x08R\x07useDisk\x12\x1d\n\nuse_memory\x18\x02 \x01(\x08R\tuseMemory\x12 \n\x0cuse_off_heap\x18\x03 \x01(\x08R\nuseOffHeap\x12"\n\x0c\x64\x65serialized\x18\x04 \x01(\x08R\x0c\x64\x65serialized\x12 \n\x0breplication\x18\x05 \x01(\x05R\x0breplication"G\n\x13ResourceInformation\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n\taddresses\x18\x02 \x03(\tR\taddressesBp\n\x1eorg.apache.spark.connect.protoP\x01ZLgithub.com/apache/spark/connector/connect/client/go/v_3_4/internal/generatedb\x06proto3'
 )
 
 
@@ -61,7 +61,7 @@ _sym_db.RegisterMessage(ResourceInformation)
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z3github.com/apache/spark/go/v_3_4/internal/generated"
+    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001ZLgithub.com/apache/spark/connector/connect/client/go/v_3_4/internal/generated"
     _STORAGELEVEL._serialized_start = 46
     _STORAGELEVEL._serialized_end = 222
     _RESOURCEINFORMATION._serialized_start = 224

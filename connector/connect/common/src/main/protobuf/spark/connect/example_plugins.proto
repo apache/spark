@@ -24,7 +24,7 @@ package spark.connect;
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
-option go_package = "github.com/apache/spark/go/v_3_4/internal/generated";
+option go_package = "github.com/apache/spark/connector/connect/client/go/v_3_4/internal/generated";
 
 message ExamplePluginRelation {
   Relation input = 1;

@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module github.com/apache/spark/go/v_3_4
+module github.com/apache/spark/connector/connect/client/go/v_3_4
 
 go 1.19
 
