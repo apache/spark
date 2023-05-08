@@ -220,6 +220,11 @@ ERROR_CLASSES_JSON = """
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
     ]
   },
+  "INVALID_TYPE" : {
+    "message" : [
+      "Argument `<arg_name>` should not be a <data_type>."
+    ]
+  },
   "INVALID_TYPENAME_CALL" : {
     "message" : [
       "StructField does not have typeName. Use typeName on its type explicitly instead."
@@ -554,16 +559,6 @@ ERROR_CLASSES_JSON = """
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
-    ]
-  },
-  "SHOULD_NOT_DATAFRAME": {
-    "message": [
-      "Argument `<arg_name>` should not be a DataFrame."
-    ]
-  },
-  "SHOULD_NOT_DATATYPE": {
-    "message": [
-      "Argument `<arg_name>` should not be a DataType."
     ]
   },
   "SLICE_WITH_STEP" : {

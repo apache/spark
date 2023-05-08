@@ -279,8 +279,8 @@ class SparkSession:
         assert data is not None
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
-                error_class="SHOULD_NOT_DATAFRAME",
-                message_parameters={"arg_name": "data"},
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
             )
 
         _schema: Optional[Union[AtomicType, StructType]] = None
