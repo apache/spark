@@ -801,7 +801,7 @@
       },
       "MISSING_KEY_PART" : {
         "message" : [
-          "<key>, <totalAmountOfParts> parts are expected..."
+          "<key>, <totalAmountOfParts> parts are expected."
         ]
       }
     }
