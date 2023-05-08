@@ -335,6 +335,8 @@ message StreamingQueryManagerCommand {
     AwaitAnyTerminationCommand await_any_termination = 3;
     // resetTerminated() API.
     bool reset_terminated = 4;
+    // addListener() API.
+    AddStreamingQueryListenerCommand add_listener = 5;
   }
 
   message AwaitAnyTerminationCommand {
@@ -366,6 +368,14 @@ message StreamingQueryManagerCommandResult {
   message AwaitAnyTerminationResult {
     bool terminated = 1;
   }
+}
+
+// TODO: maybe serialize the whole class?
+message AddStreamingQueryListenerCommand {
+  bytes on_query_started = 1;
+  bytes on_query_progress = 2;
+  bytes on_query_terminated = 2;
+  // TODO: deserialize in python or in scala?
 }
 
 // Command to get the output of 'SparkContext.resources'

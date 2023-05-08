@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
+from pyspark.sql.connect.streaming.listener import StreamingQueryListener
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
     StreamingQueryManager as PySparkStreamingQueryManager,
@@ -28,6 +29,7 @@ from pyspark.sql.streaming.query import (
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
+from pyspark.serializers import CloudPickleSerializer
 
 __all__ = ["StreamingQuery", "StreamingQueryManager"]
 
@@ -226,10 +228,14 @@ class StreamingQueryManager:
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
-    def addListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
-        # and implement below
-        raise NotImplementedError("addListener() is not implemented.")
+    def addListener(self, listener: StreamingQueryListener) -> None:
+        cmd = pb2.StreamingQueryManagerCommand()
+        ser = CloudPickleSerializer()
+        cmd.add_listener.on_query_started = ser.dumps(listener.onQueryStarted)
+        cmd.add_listener.on_query_progress = ser.dumps(listener.onQueryProgress)
+        cmd.add_listener.on_query_terminated = ser.dumps(listener.onQueryTerminated)
+        self._execute_streaming_query_manager_cmd(cmd)
+        return None
 
     # TODO(SPARK-42941): uncomment below
     # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
