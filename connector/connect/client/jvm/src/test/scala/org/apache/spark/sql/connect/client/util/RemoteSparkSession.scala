@@ -48,7 +48,8 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object SparkConnectServerUtils {
 
   // Server port
-  private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  private[spark] val port: Int =
+    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
 
