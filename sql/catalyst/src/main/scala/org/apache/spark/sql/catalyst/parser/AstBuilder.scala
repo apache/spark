@@ -501,6 +501,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   /**
    * Create a drop partition specification map.
+   *
    */
   override def visitDropPartitionSpec(
       ctx: DropPartitionSpecContext): Seq[(String, String, Option[String])] = withOrigin(ctx) {
