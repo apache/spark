@@ -348,6 +348,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(connectPlan2, sparkPlan2)
   }
 
+  test("Test basic deduplicateWithinWatermark") {
+    val connectPlan = connectTestRelation.distinct()
+    val sparkPlan = sparkTestRelation.distinct()
+    comparePlans(connectPlan, sparkPlan)
+
+    val connectPlan2 = connectTestRelation.deduplicateWithinWatermark(Seq("id", "name"))
+    val sparkPlan2 = sparkTestRelation.dropDuplicatesWithinWatermark(Seq("id", "name"))
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
   test("Test union, except, intersect") {
     val connectPlan1 = connectTestRelation.except(connectTestRelation, isAll = false)
     val sparkPlan1 = sparkTestRelation.except(sparkTestRelation)
@@ -1032,7 +1042,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         StructType.fromAttributes(attributes),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
     proto.Relation
       .newBuilder()

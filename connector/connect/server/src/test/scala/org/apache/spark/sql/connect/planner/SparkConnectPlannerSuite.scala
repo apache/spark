@@ -55,7 +55,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", new MockObserver())
+    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId", new MockObserver())
   }
 
   def readRel: proto.Relation =
@@ -89,7 +89,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         StructType.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
@@ -381,6 +382,36 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
   }
 
+  test("Test invalid deduplicateWithinWatermark") {
+    val deduplicateWithinWatermark = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setAllColumnsAsKeys(true)
+      .addColumnNames("test")
+      .setWithinWatermark(true)
+
+    val e = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation.newBuilder
+          .setDeduplicate(deduplicateWithinWatermark)
+          .build())
+    }
+    assert(
+      e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
+
+    val deduplicateWithinWatermark2 = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setWithinWatermark(true)
+    val e2 = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation.newBuilder
+          .setDeduplicate(deduplicateWithinWatermark2)
+          .build())
+    }
+    assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
+  }
+
   test("Test invalid intersect, except") {
     // Except with union_by_name=true
     val except = proto.SetOperation
@@ -434,7 +465,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(

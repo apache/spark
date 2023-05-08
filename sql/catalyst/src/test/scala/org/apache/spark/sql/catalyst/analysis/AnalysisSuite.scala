@@ -1500,4 +1500,34 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(refs.map(_.output).distinct.length == 3)
     }
   }
+
+  test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
+    val listQuery1 = ListQuery(testRelation2.select($"a"))
+    val listQuery2 = ListQuery(testRelation2.select($"b"))
+    val plan = testRelation3.where($"f".in(listQuery1) && $"f".in(listQuery2)).analyze
+    val resolvedCondition = plan.expressions.head
+    val finalPlan = testRelation2.join(testRelation3).where(resolvedCondition).analyze
+    val resolvedListQueries = finalPlan.expressions.flatMap(_.collect {
+      case l: ListQuery => l
+    })
+    assert(resolvedListQueries.length == 2)
+
+    def collectLocalRelations(plan: LogicalPlan): Seq[LocalRelation] = plan.collect {
+      case l: LocalRelation => l
+    }
+    val localRelations = resolvedListQueries.flatMap(l => collectLocalRelations(l.plan))
+    assert(localRelations.length == 2)
+    // DeduplicateRelations should deduplicate plans in subquery expressions as well.
+    assert(localRelations.head.output != localRelations.last.output)
+
+    resolvedListQueries.foreach { l =>
+      assert(l.childOutputs == l.plan.output)
+    }
+  }
+
+  test("SPARK-43293: __qualified_access_only should be ignored in normal columns") {
+    val attr = $"a".int.markAsQualifiedAccessOnly()
+    val rel = LocalRelation(attr)
+    checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
+  }
 }

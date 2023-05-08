@@ -148,7 +148,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       if (exitCode != 0 && exitCode > 2) {
         val cmd = builder.command().toArray.mkString(" ")
         logWarning(s"Process $cmd exited with code $exitCode and stderr: $errorString")
-        throw new SparkException(s"Process $cmd exited with code $exitCode")
+        throw SparkException.internalError(msg = s"Process $cmd exited with code $exitCode",
+          category = "EXECUTOR")
       }
       childPidsInInt
     } catch {
