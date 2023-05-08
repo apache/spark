@@ -1997,7 +1997,8 @@ case class LateralJoin(
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(
+    left.output ++ right.plan.output)
 
   private[this] lazy val childMetadataAttributes =
     AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)

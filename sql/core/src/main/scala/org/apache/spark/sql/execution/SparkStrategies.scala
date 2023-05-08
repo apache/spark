@@ -400,7 +400,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
+        if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
@@ -525,12 +525,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
-        val aggregateExpressions = aggExpressions.map(expr =>
-          expr.asInstanceOf[AggregateExpression])
-
+        if !aggExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
         val (functionsWithDistinct, functionsWithoutDistinct) =
-          aggregateExpressions.partition(_.isDistinct)
+          aggExpressions.partition(_.isDistinct)
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
           ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
         }.distinct
@@ -555,7 +552,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if (functionsWithDistinct.isEmpty) {
             AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
-              aggregateExpressions,
+              aggExpressions,
               resultExpressions,
               planLater(child))
           } else {
@@ -595,19 +592,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         aggregateOperator
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
-        val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
-
+          if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
         Seq(execution.python.AggregateInPandasExec(
           groupingExpressions,
-          udfExpressions,
+          aggExpressions,
           resultExpressions,
           planLater(child)))
 
       case PhysicalAggregation(_, aggExpressions, _, _) =>
         val groupAggPandasUDFNames = aggExpressions
-          .filter(_.isInstanceOf[PythonUDF])
-          .map(_.asInstanceOf[PythonUDF].name)
+          .map(_.aggregateFunction)
+          .filter(_.isInstanceOf[PythonUDAF])
+          .map(_.asInstanceOf[PythonUDAF].name)
         // If cannot match the two cases above, then it's an error
         throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
 

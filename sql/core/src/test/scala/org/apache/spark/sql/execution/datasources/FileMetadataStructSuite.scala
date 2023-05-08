@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
 import org.apache.spark.TestUtils
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
@@ -975,6 +976,54 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         val files3 = fileSourceScan3.get.asInstanceOf[FileSourceScanExec].selectedPartitions
         assert(files3.length == 1 && files3.head.files.isEmpty)
         assert(df3.collect().isEmpty)
+      }
+    }
+  }
+
+
+  Seq("parquet", "json", "csv", "text", "orc").foreach { format =>
+    test(s"metadata file path is url encoded for format: $format") {
+      withTempPath { f =>
+        val dirWithSpace = s"$f/with space"
+        spark.range(10)
+          .selectExpr("cast(id as string) as str")
+          .repartition(1)
+          .write
+          .format(format)
+          .mode("append")
+          .save(dirWithSpace)
+
+        val encodedPath = SparkPath.fromPathString(dirWithSpace).urlEncoded
+        val df = spark.read.format(format).load(dirWithSpace)
+        val metadataPath = df.select(METADATA_FILE_PATH).as[String].head()
+        assert(metadataPath.contains(encodedPath))
+      }
+    }
+
+    test(s"metadata file name is url encoded for format: $format") {
+      val suffix = if (format == "text") ".txt" else s".$format"
+      withTempPath { f =>
+        val dirWithSpace = s"$f/with space"
+        spark.range(10)
+          .selectExpr("cast(id as string) as str")
+          .repartition(1)
+          .write
+          .format(format)
+          .mode("append")
+          .save(dirWithSpace)
+
+        val pathWithSpace = s"$dirWithSpace/file with space.$suffix"
+        new File(dirWithSpace)
+          .listFiles((_, f) => f.endsWith(suffix))
+          .headOption
+          .getOrElse(fail(s"no file with suffix $suffix in $dirWithSpace"))
+          .renameTo(new File(pathWithSpace))
+
+        val encodedPath = SparkPath.fromPathString(pathWithSpace).urlEncoded
+        val encodedName = encodedPath.split("/").last
+        val df = spark.read.format(format).load(dirWithSpace)
+        val metadataName = df.select(METADATA_FILE_NAME).as[String].head()
+        assert(metadataName == encodedName)
       }
     }
   }

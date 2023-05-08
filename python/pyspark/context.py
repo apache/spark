@@ -68,6 +68,7 @@ from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler, MemoryProfiler
+from pyspark.errors import PySparkRuntimeError
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
@@ -180,8 +181,9 @@ class SparkContext:
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
         if "SPARK_REMOTE" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
-            raise RuntimeError(
-                "Remote client cannot create a SparkContext. Create SparkSession instead."
+            raise PySparkRuntimeError(
+                error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
+                message_parameters={},
             )
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
@@ -266,9 +268,15 @@ class SparkContext:
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise RuntimeError("A master URL must be set in your configuration")
+            raise PySparkRuntimeError(
+                error_class="MASTER_URL_NOT_SET",
+                message_parameters={},
+            )
         if not self._conf.contains("spark.app.name"):
-            raise RuntimeError("An application name must be set in your configuration")
+            raise PySparkRuntimeError(
+                error_class="APPLICATION_NAME_NOT_SET",
+                message_parameters={},
+            )
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
@@ -310,11 +318,6 @@ class SparkContext:
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
         self.pythonVer = "%d.%d" % sys.version_info[:2]
-
-        if sys.version_info[:2] < (3, 8):
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn("Python 3.7 support is deprecated in Spark 3.4.", FutureWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -459,10 +462,9 @@ class SparkContext:
 
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle SparkContext, which is always an error:
-        raise RuntimeError(
-            "It appears that you are attempting to reference SparkContext from a broadcast "
-            "variable, action, or transformation. SparkContext can only be used on the driver, "
-            "not in code that it run on workers. For more information, see SPARK-5063."
+        raise PySparkRuntimeError(
+            error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
+            message_parameters={},
         )
 
     def __enter__(self) -> "SparkContext":
@@ -2331,9 +2333,9 @@ class SparkContext:
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
         else:
-            raise RuntimeError(
-                "'spark.python.profile' or 'spark.python.profile.memory' configuration"
-                " must be set to 'true' to enable Python profile."
+            raise PySparkRuntimeError(
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
 
     def dump_profiles(self, path: str) -> None:
@@ -2348,9 +2350,9 @@ class SparkContext:
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
         else:
-            raise RuntimeError(
-                "'spark.python.profile' or 'spark.python.profile.memory' configuration"
-                " must be set to 'true' to enable Python profile."
+            raise PySparkRuntimeError(
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
 
     def getConf(self) -> SparkConf:
@@ -2387,7 +2389,10 @@ class SparkContext:
         Throws an exception if a SparkContext is about to be created in executors.
         """
         if TaskContext.get() is not None:
-            raise RuntimeError("SparkContext should only be created and accessed on the driver.")
+            raise PySparkRuntimeError(
+                error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
+                message_parameters={},
+            )
 
 
 def _test() -> None:

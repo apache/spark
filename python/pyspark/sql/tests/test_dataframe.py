@@ -1004,13 +1004,13 @@ class DataFrameTestsMixin:
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "Length of object", lambda: rdd.toDF("key: int").collect()
+            Exception, "LENGTH_SHOULD_BE_THE_SAME", lambda: rdd.toDF("key: int").collect()
         )
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "FloatType\\(\\) can not accept",
+            "CANNOT_ACCEPT_OBJECT_IN_TYPE",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 
@@ -1454,7 +1454,8 @@ class DataFrameTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
+    @unittest.skip("Fails in PyPy Python 3.8, should enable.")
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd

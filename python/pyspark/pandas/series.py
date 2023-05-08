@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import sys
 import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
@@ -73,7 +72,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T, GenericColumn
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -452,9 +451,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self._anchor = psdf
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
-    def _with_new_scol(
-        self, scol: GenericColumn, *, field: Optional[InternalField] = None
-    ) -> "Series":
+    def _with_new_scol(self, scol: Column, *, field: Optional[InternalField] = None) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.
 
@@ -463,7 +460,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         name = name_like_string(self._column_label)
         internal = self._internal.copy(
-            data_spark_columns=[scol.alias(name)],  # type: ignore[list-item]
+            data_spark_columns=[scol.alias(name)],
             data_fields=[
                 field if field is None or field.struct_field is None else field.copy(name=name)
             ],
@@ -6311,10 +6308,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index = (
-            InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
-                sdf_for_index, tmp_join_key
-            )
+        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
+            sdf_for_index, tmp_join_key
         )
         # sdf_for_index:
         # +----------------+-----------------+
@@ -6330,7 +6325,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -6349,9 +6344,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
-            sdf_for_data, tmp_join_key
-        )  # type: ignore[assignment]
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -6424,7 +6417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf,
             seq_col_name,
         )
@@ -6484,7 +6477,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf,
             seq_col_name,
         )
@@ -6706,7 +6699,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
         value_col_name = verify_temp_column_name(sdf, "__search_sorted_value_col__")
-        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.select(self.spark.column.alias(value_col_name)), index_col_name
         )
 
@@ -7365,15 +7358,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __iter__(self) -> None:
         return MissingPandasLikeSeries.__iter__(self)
 
-    if sys.version_info >= (3, 7):
-        # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
-        def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
-            return create_type_for_series_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark Series.
-        is_series = None
+    # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
+    def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
+        return create_type_for_series_type(params)
 
 
 def unpack_scalar(sdf: SparkDataFrame) -> Any:
