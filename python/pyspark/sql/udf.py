@@ -62,43 +62,45 @@ def _is_barrier(obj: Any) -> bool:
 
 
 def barrier(f: Callable) -> Callable:
-    """
-    This API is a developer API.
-    Mark functon should be executed in barrier mode.
-    """
+    """Mark functon should be executed in barrier mode. This API is a developer API.
 
-    # since 3.5.0, we introduce a internal decorator 'barrier' for developer only,
-    # which is dedicated for integration with external ML training frameworks including
-    # PyTorch and XGBoost.
-    # It indicates whether this UDF will be executed on barrier mode, and is only accepted
-    # in methods 'mapInPandas' and 'mapInArrow'.
-    # For example:
-    #
-    # df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
-    #
-    # @barrier
-    # def filter_func(iterator):
-    #     for pdf in iterator:
-    #         yield pdf[pdf.id == 1]
-    #
-    # filter_func._is_barrier # This UDF is marked barrier
-    # output: True
-    #
-    # df.mapInPandas(filter_func, df.schema).collect()
-    # output: [Row(id=1, age=21)]
-    #
-    # df.mapInPandas(filter_func, df.schema).show()
-    # error:
-    # ...
-    # : org.apache.spark.scheduler.BarrierJobUnsupportedRDDChainException:
-    #     [SPARK-24820][SPARK-24821]: Barrier execution mode does not allow
-    #     the following pattern of RDD chain within a barrier stage:
-    # 1. Ancestor RDDs that have different number of partitions from the resulting RDD
-    #     (e.g. union()/coalesce()/first()/take()/PartitionPruningRDD). A workaround for
-    #     first()/take() can be barrierRdd.collect().head (scala) or barrierRdd.collect()[0]
-    #     (python).
-    # 2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2)).
-    # ...
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    f : function, :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
+        a Python function, or a user-defined function. The user-defined function can
+        be either row-at-a-time or vectorized. See :meth:`pyspark.sql.functions.udf` and
+        :meth:`pyspark.sql.functions.pandas_udf`.
+
+    Returns
+    -------
+    function
+        a user-defined function
+
+    Notes
+    -----
+    The barrier function is dedicated for external ML frameworks, including PyTorch and XGBoost.
+    It is supposed only to be used in mapInPandas and mapInArrow, and followed by a collection to
+    get the model coefficients. Also note that some DataFrame operations (e.g. df.show, df.take)
+    are not allowed in barrier mode, due to the underlying RDD operations are not supported.
+
+    Examples
+    --------
+    >>> from pyspark.sql.udf import barrier
+
+    create a dataframe
+    >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+
+    define a barrier python udf
+    >>> @barrier
+    ... def filter_func(iterator):
+    ...     for pdf in iterator:
+    ...         yield pdf[pdf.id == 1]
+    ...
+    >>> df.mapInPandas(filter_func, df.schema).collect()
+    [Row(id=1, age=21)]
+    """
 
     wrapped = f
     wrapped._is_barrier = True  # type: ignore[attr-defined]
