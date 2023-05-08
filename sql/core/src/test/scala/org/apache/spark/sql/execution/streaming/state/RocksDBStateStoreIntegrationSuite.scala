@@ -28,7 +28,8 @@ import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 
-class RocksDBStateStoreIntegrationSuite extends StreamTest {
+class RocksDBStateStoreIntegrationSuite extends StreamTest
+  with AlsoTestWithChangelogCheckpointingEnabled {
   import testImplicits._
 
   test("RocksDBStateStore") {
@@ -45,7 +46,11 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
           // Verify that RocksDBStateStore by verify the state checkpoints are [version].zip
           val storeCheckpointDir = StateStoreId(
             dir.getAbsolutePath + "/state", 0, 0).storeCheckpointLocation()
-          val storeCheckpointFile = storeCheckpointDir + "/1.zip"
+          val storeCheckpointFile = if (isChangelogCheckpointingEnabled) {
+            storeCheckpointDir + "/1.changelog"
+          } else {
+            storeCheckpointDir + "/1.zip"
+          }
           new File(storeCheckpointFile).exists()
         }
       )

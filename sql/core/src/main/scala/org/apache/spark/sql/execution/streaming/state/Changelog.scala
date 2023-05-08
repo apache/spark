@@ -38,7 +38,7 @@ class ChangelogReader(fm: CheckpointFileManager, fileToRead: Path,
     val compressed = compressionCodec.compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
-  val sourceStream = try {
+  private val sourceStream = try {
     fm.open(fileToRead)
   } catch {
     case f: FileNotFoundException =>
@@ -47,9 +47,9 @@ class ChangelogReader(fm: CheckpointFileManager, fileToRead: Path,
           s"If the stream job is restarted with a new or updated state operation, please" +
           s" create a new checkpoint location or clear the existing checkpoint location.", f)
   }
-  val input: DataInputStream = decompressStream(sourceStream)
-  var byteArrayPair: ByteArrayPair = null
-  var eof = false
+  private val input: DataInputStream = decompressStream(sourceStream)
+  private var byteArrayPair: ByteArrayPair = null
+  private var eof = false
 
   override def hasNext: Boolean = {
     maybeReadNext()
@@ -89,18 +89,17 @@ class ChangelogReader(fm: CheckpointFileManager, fileToRead: Path,
   }
 }
 
-class ChangelogWriter(fm: CheckpointFileManager,
+class ChangelogWriter(fm: CheckpointFileManager, file: Path,
                       compressionCodec: CompressionCodec) extends Logging {
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
     new DataOutputStream(compressed)
   }
-  private var backingFileStream: CancellableFSDataOutputStream = null
-  private var compressedStream: DataOutputStream = null
-  def start(file: Path): Unit = {
-    backingFileStream = fm.createAtomic(file, overwriteIfPossible = true)
-    compressedStream = compressStream(backingFileStream)
-  }
+
+  private var backingFileStream: CancellableFSDataOutputStream =
+    fm.createAtomic(file, overwriteIfPossible = true)
+  private var compressedStream: DataOutputStream = compressStream(backingFileStream)
+
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(key.size)

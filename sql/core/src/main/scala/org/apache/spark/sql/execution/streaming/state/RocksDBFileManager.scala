@@ -125,6 +125,7 @@ class RocksDBFileManager(
     dfsRootDir: String,
     localTempDir: File,
     hadoopConf: Configuration,
+    codecName: String = "zstd",
     loggingId: String = "")
   extends Logging {
 
@@ -142,19 +143,19 @@ class RocksDBFileManager(
 
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
-  private def codec = CompressionCodec.createCodec(sparkConf, "zstd")
+  private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
   def getChangeLogWriter(version: Long): ChangelogWriter = {
     val rootDir = new Path(dfsRootDir)
+    val deltaFile = dfsDeltaFile(version)
     if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-    val changlogWriter = new ChangelogWriter(fm, codec)
-    changlogWriter.start(dfsDeltaFile(version))
-    changlogWriter
+    val changelogWriter = new ChangelogWriter(fm, deltaFile, codec)
+    changelogWriter
   }
 
   // Get the delta file at version
   def getChangelogReader(version: Long): ChangelogReader = {
-    val deltaFile = new Path(dfsRootDir, s"$version.delta")
+    val deltaFile = dfsDeltaFile(version)
     try {
       new ChangelogReader(fm, deltaFile, codec)
     } catch {
@@ -267,7 +268,7 @@ class RocksDBFileManager(
 
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
   def getLatestVersion(): Long = {
-    getLatestDeltaVersion(Long.MaxValue)
+    getLatestDeltaVersion(Long.MaxValue).max(getLatestSnapshotVersion(Long.MaxValue))
   }
 
   /**
@@ -305,11 +306,11 @@ class RocksDBFileManager(
   private def deleteDeltaFiles(minVersionToRetain: Long): Unit = {
     logInfo(s"deleting delta file before $minVersionToRetain")
     val deltaVersionsToDelete = fm.list(new Path(dfsRootDir), onlyDeltaFiles)
-      .map(_.getPath.getName.stripSuffix(".delta"))
+      .map(_.getPath.getName.stripSuffix(".changelog"))
       .map(_.toLong).filter(_ < minVersionToRetain)
     deltaVersionsToDelete.foreach{ version =>
       try {
-        fm.delete(new Path(s"$dfsRootDir/$version.delta"))
+        fm.delete(dfsDeltaFile(version))
         logInfo(s"Deleted delta file $version")
       } catch {
         case e: Exception =>
@@ -358,16 +359,19 @@ class RocksDBFileManager(
 
     // Find the versions to delete
     val maxSnapshotVersionPresent = sortedSnapshotVersions.last
+    val minSnapshotVersionPresent = sortedSnapshotVersions.head
 
-    val minVersionToRetain = sortedSnapshotVersions.reverse
-      .find(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
-      .getOrElse(maxSnapshotVersionPresent)
+    // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
+    // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+    val minVersionToRetain = sortedSnapshotVersions
+      .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+      .foldLeft(minSnapshotVersionPresent)(math.max)
 
     // When versionToDelete is non-empty, there are at least 2 versions.
     // We only delete orphan files when there are at least 2 versions,
     // which avoid deleting files for running tasks.
-    val versionsToDelete = sortedSnapshotVersions.filter(_ < minVersionToRetain)
-    if (versionsToDelete.isEmpty) return
+    val snapshotVersionsToDelete = sortedSnapshotVersions.filter(_ < minVersionToRetain)
+    if (snapshotVersionsToDelete.isEmpty) return
 
 
     // Resolve RocksDB files for all the versions and find the max version each file is used
@@ -383,7 +387,8 @@ class RocksDBFileManager(
     }
 
     // Best effort attempt to delete SST files that were last used in to-be-deleted versions
-    val filesToDelete = fileToMaxUsedVersion.filter { case (_, v) => versionsToDelete.contains(v) }
+    val filesToDelete = fileToMaxUsedVersion.filter {
+      case (_, v) => snapshotVersionsToDelete.contains(v) }
 
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
@@ -414,7 +419,7 @@ class RocksDBFileManager(
     }
 
     // Delete the version files and forget about them
-    versionsToDelete.foreach { version =>
+    snapshotVersionsToDelete.foreach { version =>
       val versionFile = dfsBatchZipFile(version)
       try {
         fm.delete(versionFile)

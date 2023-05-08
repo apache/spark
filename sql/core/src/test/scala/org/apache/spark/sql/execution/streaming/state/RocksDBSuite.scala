@@ -24,121 +24,235 @@ import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.scalactic.source.Position
+import org.scalatest.Tag
 
 import org.apache.spark._
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class RocksDBSuite extends SparkFunSuite {
 
-  test("RocksDB: get, put, iterator, commit, load") {
-    def testOps(enableChangelogCheckpointing: Boolean): Unit = {
-      val remoteDir = Utils.createTempDir().toString
-      new File(remoteDir).delete()  // to make sure that the directory gets created
-
-      val conf = RocksDBConf().copy(enableChangelogCheckpointing = enableChangelogCheckpointing)
-      withDB(remoteDir, conf = conf) { db =>
-        assert(db.get("a") === null)
-        assert(iterator(db).isEmpty)
-
-        db.put("a", "1")
-        assert(toStr(db.get("a")) === "1")
-        db.commit()
+trait AlsoTestWithChangelogCheckpointingEnabled extends SQLTestUtils {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED.key -> "false",
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+        testBody
       }
-
-      withDB(remoteDir, conf = conf, version = 0) { db =>
-        // version 0 can be loaded again
-        assert(toStr(db.get("a")) === null)
-        assert(iterator(db).isEmpty)
-      }
-
-      withDB(remoteDir, conf = conf, version = 1) { db =>
-        // version 1 data recovered correctly
-        assert(toStr(db.get("a")) === "1")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-
-        // make changes but do not commit version 2
-        db.put("b", "2")
-        assert(toStr(db.get("b")) === "2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-      }
-
-      withDB(remoteDir, conf = conf, version = 1) { db =>
-        // version 1 data not changed
-        assert(toStr(db.get("a")) === "1")
-        assert(db.get("b") === null)
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-
-        // commit version 2
-        db.put("b", "2")
-        assert(toStr(db.get("b")) === "2")
-        db.commit()
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-      }
-
-      withDB(remoteDir, conf = conf, version = 1) { db =>
-        // version 1 data not changed
-        assert(toStr(db.get("a")) === "1")
-        assert(db.get("b") === null)
-      }
-
-      withDB(remoteDir, conf = conf, version = 2) { db =>
-        // version 2 can be loaded again
-        assert(toStr(db.get("b")) === "2")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-
-        db.load(1)
-        assert(toStr(db.get("b")) === null)
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-      }
+      // in case tests have any code that needs to execute after every test
+      super.afterEach()
     }
 
-    for (enableChangelogCheckpointing <- Seq(false, true)) {
-      withClue(s"enableChangelogCheckpointing = $enableChangelogCheckpointing") {
-        testOps(enableChangelogCheckpointing)
+    super.test(testName + " (with changelog checkpointing)") {
+      // in case tests have any code that needs to execute before every test
+      super.beforeEach()
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED.key -> "true",
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+        testBody
       }
     }
   }
 
-  test("RocksDB: cleanup old files") {
-    val remoteDir = Utils.createTempDir().toString
-    val conf = RocksDBConf().copy(compactOnCommit = true, minVersionsToRetain = 10)
+  def isChangelogCheckpointingEnabled: Boolean =
+    SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED)
+}
 
-    def versionsPresent: Seq[Long] = {
-      remoteDir.listFiles.filter(_.getName.endsWith(".zip"))
-        .map(_.getName.stripSuffix(".zip"))
-        .map(_.toLong)
-        .sorted
+class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
+
+  sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+
+  def snapshotVersionsPresent(dir: String): Seq[Long] = {
+    dir.listFiles.filter(_.getName.endsWith(".zip"))
+      .map(_.getName.stripSuffix(".zip"))
+      .map(_.toLong)
+      .sorted
+  }
+  def changelogVersionsPresent(dir: String): Seq[Long] = {
+    dir.listFiles.filter(_.getName.endsWith(".changelog"))
+      .map(_.getName.stripSuffix(".changelog"))
+      .map(_.toLong)
+      .sorted
+  }
+
+  test("RocksDB: check changelog and snapshot version") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    for (version <- 0 to 49) {
+      withDB(remoteDir, version = version) { db =>
+          db.put(version.toString, version.toString)
+          db.commit()
+          if ((version + 1) % 5 == 0) db.cleanup()
+      }
     }
 
+    if (isChangelogCheckpointingEnabled) {
+      assert(changelogVersionsPresent(remoteDir) === (1 to 50))
+      assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
+    } else {
+      assert(changelogVersionsPresent(remoteDir) === Seq.empty)
+      assert(snapshotVersionsPresent(remoteDir) === (1 to 50))
+    }
+  }
+
+  test("RocksDB: load version that doesn't exist") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    withDB(remoteDir) { db =>
+      intercept[IllegalStateException] {
+        db.load(1)
+      }
+    }
+  }
+
+  test("RocksDB: purge changelog and snapshots") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    val conf = dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 3)
     withDB(remoteDir, conf = conf) { db =>
-      // Generate versions without cleaning up
-      for (version <- 1 to 50) {
-        if (version > 1) {
-          // remove keys we wrote in previous iteration to ensure compaction happens
-          db.remove((version - 1).toString)
-        }
-        db.put(version.toString, version.toString)
+      db.load(0)
+      db.commit()
+      for (version <- 1 to 2) {
+        db.load(version)
+        db.commit()
+        db.cleanup()
+      }
+      assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+      assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3))
+
+      for (version <- 3 to 4) {
+        db.load(version)
         db.commit()
       }
-
-      // Clean up and verify version files and SST files were deleted
-      require(versionsPresent === (1L to 50L))
-      val sstDir = new File(remoteDir, "SSTs")
-      val numSstFiles = listFiles(sstDir).length
+      assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 5))
       db.cleanup()
-      assert(versionsPresent === (41L to 50L))
-      assert(listFiles(sstDir).length < numSstFiles)
+      // 3 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
+      assert(changelogVersionsPresent(remoteDir) == (3 to 5))
 
-      // Verify data in retained vesions.
-      versionsPresent.foreach { version =>
+      for (version <- 5 to 7) {
         db.load(version)
-        val data = db.iterator().map(toStr).toSet
-        assert(data === Set((version.toString, version.toString)))
+        db.commit()
+      }
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
+      assert(changelogVersionsPresent(remoteDir) == (3 to 8))
+      db.cleanup()
+      // 5 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
+      assert(snapshotVersionsPresent(remoteDir) === Seq(5, 8))
+      assert(changelogVersionsPresent(remoteDir) == (5 to 8))
+    }
+  }
+
+  test("RocksDB: changelog checkpointing backward compatibility") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    val disableChangelogCheckpointingConf =
+      dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 30)
+    withDB(remoteDir, conf = disableChangelogCheckpointingConf) { db =>
+      for (version <- 1 to 30) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.remove((version - 1).toString)
+        db.commit()
+      }
+      assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
+    }
+
+    // Now enable changelog checkpointing in a checkpoint created by a state store
+    // that disable changelog checkpointing.
+    val enableChangelogCheckpointingConf =
+      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30)
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
+      for (version <- 1 to 30) {
+        db.load(version)
+        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      }
+      for (version <- 30 to 60) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.remove((version - 1).toString)
+        db.commit()
+      }
+      assert(snapshotVersionsPresent(remoteDir) === (1 to 30))
+      assert(changelogVersionsPresent(remoteDir) === (30 to 60))
+      for (version <- 1 to 60) {
+        db.load(version, readOnly = true)
+        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      }
+      // Check that snapshots and changelogs get purged correctly.
+      db.cleanup()
+      assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
+      assert(changelogVersionsPresent(remoteDir) === (30 to 60))
+      // Verify the content of retained versions.
+      for (version <- 30 to 60) {
+        db.load(version, readOnly = true)
+        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
     }
+  }
+
+  test("RocksDB: get, put, iterator, commit, load") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    withDB(remoteDir) { db =>
+      assert(db.get("a") === null)
+      assert(iterator(db).isEmpty)
+
+      db.put("a", "1")
+      assert(toStr(db.get("a")) === "1")
+      db.commit()
+    }
+
+    withDB(remoteDir, version = 0) { db =>
+      // version 0 can be loaded again
+      assert(toStr(db.get("a")) === null)
+      assert(iterator(db).isEmpty)
+    }
+
+    withDB(remoteDir, version = 1) { db =>
+      // version 1 data recovered correctly
+      assert(toStr(db.get("a")) === "1")
+      assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+      // make changes but do not commit version 2
+      db.put("b", "2")
+      assert(toStr(db.get("b")) === "2")
+      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+    }
+
+    withDB(remoteDir, version = 1) { db =>
+      // version 1 data not changed
+      assert(toStr(db.get("a")) === "1")
+      assert(db.get("b") === null)
+      assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+      // commit version 2
+      db.put("b", "2")
+      assert(toStr(db.get("b")) === "2")
+      db.commit()
+      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+    }
+
+    withDB(remoteDir, version = 1) { db =>
+      // version 1 data not changed
+      assert(toStr(db.get("a")) === "1")
+      assert(db.get("b") === null)
+    }
+
+    withDB(remoteDir, version = 2) { db =>
+      // version 2 can be loaded again
+      assert(toStr(db.get("b")) === "2")
+      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      db.load(1)
+      assert(toStr(db.get("b")) === null)
+      assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+    }
+
   }
 
   test("RocksDB: handle commit failures and aborts") {
@@ -147,11 +261,11 @@ class RocksDBSuite extends SparkFunSuite {
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
       classOf[CreateAtomicTestManager].getName)
     val remoteDir = Utils.createTempDir().getAbsolutePath
-    val conf = RocksDBConf().copy(compactOnCommit = true)
-    withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+    withDB(remoteDir, hadoopConf = hadoopConf) { db =>
       // Disable failure of output stream and generate versions
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
       for (version <- 1 to 10) {
+        db.load(version - 1)
         db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
         db.commit()
       }
@@ -159,16 +273,35 @@ class RocksDBSuite extends SparkFunSuite {
 
       // Fail commit for next version and verify that reloading resets the files
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
+      db.load(10)
       db.put("11", "11")
       intercept[IOException] { quietly { db.commit() } }
-      assert(db.load(10).iterator().map(toStr).toSet === version10Data)
+      assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
       // Abort commit for next version and verify that reloading resets the files
       db.load(10)
       db.put("11", "11")
       db.rollback()
-      assert(db.load(10).iterator().map(toStr).toSet === version10Data)
+      assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
+    }
+  }
+
+  test("RocksDBFileManager: read and write changelog") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1)
+    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString)
+    for (j <- 2 to 4) changelogWriter.delete(j.toString)
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map(i => new ByteArrayPair(i.toString, i.toString)) ++
+      (2 to 4).map(j => new ByteArrayPair(j.toString, null))
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1.key === e2.key && e1.value === e2.value)
     }
   }
 
@@ -433,7 +566,7 @@ class RocksDBSuite extends SparkFunSuite {
     quietly {
       withDB(
         Utils.createTempDir().toString,
-        conf = RocksDBConf().copy(lockAcquireTimeoutMs = 20)) { db =>
+        conf = dbConf.copy(lockAcquireTimeoutMs = 20)) { db =>
         // DB has been loaded so current thread has alread acquired the lock on the RocksDB instance
 
         db.load(0)  // Current thread should be able to load again
@@ -470,26 +603,19 @@ class RocksDBSuite extends SparkFunSuite {
   }
 
   test("ensure concurrent access lock is released after Spark task completes") {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-    val sc = new SparkContext(conf)
-
-    try {
-      RocksDBSuite.withSingletonDB {
-        // Load a RocksDB instance, that is, get a lock inside a task and then fail
-        quietly {
-          intercept[Exception] {
-            sc.makeRDD[Int](1 to 1, 1).map { i =>
-              RocksDBSuite.singleton.load(0)
-              throw new Exception("fail this task to test lock release")
-            }.count()
-          }
+    RocksDBSuite.withSingletonDB {
+      // Load a RocksDB instance, that is, get a lock inside a task and then fail
+      quietly {
+        intercept[Exception] {
+          sparkContext.makeRDD[Int](1 to 1, 1).map { i =>
+            RocksDBSuite.singleton.load(0)
+            throw new Exception("fail this task to test lock release")
+          }.count()
         }
-
-        // Test whether you can load again, that is, will it successfully lock again
-        RocksDBSuite.singleton.load(0)
       }
-    } finally {
-      sc.stop()
+
+      // Test whether you can load again, that is, will it successfully lock again
+      RocksDBSuite.singleton.load(0)
     }
   }
 
@@ -572,7 +698,7 @@ class RocksDBSuite extends SparkFunSuite {
     // disable resetting stats
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir, conf = RocksDBConf().copy(resetStatsOnLoad = false)) { db =>
+      withDB(remoteDir, conf = dbConf.copy(resetStatsOnLoad = false)) { db =>
         verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
         db.load(0)
         db.put("a", "1") // put also triggers a db get
@@ -588,28 +714,6 @@ class RocksDBSuite extends SparkFunSuite {
         verifyMetrics(putCount = 2, getCount = 3, metrics = db.metrics)
       }
     }
-
-    // force compaction and check the compaction metrics
-    withTempDir { dir =>
-      val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
-        db.load(0)
-        db.put("a", "5")
-        db.put("b", "5")
-        db.commit()
-
-        db.load(1)
-        db.put("a", "10")
-        db.put("b", "25")
-        db.commit()
-
-        val metrics = db.metrics
-        assert(metrics.nativeOpsHistograms("compaction").count > 0)
-        assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
-        assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
-        assert(metrics.pinnedBlocksMemUsage >= 0)
-      }
-    }
   }
 
   // Add tests to check valid and invalid values for max_open_files passed to the underlying
@@ -618,9 +722,7 @@ class RocksDBSuite extends SparkFunSuite {
     test(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles config property " +
       "for RocksDB state store instance should succeed") {
       withTempDir { dir =>
-        val sqlConf = SQLConf.get
         sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles", maxOpenFiles)
-        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
         assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
 
         val remoteDir = dir.getCanonicalPath
@@ -657,6 +759,7 @@ class RocksDBSuite extends SparkFunSuite {
         }
         assert(ex.getMessage.contains("Invalid value for"))
         assert(ex.getMessage.contains("must be an integer"))
+        sqlConf.unsetConf("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles")
       }
     }
   }
@@ -812,7 +915,7 @@ class RocksDBSuite extends SparkFunSuite {
       var curVersion: Long = 0
       // starting with the config "trackTotalNumberOfRows = true"
       // this should track the number of rows correctly
-      withDB(remoteDir, conf = RocksDBConf().copy(trackTotalNumberOfRows = true)) { db =>
+      withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = true)) { db =>
         db.load(curVersion)
         db.put("a", "5")
         db.put("b", "5")
@@ -828,7 +931,7 @@ class RocksDBSuite extends SparkFunSuite {
 
       // restart with config "trackTotalNumberOfRows = false"
       // this should reset the number of keys as -1, and keep the number as -1
-      withDB(remoteDir, conf = RocksDBConf().copy(trackTotalNumberOfRows = false)) { db =>
+      withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = false)) { db =>
         db.load(curVersion)
 
         assert(db.metrics.numUncommittedKeys === -1)
@@ -845,7 +948,7 @@ class RocksDBSuite extends SparkFunSuite {
 
       // restart with config "trackTotalNumberOfRows = true" again
       // this should count the number of keys at the load phase, and continue tracking the number
-      withDB(remoteDir, conf = RocksDBConf().copy(trackTotalNumberOfRows = true)) { db =>
+      withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = true)) { db =>
         db.load(curVersion)
 
         assert(db.metrics.numUncommittedKeys === 3)
@@ -865,10 +968,14 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  private def sqlConf = SQLConf.get
+
+  private def dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
   def withDB[T](
       remoteDir: String,
       version: Int = 0,
-      conf: RocksDBConf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
+      conf: RocksDBConf = dbConf,
       hadoopConf: Configuration = new Configuration())(
       func: RocksDB => T): T = {
     var db: RocksDB = null

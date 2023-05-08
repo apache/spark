@@ -56,7 +56,11 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
 
-  case class RocksDBCheckpoint(checkpointDir: File, version: Long, numKeys: Long)
+  case class RocksDBCheckpoint(checkpointDir: File, version: Long, numKeys: Long) {
+    def close(): Unit = {
+      silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
+    }
+  }
 
   @volatile private var latestCheckpoint: Option[RocksDBCheckpoint] = None
 
@@ -113,8 +117,8 @@ class RocksDB(
   private val nativeStats = dbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
-  private val fileManager = new RocksDBFileManager(
-    dfsRootDir, createTempDir("fileManager"), hadoopConf, loggingId = loggingId)
+  private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
+    hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
   private val acquireLock = new Object
@@ -135,7 +139,7 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  def load(version: Long): RocksDB = {
+  def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
     acquire()
     logInfo(s"Loading $version")
@@ -144,6 +148,7 @@ class RocksDB(
         closeDB()
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        openDB()
 
         val numKeys = if (!conf.trackTotalNumberOfRows) {
           // we don't track the total number of rows - discard the number being track
@@ -156,7 +161,6 @@ class RocksDB(
           metadata.numKeys
         }
         numKeysOnWritingVersion = numKeys
-        openDB()
 
         for (v <- latestSnapshotVersion + 1 to version) {
           var changelogReader: ChangelogReader = null
@@ -187,7 +191,7 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
-    if (enableChangelogCheckpointing) {
+    if (enableChangelogCheckpointing && !readOnly) {
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
     }
     this
@@ -314,6 +318,7 @@ class RocksDB(
    */
   def commit(): Long = {
     val newVersion = loadedVersion + 1
+    assert(newVersion > 0)
     try {
 
       logInfo(s"Flushing updates for $newVersion")
@@ -327,6 +332,7 @@ class RocksDB(
         val cp = Checkpoint.create(db)
         cp.createCheckpoint(checkpointDir.toString)
         synchronized {
+          latestCheckpoint.foreach(_.close())
           latestCheckpoint = Some(
             RocksDBCheckpoint(checkpointDir, newVersion, numKeysOnWritingVersion))
         }
@@ -335,8 +341,13 @@ class RocksDB(
       logInfo(s"Syncing checkpoint for $newVersion to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
-          changelogWriter.foreach(_.commit())
+          try {
+            changelogWriter.foreach(_.commit())
+          } finally {
+            changelogWriter = None
+          }
         } else {
+          assert(changelogWriter.isEmpty)
           uploadSnapshot()
         }
       }
@@ -369,10 +380,15 @@ class RocksDB(
     }
     localCheckpoint match {
       case Some(RocksDBCheckpoint(localDir, version, numKeys)) =>
-        val uploadTime = timeTakenMs {
-          fileManager.saveCheckpointToDfs(localDir, version, numKeys)
+        try {
+          val uploadTime = timeTakenMs {
+            fileManager.saveCheckpointToDfs(localDir, version, numKeys)
+            fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
+          }
+          logInfo(s"Upload snapshot of version $version, time taken: $uploadTime ms")
+        } finally {
+          localCheckpoint.foreach(_.close())
         }
-        logInfo(s"Upload snapshot of version $version, time taken: $uploadTime ms")
       case _ =>
     }
   }
@@ -383,6 +399,9 @@ class RocksDB(
   def rollback(): Unit = {
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
+    changelogWriter.foreach(_.abort())
+    // Make sure changelogWriter gets recreated next time.
+    changelogWriter = None
     release()
     logInfo(s"Rolled back to $loadedVersion")
   }
@@ -407,6 +426,7 @@ class RocksDB(
       flushOptions.close()
       dbOptions.close()
       dbLogger.close()
+      latestCheckpoint.foreach(_.close())
       silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {
       case e: Exception =>
@@ -602,7 +622,8 @@ case class RocksDBConf(
     boundedMemoryUsage: Boolean,
     totalMemoryUsageMB: Long,
     writeBufferCacheRatio: Double,
-    highPriorityPoolRatio: Double)
+    highPriorityPoolRatio: Double,
+    compressionCodec: String)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -760,7 +781,8 @@ object RocksDBConf {
       getBooleanConf(BOUNDED_MEMORY_USAGE_CONF),
       getLongConf(MAX_MEMORY_USAGE_MB_CONF),
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
-      getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF))
+      getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
+      storeConf.compressionCodec)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

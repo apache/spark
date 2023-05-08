@@ -30,7 +30,9 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndAfter {
+class StreamingSessionWindowStateManagerSuite extends StreamTest
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with BeforeAndAfter {
   private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("value", LongType)

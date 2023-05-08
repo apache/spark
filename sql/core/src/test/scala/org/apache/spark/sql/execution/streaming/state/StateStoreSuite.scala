@@ -39,6 +39,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -279,7 +280,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val timeoutDuration = 1.minute
 
     quietly {
-      withSpark(new SparkContext(conf)) { sc =>
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
@@ -389,7 +390,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val timeoutDuration = 1.minute
 
     quietly {
-      withSpark(new SparkContext(conf)) { sc =>
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
@@ -1159,54 +1160,61 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("StateStore.get") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
     quietly {
-      val dir = newDir()
-      val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
-      val storeConf = getDefaultStoreConf
-      val hadoopConf = new Configuration()
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+        withCoordinatorRef(sc) { coordinatorRef =>
+          val dir = newDir()
+          val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
+          val storeConf = getDefaultStoreConf
+          val hadoopConf = new Configuration()
 
-      // Verify that trying to get incorrect versions throw errors
-      intercept[IllegalArgumentException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+          // Verify that trying to get incorrect versions throw errors
+          intercept[IllegalArgumentException] {
+            StateStore.get(
+              storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+          }
+          assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
+
+          intercept[IllegalStateException] {
+            StateStore.get(
+              storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          }
+
+          // Increase version of the store and try to get again
+          val store0 = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+          assert(store0.version === 0)
+          put(store0, "a", 0, 1)
+          store0.commit()
+
+          val store1 = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          assert(StateStore.isLoaded(storeId))
+          assert(store1.version === 1)
+          assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
+
+          // Verify that you can also load older version
+          val store0reloaded = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+          assert(store0reloaded.version === 0)
+          assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
+
+          // Verify that you can remove the store and still reload and use it
+          StateStore.unload(storeId)
+          assert(!StateStore.isLoaded(storeId))
+
+          val store1reloaded = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          assert(StateStore.isLoaded(storeId))
+          assert(store1reloaded.version === 1)
+          put(store1reloaded, "a", 0, 2)
+          assert(store1reloaded.commit() === 2)
+          assert(rowPairsToDataSet(store1reloaded.iterator()) === Set(("a", 0) -> 2))
+        }
       }
-      assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
-
-      intercept[IllegalStateException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      }
-
-      // Increase version of the store and try to get again
-      val store0 = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
-      assert(store0.version === 0)
-      put(store0, "a", 0, 1)
-      store0.commit()
-
-      val store1 = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      assert(StateStore.isLoaded(storeId))
-      assert(store1.version === 1)
-      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
-
-      // Verify that you can also load older version
-      val store0reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
-      assert(store0reloaded.version === 0)
-      assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
-
-      // Verify that you can remove the store and still reload and use it
-      StateStore.unload(storeId)
-      assert(!StateStore.isLoaded(storeId))
-
-      val store1reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      assert(StateStore.isLoaded(storeId))
-      assert(store1reloaded.version === 1)
-      put(store1reloaded, "a", 0, 2)
-      assert(store1reloaded.commit() === 2)
-      assert(rowPairsToDataSet(store1reloaded.iterator()) === Set(("a", 0) -> 2))
     }
   }
 
@@ -1262,7 +1270,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(metricNew.name === "m1", "incorrect name in copied instance")
 
     val conf = new SparkConf().setMaster("local").setAppName("SPARK-35763")
-    withSpark(new SparkContext(conf)) { sc =>
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
       val sqlMetric = metric.createSQLMetric(sc)
       assert(sqlMetric != null)
       assert(sqlMetric.name === Some("desc1"))

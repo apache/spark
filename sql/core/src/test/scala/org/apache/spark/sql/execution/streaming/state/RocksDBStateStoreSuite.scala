@@ -25,10 +25,13 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
@@ -36,6 +39,8 @@ import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with SharedSparkSession
   with BeforeAndAfter {
 
   before {
@@ -75,7 +80,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val testConfs = Seq(
         ("spark.sql.streaming.stateStore.providerClass",
           classOf[RocksDBStateStoreProvider].getName),
-        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".compactOnCommit", "true"),
+        (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".enableChangelogCheckpointing", "true"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".lockAcquireTimeoutMs", "10"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxOpenFiles", "1000"),
         (RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".maxWriteBufferNumber", "3"),
@@ -102,7 +107,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }.collect().head
 
       // Verify the confs are same as those configured in the session conf
-      assert(rocksDBConfInTask.compactOnCommit == true)
+      assert(rocksDBConfInTask.enableChangelogCheckpointing == true)
       assert(rocksDBConfInTask.lockAcquireTimeoutMs == 10L)
       assert(rocksDBConfInTask.formatVersion == 4)
       assert(rocksDBConfInTask.maxOpenFiles == 1000)
@@ -125,6 +130,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       put(store, "a", 0, 1)
       assert(get(store, "a", 0) === Some(1))
       assert(store.commit() === 1)
+      provider.doMaintenance()
       assert(store.hasCommitted)
       val storeMetrics = store.metrics
       assert(storeMetrics.numKeys === 1)
@@ -177,6 +183,33 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   override def getDefaultSQLConf(
     minDeltasForSnapshot: Int,
-    numOfVersToRetainInMemory: Int): SQLConf = new SQLConf()
+    numOfVersToRetainInMemory: Int): SQLConf = SQLConf.get
+
+
+  override def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
+
+  override def testWithAllCodec(name: String)(func: => Any): Unit = {
+    codecsInShortName.foreach { codecShortName =>
+      super.test(s"$name - with codec $codecShortName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+          func
+        }
+      }
+    }
+
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
+      super.test(s"$name - with codec $codecShortName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+          func
+        }
+      }
+    }
+  }
 }
 
