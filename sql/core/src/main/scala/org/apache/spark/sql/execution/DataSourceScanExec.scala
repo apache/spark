@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
@@ -370,8 +371,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
     }
   }
 
-  @transient
-  protected lazy val pushedDownFilters = {
+  private def translatePushedDownFilters(dataFilters: Seq[Expression]): Seq[Filter] = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
@@ -381,6 +381,24 @@ trait FileSourceScanLike extends DataSourceScanExec {
       case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+  }
+
+  @transient
+  protected lazy val pushedDownFilters: Seq[Filter] = translatePushedDownFilters(dataFilters)
+
+  @transient
+  protected lazy val dynamicallyPushedDownFilters: Seq[Filter] = {
+    if (dataFilters.exists(_.exists(_.isInstanceOf[execution.ScalarSubquery]))) {
+      // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
+      // support translate it. The subquery must has been materialized since SparkPlan always
+      // execute subquery first.
+      val normalized = dataFilters.map(_.transform {
+        case scalarSubquery: execution.ScalarSubquery => scalarSubquery.toLiteral
+      })
+      translatePushedDownFilters(normalized)
+    } else {
+      pushedDownFilters
+    }
   }
 
   override lazy val metadata: Map[String, String] = {
@@ -543,7 +561,7 @@ case class FileSourceScanExec(
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
+        filters = dynamicallyPushedDownFilters,
         options = options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
