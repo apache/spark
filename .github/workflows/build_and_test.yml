@@ -532,7 +532,7 @@ jobs:
         java-version: ${{ inputs.java }}
     - name: Install Golang
       run: |
-        apt-get update
+        apt update
         apt-get install -y golang-go
     - name: Run Build & Test
       run: |
