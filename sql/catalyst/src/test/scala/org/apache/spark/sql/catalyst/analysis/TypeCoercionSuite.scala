@@ -1550,6 +1550,10 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+    ruleTest(inConversion,
+      In(Literal(0), Seq(Literal("00"))),
+      In(Literal(0), Seq(Cast(Literal("00"), IntegerType)))
+    )
   }
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
