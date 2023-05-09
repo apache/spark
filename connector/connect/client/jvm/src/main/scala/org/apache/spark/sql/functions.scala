@@ -113,7 +113,7 @@ object functions {
    * An alias of `typedlit`, and it is encouraged to use `typedlit` directly.
    *
    * @group normal_funcs
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def typedLit[T: TypeTag](literal: T): Column = typedlit(literal)
 
@@ -130,7 +130,7 @@ object functions {
    *   Scala types are not used.
    *
    * @group normal_funcs
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def typedlit[T: TypeTag](literal: T): Column = literal match {
     case c: Column => c

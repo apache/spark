@@ -389,7 +389,8 @@ object LiteralValueProtoConverter {
       .map { case (element, dataType) =>
         getConverter(dataType)(element)
       }
-      .asInstanceOf[Seq[Object]]
+      .asInstanceOf[scala.collection.Seq[Object]]
+      .toSeq
 
     toTuple(structData)
   }
