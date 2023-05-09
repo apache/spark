@@ -2070,21 +2070,19 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val joined =
       session.sessionState.executePlan(transformJoin(rel)).analyzed.asInstanceOf[logical.Join]
 
-    // Return if the left & right dataType is a struct
-    def isLeftRightStruct(struct: DataType): (Boolean, Boolean) = {
-      assert(struct.isInstanceOf[StructType])
-      val schema = struct.asInstanceOf[StructType]
+    val (isLeftEncStruct, isRightEncStruct) = {
+      val dataType = transformDataType(rel.getLeftRightAsStruct)
+      assert(dataType.isInstanceOf[StructType])
+      val schema = dataType.asInstanceOf[StructType]
       // assert left & right
       assert(schema.fields.length == 2)
       assert(schema.fields(0).name == "left")
       assert(schema.fields(1).name == "right")
-      (
-        schema.fields(0).dataType.isInstanceOf[StructType],
-        schema.fields(1).dataType.isInstanceOf[StructType])
-    }
 
-    val (isLeftEncStruct, isRightEncStruct) = isLeftRightStruct(
-      transformDataType(rel.getLeftRightAsStruct))
+      val isNonNullableStruct: StructField => Boolean =
+        f => f.dataType.isInstanceOf[StructType] // TODO: && !Option
+      (isNonNullableStruct(schema.fields(0)), isNonNullableStruct(schema.fields(1)))
+    }
 
     JoinWith.typedJoinWith(
       joined,

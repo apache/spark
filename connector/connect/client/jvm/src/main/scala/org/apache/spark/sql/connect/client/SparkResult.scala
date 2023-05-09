@@ -28,7 +28,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{EncoderField, ProductEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -50,45 +50,30 @@ private[sql] class SparkResult[T](
   private val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
-    val agnosticEncoder = if (encoder == UnboundRowEncoder) {
-      // Create a row encoder based on the schema.
-      RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
-    } else {
-      encoder match {
-        case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
-          // Tuple fields are position based
-          assert(fields.length == schema.fields.length)
-          val updatedFields = fields.zipWithIndex.map { case (f, id) =>
-            updateProductEncoderField(f, schema.fields(id).dataType)
-          }
-          ProductEncoder[T](clsTag, updatedFields)
-        case _ =>
-          encoder
-      }
-    }
+    val agnosticEncoder = updateProductEncoder(encoder, schema).asInstanceOf[AgnosticEncoder[T]]
     ExpressionEncoder(agnosticEncoder)
   }
 
   /**
-   * Recursively update the fields of the ProductEncoder fields. A tuple ProductEncoder may
-   * contains [[UnboundRowEncoder]], which need to be updated to [[RowEncoder]] using the data
-   * schema of the field.
+   * Recursively update the fields of the ProductEncoder fields.
    */
-  private def updateProductEncoderField(f: EncoderField, dataType: DataType): EncoderField = {
-    f.enc match {
+  private def updateProductEncoder[_](
+      enc: AgnosticEncoder[_],
+      dataType: DataType): AgnosticEncoder[_] = {
+    enc match {
       case UnboundRowEncoder =>
         // Replace the row encoder with the encoder inferred from the schema.
-        f.copy(enc = RowEncoder.encoderFor(dataType.asInstanceOf[StructType]))
+        RowEncoder.encoderFor(dataType.asInstanceOf[StructType])
       case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
         // Recursively continue updating the tuple product encoder
         val schema = dataType.asInstanceOf[StructType]
         assert(fields.length == schema.fields.length)
         val updatedFields = fields.zipWithIndex.map { case (f, id) =>
-          updateProductEncoderField(f, schema.fields(id).dataType)
+          f.copy(enc = updateProductEncoder(f.enc, schema.fields(id).dataType))
         }
-        f.copy(enc = ProductEncoder(clsTag, updatedFields))
+        ProductEncoder(clsTag, updatedFields)
       case _ =>
-        f
+        enc
     }
   }
 
