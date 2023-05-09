@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -795,13 +792,11 @@ class SparkConnectPlanner(val session: SparkSession) {
     bytes
       .map { blockData =>
         try {
-          val blob = blockData.toByteBuffer().array()
-          val blobSize = blockData.size.toInt
-          val size = ByteBuffer.wrap(blob).getInt
-          val intSize = 4
-          val data = blob.slice(intSize, intSize + size)
-          val schema = new String(blob.slice(intSize + size, blobSize), StandardCharsets.UTF_8)
-          transformLocalRelation(Option(schema), Option(data))
+          val localRelation = proto.Relation.newBuilder()
+            .getLocalRelation
+            .getParserForType
+            .parseFrom(blockData.toInputStream())
+          transformLocalRelation(localRelation)
         } finally {
           blockManager.releaseLock(blockId)
         }
