@@ -49,6 +49,7 @@ class StateStoreChangelogWriter(fm: CheckpointFileManager, file: Path,
   private var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   private var compressedStream: DataOutputStream = compressStream(backingFileStream)
+  var size = 0
 
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
@@ -56,6 +57,7 @@ class StateStoreChangelogWriter(fm: CheckpointFileManager, file: Path,
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
     compressedStream.write(value)
+    size += 1
   }
 
   def delete(key: Array[Byte]): Unit = {
@@ -64,6 +66,7 @@ class StateStoreChangelogWriter(fm: CheckpointFileManager, file: Path,
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
+    size += 1
   }
 
   def abort(): Unit = {

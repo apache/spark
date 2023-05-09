@@ -80,9 +80,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   test("RocksDB: check changelog and snapshot version") {
     val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 1)
     new File(remoteDir).delete()  // to make sure that the directory gets created
     for (version <- 0 to 49) {
-      withDB(remoteDir, version = version) { db =>
+      withDB(remoteDir, version = version, conf = conf) { db =>
           db.put(version.toString, version.toString)
           db.commit()
           if ((version + 1) % 5 == 0) db.cleanup()
@@ -111,7 +112,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   test("RocksDB: purge changelog and snapshots") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
-    val conf = dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 3)
+    val conf = dbConf.copy(enableChangelogCheckpointing = true,
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = conf) { db =>
       db.load(0)
       db.commit()
@@ -147,6 +149,40 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("RocksDB: minDeltasForSnapshot") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    val conf = dbConf.copy(enableChangelogCheckpointing = true, minDeltasForSnapshot = 3)
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 1) {
+        db.load(version)
+        db.commit()
+        db.cleanup()
+      }
+      // Snapshot should not be created because minDeltasForSnapshot = 3
+      assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
+      assert(changelogVersionsPresent(remoteDir) == Seq(1, 2))
+      db.load(2)
+      db.commit()
+      db.cleanup()
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3))
+      db.load(3)
+      for (i <- 1 to 1001) {
+        db.put(i.toString, i.toString)
+      }
+      db.commit()
+      db.cleanup()
+      // Snapshot should be created this time because the size of the change log > 1000
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4))
+      for (version <- 4 to 6) {
+        db.load(version)
+        db.commit()
+        db.cleanup()
+      }
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7))
+    }
+  }
+
   test("RocksDB: changelog checkpointing backward compatibility") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
@@ -165,7 +201,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // Now enable changelog checkpointing in a checkpoint created by a state store
     // that disable changelog checkpointing.
     val enableChangelogCheckpointingConf =
-      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30)
+      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
+        minDeltasForSnapshot = 1)
     withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
       for (version <- 1 to 30) {
         db.load(version)

@@ -324,19 +324,23 @@ class RocksDB(
     try {
 
       logInfo(s"Flushing updates for $newVersion")
-      val flushTimeMs = timeTakenMs { db.flush(flushOptions) }
 
-      val checkpointDir = createTempDir("checkpoint")
-      // Make sure the directory does not exist. Native RocksDB fails if the directory to
-      // checkpoint exists.
-      Utils.deleteRecursively(checkpointDir)
-      val checkpointTimeMs = timeTakenMs {
-        val cp = Checkpoint.create(db)
-        cp.createCheckpoint(checkpointDir.toString)
-        synchronized {
-          latestCheckpoint.foreach(_.close())
-          latestCheckpoint = Some(
-            RocksDBCheckpoint(checkpointDir, newVersion, numKeysOnWritingVersion))
+      var flushTimeMs = 0L
+      var checkpointTimeMs = 0L
+      if (shouldCreateSnapshot()) {
+        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
+        checkpointTimeMs = timeTakenMs {
+          val checkpointDir = createTempDir("checkpoint")
+          // Make sure the directory does not exist. Native RocksDB fails if the directory to
+          // checkpoint exists.
+          Utils.deleteRecursively(checkpointDir)
+          val cp = Checkpoint.create(db)
+          cp.createCheckpoint(checkpointDir.toString)
+          synchronized {
+            latestCheckpoint.foreach(_.close())
+            latestCheckpoint = Some(
+              RocksDBCheckpoint(checkpointDir, newVersion, numKeysOnWritingVersion))
+          }
         }
       }
 
@@ -375,7 +379,16 @@ class RocksDB(
     }
   }
 
-  def uploadSnapshot(): Unit = {
+  private def shouldCreateSnapshot(): Boolean = {
+    if (enableChangelogCheckpointing) {
+      assert(changelogWriter.isDefined)
+      val newVersion = loadedVersion + 1
+      newVersion - fileManager.getLastUploadedSnapshotVersion() >= conf.minDeltasForSnapshot ||
+        changelogWriter.get.size > 1000
+    } else true
+  }
+
+  private def uploadSnapshot(): Unit = {
     val localCheckpoint = synchronized {
       val checkpoint = latestCheckpoint
       latestCheckpoint = None
@@ -611,6 +624,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
  */
 case class RocksDBConf(
     minVersionsToRetain: Int,
+    minDeltasForSnapshot: Int,
     compactOnCommit: Boolean,
     enableChangelogCheckpointing: Boolean,
     blockSizeKB: Long,
@@ -770,6 +784,7 @@ object RocksDBConf {
 
     RocksDBConf(
       storeConf.minVersionsToRetain,
+      storeConf.minDeltasForSnapshot,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
       getBooleanConf(ENABLE_CHANGELOG_CHECKPOINTING_CONF),
       getPositiveLongConf(BLOCK_SIZE_KB_CONF),
