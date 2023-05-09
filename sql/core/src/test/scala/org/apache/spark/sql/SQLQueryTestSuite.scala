@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -433,26 +434,31 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
+  def hasNoDuplicateColumns(schema: String): Boolean = {
+    val columnAndTypes = schema.replaceFirst("^struct<", "").stripSuffix(">").split(",")
+    columnAndTypes.size == columnAndTypes.distinct.size
+  }
+
   def expandCTEQueryAndCompareResult(
       session: SparkSession,
       query: String,
       output: ExecutionOutput): Unit = {
-    val logicalPlan: LogicalPlan = session.sessionState.sqlParser.parsePlan(query)
+    val triggerCreateViewTest = try {
+      val logicalPlan: LogicalPlan = session.sessionState.sqlParser.parsePlan(query)
+      !logicalPlan.isInstanceOf[Command] &&
+      output.schema.get != emptySchema &&
+      hasNoDuplicateColumns(output.schema.get)
+    } catch {
+      case _: ParseException => return
+    }
+
     // For non-command query with CTE, compare the results of selecting from view created on the
     // original query.
-    if (!logicalPlan.isInstanceOf[Command] && output.schema.get != emptySchema) {
+    if (triggerCreateViewTest) {
       val createView = s"CREATE temporary VIEW cte_view AS $query"
       val selectFromView = "SELECT * FROM cte_view"
       val dropViewIfExists = "DROP VIEW IF EXISTS cte_view"
-      try {
-        session.sql(createView)
-      }
-      catch {
-        case e: AnalysisException =>
-          if (e.getMessage.contains("already exists")) {
-            return
-          }
-      }
+      session.sql(createView)
       val (selectViewSchema, selectViewOutput) =
         handleExceptions(getNormalizedQueryExecutionResult(session, selectFromView))
       // Compare results.
