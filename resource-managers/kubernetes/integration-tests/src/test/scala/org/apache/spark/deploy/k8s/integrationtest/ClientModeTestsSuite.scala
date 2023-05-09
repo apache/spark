@@ -53,8 +53,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .endSpec()
         .build())
     try {
-      val driverPod = testBackend
-        .getKubernetesClient
+      val driverPod = testBackend.getKubernetesClient
         .pods()
         .inNamespace(kubernetesTestComponents.namespace)
         .create(new PodBuilder()
@@ -98,6 +97,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
       Eventually.eventually(TIMEOUT, INTERVAL) {
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPodName)
           .getLog
           .contains("Pi is roughly 3"), "The application did not complete.")

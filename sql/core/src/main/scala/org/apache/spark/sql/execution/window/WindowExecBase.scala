@@ -190,7 +190,6 @@ trait WindowExecBase extends UnaryExecNode {
                 case _ => collect("AGGREGATE", frame, e, f)
               }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: PythonUDF => collect("AGGREGATE", frame, e, f)
             case f => throw new IllegalStateException(s"Unsupported window function: $f")
           }
         case _ =>
@@ -210,7 +209,7 @@ trait WindowExecBase extends UnaryExecNode {
         // in a single Window physical node. Therefore, we can assume no SQL aggregation
         // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
         // aggregation function in a single physical node.
-        def processor = if (functions.exists(_.isInstanceOf[PythonUDF])) {
+        def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
           AggregateProcessor(

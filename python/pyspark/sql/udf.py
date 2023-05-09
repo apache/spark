@@ -43,7 +43,7 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -178,10 +178,9 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
 
     def vectorized_udf(*args: pd.Series) -> pd.Series:
         if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
-            raise NotImplementedError(
-                "Struct input type are not supported with Arrow optimization "
-                "enabled in Python UDFs. Disable "
-                "'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_WITH_ARROW_OPTIMIZATION",
+                message_parameters={"feature": "Struct input type"},
             )
         return pd.Series(result_func(f(*a)) for a in zip(*args))
 
@@ -267,9 +266,12 @@ class UserDefinedFunction:
             try:
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
-                raise NotImplementedError(
-                    "Invalid return type with scalar Pandas UDFs: %s is "
-                    "not supported" % str(self._returnType_placeholder)
+                raise PySparkNotImplementedError(
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={
+                        "feature": f"Invalid return type with scalar Pandas UDFs: "
+                        f"{self._returnType_placeholder}"
+                    },
                 )
         elif (
             self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
@@ -279,10 +281,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type with grouped map Pandas UDFs or "
-                        "at groupby.applyInPandas(WithState): %s is not supported"
-                        % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type with grouped map Pandas UDFs or "
+                            f"at groupby.applyInPandas(WithState): {self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise PySparkTypeError(
@@ -301,9 +305,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type in mapInPandas: "
-                        "%s is not supported" % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type in mapInPandas: "
+                            f"{self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise PySparkTypeError(
@@ -318,9 +325,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type in cogroup.applyInPandas: "
-                        "%s is not supported" % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type in cogroup.applyInPandas: "
+                            f"{self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise PySparkTypeError(
@@ -337,9 +347,12 @@ class UserDefinedFunction:
                     raise TypeError
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
-                raise NotImplementedError(
-                    "Invalid  return type with grouped aggregate Pandas UDFs: "
-                    "%s is not supported" % str(self._returnType_placeholder)
+                raise PySparkNotImplementedError(
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={
+                        "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
+                        f"{self._returnType_placeholder}"
+                    },
                 )
 
         return self._returnType_placeholder
