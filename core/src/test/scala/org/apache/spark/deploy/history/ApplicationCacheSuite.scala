@@ -405,17 +405,15 @@ class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matcher
     // Wait for old SparkUI being removed from cache
     awaitRemoval.await()
 
+    // Loading of new SparkUI is blocked because old one has not been detached.
     val t2 = new Thread(() => cache.get(appId))
     t2.start()
     t2.join(100)
-
-    // Loading of new SparkUI is blocked because old one has not been detached.
     assert(loadCount == metrics.loadCount.getCount)
 
     // Unblock detach action and wait for loading of new SparkUI to complete.
     blockDetach.countDown()
     t2.join()
-
     assert(loadCount + 1 == metrics.loadCount.getCount)
   }
 }
