@@ -145,9 +145,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     val inlineCTE = InlineCTE(alwaysInline = true)
-    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
+    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, refCount) =>
+    cteMap.values.foreach { case (relation, refCount, _) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       if (refCount == 0) checkAnalysis0(relation.child)
@@ -330,7 +330,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   messageParameters = Map("aggFunc" -> agg.aggregateFunction.prettyName))
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
                   errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
@@ -403,14 +402,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if AggregateExpression.isAggregate(expr) =>
-                val aggFunction = expr match {
-                  case agg: AggregateExpression => agg.aggregateFunction
-                  case udf: PythonUDF => udf
-                }
+              case expr: AggregateExpression =>
+                val aggFunction = expr.aggregateFunction
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
+                    case expr: AggregateExpression =>
                       expr.failAnalysis(
                         errorClass = "NESTED_AGGREGATE_FUNCTION",
                         messageParameters = Map.empty)
@@ -935,7 +931,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           expr.failAnalysis(

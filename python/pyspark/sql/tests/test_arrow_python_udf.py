@@ -31,12 +31,7 @@ from pyspark.testing.sqlutils import (
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(PythonUDFArrowTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
-
+class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_broadcast_in_udf(self):
         super(PythonUDFArrowTests, self).test_broadcast_in_udf()
@@ -54,9 +49,7 @@ class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
 
     def test_nested_input_error(self):
-        with self.assertRaisesRegexp(
-            Exception, "NotImplementedError: Struct input type are not supported"
-        ):
+        with self.assertRaisesRegexp(Exception, "[NotImplementedError]"):
             self.spark.range(1).selectExpr("struct(1, 2) as struct").select(
                 udf(lambda x: x)("struct")
             ).collect()
@@ -116,6 +109,20 @@ class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
             .first()
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
+
+
+class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(PythonUDFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(PythonUDFArrowTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

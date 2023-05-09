@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
 import com.google.protobuf.DescriptorProtos.{FileDescriptorProto, FileDescriptorSet}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+import com.google.protobuf.TypeRegistry
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -282,5 +283,21 @@ private[sql] object ProtobufUtils extends Logging {
   private[protobuf] def toFieldStr(names: Seq[String]): String = names match {
     case Seq() => "top-level record"
     case n => s"field '${n.mkString(".")}'"
+  }
+
+  /** Builds [[TypeRegistry]] with all the messages found in the descriptor file. */
+  private[protobuf] def buildTypeRegistry(descFilePath: String): TypeRegistry = {
+    val registryBuilder = TypeRegistry.newBuilder()
+    for (fileDesc <- parseFileDescriptorSet(descFilePath)) {
+      registryBuilder.add(fileDesc.getMessageTypes)
+    }
+    registryBuilder.build()
+  }
+
+  /** Builds [[TypeRegistry]] with the descriptor and the others from the same proto file. */
+  private [protobuf] def buildTypeRegistry(descriptor: Descriptor): TypeRegistry = {
+    TypeRegistry.newBuilder()
+      .add(descriptor) // This adds any other descriptors in the associated proto file.
+      .build()
   }
 }

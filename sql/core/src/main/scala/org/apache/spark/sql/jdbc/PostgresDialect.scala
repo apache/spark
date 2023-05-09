@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, SQLException, Types}
+import java.sql.{Connection, SQLException, Timestamp, Types}
+import java.time.LocalDateTime
 import java.util
 import java.util.Locale
 
@@ -100,6 +101,14 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/1405
       None
     case _ => None
+  }
+
+  override def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    t.toLocalDateTime
+  }
+
+  override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    Timestamp.valueOf(ldt)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {

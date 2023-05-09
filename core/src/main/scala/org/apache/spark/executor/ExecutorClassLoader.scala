@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.repl
+package org.apache.spark.executor
 
 import java.io.{ByteArrayOutputStream, FileNotFoundException, FilterInputStream, InputStream}
 import java.net.{URI, URL, URLEncoder}
@@ -60,7 +60,7 @@ class ExecutorClassLoader(
   val parentLoader = new ParentClassLoader(parent)
 
   // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
-  private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
+  private[executor] var httpUrlConnectionTimeoutMillis: Int = -1
 
   private val fetchFn: (String) => InputStream = uri.getScheme() match {
     case "spark" => getClassFileInputStreamFromSparkRPC
@@ -269,5 +269,5 @@ extends ClassVisitor(ASM9, cv) {
  * throw a special one that's neither [[LinkageError]] nor [[ClassNotFoundException]] to make JVM
  * retry to load this class later.
  */
-private[repl] class RemoteClassLoaderError(className: String, cause: Throwable)
+private[executor] class RemoteClassLoaderError(className: String, cause: Throwable)
   extends Error(className, cause)

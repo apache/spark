@@ -27,18 +27,18 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   val attrInts = Seq(
     $"cint".int,
-    $"c.int".int,
+    $"`c.int`".int,
     GetStructField($"a".struct(StructType(
       StructField("cstr", StringType, nullable = true) ::
         StructField("cint", IntegerType, nullable = true) :: Nil)), 1, None),
     GetStructField($"a".struct(StructType(
       StructField("c.int", IntegerType, nullable = true) ::
         StructField("cstr", StringType, nullable = true) :: Nil)), 0, None),
-    GetStructField($"a.b".struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("cstr1", StringType, nullable = true) ::
         StructField("cstr2", StringType, nullable = true) ::
         StructField("cint", IntegerType, nullable = true) :: Nil)), 2, None),
-    GetStructField($"a.b".struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("c.int", IntegerType, nullable = true) :: Nil)), 0, None),
     GetStructField(GetStructField($"a".struct(StructType(
       StructField("cstr1", StringType, nullable = true) ::
@@ -56,18 +56,18 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
 
   val attrStrs = Seq(
     $"cstr".string,
-    $"c.str".string,
+    $"`c.str`".string,
     GetStructField($"a".struct(StructType(
       StructField("cint", IntegerType, nullable = true) ::
         StructField("cstr", StringType, nullable = true) :: Nil)), 1, None),
     GetStructField($"a".struct(StructType(
       StructField("c.str", StringType, nullable = true) ::
         StructField("cint", IntegerType, nullable = true) :: Nil)), 0, None),
-    GetStructField($"a.b".struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("cint1", IntegerType, nullable = true) ::
         StructField("cint2", IntegerType, nullable = true) ::
         StructField("cstr", StringType, nullable = true) :: Nil)), 2, None),
-    GetStructField($"a.b".struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("c.str", StringType, nullable = true) :: Nil)), 0, None),
     GetStructField(GetStructField($"a".struct(StructType(
       StructField("cint1", IntegerType, nullable = true) ::

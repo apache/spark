@@ -20,6 +20,7 @@ import typing
 import os
 import functools
 import unittest
+import uuid
 
 from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -73,6 +74,7 @@ if should_test_connect:
 class MockRemoteSession:
     def __init__(self):
         self.hooks = {}
+        self.session_id = str(uuid.uuid4())
 
     def set_hook(self, name, hook):
         self.hooks[name] = hook
@@ -87,7 +89,7 @@ class MockRemoteSession:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class PlanOnlyTestFixture(unittest.TestCase):
+class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
     @classmethod
     def _read_table(cls, table_name):
         return DataFrame.withPlan(Read(table_name), cls.connect)
@@ -146,7 +148,11 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         """
         Override this in subclasses to supply a more specific conf
         """
-        return SparkConf(loadDefaults=False)
+        conf = SparkConf(loadDefaults=False)
+        # Disable JVM stack trace in Spark Connect tests to prevent the
+        # HTTP header size from exceeding the maximum allowed size.
+        conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "false")
+        return conf
 
     @classmethod
     def setUpClass(cls):

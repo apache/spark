@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalShortType}
 
 /**
  * The data type representing `Short` values. Please use the singleton `DataTypes.ShortType`.
@@ -29,18 +26,10 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalShortType}
  */
 @Stable
 class ShortType private() extends IntegralType {
-  // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "ShortType$" in byte code.
-  // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Short
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
   /**
    * The default size of a value of the ShortType is 2 bytes.
    */
   override def defaultSize: Int = 2
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalShortType
 
   override def simpleString: String = "smallint"
 

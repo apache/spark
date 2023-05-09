@@ -22,7 +22,7 @@ import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Properties, UUID}
+import java.util.{Collections, Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
@@ -38,7 +38,6 @@ import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
-import org.apache.hadoop.util.VersionInfo
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -62,7 +61,7 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{CallerContext, Utils, VersionUtils, YarnContainerInfoHelper}
+import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -76,10 +75,6 @@ private[spark] class Client(
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
-
-  // ContainerLaunchContext.setTokensConf is only available in Hadoop 2.9+ and 3.x, so here we use
-  // reflection to avoid compilation for Hadoop 2.7 profile.
-  private val SET_TOKENS_CONF_METHOD = "setTokensConf"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var appMaster: ApplicationMaster = _
@@ -294,7 +289,7 @@ private[spark] class Client(
     }
 
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(amMemory + amMemoryOverhead)
+    capability.setMemorySize(amMemory + amMemoryOverhead)
     capability.setVirtualCores(amCores)
     if (amResources.nonEmpty) {
       ResourceRequestHelper.setResourceRequests(amResources, capability)
@@ -309,7 +304,7 @@ private[spark] class Client(
         amRequest.setCapability(capability)
         amRequest.setNumContainers(1)
         amRequest.setNodeLabelExpression(expr)
-        appContext.setAMContainerResourceRequest(amRequest)
+        appContext.setAMContainerResourceRequests(Collections.singletonList(amRequest))
       case None =>
         appContext.setResource(capability)
     }
@@ -362,36 +357,20 @@ private[spark] class Client(
   private def setTokenConf(amContainer: ContainerLaunchContext): Unit = {
     // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
     // for fetching delegation tokens. See YARN-5910 for more details.
-    val regex = sparkConf.get(config.AM_TOKEN_CONF_REGEX)
-    // The feature is only supported in Hadoop 2.9+ and 3.x, hence the check below.
-    val isSupported = VersionUtils.majorMinorVersion(VersionInfo.getVersion) match {
-      case (2, n) if n >= 9 => true
-      case (3, _) => true
-      case _ => false
-    }
-    if (regex.nonEmpty && isSupported) {
+    sparkConf.get(config.AM_TOKEN_CONF_REGEX).foreach { regex =>
       logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
-      val dob = new DataOutputBuffer();
-      val copy = new Configuration(false);
-      copy.clear();
+      val dob = new DataOutputBuffer()
+      val copy = new Configuration(false)
+      copy.clear()
       hadoopConf.asScala.foreach { entry =>
-        if (entry.getKey.matches(regex.get)) {
+        if (entry.getKey.matches(regex)) {
           copy.set(entry.getKey, entry.getValue)
           logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
         }
       }
       copy.write(dob);
 
-      // since this method was added in Hadoop 2.9 and 3.0, we use reflection here to avoid
-      // compilation error for Hadoop 2.7 profile.
-      val setTokensConfMethod = try {
-        amContainer.getClass.getMethod(SET_TOKENS_CONF_METHOD, classOf[ByteBuffer])
-      } catch {
-        case _: NoSuchMethodException =>
-          throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
-              s" Please check YARN version and make sure it is 2.9+ or 3.x")
-      }
-      setTokensConfMethod.invoke(amContainer, ByteBuffer.wrap(dob.getData))
+      amContainer.setTokensConf(ByteBuffer.wrap(dob.getData))
     }
   }
 
@@ -410,7 +389,7 @@ private[spark] class Client(
    * Fail fast if we have requested more resources per container than is available in the cluster.
    */
   private def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
-    val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
+    val maxMem = newAppResponse.getMaximumResourceCapability.getMemorySize
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem =

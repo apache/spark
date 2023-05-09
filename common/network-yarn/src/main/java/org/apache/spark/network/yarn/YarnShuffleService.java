@@ -28,6 +28,7 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -59,6 +60,7 @@ import org.apache.spark.network.crypto.AuthServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.shuffle.AppsWithRecoveryDisabled;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
@@ -135,6 +137,12 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String INTEGRATION_TESTING = "spark.yarn.shuffle.testing";
 
   private static final boolean DEFAULT_STOP_ON_FAILURE = false;
+
+  @VisibleForTesting
+  static final String SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED =
+      "spark.yarn.shuffle.server.recovery.disabled";
+  @VisibleForTesting
+  static final String SECRET_KEY = "secret";
 
   // just for testing when you want to find an open port
   @VisibleForTesting
@@ -407,10 +415,30 @@ public class YarnShuffleService extends AuxiliaryService {
   public void initializeApplication(ApplicationInitializationContext context) {
     String appId = context.getApplicationId().toString();
     try {
-      ByteBuffer shuffleSecret = context.getApplicationDataForService();
+      ByteBuffer appServiceData = context.getApplicationDataForService();
+      String payload = JavaUtils.bytesToString(appServiceData);
+      String shuffleSecret;
+      Map<String, Object> metaInfo;
+      try {
+        metaInfo = mapper.readValue(payload,
+            new TypeReference<Map<String, Object>>() {});
+        Object metadataStorageVal = metaInfo.get(SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED);
+        if (metadataStorageVal != null && (Boolean) metadataStorageVal) {
+          AppsWithRecoveryDisabled.disableRecoveryOfApp(appId);
+          logger.info("Disabling metadata persistence for application {}", appId);
+        }
+      } catch (IOException ioe) {
+        logger.warn("Unable to parse application data for service: " + payload);
+        metaInfo = null;
+      }
       if (isAuthenticationEnabled()) {
-        AppId fullId = new AppId(appId);
-        if (db != null) {
+        if (metaInfo != null) {
+          shuffleSecret = (String) metaInfo.get(SECRET_KEY);
+        } else {
+          shuffleSecret = payload;
+        }
+        if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
+          AppId fullId = new AppId(appId);
           byte[] key = dbAppKey(fullId);
           byte[] value = mapper.writeValueAsString(shuffleSecret).getBytes(StandardCharsets.UTF_8);
           db.put(key, value);
@@ -428,7 +456,7 @@ public class YarnShuffleService extends AuxiliaryService {
     try {
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
-        if (db != null) {
+        if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
           try {
             db.delete(dbAppKey(fullId));
           } catch (IOException e) {
@@ -440,6 +468,8 @@ public class YarnShuffleService extends AuxiliaryService {
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);
+    } finally {
+      AppsWithRecoveryDisabled.removeApp(appId);
     }
   }
 

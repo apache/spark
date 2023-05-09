@@ -320,7 +320,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
+      RewriteUpdateTable ::
       typeCoercionRules ++
       Seq(
         ResolveWithCTE,
@@ -605,7 +607,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         groupingAttrs: Seq[Expression],
         gid: Attribute): Seq[NamedExpression] = {
       def replaceExprs(e: Expression): Expression = e match {
-        case e if AggregateExpression.isAggregate(e) => e
+        case e: AggregateExpression => e
         case e =>
           // Replace expression by expand output attribute.
           val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
@@ -863,9 +865,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // Support any aggregate expression that can appear in an Aggregate plan except Pandas UDF.
     // TODO: Support Pandas UDF.
     private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-      case _: AggregateExpression => // OK and leave the argument check to CheckAnalysis.
-      case expr: PythonUDF if PythonUDF.isGroupedAggPandasUDF(expr) =>
-        throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
+      case a: AggregateExpression =>
+        if (a.aggregateFunction.isInstanceOf[PythonUDAF]) {
+          throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
+        } else {
+          // OK and leave the argument check to CheckAnalysis.
+        }
       case e: Attribute =>
         throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
       case e => e.children.foreach(checkValidAggregateExpression)
@@ -1817,7 +1822,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             "sqlExpr" -> a.sql,
             "cols" -> cols))
       }
-      resolved
+      resolved match {
+        case Alias(child: ExtractValue, _) => child
+        case other => other
+      }
     }
 
     // Expand the star expression using the input plan first. If failed, try resolve
@@ -2263,6 +2271,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           }
         // We get an aggregate function, we need to wrap it in an AggregateExpression.
         case agg: AggregateFunction =>
+          // Note: PythonUDAF does not support these advanced clauses.
+          if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
+
           u.filter match {
             case Some(filter) if !filter.deterministic =>
               throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
@@ -2288,25 +2299,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             agg.toAggregateExpression(u.isDistinct, u.filter)
           }
         // This function is not an aggregate function, just return the resolved one.
-        case other if u.isDistinct =>
-          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-            other.prettyName, "DISTINCT")
-        case other if u.filter.isDefined =>
-          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-            other.prettyName, "FILTER clause")
-        case other if u.ignoreNulls =>
-          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-            other.prettyName, "IGNORE NULLS")
-        case e: String2TrimExpression if numArgs == 2 =>
-          if (trimWarningEnabled.get) {
-            log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-              " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-              " instead.")
-            trimWarningEnabled.set(false)
-          }
-          e
         case other =>
+          checkUnsupportedAggregateClause(other, u)
+          if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
+            if (trimWarningEnabled.get) {
+              log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                " instead.")
+              trimWarningEnabled.set(false)
+            }
+          }
           other
+      }
+    }
+
+    private def checkUnsupportedAggregateClause(func: Expression, u: UnresolvedFunction): Unit = {
+      if (u.isDistinct) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          func.prettyName, "DISTINCT")
+      }
+      if (u.filter.isDefined) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          func.prettyName, "FILTER clause")
+      }
+      if (u.ignoreNulls) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          func.prettyName, "IGNORE NULLS")
       }
     }
 
@@ -2417,14 +2435,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _) if !sub.resolved =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
-            ListQuery(plan, exprs, exprId, plan.output)
+            ListQuery(plan, exprs, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
@@ -2494,17 +2512,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val windowedAggExprs: Set[Expression] = exprs.flatMap { expr =>
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
-          case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
           case UnresolvedWindowExpression(ae: AggregateExpression, _) => ae
-          case UnresolvedWindowExpression(e: PythonUDF, _)
-            if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.exists {
         case ae: AggregateExpression => !windowedAggExprs.contains(ae)
-        case e: PythonUDF => PythonUDF.isGroupedAggPandasUDF(e) && !windowedAggExprs.contains(e)
         case _ => false
       })
     }
@@ -3329,43 +3343,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           v2Write
         }
-
-      case u: UpdateTable if !u.skipSchemaResolution && u.resolved =>
-        resolveAssignments(u)
-
-      case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
-        resolveAssignments(m)
-    }
-
-    private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
-      p.transformExpressions {
-        case assignment: Assignment =>
-          val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
-            AssertNotNull(assignment.value)
-          } else {
-            assignment.value
-          }
-          val casted = if (assignment.key.dataType != nullHandled.dataType) {
-            val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
-            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-            cast
-          } else {
-            nullHandled
-          }
-          val rawKeyType = assignment.key.transform {
-            case a: AttributeReference =>
-              CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
-          }.dataType
-          val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
-            CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
-          } else {
-            casted
-          }
-          val cleanedKey = assignment.key.transform {
-            case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-          }
-          Assignment(cleanedKey, finalValue)
-      }
     }
   }
 

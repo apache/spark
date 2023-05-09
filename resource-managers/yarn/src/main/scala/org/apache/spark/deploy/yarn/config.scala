@@ -80,8 +80,7 @@ package object config extends Logging {
 
   private[spark] val AM_TOKEN_CONF_REGEX =
     ConfigBuilder("spark.yarn.am.tokenConfRegex")
-      .doc("This config is only supported when Hadoop version is 2.9+ or 3.x (e.g., when using " +
-        "the Hadoop 3.x profile). The value of this config is a regex expression used to grep a " +
+      .doc("The value of this config is a regex expression used to grep a " +
         "list of config entries from the job's configuration file (e.g., hdfs-site.xml) and send " +
         "to RM, which uses them when renewing delegation tokens. A typical use case of this " +
         "feature is to support delegation tokens in an environment where a YARN cluster needs to " +
@@ -93,14 +92,6 @@ package object config extends Logging {
         "similar to 'mapreduce.job.send-token-conf'. Please check YARN-5910 for more details.")
       .version("3.3.0")
       .stringConf
-      .createOptional
-
-  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
-    ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
-      .doc("Interval after which Executor failures will be considered independent and not " +
-        "accumulate towards the attempt count.")
-      .version("2.0.0")
-      .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val MAX_APP_ATTEMPTS = ConfigBuilder("spark.yarn.maxAppAttempts")
@@ -277,11 +268,6 @@ package object config extends Logging {
       .version("1.2.0")
       .intConf
       .createWithDefault(25)
-
-  private[spark] val MAX_EXECUTOR_FAILURES = ConfigBuilder("spark.yarn.max.executor.failures")
-    .version("1.0.0")
-    .intConf
-    .createOptional
 
   private[spark] val MAX_REPORTER_THREAD_FAILURES =
     ConfigBuilder("spark.yarn.scheduler.reporterThread.maxFailures")

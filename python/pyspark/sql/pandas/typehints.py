@@ -18,6 +18,7 @@ from inspect import Signature
 from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
 
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -132,7 +133,10 @@ def infer_eval_type(
     elif is_series_or_frame_agg:
         return PandasUDFType.GROUPED_AGG
     else:
-        raise NotImplementedError("Unsupported signature: %s." % sig)
+        raise PySparkNotImplementedError(
+            error_class="UNSUPPORTED_SIGNATURE",
+            message_parameters={"signature": str(sig)},
+        )
 
 
 def check_tuple_annotation(
@@ -161,7 +165,7 @@ def check_union_annotation(
     import typing
 
     # Note that we cannot rely on '__origin__' in other type hints as it has changed from version
-    # to version. For example, it's abc.Iterator in Python 3.7 but typing.Iterator in Python 3.6.
+    # to version.
     origin = getattr(annotation, "__origin__", None)
     return origin == typing.Union and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))

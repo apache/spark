@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.InputStream
+import java.io.{ByteArrayInputStream, InputStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
+import java.util.Arrays
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.{CheckedInputStream, CRC32}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
@@ -30,6 +33,7 @@ import Artifact._
 import com.google.protobuf.ByteString
 import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
+import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
@@ -40,14 +44,26 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
  * client to the server (local/remote).
  * @param userContext
+ * @param sessionId
+ *   An unique identifier of the session which the artifact manager belongs to.
  * @param channel
  */
-class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
+class ArtifactManager(
+    userContext: proto.UserContext,
+    sessionId: String,
+    channel: ManagedChannel) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newStub(channel)
+  private[this] val bstub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+  private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
+
+  /**
+   * Register a [[ClassFinder]] for dynamically generated classes.
+   */
+  def registerClassFinder(finder: ClassFinder): Unit = classFinders.add(finder)
 
   /**
    * Add a single artifact to the session.
@@ -92,10 +108,48 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
    */
   def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
 
+  private def isCachedArtifact(hash: String): Boolean = {
+    val artifactName = CACHE_PREFIX + "/" + hash
+    val request = proto.ArtifactStatusesRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .addAllNames(Arrays.asList(artifactName))
+      .build()
+    val statuses = bstub.artifactStatus(request).getStatusesMap
+    if (statuses.containsKey(artifactName)) {
+      statuses.get(artifactName).getExists
+    } else false
+  }
+
+  /**
+   * Cache the give blob at the session.
+   */
+  def cacheArtifact(blob: Array[Byte]): String = {
+    val hash = sha256Hex(blob)
+    if (!isCachedArtifact(hash)) {
+      addArtifacts(newCacheArtifact(hash, new InMemory(blob)) :: Nil)
+    }
+    hash
+  }
+
+  /**
+   * Upload all class file artifacts from the local REPL(s) to the server.
+   *
+   * The registered [[ClassFinder]]s are traversed to retrieve the class file artifacts.
+   */
+  private[client] def uploadAllClassFileArtifacts(): Unit = {
+    addArtifacts(classFinders.asScala.flatMap(_.findClasses()))
+  }
+
   /**
    * Add a number of artifacts to the session.
    */
   private def addArtifacts(artifacts: Iterable[Artifact]): Unit = {
+    if (artifacts.isEmpty) {
+      return
+    }
+
     val promise = Promise[Seq[ArtifactSummary]]
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
@@ -161,6 +215,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
       .setUserContext(userContext)
+      .setSessionId(sessionId)
     artifacts.foreach { artifact =>
       val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
       try {
@@ -215,6 +270,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
       .setUserContext(userContext)
+      .setSessionId(sessionId)
 
     val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
     try {
@@ -268,6 +324,7 @@ class Artifact private (val path: Path, val storage: LocalData) {
 object Artifact {
   val CLASS_PREFIX: Path = Paths.get("classes")
   val JAR_PREFIX: Path = Paths.get("jars")
+  val CACHE_PREFIX: Path = Paths.get("cache")
 
   def newJarArtifact(fileName: Path, storage: LocalData): Artifact = {
     newArtifact(JAR_PREFIX, ".jar", fileName, storage)
@@ -275,6 +332,10 @@ object Artifact {
 
   def newClassArtifact(fileName: Path, storage: LocalData): Artifact = {
     newArtifact(CLASS_PREFIX, ".class", fileName, storage)
+  }
+
+  def newCacheArtifact(id: String, storage: LocalData): Artifact = {
+    newArtifact(CACHE_PREFIX, "", Paths.get(id), storage)
   }
 
   private def newArtifact(
@@ -302,4 +363,13 @@ object Artifact {
     override def size: Long = Files.size(path)
     override def stream: InputStream = Files.newInputStream(path)
   }
+
+  /**
+   * Payload stored in memory.
+   */
+  class InMemory(bytes: Array[Byte]) extends LocalData {
+    override def size: Long = bytes.length
+    override def stream: InputStream = new ByteArrayInputStream(bytes)
+  }
+
 }
