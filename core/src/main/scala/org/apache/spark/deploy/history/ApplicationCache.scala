@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -48,11 +48,24 @@ private[history] class ApplicationCache(
     val retainedApplications: Int,
     val clock: Clock) extends Logging {
 
+  /**
+   * Keep track of SparkUIs in [[ApplicationCache#appCache]] and SparkUIs removed from
+   * [[ApplicationCache#appCache]] but not destroyed yet.
+   */
+  private val loadedApps = new ConcurrentHashMap[CacheKey, CountDownLatch]()
+
   private val appLoader = new CacheLoader[CacheKey, CacheEntry] {
 
     /** the cache key doesn't match a cached entry, or the entry is out-of-date, so load it. */
     override def load(key: CacheKey): CacheEntry = {
-      loadApplicationEntry(key.appId, key.attemptId)
+      // Ensure current SparkUI has been detached before trying to load new one.
+      val removalLatch = loadedApps.get(key)
+      if (removalLatch != null) {
+        removalLatch.await()
+      }
+      val entry = loadApplicationEntry(key.appId, key.attemptId)
+      loadedApps.put(key, new CountDownLatch(1))
+      entry
     }
 
   }
@@ -63,11 +76,13 @@ private[history] class ApplicationCache(
      * Removal event notifies the provider to detach the UI.
      * @param rm removal notification
      */
-    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
+    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = try {
       metrics.evictionCount.inc()
       val key = rm.getKey
       logDebug(s"Evicting entry ${key}")
       operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().loadedUI.ui)
+    } finally {
+      loadedApps.remove(rm.getKey()).countDown()
     }
   }
 
