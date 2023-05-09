@@ -781,13 +781,20 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("CreateTableAsSelect: nullable schema") {
+    registerCatalog("testcat_nullability", classOf[ReserveSchemaNullabilityCatalog])
+
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val reserveNullabilityCatalog = catalog("testcat_nullability").asTableCatalog
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
+    val reserveNullabilityIdentifier = "testcat_nullability.table_name"
 
-    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
-      case (catalog, identifier) =>
+    Seq(
+      (basicCatalog, basicIdentifier, true),
+      (atomicCatalog, atomicIdentifier, true),
+      (reserveNullabilityCatalog, reserveNullabilityIdentifier, false)).foreach {
+      case (catalog, identifier, nullable) =>
         spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT 1 i")
 
         val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -795,14 +802,24 @@ class DataSourceV2SQLSuiteV1Filter
         assert(table.name == identifier)
         assert(table.partitioning.isEmpty)
         assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
-        assert(table.schema == new StructType().add("i", "int"))
+        assert(table.schema == new StructType().add("i", "int", nullable))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
         checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Row(1))
 
-        sql(s"INSERT INTO $identifier SELECT CAST(null AS INT)")
-        val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-        checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq(Row(1), Row(null)))
+        def insertNullValueAndCheck(): Unit = {
+          sql(s"INSERT INTO $identifier SELECT CAST(null AS INT)")
+          val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+          checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq(Row(1), Row(null)))
+        }
+        if (nullable) {
+          insertNullValueAndCheck()
+        } else {
+          val e = intercept[Exception] {
+            insertNullValueAndCheck()
+          }
+          assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+        }
     }
   }
 
@@ -2311,7 +2328,7 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
 
     try {
       sql("create global temp view v as select 1")
@@ -2336,7 +2353,7 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("SPARK-30104: v2 catalog named global_temp will be masked") {
     val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
     checkError(
       exception = intercept[AnalysisException] {
         // Since the following multi-part name starts with `globalTempDB`, it is resolved to
@@ -2543,7 +2560,7 @@ class DataSourceV2SQLSuiteV1Filter
       context = ExpectedContext(fragment = "testcat.abc", start = 17, stop = 27))
 
     val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    registerCatalog(globalTempDB, classOf[InMemoryTableCatalog])
     withTempView("v") {
       sql("create global temp view v as select 1")
       checkError(
@@ -3260,4 +3277,8 @@ class FakeV2Provider extends SimpleTableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
+}
+
+class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
+  override def useNullableQuerySchema(): Boolean = false
 }

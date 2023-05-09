@@ -1016,11 +1016,6 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
-      "AES_SALTED_MAGIC" : {
-        "message" : [
-          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
-        ]
-      },
       "PATTERN" : {
         "message" : [
           "<value>."
