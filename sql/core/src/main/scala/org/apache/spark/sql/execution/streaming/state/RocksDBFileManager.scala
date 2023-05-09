@@ -262,10 +262,6 @@ class RocksDBFileManager(
     getLatestDeltaVersion(Long.MaxValue).max(getLatestSnapshotVersion(Long.MaxValue))
   }
 
-  def getLastUploadedSnapshotVersion(): Long = {
-    versionToRocksDBFiles.keys().asScala.foldLeft(0L)(math.max)
-  }
-
   /**
    * Find orphan files which are not tracked by zip files.
    * Both sst files and log files can be orphan files.

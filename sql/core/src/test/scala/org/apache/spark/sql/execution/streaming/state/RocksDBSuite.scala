@@ -167,19 +167,25 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.cleanup()
       assert(snapshotVersionsPresent(remoteDir) === Seq(3))
       db.load(3)
-      for (i <- 1 to 1001) {
+      for (i <- 1 to 10001) {
         db.put(i.toString, i.toString)
       }
       db.commit()
       db.cleanup()
       // Snapshot should be created this time because the size of the change log > 1000
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4))
-      for (version <- 4 to 6) {
+      for (version <- 4 to 7) {
         db.load(version)
         db.commit()
         db.cleanup()
       }
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7))
+      for (version <- 8 to 20) {
+        db.load(version)
+        db.commit()
+      }
+      db.cleanup()
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7, 19))
     }
   }
 

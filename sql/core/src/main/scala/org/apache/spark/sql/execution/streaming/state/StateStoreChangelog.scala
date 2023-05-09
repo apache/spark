@@ -158,6 +158,7 @@ class StateStoreChangelogReader(fm: CheckpointFileManager, fileToRead: Path,
         throw new IOException(
           s"Error reading streaming state file $fileToRead of $this: key size cannot be $keySize")
       } else {
+        // TODO: reuse the key buffer and value buffer across records.
         val keyBuffer = new Array[Byte](keySize)
         ByteStreams.readFully(input, keyBuffer, 0, keySize)
         val valueSize = input.readInt()
