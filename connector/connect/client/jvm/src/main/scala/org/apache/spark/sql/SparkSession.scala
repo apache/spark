@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
@@ -55,14 +57,12 @@ import org.apache.spark.sql.types.StructType
  *
  * {{{
  *   SparkSession.builder
- *     .master("local")
- *     .appName("Word Count")
- *     .config("spark.some.config.option", "some-value")
+ *     .remote("sc://localhost:15001/myapp")
  *     .getOrCreate()
  * }}}
  */
 class SparkSession private[sql] (
-    private val client: SparkConnectClient,
+    private[sql] val client: SparkConnectClient,
     private val cleaner: Cleaner,
     private val planIdGenerator: AtomicLong)
     extends Serializable
@@ -541,13 +541,37 @@ class SparkSession private[sql] (
   override def close(): Unit = {
     client.shutdown()
     allocator.close()
+    SparkSession.onSessionClose(this)
   }
 }
 
 // The minimal builder needed to create a spark session.
 // TODO: implements all methods mentioned in the scaladoc of [[SparkSession]]
 object SparkSession extends Logging {
+  private val MAX_CACHED_SESSIONS = 100
   private val planIdGenerator = new AtomicLong
+
+  private val sessions = CacheBuilder
+    .newBuilder()
+    .weakValues()
+    .maximumSize(MAX_CACHED_SESSIONS)
+    .build(new CacheLoader[Configuration, SparkSession] {
+      override def load(c: Configuration): SparkSession = create(c)
+    })
+
+  /**
+   * Create a new [[SparkSession]] based on the connect client [[Configuration]].
+   */
+  private[sql] def create(configuration: Configuration): SparkSession = {
+    new SparkSession(new SparkConnectClient(configuration), cleaner, planIdGenerator)
+  }
+
+  /**
+   * Hook called when a session is closed.
+   */
+  private[sql] def onSessionClose(session: SparkSession): Unit = {
+    sessions.invalidate(session.client.configuration)
+  }
 
   def builder(): Builder = new Builder()
 
@@ -558,24 +582,50 @@ object SparkSession extends Logging {
   }
 
   class Builder() extends Logging {
-    private var _client: SparkConnectClient = _
+    private val builder = SparkConnectClient.builder()
+    private var client: SparkConnectClient = _
 
     def remote(connectionString: String): Builder = {
-      client(SparkConnectClient.builder().connectionString(connectionString).build())
+      builder.connectionString(connectionString)
       this
     }
 
     private[sql] def client(client: SparkConnectClient): Builder = {
-      _client = client
+      this.client = client
       this
     }
 
-    def build(): SparkSession = {
-      if (_client == null) {
-        _client = SparkConnectClient.builder().build()
+    private def tryCreateSessionFromClient(): Option[SparkSession] = {
+      if (client != null) {
+        Option(new SparkSession(client, cleaner, planIdGenerator))
+      } else {
+        None
       }
-      new SparkSession(_client, cleaner, planIdGenerator)
     }
+
+    /**
+     * Build the [[SparkSession]].
+     *
+     * This will try to reuse an existing session if has the same configuration.
+     */
+    def build(): SparkSession = {
+      tryCreateSessionFromClient().getOrElse(sessions.get(builder.configuration))
+    }
+
+    /**
+     * Create a new [[SparkSession]].
+     *
+     * This will always return a newly created session.
+     */
+    def create(): SparkSession = {
+      tryCreateSessionFromClient().getOrElse(SparkSession.this.create(builder.configuration))
+    }
+
+    /**
+     * Get or create a [[SparkSession]]. If a session exist with the same configuration that is
+     * returned instead of creating a new session.
+     */
+    def getOrCreate(): SparkSession = build()
   }
 
   def getActiveSession: Option[SparkSession] = {
