@@ -34,7 +34,7 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevel
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
-import org.apache.spark.sql.types.{Metadata, StructField, StructType}
+import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -873,9 +873,8 @@ class Dataset[T] private[sql] (
         throw new IllegalArgumentException(s"Unsupported join type '$e'.")
     }
 
-    val leftRightAsStruct: StructType = StructType(
-      StructField("left", this.encoder.dataType, this.encoder.nullable) ::
-        StructField("right", other.encoder.dataType, other.encoder.nullable) :: Nil)
+    def isRowStruct(enc: AgnosticEncoder[_]): Boolean =
+      enc.dataType.isInstanceOf[StructType] && !enc.isInstanceOf[OptionEncoder[_]]
 
     val tupleEncoder = ProductEncoder
       .tuple(Seq(this.encoder, other.encoder), Some(joinedNullables))
@@ -888,7 +887,8 @@ class Dataset[T] private[sql] (
         .setRight(other.plan.getRoot)
         .setJoinType(joinTypeValue)
         .setJoinCondition(condition.expr)
-        .setLeftRightAsStruct(DataTypeProtoConverter.toConnectProtoType(leftRightAsStruct))
+        .setIsLeftRowStruct(isRowStruct(this.encoder))
+        .setIsRightRowStruct(isRowStruct(other.encoder))
     }
   }
 

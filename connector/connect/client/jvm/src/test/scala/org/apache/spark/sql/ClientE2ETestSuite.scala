@@ -1158,7 +1158,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     import session.implicits._
     val ds1 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("a")
     val ds2 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("b")
-    // TODO: The server side need to know the type is an option or not.
     val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
     checkSameResult(Seq((Some((2, 3)), Some((1, 2)))), joined)
   }

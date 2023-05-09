@@ -226,9 +226,12 @@ message Join {
     JOIN_TYPE_CROSS = 7;
   }
 
-  // Optional. Only provide the join left and right data types in a new struct when using joinWith
-  // where the result is a Dataset.
-  optional DataType left_right_as_struct = 6;
+  // Optional. set to true if the left is a struct that can be flattened to a row. Only used by
+  // JoinWith where the left is a dataset.
+  optional bool is_left_row_struct = 6;
+  // Optional. set to true if the right is a struct that can be flattened to a row. Only used by
+  // JoinWith where the right is a dataset.
+  optional bool is_right_row_struct = 7;
 }
 
 // Relation of type [[SetOperation]]

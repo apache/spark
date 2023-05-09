@@ -2070,30 +2070,16 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     val joined =
       session.sessionState.executePlan(transformJoin(rel)).analyzed.asInstanceOf[logical.Join]
 
-    val (isLeftEncStruct, isRightEncStruct) = {
-      val dataType = transformDataType(rel.getLeftRightAsStruct)
-      assert(dataType.isInstanceOf[StructType])
-      val schema = dataType.asInstanceOf[StructType]
-      // assert left & right
-      assert(schema.fields.length == 2)
-      assert(schema.fields(0).name == "left")
-      assert(schema.fields(1).name == "right")
-
-      val isNonNullableStruct: StructField => Boolean =
-        f => f.dataType.isInstanceOf[StructType] // TODO: && !Option
-      (isNonNullableStruct(schema.fields(0)), isNonNullableStruct(schema.fields(1)))
-    }
-
     JoinWith.typedJoinWith(
       joined,
       session.sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       session.sessionState.analyzer.resolver,
-      isLeftEncStruct,
-      isRightEncStruct)
+      rel.getIsLeftRowStruct,
+      rel.getIsRightRowStruct)
   }
 
   private def transformJoinOrJoinWith(rel: proto.Join): LogicalPlan = {
-    if (rel.hasLeftRightAsStruct) {
+    if (rel.hasIsLeftRowStruct && rel.hasIsRightRowStruct) {
       transformJoinWith(rel)
     } else {
       transformJoin(rel)

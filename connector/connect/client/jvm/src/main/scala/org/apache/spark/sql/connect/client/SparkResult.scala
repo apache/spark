@@ -50,14 +50,14 @@ private[sql] class SparkResult[T](
   private val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
-    val agnosticEncoder = updateProductEncoder(encoder, schema).asInstanceOf[AgnosticEncoder[T]]
+    val agnosticEncoder = createEncoder(encoder, schema).asInstanceOf[AgnosticEncoder[T]]
     ExpressionEncoder(agnosticEncoder)
   }
 
   /**
-   * Recursively update the fields of the ProductEncoder fields.
+   * Update RowEncoder and recursively update the fields of the ProductEncoder if found.
    */
-  private def updateProductEncoder[_](
+  private def createEncoder[_](
       enc: AgnosticEncoder[_],
       dataType: DataType): AgnosticEncoder[_] = {
     enc match {
@@ -69,7 +69,7 @@ private[sql] class SparkResult[T](
         val schema = dataType.asInstanceOf[StructType]
         assert(fields.length == schema.fields.length)
         val updatedFields = fields.zipWithIndex.map { case (f, id) =>
-          f.copy(enc = updateProductEncoder(f.enc, schema.fields(id).dataType))
+          f.copy(enc = createEncoder(f.enc, schema.fields(id).dataType))
         }
         ProductEncoder(clsTag, updatedFields)
       case _ =>
