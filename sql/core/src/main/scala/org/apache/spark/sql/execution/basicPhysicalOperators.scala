@@ -65,12 +65,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     references.filter(a => usedMoreThanOnce.contains(a.exprId))
   }
 
-  override def reusableExpressions(): (Seq[Expression], Seq[Attribute]) =
-    (projectList, child.output)
-
-
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val exprs = bindReferences[Expression](projectList, child.output)
+    initBlock += ctx.subexpressionElimination(exprs: _*)
     val resultVars = exprs.map(_.genCode(ctx))
 
     // Evaluation of non-deterministic expressions can't be deferred.
@@ -169,6 +166,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
+    initBlock +=
+      ctx.subexpressionElimination(otherPreds.map(BindReferences.bindReference(_, inputAttrs)): _*)
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
@@ -236,9 +235,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
-
-  override def reusableExpressions(): (Seq[Expression], Seq[Attribute]) =
-    (otherPreds, child.output)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")

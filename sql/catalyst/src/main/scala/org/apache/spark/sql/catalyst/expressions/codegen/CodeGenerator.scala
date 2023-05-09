@@ -1027,20 +1027,19 @@ class CodegenContext extends Logging {
     splitExpressions(subexprFunctions.toSeq, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
+  /**
+   * Collect all commons expressions and return the initialization code block.
+   * @param expressions
+   * @return
+   */
   def subexpressionElimination(expressions: Seq[Expression]): Block = {
     var initBlock: Block = EmptyBlock
     if (SQLConf.get.subexpressionEliminationEnabled) {
       val equivalence = new EquivalentExpressions
-      wholeStageSubexpressionElimination(expressions, equivalence)
+      expressions.map(equivalence.addExprTree(_))
       equivalence.getAllExprStates(1).map(initBlock += initCommonExpression(_))
     }
     initBlock
-  }
-
-  def wholeStageSubexpressionElimination(
-       expressions: Seq[Expression],
-       equivalence: EquivalentExpressions): Unit = {
-    expressions.map(equivalence.addExprTree(_))
   }
 
   def initCommonExpression(stats: ExpressionStats): Block = {
