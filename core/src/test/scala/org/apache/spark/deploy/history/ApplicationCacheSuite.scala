@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
+import java.util.concurrent.CountDownLatch
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
@@ -381,4 +382,41 @@ class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matcher
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }
 
+  test("Load new SparkUI before current one detached") {
+    val awaitRemoval = new CountDownLatch(1)
+    val blockDetach = new CountDownLatch(1)
+    val operations = new StubCacheOperations() {
+      override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
+        awaitRemoval.countDown()
+        super.detachSparkUI(appId, attemptId, ui)
+        blockDetach.await()
+      }
+    }
+    val cache = new ApplicationCache(operations, 2, new ManualClock())
+    val metrics = cache.metrics
+    val appId = "app1"
+    operations.putAndAttach(appId, None, true, 0, 10)
+    cache.get(appId)
+    val loadCount = metrics.loadCount.getCount
+
+    val t1 = new Thread(() => cache.invalidate(CacheKey(appId, None)))
+    t1.start()
+
+    // Wait for SparkUI being removed from cache
+    awaitRemoval.await()
+
+    val t2 = new Thread(() => cache.get(appId))
+    t2.start()
+    t2.join(100)
+
+    // Loading of new SparkUI is blocked because current one has not been detached.
+    assert(loadCount == metrics.loadCount.getCount)
+
+    // Unblock detach action and wait for loading of new SparkUI to complete.
+    blockDetach.countDown()
+    t2.join()
+
+    // Start loading of new SparkUI after current one detached.
+    assert(loadCount + 1 == metrics.loadCount.getCount)
+  }
 }
