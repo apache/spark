@@ -16,7 +16,8 @@
 #
 import functools
 import os
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar
+from collections.abc import Iterator
+from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union
 
 from py4j.java_collections import JavaArray
 from py4j.java_gateway import (
@@ -26,6 +27,8 @@ from py4j.java_gateway import (
 )
 
 from pyspark import SparkContext
+
+from pyspark.sql.types import Row
 
 # For backward compatibility.
 from pyspark.errors import (  # noqa: F401
@@ -38,6 +41,7 @@ from pyspark.errors import (  # noqa: F401
     UnknownException,
     SparkUpgradeException,
     PySparkNotImplementedError,
+    PySparkTypeError,
 )
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
@@ -45,6 +49,7 @@ from pyspark.find_spark_home import _find_spark_home
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql._typing import SupportsProcess
 
 has_numpy = False
 try:
@@ -117,6 +122,79 @@ class ForeachBatchFunction:
 
     class Java:
         implements = ["org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction"]
+
+
+def construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"]):
+    from pyspark.taskcontext import TaskContext
+
+    if callable(f):
+        # The provided object is a callable function that is supposed to be called on each row.
+        # Construct a function that takes an iterator and calls the provided function on each
+        # row.
+        def func_without_process(_: Any, iterator: Iterator) -> Iterator:
+            for x in iterator:
+                f(x)  # type: ignore[operator]
+            return iter([])
+
+        return func_without_process
+
+    else:
+        # The provided object is not a callable function. Then it is expected to have a
+        # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
+        # 'close(error)' methods.
+
+        if not hasattr(f, "process"):
+            raise AttributeError("Provided object does not have a 'process' method")
+
+        if not callable(getattr(f, "process")):
+            raise PySparkTypeError(
+                error_class="ATTRIBUTE_NOT_CALLABLE",
+                message_parameters={"attr_name": "process", "obj_name": "f"},
+            )
+
+        def doesMethodExist(method_name: str) -> bool:
+            exists = hasattr(f, method_name)
+            if exists and not callable(getattr(f, method_name)):
+                raise PySparkTypeError(
+                    error_class="ATTRIBUTE_NOT_CALLABLE",
+                    message_parameters={"attr_name": method_name, "obj_name": "f"},
+                )
+            return exists
+
+        open_exists = doesMethodExist("open")
+        close_exists = doesMethodExist("close")
+
+        def func_with_open_process_close(partition_id: Any, iterator: Iterator) -> Iterator:
+            epoch_id = cast(TaskContext, TaskContext.get()).getLocalProperty(
+                "streaming.sql.batchId"
+            )
+            if epoch_id:
+                int_epoch_id = int(epoch_id)
+            else:
+                raise RuntimeError("Could not get batch id from TaskContext")
+
+            # Check if the data should be processed
+            should_process = True
+            if open_exists:
+                should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
+
+            error = None
+
+            try:
+                if should_process:
+                    for x in iterator:
+                        cast("SupportsProcess", f).process(x)
+            except Exception as ex:
+                error = ex
+            finally:
+                if close_exists:
+                    f.close(error)  # type: ignore[union-attr]
+                if error:
+                    raise error
+
+            return iter([])
+
+        return func_with_open_process_close  # type: ignore[assignment]
 
 
 def to_str(value: Any) -> Optional[str]:

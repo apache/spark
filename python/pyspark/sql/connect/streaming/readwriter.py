@@ -20,8 +20,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import sys
-from collections.abc import Iterator
-from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
@@ -33,6 +32,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamWriter as PySparkDataStreamWriter,
 )
 from pyspark.sql.types import Row, StructType
+from pyspark.sql.utils import construct_foreach_function
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
@@ -483,77 +483,8 @@ class DataStreamWriter:
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
-        from pyspark.taskcontext import TaskContext
 
-        if callable(f):
-            # The provided object is a callable function that is supposed to be called on each row.
-            # Construct a function that takes an iterator and calls the provided function on each
-            # row.
-            def func_without_process(_: Any, iterator: Iterator) -> Iterator:
-                for x in iterator:
-                    f(x)  # type: ignore[operator]
-                return iter([])
-
-            func = func_without_process
-
-        else:
-            # The provided object is not a callable function. Then it is expected to have a
-            # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
-            # 'close(error)' methods.
-
-            if not hasattr(f, "process"):
-                raise AttributeError("Provided object does not have a 'process' method")
-
-            if not callable(getattr(f, "process")):
-                raise PySparkTypeError(
-                    error_class="ATTRIBUTE_NOT_CALLABLE",
-                    message_parameters={"attr_name": "process", "obj_name": "f"},
-                )
-
-            def doesMethodExist(method_name: str) -> bool:
-                exists = hasattr(f, method_name)
-                if exists and not callable(getattr(f, method_name)):
-                    raise PySparkTypeError(
-                        error_class="ATTRIBUTE_NOT_CALLABLE",
-                        message_parameters={"attr_name": method_name, "obj_name": "f"},
-                    )
-                return exists
-
-            open_exists = doesMethodExist("open")
-            close_exists = doesMethodExist("close")
-
-            def func_with_open_process_close(partition_id: Any, iterator: Iterator) -> Iterator:
-                epoch_id = cast(TaskContext, TaskContext.get()).getLocalProperty(
-                    "streaming.sql.batchId"
-                )
-                if epoch_id:
-                    int_epoch_id = int(epoch_id)
-                else:
-                    raise RuntimeError("Could not get batch id from TaskContext")
-
-                # Check if the data should be processed
-                should_process = True
-                if open_exists:
-                    should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
-
-                error = None
-
-                try:
-                    if should_process:
-                        for x in iterator:
-                            cast("SupportsProcess", f).process(x)
-                except Exception as ex:
-                    error = ex
-                finally:
-                    if close_exists:
-                        f.close(error)  # type: ignore[union-attr]
-                    if error:
-                        raise error
-
-                return iter([])
-
-            func = func_with_open_process_close  # type: ignore[assignment]
-
+        func = construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
         command = (func, None, serializer, serializer)
         self._write_proto.foreach.python_writer.command = CloudPickleSerializer().dumps(command)
