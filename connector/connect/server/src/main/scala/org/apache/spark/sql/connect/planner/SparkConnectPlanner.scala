@@ -792,7 +792,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     bytes
       .map { blockData =>
         try {
-          val localRelation = proto.Relation.newBuilder()
+          val localRelation = proto.Relation
+            .newBuilder()
             .getLocalRelation
             .getParserForType
             .parseFrom(blockData.toInputStream())

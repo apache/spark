@@ -234,7 +234,8 @@ private[sql] class SparkConnectClient(
    * Cache the given local relation at the server, and return its key in the remote cache.
    */
   def cacheLocalRelation(data: ByteString, schema: String): String = {
-    val localRelation = proto.Relation.newBuilder()
+    val localRelation = proto.Relation
+      .newBuilder()
       .getLocalRelationBuilder
       .setSchema(schema)
       .setData(data)
