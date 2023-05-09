@@ -27,7 +27,7 @@ import org.apache.spark.sql.streaming.GroupState;
 /**
  * ::Experimental::
  * Base interface for a map function used in
- * {@link org.apache.spark.sql.KeyValueGroupedDataset#mapGroupsWithState(
+ * {@code org.apache.spark.sql.KeyValueGroupedDataset.mapGroupsWithState(
  * MapGroupsWithStateFunction, org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}
  * @since 2.1.1
  */

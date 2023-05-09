@@ -684,7 +684,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       ds.groupingAttributes,
       ds.dataAttributes,
       udf.outputObjAttr,
-      ds.kEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      ds.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
       outputMode,
       rel.getIsMapGroupsWithState,
       timeoutConf,

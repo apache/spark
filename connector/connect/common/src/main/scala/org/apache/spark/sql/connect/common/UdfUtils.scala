@@ -105,15 +105,6 @@ private[sql] object UdfUtils extends Serializable {
       }
   }
 
-  def mapValuesAdaptor[K, V, S, U, IV](
-      f: (K, Iterator[V], GroupState[S]) => Iterator[U],
-      valueMapFunc: IV => V): (K, Iterator[IV], GroupState[S]) => Iterator[U] = {
-    (k: K, itr: Iterator[IV], s: GroupState[S]) =>
-      {
-        f(k, itr.map(v => valueMapFunc(v)), s)
-      }
-  }
-
   def mapGroupsWithStateFuncToScalaFunc[K, V, S, U](
       f: MapGroupsWithStateFunction[K, V, S, U]): (K, Iterator[V], GroupState[S]) => U = {
     (key, data, groupState) => f.call(key, data.asJava, groupState)

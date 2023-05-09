@@ -591,6 +591,9 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       timeoutConf: GroupStateTimeout,
       initialState: KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
     val nf = if (valueMapFunc == UdfUtils.identical()) {
       func
     } else {
@@ -613,6 +616,9 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
     val nf = if (valueMapFunc == UdfUtils.identical()) {
       func
     } else {
