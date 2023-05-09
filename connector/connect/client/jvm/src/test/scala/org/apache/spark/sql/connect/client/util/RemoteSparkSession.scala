@@ -168,8 +168,10 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
-    spark =
-      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
+    spark = SparkSession
+      .builder()
+      .client(SparkConnectClient.builder().port(serverPort).build())
+      .create()
 
     // Retry and wait for the server to start
     val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min

@@ -395,7 +395,7 @@ class SparkSession private[sql] (
   // scalastyle:on
 
   def newSession(): SparkSession = {
-    SparkSession.builder().client(client.copy()).build()
+    SparkSession.builder().client(client.copy()).create()
   }
 
   private def range(
@@ -634,26 +634,33 @@ object SparkSession extends Logging {
     /**
      * Build the [[SparkSession]].
      *
-     * This will try to reuse an existing session if has the same configuration.
+     * This will always return a newly created session.
      */
-    def build(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(sessions.get(builder.configuration))
-    }
+    @deprecated(message = "Please use create() instead.", since = "3.5.0")
+    def build(): SparkSession = create()
 
     /**
      * Create a new [[SparkSession]].
      *
      * This will always return a newly created session.
+     *
+     * @since 3.5.0
      */
     def create(): SparkSession = {
       tryCreateSessionFromClient().getOrElse(SparkSession.this.create(builder.configuration))
     }
 
     /**
-     * Get or create a [[SparkSession]]. If a session exist with the same configuration that is
-     * returned instead of creating a new session.
+     * Get or create a [[SparkSession]].
+     *
+     * If a session exist with the same configuration that is returned instead of creating a new
+     * session.
+     *
+     * @since 3.5.0
      */
-    def getOrCreate(): SparkSession = build()
+    def getOrCreate(): SparkSession = {
+      tryCreateSessionFromClient().getOrElse(sessions.get(builder.configuration))
+    }
   }
 
   def getActiveSession: Option[SparkSession] = {
