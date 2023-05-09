@@ -48,7 +48,8 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object SparkConnectServerUtils {
 
   // Server port
-  private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  private[spark] val port: Int =
+    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
 
@@ -167,8 +168,10 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
-    spark =
-      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
+    spark = SparkSession
+      .builder()
+      .client(SparkConnectClient.builder().port(serverPort).build())
+      .create()
 
     // Retry and wait for the server to start
     val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min

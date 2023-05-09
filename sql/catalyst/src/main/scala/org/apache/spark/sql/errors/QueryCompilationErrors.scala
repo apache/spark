@@ -1717,7 +1717,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def mismatchedInsertedDataColumnNumberError(
       tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
       messageParameters = Map(
         "tableName" -> tableName,
         "targetColumns" -> insert.table.output.size.toString,

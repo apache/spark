@@ -72,8 +72,8 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert_map_items_to_dict
-from pyspark.sql.types import DataType, MapType, StructType, TimestampType
+from pyspark.sql.pandas.types import _create_converter_to_pandas
+from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkRuntimeError
@@ -173,7 +173,8 @@ class ChannelBuilder:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
-                    "detail": "URL scheme must be set to `sc`.",
+                    "detail": "The URL must start with 'sc://'. Please update the URL to "
+                    "follow the correct format, e.g., 'sc://hostname:port'.",
                 },
             )
         # Rewrite the URL to use http as the scheme so that we can leverage
@@ -185,8 +186,8 @@ class ChannelBuilder:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
-                    "detail": f"Path component for connection URI `{self.url.path}` "
-                    f"must be empty.",
+                    "detail": f"The path component '{self.url.path}' must be empty. Please update "
+                    f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
                 },
             )
         self._extract_attributes()
@@ -210,7 +211,9 @@ class ChannelBuilder:
                     raise PySparkValueError(
                         error_class="INVALID_CONNECT_URL",
                         message_parameters={
-                            "detail": f"Parameter '{p}' is not a valid parameter key-value pair.",
+                            "detail": f"Parameter '{p}' should be provided as a "
+                            f"key-value pair separated by an equal sign (=). Please update "
+                            f"the parameter to follow the correct format, e.g., 'key=value'.",
                         },
                     )
                 self.params[kv[0]] = urllib.parse.unquote(kv[1])
@@ -226,8 +229,9 @@ class ChannelBuilder:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
-                    "detail": f"Target destination {self.url.netloc} does not match "
-                    f"'<host>:<port>' pattern.",
+                    "detail": f"Target destination '{self.url.netloc}' should match the "
+                    f"'<host>:<port>' pattern. Please update the destination to follow "
+                    f"the correct format, e.g., 'hostname:port'.",
                 },
             )
 
@@ -705,17 +709,35 @@ class SparkConnectClient(object):
         schema = schema or types.from_arrow_schema(table.schema)
         assert schema is not None and isinstance(schema, StructType)
 
-        pdf = table.to_pandas()
-        pdf.columns = schema.fieldNames()
+        # Rename columns to avoid duplicated column names.
+        pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
+        pdf.columns = schema.names
 
-        for field, pa_field in zip(schema, table.schema):
-            if isinstance(field.dataType, TimestampType):
-                assert pa_field.type.tz is not None
-                pdf[field.name] = _check_series_localize_timestamps(
-                    pdf[field.name], pa_field.type.tz
-                )
-            elif isinstance(field.dataType, MapType):
-                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
+        timezone: Optional[str] = None
+        struct_in_pandas: Optional[str] = None
+        error_on_duplicated_field_names: bool = False
+        if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
+            timezone, struct_in_pandas = self.get_configs(
+                "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+            )
+
+            if struct_in_pandas == "legacy":
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
+
+        pdf = pd.concat(
+            [
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(pser)
+                for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
+            ],
+            axis="columns",
+        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -1067,6 +1089,11 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
+
+    def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
+        op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
+        configs = dict(self.config(op).pairs)
+        return tuple(configs.get(key) for key in keys)
 
     def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """

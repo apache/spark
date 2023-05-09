@@ -55,7 +55,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
-from pyspark.errors import ArithmeticException, PySparkTypeError
+from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 
 if have_pandas:
     import pandas as pd
@@ -542,8 +542,14 @@ class ArrowTestsMixin:
     def check_createDataFrame_with_single_data_type(self):
         for schema in ["int", IntegerType()]:
             with self.subTest(schema=schema):
-                with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema=schema).collect()
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    message_parameters={"data_type": "IntegerType()"},
+                )
 
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
@@ -887,6 +893,60 @@ class ArrowTestsMixin:
         ):
             with self.assertRaises(ArithmeticException):
                 self.spark.sql("select 1/0").toPandas()
+
+    def test_toPandas_duplicate_field_names(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_duplicate_field_names(arrow_enabled)
+
+    def check_toPandas_duplicate_field_names(self, arrow_enabled):
+        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+        for struct_in_pandas in ["legacy", "row", "dict"]:
+            df = self.spark.createDataFrame(data, schema=schema)
+
+            with self.subTest(struct_in_pandas=struct_in_pandas):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+                        "spark.sql.execution.pandas.structHandlingMode": struct_in_pandas,
+                    }
+                ):
+                    if arrow_enabled and struct_in_pandas == "legacy":
+                        with self.assertRaisesRegexp(
+                            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+                        ):
+                            df.toPandas()
+                    else:
+                        if struct_in_pandas == "dict":
+                            expected = pd.DataFrame(
+                                [
+                                    [
+                                        {"x_0": "a", "x_1": 1},
+                                        {"a": 2, "x_0": 3, "x_1": "b", "y_0": 4, "y_1": "c"},
+                                    ],
+                                    [
+                                        {"x_0": "x", "x_1": 6},
+                                        {"a": 7, "x_0": 8, "x_1": "y", "y_0": 9, "y_1": "z"},
+                                    ],
+                                ],
+                                columns=schema.names,
+                            )
+                        else:
+                            expected = pd.DataFrame.from_records(data, columns=schema.names)
+                        assert_frame_equal(df.toPandas(), expected)
 
 
 @unittest.skipIf(

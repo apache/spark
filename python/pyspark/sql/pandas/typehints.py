@@ -165,7 +165,7 @@ def check_union_annotation(
     import typing
 
     # Note that we cannot rely on '__origin__' in other type hints as it has changed from version
-    # to version. For example, it's abc.Iterator in Python 3.7 but typing.Iterator in Python 3.6.
+    # to version.
     origin = getattr(annotation, "__origin__", None)
     return origin == typing.Union and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))

@@ -587,8 +587,10 @@ case class AdaptiveSparkPlanExec(
           BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
         }
       case i: InMemoryTableScanExec =>
-        // No need to optimize `InMemoryTableScanExec` as it's a leaf node.
-        TableCacheQueryStageExec(currentStageId, i)
+        // Apply `queryStageOptimizerRules` so that we can reuse subquery.
+        // No need to apply `postStageCreationRules` for `InMemoryTableScanExec`
+        // as it's a leaf node.
+        TableCacheQueryStageExec(currentStageId, optimizeQueryStage(i, isFinalStage = false))
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)
