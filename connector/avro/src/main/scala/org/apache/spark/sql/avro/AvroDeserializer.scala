@@ -132,6 +132,14 @@ private[sql] class AvroDeserializer(
         s"this field, enable the SQL configuration: `${confKey.key}`.")
     }
 
+    def lowerPrecisionException(provided: DataType): IncompatibleSchemaException = {
+      new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
+        s"${realDataType.catalogString}, however you're trying to read the field as " +
+        s"${provided.catalogString}, which leads to data being read as null. Please provide" +
+        s" a wider decimal type to get the correct result. To allow reading null to " +
+        s"this field, enable the SQL configuration: `${confKey.key}`.")
+    }
+
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
@@ -243,7 +251,7 @@ private[sql] class AvroDeserializer(
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
-          throw incorrectTypeException(dt)
+          throw lowerPrecisionException(dt)
         }
         (updater, ordinal, value) =>
           val bigDecimal =
@@ -255,7 +263,7 @@ private[sql] class AvroDeserializer(
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
-          throw incorrectTypeException(dt)
+          throw lowerPrecisionException(dt)
         }
         (updater, ordinal, value) =>
           val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)

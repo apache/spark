@@ -642,17 +642,19 @@ abstract class AvroSuite
 
   test("SPARK-43380: Fix Avro data type conversion issues to avoid producing incorrect results") {
     withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
       // With the flag disabled, we will throw an exception if there is a mismatch
-      val e = intercept[SparkException] {
-        spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
-      }
-      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
-      ExceptionUtils.getRootCause(e) match {
-        case ex: IncompatibleSchemaException =>
-          assert(ex.getMessage.contains(confKey))
-        case other =>
-          fail(s"Received unexpected exception", other)
+      withSQLConf(confKey -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+        }
+        ExceptionUtils.getRootCause(e) match {
+          case ex: IncompatibleSchemaException =>
+            assert(ex.getMessage.contains(confKey))
+          case other =>
+            fail(s"Received unexpected exception", other)
+        }
       }
       // The following used to work, so it should still work with the flag enabled
       checkAnswer(
