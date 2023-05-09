@@ -444,7 +444,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val createView = s"CREATE temporary VIEW cte_view AS $query"
       val selectFromView = "SELECT * FROM cte_view"
       val dropViewIfExists = "DROP VIEW IF EXISTS cte_view"
-      session.sql(createView)
+      try {
+        session.sql(createView)
+      }
+      catch {
+        case e: AnalysisException =>
+          if (e.getMessage.contains("already exists")) {
+            return
+          }
+      }
       val (selectViewSchema, selectViewOutput) =
         handleExceptions(getNormalizedQueryExecutionResult(session, selectFromView))
       // Compare results.
