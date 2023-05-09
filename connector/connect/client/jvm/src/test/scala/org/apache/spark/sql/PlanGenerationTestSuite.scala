@@ -97,9 +97,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = SparkConnectClient(
-      proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null"))
+    val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
