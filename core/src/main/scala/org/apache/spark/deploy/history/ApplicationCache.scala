@@ -50,7 +50,7 @@ private[history] class ApplicationCache(
 
   /**
    * Keep track of SparkUIs in [[ApplicationCache#appCache]] and SparkUIs removed from
-   * [[ApplicationCache#appCache]] but not destroyed yet.
+   * [[ApplicationCache#appCache]] but not detached yet.
    */
   private val loadedApps = new ConcurrentHashMap[CacheKey, CountDownLatch]()
 
