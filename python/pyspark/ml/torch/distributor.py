@@ -542,7 +542,7 @@ class TorchDistributor(Distributor):
         Callable
             The wrapped function ready for use with `mapPartitions`
         """
-        from pyspark.sql.udf import barrier
+        from pyspark.sql.pandas.utils import barrier
 
         num_processes = self.num_processes
         use_gpu = self.use_gpu

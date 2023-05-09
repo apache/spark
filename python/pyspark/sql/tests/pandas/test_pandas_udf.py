@@ -338,7 +338,7 @@ class PandasUDFTestsMixin:
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
     def test_barrier_pandas_udf(self):
-        from pyspark.sql.udf import barrier
+        from pyspark.sql.pandas.utils import barrier
 
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
@@ -365,7 +365,7 @@ class PandasUDFTestsMixin:
 
     def test_barrier_arrow_udf(self):
         import pyarrow as pa
-        from pyspark.sql.udf import barrier
+        from pyspark.sql.pandas.utils import barrier
 
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
