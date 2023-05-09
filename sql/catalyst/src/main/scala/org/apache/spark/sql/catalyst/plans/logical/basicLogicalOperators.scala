@@ -2149,3 +2149,14 @@ object AsOfJoin {
     }
   }
 }
+
+/**
+ * This node is inserted at the top of a cached plan before planning. This makes the plan
+ * can be aware of whether it's inside table cache or not.
+ */
+case class TableCache(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = child.maxRows
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}

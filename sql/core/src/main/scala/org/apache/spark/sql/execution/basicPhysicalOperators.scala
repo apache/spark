@@ -914,3 +914,37 @@ case class ReusedSubqueryExec(child: BaseSubqueryExec)
 
   override def executeCollect(): Array[InternalRow] = child.executeCollect()
 }
+
+case class TableCacheExec(child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+  override def doCanonicalize(): SparkPlan = child.canonicalized
+  override def supportsRowBased: Boolean = child.supportsRowBased
+  override def supportsColumnar: Boolean = child.supportsColumnar
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  protected override def doExecute(): RDD[InternalRow] = child.execute()
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = child.executeColumnar()
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields,
+      printNodeId,
+      indent)
+  }
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}

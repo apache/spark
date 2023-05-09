@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -240,21 +241,26 @@ abstract class DisableUnnecessaryBucketedScanSuite
   }
 
   test("SPARK-33075: not disable bucketed table scan for cached query") {
-    withTable("t1") {
-      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
-        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
-        spark.catalog.cacheTable("t1")
-        assertCached(spark.table("t1"))
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
+          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> enabled.toString) {
+        withTable("t1") {
+          df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
+          spark.catalog.cacheTable("t1")
+          assertCached(spark.table("t1"))
 
-        // Verify cached bucketed table scan not disabled
-        val partitioning = stripAQEPlan(spark.table("t1").queryExecution.executedPlan)
-          .outputPartitioning
-        assert(partitioning match {
-          case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
-          case _ => false
-        })
-        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution.executedPlan
-        assert(find(aggregateQueryPlan)(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+          // Verify cached bucketed table scan not disabled
+          val df = spark.table("t1")
+          df.collect()
+          val partitioning = stripAQEPlan(df.queryExecution.executedPlan).outputPartitioning
+          assert(partitioning match {
+            case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
+            case _ => false
+          })
+          val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution
+            .executedPlan
+          assert(find(aggregateQueryPlan)(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+        }
       }
     }
   }
@@ -281,6 +287,31 @@ abstract class DisableUnnecessaryBucketedScanSuite
         assert(df.count == 1)
         checkDisableBucketedScan(query = "SELECT SUM(id) FROM t1 WHERE id is not null",
           expectedNumScanWithAutoScanEnabled = 1, expectedNumScanWithAutoScanDisabled = 1)
+      }
+    }
+  }
+
+  test("SPARK-43420: Make DisableUnnecessaryBucketedScan smart with table cache") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true",
+          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> enabled.toString) {
+        withTable("t") {
+          withTempView("v") {
+            withCache("v") {
+              df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t")
+              spark.sql("SELECT j FROM t GROUP BY j").cache().createOrReplaceTempView("v")
+              val df = spark.sql("SELECT * FROM v")
+              df.collect()
+
+              val fileSourceScanExec = collect(df.queryExecution.executedPlan) {
+                case i: InMemoryTableScanExec => collect(i.relation.cachedPlan) {
+                  case f: FileSourceScanExec if !f.disableBucketedScan => f
+                }
+              }.flatten
+              assert(fileSourceScanExec.size == 1)
+            }
+          }
+        }
       }
     }
   }

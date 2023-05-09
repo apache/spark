@@ -228,10 +228,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(planned.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
   }
 
-  test("CollectLimit can appear in the middle of a plan when caching is used") {
+  test("CollectLimit can not appear in the middle of a plan when caching is used") {
     val query = testData.select($"key", $"value").limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
+    assert(planned.cachedPlan.isInstanceOf[TableCacheExec])
+    assert(planned.cachedPlan.children.head.isInstanceOf[WholeStageCodegenExec])
+    assert(planned.cachedPlan.children.head.children.head.isInstanceOf[GlobalLimitExec])
   }
 
   test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {

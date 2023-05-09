@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan, TableCacheExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
 
@@ -82,24 +82,31 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
    * @param withInterestingPartition The traversed plan has operator with interesting partition.
    * @param withExchange The traversed plan has [[Exchange]] operator.
    * @param withAllowedNode The traversed plan has only [[isAllowedUnaryExecNode]] operators.
+   * @param insideTableCache The plan is inside the table cache.
    */
   private def disableBucketWithInterestingPartition(
       plan: SparkPlan,
       withInterestingPartition: Boolean,
       withExchange: Boolean,
-      withAllowedNode: Boolean): SparkPlan = {
+      withAllowedNode: Boolean,
+      insideTableCache: Boolean): SparkPlan = {
     plan match {
       case p if hasInterestingPartition(p) =>
         // Operator with interesting partition, propagates `withInterestingPartition` as true
         // to its children, and resets `withExchange` and `withAllowedNode`.
-        p.mapChildren(disableBucketWithInterestingPartition(_, true, false, true))
+        p.mapChildren(disableBucketWithInterestingPartition(_, true, false, true, insideTableCache))
       case exchange: Exchange =>
         // Exchange operator propagates `withExchange` as true to its child.
         exchange.mapChildren(disableBucketWithInterestingPartition(
-          _, withInterestingPartition, true, withAllowedNode))
+          _, withInterestingPartition, true, withAllowedNode, insideTableCache))
       case scan: FileSourceScanExec =>
         if (scan.bucketedScan) {
-          if (!withInterestingPartition || (withExchange && withAllowedNode)) {
+          val disableBucketScan = !withInterestingPartition || (withExchange && withAllowedNode)
+          if (insideTableCache && disableBucketScan) {
+            // Do not disable bucket scan if it is inside table cache so that it can preserve
+            // output partitioning.
+            scan
+          } else if (disableBucketScan) {
             val nonBucketedScan = scan.copy(disableBucketedScan = true)
             scan.logicalLink.foreach(nonBucketedScan.setLogicalLink)
             nonBucketedScan
@@ -114,7 +121,8 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
           _,
           withInterestingPartition,
           withExchange,
-          withAllowedNode && isAllowedUnaryExecNode(o)))
+          withAllowedNode && isAllowedUnaryExecNode(o),
+          insideTableCache))
     }
   }
 
@@ -149,7 +157,8 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
     if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScan) {
       plan
     } else {
-      disableBucketWithInterestingPartition(plan, false, false, true)
+      val insideTableCache = plan.isInstanceOf[TableCacheExec]
+      disableBucketWithInterestingPartition(plan, false, false, true, insideTableCache)
     }
   }
 }

@@ -916,6 +916,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case WriteFiles(child, fileFormat, partitionColumns, bucket, options, staticPartitions) =>
         WriteFilesExec(planLater(child), fileFormat, partitionColumns, bucket, options,
           staticPartitions) :: Nil
+      case TableCache(child) => TableCacheExec(planLater(child)) :: Nil
       case _ => Nil
     }
   }

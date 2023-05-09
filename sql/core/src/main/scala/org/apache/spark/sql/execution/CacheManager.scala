@@ -26,7 +26,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias, TableCache, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -63,11 +63,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * outputPartitioning of the underlying cached query plan can be leveraged later.
    * Configurations include:
    * 1. AQE
-   * 2. Automatic bucketed table scan
    */
   private val forceDisableConfigs: Seq[ConfigEntry[Boolean]] = Seq(
-    SQLConf.ADAPTIVE_EXECUTION_ENABLED,
-    SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+    SQLConf.ADAPTIVE_EXECUTION_ENABLED)
 
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
@@ -117,7 +115,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(TableCache(planToCache))
         InMemoryRelation(
           storageLevel,
           qe,
@@ -265,7 +263,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(TableCache(cd.plan))
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
