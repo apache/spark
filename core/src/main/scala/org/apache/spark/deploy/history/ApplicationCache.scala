@@ -58,7 +58,7 @@ private[history] class ApplicationCache(
 
     /** the cache key doesn't match a cached entry, or the entry is out-of-date, so load it. */
     override def load(key: CacheKey): CacheEntry = {
-      // Ensure current SparkUI has been detached before trying to load new one.
+      // Ensure current SparkUI has been detached before loading new one.
       val removalLatch = loadedApps.get(key)
       if (removalLatch != null) {
         removalLatch.await()
