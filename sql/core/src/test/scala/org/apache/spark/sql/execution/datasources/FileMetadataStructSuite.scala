@@ -23,6 +23,8 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.TestUtils
 import org.apache.spark.paths.SparkPath
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
@@ -1025,6 +1027,32 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         val metadataName = df.select(METADATA_FILE_NAME).as[String].head()
         assert(metadataName == encodedName)
       }
+    }
+  }
+
+  test("SPARK-43422: Keep tags during optimization when adding metadata columns") {
+    withTempPath { path =>
+      spark.range(end = 10).write.format("parquet").save(path.toString)
+
+      // Add the tag to the base Dataframe before selecting a metadata column.
+      val customTag = TreeNodeTag[Boolean]("customTag")
+      val baseDf = spark.read.format("parquet").load(path.toString)
+      val tagsPut = baseDf.queryExecution.analyzed.collect {
+        case rel: LogicalRelation => rel.setTagValue(customTag, true)
+      }
+
+      assert(tagsPut.nonEmpty)
+
+      val dfWithMetadata = baseDf.select("_metadata.row_index")
+
+      // Expect the tag in the analyzed and optimized plan after querying a metadata column.
+      def isTaggedRelation(plan: LogicalPlan): Boolean = plan match {
+        case rel: LogicalRelation => rel.getTagValue(customTag).getOrElse(false)
+        case _ => false
+      }
+
+      assert(dfWithMetadata.queryExecution.analyzed.exists(isTaggedRelation))
+      assert(dfWithMetadata.queryExecution.optimizedPlan.exists(isTaggedRelation))
     }
   }
 }
