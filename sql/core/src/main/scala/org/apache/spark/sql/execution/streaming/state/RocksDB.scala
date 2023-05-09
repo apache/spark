@@ -124,7 +124,7 @@ class RocksDB(
   private val acquireLock = new Object
 
   @volatile private var db: NativeRocksDB = _
-  @volatile private var changelogWriter: Option[ChangelogWriter] = None
+  @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
   @volatile private var numKeysOnLoadedVersion = 0L
@@ -161,9 +161,10 @@ class RocksDB(
           metadata.numKeys
         }
         numKeysOnWritingVersion = numKeys
-
+        // Replay change log from the last snapshot to the loaded version.
+        // This will be noop if changelog checkpointing is disabled.
         for (v <- latestSnapshotVersion + 1 to version) {
-          var changelogReader: ChangelogReader = null
+          var changelogReader: StateStoreChangelogReader = null
           try {
             changelogReader = fileManager.getChangelogReader(v)
             while (changelogReader.hasNext) {
@@ -178,6 +179,8 @@ class RocksDB(
             if (changelogReader != null) changelogReader.close()
           }
         }
+        // After changelog replay the numKeysOnWritingVersion will be updated to
+        // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
         loadedVersion = version
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
@@ -318,7 +321,6 @@ class RocksDB(
    */
   def commit(): Long = {
     val newVersion = loadedVersion + 1
-    assert(newVersion > 0)
     try {
 
       logInfo(s"Flushing updates for $newVersion")
@@ -342,6 +344,7 @@ class RocksDB(
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
           try {
+            assert(changelogWriter.isDefined)
             changelogWriter.foreach(_.commit())
           } finally {
             changelogWriter = None

@@ -145,27 +145,18 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
-  def getChangeLogWriter(version: Long): ChangelogWriter = {
+  def getChangeLogWriter(version: Long): StateStoreChangelogWriter = {
     val rootDir = new Path(dfsRootDir)
     val deltaFile = dfsDeltaFile(version)
     if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-    val changelogWriter = new ChangelogWriter(fm, deltaFile, codec)
+    val changelogWriter = new StateStoreChangelogWriter(fm, deltaFile, codec)
     changelogWriter
   }
 
   // Get the delta file at version
-  def getChangelogReader(version: Long): ChangelogReader = {
+  def getChangelogReader(version: Long): StateStoreChangelogReader = {
     val deltaFile = dfsDeltaFile(version)
-    try {
-      new ChangelogReader(fm, deltaFile, codec)
-    } catch {
-      // If the commit files are not present, it is possible that the given state version is not
-      // yet committed or commit is in progress. Throw a retry exception to let the caller to
-      // retry after sometime.
-      case f: FileNotFoundException =>
-        logWarning(s"changelog for version $version doesn't exist in the checkpoint.")
-        throw f
-    }
+    new StateStoreChangelogReader(fm, deltaFile, codec)
   }
 
   /**
