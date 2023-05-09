@@ -525,11 +525,11 @@ jobs:
         key: golang-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
-    - name: Install Java ${{ matrix.java }}
+    - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
         distribution: temurin
-        java-version: ${{ matrix.java }}
+        java-version: ${{ inputs.java }}
     - name: Install Golang
       run: |
         apt-get update
