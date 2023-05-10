@@ -2195,6 +2195,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "operation" -> "generated columns")
     )
   }
+
+  test("SPARK-43400: Add Primary Key syntax support") {
+    val catalog = spark.sessionState.catalog
+    sql("CREATE TABLE s(a INT, b INT, PRIMARY KEY(a)) USING parquet")
+    var source = catalog.getTableMetadata(TableIdentifier("s"))
+    assert(source.provider == Some("parquet"))
+
+    sql("CREATE TABLE t(a INT PRIMARY KEY, b INT) USING orc")
+    source = catalog.getTableMetadata(TableIdentifier("t"))
+    assert(source.provider == Some("orc"))
+  }
 }
 
 object FakeLocalFsFileSystem {

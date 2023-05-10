@@ -87,8 +87,9 @@ statement
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
-        (LIKE? pattern=stringLit)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+        (LIKE? pattern=stringLit)?                                     #showNamespaces
+    | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList
+        (COMMA primaryColumnDefinition)? RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
@@ -98,7 +99,8 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN createOrReplaceTableColTypeList
+        (COMMA primaryColumnDefinition)? RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
@@ -1070,6 +1072,7 @@ createOrReplaceTableColType
 
 colDefinitionOption
     : NOT NULL
+    | PRIMARY KEY (NOT ENFORCED)?
     | defaultExpression
     | generationExpression
     | commentSpec
@@ -1085,6 +1088,14 @@ complexColTypeList
 
 complexColType
     : identifier COLON? dataType (NOT NULL)? commentSpec?
+    ;
+
+primaryColumnDefinition
+    : PRIMARY KEY LEFT_PAREN primaryColumns RIGHT_PAREN (NOT ENFORCED)?
+    ;
+
+primaryColumns
+    : identifier (COMMA identifier)*
     ;
 
 whenClause
@@ -1591,6 +1602,7 @@ nonReserved
     | DROP
     | ELSE
     | END
+    | ENFORCED
     | ESCAPE
     | ESCAPED
     | EXCHANGE
@@ -1641,6 +1653,7 @@ nonReserved
     | IS
     | ITEMS
     | KEYS
+    | KEY
     | LAST
     | LAZY
     | LEADING
