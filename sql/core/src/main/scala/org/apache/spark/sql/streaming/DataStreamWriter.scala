@@ -357,13 +357,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == SOURCE_NAME_FOREACH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = if (foreachWriter != null) {
-        ForeachWriterTable[T](foreachWriter, ds.exprEnc)
+      if (foreachWriter != null) {
+        val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
+        startQuery(sink, extraOptions, catalogTable = catalogTable)
       } else {
-        new ForeachWriterTable[UnsafeRow](
+        val sink = new ForeachWriterTable[UnsafeRow](
           pythonForeachWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
+        startQuery(sink, extraOptions, catalogTable = catalogTable)
       }
-      startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
       if (trigger.isInstanceOf[ContinuousTrigger]) {
