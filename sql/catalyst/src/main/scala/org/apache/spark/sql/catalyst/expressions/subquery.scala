@@ -367,7 +367,12 @@ case class ListQuery(
     plan.output.head.dataType
   }
   override lazy val resolved: Boolean = childrenResolved && plan.resolved && numCols != -1
-  override def nullable: Boolean = childOutputs.exists(_.nullable)
+  override def nullable: Boolean = {
+    // ListQuery can't be executed alone so its nullability is not defined.
+    // Consider using ListQuery.childOutputs.exists(_.nullable)
+    assert(false, "ListQuery nullability is not defined")
+    false
+  }
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
   override def toString: String = s"list#${exprId.id} $conditionString"

@@ -399,7 +399,9 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   }
 
   override def children: Seq[Expression] = values :+ query
-  override def nullable: Boolean = children.exists(_.nullable)
+  override def nullable: Boolean = {
+    values.exists(_.nullable) || query.childOutputs.exists(_.nullable)
+  }
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 
