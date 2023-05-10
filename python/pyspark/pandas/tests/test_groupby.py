@@ -501,11 +501,28 @@ class GroupByTestsMixin:
         )
 
     def test_nth(self):
-        for n in [0, 1, 2, 128, -1, -2, -128]:
-            self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
+        # TODO(SPARK-43433): Match `GroupBy.nth` behavior with new pandas behavior
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pdf, psdf = self.pdf, self.psdf
+            pdf = pdf[["A", "B", "D"]]
+            psdf = psdf[["A", "B", "D"]]
+            # Against DataFrameGroupBy
+            self.assert_eq(
+                psdf.groupby("A").nth(0).sort_index(),
+                pdf.groupby("A").nth(0).set_index("A").sort_index(),
+            )
+            # Against SeriesGroupBy
+            pdf_result = pdf.groupby("A")["B"].nth(0).sort_index()
+            pdf_result.index = pd.Index([1, 2], dtype="int64", name="A")
+            self.assert_eq(
+                psdf.groupby("A")["B"].nth(0).sort_index(),
+                pdf_result,
+            )
+        else:
+            for n in [0, 1, 2, 128, -1, -2, -128]:
+                self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
 
         # Behavior changes from pandas 2.0.0: https://github.com/pandas-dev/pandas/issues/13666
-        # if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
         with self.assertRaisesRegex(NotImplementedError, "slice or list"):
             self.psdf.groupby("B").nth(slice(0, 2))
         with self.assertRaisesRegex(NotImplementedError, "slice or list"):

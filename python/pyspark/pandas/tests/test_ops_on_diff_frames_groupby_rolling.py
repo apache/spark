@@ -72,7 +72,38 @@ class OpsOnDiffFramesGroupByRollingTestsMixin:
         )
 
     def test_groupby_rolling_count(self):
-        self._test_groupby_rolling_func("count")
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pser = pd.Series([1, 2, 3], name="a")
+            pkey = pd.Series([1, 2, 3], name="a")
+            psser = ps.from_pandas(pser)
+            kkey = ps.from_pandas(pkey)
+
+            # TODO(SPARK-43432): Fix `min_periods` for Rolling to work same as pandas
+            self.assert_eq(
+                psser.groupby(kkey).rolling(2).count().sort_index(),
+                pser.groupby(pkey).rolling(2, min_periods=1).count().sort_index(),
+            )
+
+            pdf = pd.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
+            pkey = pd.Series([1, 2, 3, 2], name="a")
+            psdf = ps.from_pandas(pdf)
+            kkey = ps.from_pandas(pkey)
+
+            self.assert_eq(
+                psdf.groupby(kkey).rolling(2).count().sort_index(),
+                pdf.groupby(pkey).rolling(2, min_periods=1).count().sort_index(),
+            )
+
+            self.assert_eq(
+                psdf.groupby(kkey)["b"].rolling(2).count().sort_index(),
+                pdf.groupby(pkey)["b"].rolling(2, min_periods=1).count().sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)[["b"]].rolling(2).count().sort_index(),
+                pdf.groupby(pkey)[["b"]].rolling(2, min_periods=1).count().sort_index(),
+            )
+        else:
+            self._test_groupby_rolling_func("count")
 
     def test_groupby_rolling_min(self):
         self._test_groupby_rolling_func("min")
