@@ -39,6 +39,7 @@ case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
+  with QueryErrorsBase
   with SharedSparkSession {
   import testImplicits._
 
@@ -799,8 +800,9 @@ class QueryCompilationErrorsSuite
           exception = intercept[AnalysisException] {
             sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
           },
-          errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
-          parameters = Map("cmd" -> "CREATE NAMESPACE ... LOCATION ..."))
+          errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
+          sqlState = "46110",
+          parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
       }
     }
   }
@@ -821,15 +823,21 @@ class QueryCompilationErrorsSuite
             exception = intercept[AnalysisException] {
               sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
             },
-            errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
-            parameters = Map("cmd" -> "SET NAMESPACE with property location"))
+            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            sqlState = "46110",
+            parameters = Map(
+              "cmd" -> toSQLStmt("SET NAMESPACE"),
+              "property" -> toSQLConf("location")))
 
           checkError(
             exception = intercept[AnalysisException] {
               sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
             },
-            errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
-            parameters = Map("cmd" -> "SET NAMESPACE with property a"))
+            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            sqlState = "46110",
+            parameters = Map(
+              "cmd" -> toSQLStmt("SET NAMESPACE"),
+              "property" -> toSQLConf("a")))
         }
       }
     }

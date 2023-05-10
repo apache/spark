@@ -3263,7 +3263,8 @@ class DataSourceV2SQLSuiteV1Filter
       exception = intercept[AnalysisException] {
         sql(s"$sqlCommand $sqlParams")
       },
-      errorClass = "NOT_SUPPORTED_OPERATION_FOR_V2_TABLE",
+      errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+      sqlState = "46110",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
 }

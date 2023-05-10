@@ -1266,15 +1266,29 @@
     },
     "sqlState" : "42000"
   },
-  "NOT_SUPPORTED_OPERATION_FOR_V2_TABLE" : {
+  "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
       "<cmd> is not supported for v2 tables."
-    ]
+    ],
+    "sqlState" : "46110"
   },
-  "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG" : {
+  "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
     "message" : [
-      "<cmd> is not supported in JDBC catalog."
-    ]
+      "Not supported command in JDBC catalog:"
+    ],
+    "subClass" : {
+      "COMMAND" : {
+        "message" : [
+          "<cmd>"
+        ]
+      },
+      "COMMAND_WITH_PROPERTY" : {
+        "message" : [
+          "<cmd> with property <property>."
+        ]
+      }
+    },
+    "sqlState" : "46110"
   },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
