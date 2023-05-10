@@ -16,7 +16,7 @@
  */
 package org.apache.spark.util
 
-object SparkClassUtils {
+trait SparkClassUtils {
   def getSparkClassLoader: ClassLoader = getClass.getClassLoader
 
   def getContextOrSparkClassLoader: ClassLoader =
@@ -40,3 +40,5 @@ object SparkClassUtils {
     // scalastyle:on classforname
   }
 }
+
+object SparkClassUtils extends SparkClassUtils
