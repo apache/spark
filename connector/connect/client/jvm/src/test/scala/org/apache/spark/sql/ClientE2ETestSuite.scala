@@ -205,7 +205,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
           .builder()
           .port(port)
           .build())
-      .build()
+      .create()
 
     val df2 = spark2.range(10).limit(3)
 

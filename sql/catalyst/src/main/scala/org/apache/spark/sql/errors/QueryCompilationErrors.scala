@@ -3287,20 +3287,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "protobufType" -> protobufType))
   }
 
-  def cannotConvertCatalystTypeToProtobufEnumTypeError(
-      sqlColumn: Seq[String],
-      protobufColumn: String,
-      data: String,
-      enumString: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE",
-      messageParameters = Map(
-        "sqlColumn" -> toSQLId(sqlColumn),
-        "protobufColumn" -> protobufColumn,
-        "data" -> data,
-        "enumString" -> enumString))
-  }
-
   def cannotConvertProtobufTypeToCatalystTypeError(
       protobufType: String,
       sqlType: DataType,
