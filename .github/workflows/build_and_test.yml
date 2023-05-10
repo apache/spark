@@ -277,6 +277,7 @@ jobs:
     # Currently, enable docker build from cache for `master` and branch (since 3.4) jobs
     if: >-
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).golang == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
       (inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3')
