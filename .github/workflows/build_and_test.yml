@@ -532,8 +532,8 @@ jobs:
         java-version: ${{ inputs.java }}
     - name: Install Golang
       run: |
-        apt update
-        apt-get install -y golang-go
+        sudo apt update
+        sudo apt-get install -y golang-go
     - name: Run Build & Test
       run: |
         cd connector/connect/client/go
