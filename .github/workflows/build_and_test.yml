@@ -618,6 +618,7 @@ jobs:
       run: |
         export PATH=$PATH:$HOME/buf/bin
         cd connector/connect/client/go
+        go mod download
         make
         make fulltest
 
