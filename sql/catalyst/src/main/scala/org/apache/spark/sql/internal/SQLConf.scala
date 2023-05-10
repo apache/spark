@@ -1941,7 +1941,7 @@ object SQLConf {
       .createWithDefault(5)
 
   val STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED =
-    buildConf("spark.sql.streaming.stateStore.rocksdb.enableChangelogCheckpointing")
+    buildConf("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled")
       .internal()
       .doc("Enable RocksDB state store to checkpoint a version of the state" +
         " by uploading the changelog.")

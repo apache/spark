@@ -202,7 +202,7 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
-    rocksDB.cleanup()
+    rocksDB.doMaintenance()
   }
 
   override def close(): Unit = {

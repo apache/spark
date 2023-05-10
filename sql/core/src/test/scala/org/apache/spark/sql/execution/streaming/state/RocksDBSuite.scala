@@ -86,7 +86,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       withDB(remoteDir, version = version, conf = conf) { db =>
           db.put(version.toString, version.toString)
           db.commit()
-          if ((version + 1) % 5 == 0) db.cleanup()
+          if ((version + 1) % 5 == 0) db.doMaintenance()
       }
     }
 
@@ -103,8 +103,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     withDB(remoteDir) { db =>
-      intercept[IllegalStateException] {
-        db.load(1)
+      if (isChangelogCheckpointingEnabled) {
+        intercept[IllegalStateException] {
+          db.load(1)
+        }
+      } else {
+        intercept[FileNotFoundException] {
+          db.load(1)
+        }
       }
     }
   }
@@ -120,7 +126,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       for (version <- 1 to 2) {
         db.load(version)
         db.commit()
-        db.cleanup()
+        db.doMaintenance()
       }
       assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
       assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3))
@@ -131,7 +137,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
       assert(changelogVersionsPresent(remoteDir) == (1 to 5))
-      db.cleanup()
+      db.doMaintenance()
       // 3 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
       assert(changelogVersionsPresent(remoteDir) == (3 to 5))
@@ -142,7 +148,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       }
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
       assert(changelogVersionsPresent(remoteDir) == (3 to 8))
-      db.cleanup()
+      db.doMaintenance()
       // 5 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
       assert(snapshotVersionsPresent(remoteDir) === Seq(5, 8))
       assert(changelogVersionsPresent(remoteDir) == (5 to 8))
@@ -157,34 +163,34 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       for (version <- 0 to 1) {
         db.load(version)
         db.commit()
-        db.cleanup()
+        db.doMaintenance()
       }
       // Snapshot should not be created because minDeltasForSnapshot = 3
       assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
       assert(changelogVersionsPresent(remoteDir) == Seq(1, 2))
       db.load(2)
       db.commit()
-      db.cleanup()
+      db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(3))
       db.load(3)
       for (i <- 1 to 10001) {
         db.put(i.toString, i.toString)
       }
       db.commit()
-      db.cleanup()
+      db.doMaintenance()
       // Snapshot should be created this time because the size of the change log > 1000
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4))
       for (version <- 4 to 7) {
         db.load(version)
         db.commit()
-        db.cleanup()
+        db.doMaintenance()
       }
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7))
       for (version <- 8 to 20) {
         db.load(version)
         db.commit()
       }
-      db.cleanup()
+      db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7, 19))
     }
   }
@@ -227,7 +233,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
       // Check that snapshots and changelogs get purged correctly.
-      db.cleanup()
+      db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       // Verify the content of retained versions.

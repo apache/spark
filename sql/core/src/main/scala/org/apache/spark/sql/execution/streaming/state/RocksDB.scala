@@ -147,8 +147,11 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
-        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        val loadSnapshotVersion = if (enableChangelogCheckpointing) {
+          fileManager.getLatestSnapshotVersion(version)
+        } else version
+        val metadata = fileManager.loadCheckpointFromDfs(loadSnapshotVersion, workingDir)
+        loadedVersion = loadSnapshotVersion
         openDB()
 
         val numKeys = if (!conf.trackTotalNumberOfRows) {
@@ -162,28 +165,10 @@ class RocksDB(
           metadata.numKeys
         }
         numKeysOnWritingVersion = numKeys
-        // Replay change log from the last snapshot to the loaded version.
-        // This will be noop if changelog checkpointing is disabled.
-        for (v <- latestSnapshotVersion + 1 to version) {
-          var changelogReader: StateStoreChangelogReader = null
-          try {
-            changelogReader = fileManager.getChangelogReader(v)
-            while (changelogReader.hasNext) {
-              val byteArrayPair = changelogReader.next()
-              if (byteArrayPair.value != null) {
-                put(byteArrayPair.key, byteArrayPair.value)
-              } else {
-                remove(byteArrayPair.key)
-              }
-            }
-          } finally {
-            if (changelogReader != null) changelogReader.close()
-          }
-        }
+        if (enableChangelogCheckpointing) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
-        loadedVersion = version
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (conf.resetStatsOnLoad) {
@@ -199,6 +184,28 @@ class RocksDB(
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
     }
     this
+  }
+
+  private def replayChangelog(endVersion: Long): Unit = {
+    // Replay change log from the loaded version to the target version.
+    // This will be noop if changelog checkpointing is disabled.
+    for (v <- loadedVersion + 1 to endVersion) {
+      var changelogReader: StateStoreChangelogReader = null
+      try {
+        changelogReader = fileManager.getChangelogReader(v)
+        while (changelogReader.hasNext) {
+          val byteArrayPair = changelogReader.next()
+          if (byteArrayPair.value != null) {
+            put(byteArrayPair.key, byteArrayPair.value)
+          } else {
+            remove(byteArrayPair.key)
+          }
+        }
+      } finally {
+        if (changelogReader != null) changelogReader.close()
+      }
+    }
+    loadedVersion = endVersion
   }
 
   /**
@@ -329,6 +336,8 @@ class RocksDB(
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
       if (shouldCreateSnapshot()) {
+        // Need to flush the change to disk before creating a checkpoint
+        // because rocksdb wal is disabled.
         flushTimeMs = timeTakenMs { db.flush(flushOptions) }
         checkpointTimeMs = timeTakenMs {
           val checkpointDir = createTempDir("checkpoint")
@@ -424,7 +433,7 @@ class RocksDB(
     logInfo(s"Rolled back to $loadedVersion")
   }
 
-  def cleanup(): Unit = {
+  def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
       uploadSnapshot()
     }
