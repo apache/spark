@@ -103,6 +103,7 @@ jobs:
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
+              \"golang\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -529,6 +530,95 @@ jobs:
         input: connector/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.4,subdir=connector/connect/common/src/main'
 
+
+  # Static analysis, and documentation build
+  golang:
+    needs: [precondition, infra-image]
+    # always run if lint == 'true', even infra-image is skip (such as non-master job)
+    if: always() && fromJson(needs.precondition.outputs.required).golang == 'true'
+    name: Golang
+    runs-on: ubuntu-22.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PYSPARK_DRIVER_PYTHON: python3.9
+      PYSPARK_PYTHON: python3.9
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+    container:
+      image: ${{ needs.precondition.outputs.image_url }}
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v3
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/coursier
+        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          docs-coursier-
+    - name: Cache Maven local repository
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          docs-maven-
+    - name: Install Java 8
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: 8
+    - name: Install Golang
+      run: |
+        sudo apt update
+        sudo apt-get install -y golang-go
+    - name: Install Python linter dependencies
+      run: |
+        # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
+        #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
+        # Jinja2 3.0.0+ causes error when building with Sphinx.
+        #   See also https://issues.apache.org/jira/browse/SPARK-35375.
+        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
+        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
+    - name: Install dependencies for Python code generation
+      run: |
+        # See more in "Installation" https://docs.buf.build/installation#tarball
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.18.0/buf-Linux-x86_64.tar.gz
+        mkdir -p $HOME/buf
+        tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
+        python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
+    - name: Run Build & Test
+      run: |
+        export PATH=$PATH:$HOME/buf/bin
+        cd connector/connect/client/go
+        make
+        make fulltest
 
   # Static analysis, and documentation build
   lint:
