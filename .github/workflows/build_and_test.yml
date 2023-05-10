@@ -596,8 +596,8 @@ jobs:
         java-version: 8
     - name: Install Golang
       run: |
-        sudo apt update
-        sudo apt-get install -y golang-go
+        apt update
+        apt-get install -y golang-go
     - name: Install Python linter dependencies
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
