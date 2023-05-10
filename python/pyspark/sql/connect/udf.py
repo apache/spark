@@ -36,7 +36,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.types import ArrayType, DataType, MapType, StringType, StructType
-from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
+from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration, _create_arrow_py_udf
 from pyspark.errors import PySparkTypeError
 
 
@@ -55,7 +55,6 @@ def _create_py_udf(
     returnType: "DataTypeOrString",
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
-    from pyspark.sql.udf import _create_arrow_py_udf
     from pyspark.sql.connect.session import _active_spark_session
 
     if _active_spark_session is None:
@@ -252,6 +251,7 @@ class UDFRegistration:
             f = cast("UserDefinedFunctionLike", f)
             if f.evalType not in [
                 PythonEvalType.SQL_BATCHED_UDF,
+                PythonEvalType.SQL_ARROW_BATCHED_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -259,14 +259,26 @@ class UDFRegistration:
                 raise PySparkTypeError(
                     error_class="INVALID_UDF_EVAL_TYPE",
                     message_parameters={
-                        "eval_type": "SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                        "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
+                        "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or "
+                        "SQL_GROUPED_AGG_PANDAS_UDF"
                     },
                 )
-            return_udf = f
-            self.sparkSession._client.register_udf(
-                f.func, f.returnType, name, f.evalType, f.deterministic
+            source_udf = _create_udf(
+                f.func,
+                returnType=f.returnType,
+                name=name,
+                evalType=f.evalType,
+                deterministic=f.deterministic,
             )
+            if f.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+                register_udf = _create_arrow_py_udf(source_udf)._unwrapped
+            else:
+                register_udf = source_udf._unwrapped
+            self.sparkSession._client.register_udf(
+                register_udf.func, f.returnType, name, f.evalType, f.deterministic
+            )
+            return_udf = f
         else:
             if returnType is None:
                 returnType = StringType()
@@ -274,7 +286,7 @@ class UDFRegistration:
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
 
-            self.sparkSession._client.register_udf(f, returnType, name)
+            self.sparkSession._client.register_udf(return_udf.func, returnType, name)
 
         return return_udf
 
