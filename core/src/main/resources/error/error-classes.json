@@ -824,6 +824,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_MEMORY" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -870,11 +876,23 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_DRIVER_MEMORY" : {
+    "message" : [
+      "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or <config> in Spark configuration."
+    ],
+    "sqlState" : "F0000"
+  },
   "INVALID_EMPTY_LOCATION" : {
     "message" : [
       "The location name cannot be empty string, but `<location>` was given."
     ],
     "sqlState" : "42K05"
+  },
+  "INVALID_EXECUTOR_MEMORY" : {
+    "message" : [
+      "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or <config> in Spark configuration."
+    ],
+    "sqlState" : "F0000"
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
