@@ -17,11 +17,12 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeUnit}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.TimeoutException
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
@@ -61,7 +62,11 @@ private[history] class ApplicationCache(
       // Ensure old SparkUI has been detached before loading new one.
       val removalLatch = loadedApps.get(key)
       if (removalLatch != null) {
-        removalLatch.await()
+        // Old SparkUI is in the middle of detaching.
+        // Waiting 10 seconds should be enough since detaching usually takes less than 1 second.
+        if (!removalLatch.await(10, TimeUnit.SECONDS)) {
+          throw new TimeoutException("Timed out waiting for old SparkUI to be detached")
+        }
       }
       val entry = loadApplicationEntry(key.appId, key.attemptId)
       loadedApps.put(key, new CountDownLatch(1))
