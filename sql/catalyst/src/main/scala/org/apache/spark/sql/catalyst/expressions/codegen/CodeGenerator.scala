@@ -1307,7 +1307,7 @@ class CodegenContext extends Logging {
   }
 
   def genReusedCode(stats: ExpressionStats, eval: ExprCode): ExprCode = {
-    val (inputVars, _) = getLocalInputVariableValues(this, stats.expr)
+    val (inputVars, _) = getLocalInputVariableValues(this, stats.expr, subExprEliminationExprs)
     val (initialized, isNull, value) = (stats.initialized.get, stats.isNull.get, stats.value.get)
     val validParamLength = isValidParamLength(calculateParamLengthFromExprValues(inputVars))
     if(!stats.addedFunction && validParamLength) {
