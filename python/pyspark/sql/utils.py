@@ -40,8 +40,9 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkAttributeError,
     PySparkNotImplementedError,
-    PySparkTypeError,
+    PySparkRuntimeError,
 )
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
@@ -144,10 +145,13 @@ def construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"
         # 'close(error)' methods.
 
         if not hasattr(f, "process"):
-            raise AttributeError("Provided object does not have a 'process' method")
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_CALLABLE",
+                message_parameters={"attr_name": "process", "obj_name": "f"},
+            )
 
         if not callable(getattr(f, "process")):
-            raise PySparkTypeError(
+            raise PySparkAttributeError(
                 error_class="ATTRIBUTE_NOT_CALLABLE",
                 message_parameters={"attr_name": "process", "obj_name": "f"},
             )
@@ -155,7 +159,7 @@ def construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"
         def doesMethodExist(method_name: str) -> bool:
             exists = hasattr(f, method_name)
             if exists and not callable(getattr(f, method_name)):
-                raise PySparkTypeError(
+                raise PySparkAttributeError(
                     error_class="ATTRIBUTE_NOT_CALLABLE",
                     message_parameters={"attr_name": method_name, "obj_name": "f"},
                 )
@@ -171,7 +175,10 @@ def construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"
             if epoch_id:
                 int_epoch_id = int(epoch_id)
             else:
-                raise RuntimeError("Could not get batch id from TaskContext")
+                raise PySparkRuntimeError(
+                    error_class="CANNOT_GET_BATCH_ID",
+                    message_parameters={"obj_name": "TaskContext"},
+                )
 
             # Check if the data should be processed
             should_process = True
