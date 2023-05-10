@@ -308,7 +308,6 @@ message Aggregate {
     GROUP_TYPE_ROLLUP = 2;
     GROUP_TYPE_CUBE = 3;
     GROUP_TYPE_PIVOT = 4;
-    GROUP_TYPE_GROUPBYKEY = 5;
   }
 
   message Pivot {

@@ -554,7 +554,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
         .setInput(plan.getRoot)
-        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBYKEY)
+        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .addAllGroupingExpressions(groupingExprs)
         .addAllAggregateExpressions(columns.map(_.expr).asJava)
     }

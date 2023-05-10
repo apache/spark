@@ -1159,21 +1159,25 @@ class SparkConnectPlanner(val session: SparkSession) {
     assert(rel.hasInput)
     val baseRel = transformRelation(rel.getInput)
     val cond = rel.getCondition
-    cond.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION
-          if isTypedFilter(cond.getCommonInlineUserDefinedFunction) =>
-        transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
-      case _ =>
-        logical.Filter(condition = transformExpression(cond), child = baseRel)
+    if (isTypedScalaUdfExpr(cond)) {
+      transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
+    } else {
+      logical.Filter(condition = transformExpression(cond), child = baseRel)
     }
   }
 
-  private def isTypedFilter(udf: proto.CommonInlineUserDefinedFunction): Boolean = {
-    // It is a scala udf && the udf argument is an unresolved start.
-    // This means the udf is a typed filter to filter on all inputs
-    udf.getFunctionCase == proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
-    udf.getArgumentsCount == 1 &&
-    udf.getArguments(0).getExprTypeCase == proto.Expression.ExprTypeCase.UNRESOLVED_STAR
+  private def isTypedScalaUdfExpr(expr: proto.Expression): Boolean = {
+    expr.getExprTypeCase match {
+      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
+        val udf = expr.getCommonInlineUserDefinedFunction
+        // A typed scala udf is a scala udf && the udf argument is an unresolved start.
+        udf.getFunctionCase ==
+          proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
+          udf.getArgumentsCount == 1 &&
+          udf.getArguments(0).getExprTypeCase == proto.Expression.ExprTypeCase.UNRESOLVED_STAR
+      case _ =>
+        false
+    }
   }
 
   private def transformTypedFilter(
@@ -1896,7 +1900,12 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     rel.getGroupType match {
-      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBYKEY =>
+      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
+          // This relies on the assumption that a KVGDS always requires the head to be a Typed UDF.
+          // This is the case for datasets created via groupByKey,
+          // and also via RelationalGroupedDS#as, as the first is a dummy UDF currently.
+          if rel.getGroupingExpressionsList.size() >= 1 &&
+            isTypedScalaUdfExpr(rel.getGroupingExpressionsList.get(0)) =>
         transformKeyValueGroupedAggregate(rel)
       case _ =>
         transformRelationalGroupedAggregate(rel)
