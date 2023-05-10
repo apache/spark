@@ -39,7 +39,7 @@ class RDDOperationGraphSuite extends SparkFunSuite with PrivateMethodTester {
     assert(c1 == c1copy)
   }
 
-  test("SPARK-XXXXX: makeDotNode should not fail when DeterministicLevel is absent") {
+  test("SPARK-43441: makeDotNode should not fail when DeterministicLevel is absent") {
     val node = new RDDOperationNode(0, "", false, false, "", null)
     val _makeDotNode = PrivateMethod[String](Symbol("makeDotNode"))
     RDDOperationGraph.invokePrivate(_makeDotNode(node))
