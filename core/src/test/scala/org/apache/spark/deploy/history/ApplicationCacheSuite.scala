@@ -22,14 +22,18 @@ import java.util.concurrent.CountDownLatch
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
+import scala.concurrent.TimeoutException
 
 import com.codahale.metrics.Counter
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
@@ -382,7 +386,7 @@ class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matcher
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }
 
-  test("Load new SparkUI before old one detached") {
+  test("Load new SparkUI during old one is detaching") {
     val awaitRemoval = new CountDownLatch(1)
     val blockDetach = new CountDownLatch(1)
     val operations = new StubCacheOperations() {
@@ -405,15 +409,15 @@ class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matcher
     // Wait for old SparkUI being removed from cache
     awaitRemoval.await()
 
-    // Loading of new SparkUI is blocked because old one has not been detached.
-    val t2 = new Thread(() => cache.get(appId))
-    t2.start()
-    t2.join(100)
+    // Expect TimeoutException when loading of new SparkUI is blocked too long.
+    eventually(Timeout(11.seconds)) {
+      intercept[TimeoutException](cache.get(appId))
+    }
     assert(loadCount == metrics.loadCount.getCount)
 
-    // Unblock detach action and wait for loading of new SparkUI to complete.
+    // Unblock detaching and load new SparkUI again.
     blockDetach.countDown()
-    t2.join()
+    cache.get(appId)
     assert(loadCount + 1 == metrics.loadCount.getCount)
   }
 }
