@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -370,7 +371,9 @@ case class ListQuery(
   override def nullable: Boolean = {
     // ListQuery can't be executed alone so its nullability is not defined.
     // Consider using ListQuery.childOutputs.exists(_.nullable)
-    assert(false, "ListQuery nullability is not defined")
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY)) {
+      assert(false, "ListQuery nullability is not defined")
+    }
     false
   }
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)

@@ -400,7 +400,13 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 
   override def children: Seq[Expression] = values :+ query
   override def nullable: Boolean = {
-    values.exists(_.nullable) || query.childOutputs.exists(_.nullable)
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY)) {
+      values.exists(_.nullable) || query.childOutputs.exists(_.nullable)
+    } else {
+      // Legacy (incorrect) behavior checked only the nullability of the left-hand side
+      // (see SPARK-43413).
+      values.exists(_.nullable)
+    }
   }
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
