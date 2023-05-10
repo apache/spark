@@ -18,10 +18,9 @@ package org.apache.spark.sql.protobuf
 
 import java.util.concurrent.TimeUnit
 
-import com.google.protobuf.{ByteString, DynamicMessage, Message}
+import com.google.protobuf.{ByteString, DynamicMessage, Message, TypeRegistry}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
-import com.google.protobuf.TypeRegistry
 import com.google.protobuf.util.JsonFormat
 
 import org.apache.spark.sql.AnalysisException
@@ -40,7 +39,8 @@ private[sql] class ProtobufDeserializer(
     rootCatalystType: DataType,
     filters: StructFilters = new NoopFilters,
     typeRegistry: TypeRegistry = TypeRegistry.getEmptyTypeRegistry,
-    emitDefaultValues: Boolean = false) {
+    emitDefaultValues: Boolean = false,
+    enumsAsInts: Boolean = false) {
 
   def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
     this(
@@ -79,10 +79,18 @@ private[sql] class ProtobufDeserializer(
   // JsonFormatter used to convert Any fields (if the option is enabled).
   // This keeps original field names and does not include any extra whitespace in JSON.
   // If the runtime type for Any field is not found in the registry, it throws an exception.
-  private val jsonPrinter = JsonFormat.printer
-    .omittingInsignificantWhitespace()
-    .preservingProtoFieldNames()
-    .usingTypeRegistry(typeRegistry)
+  private val jsonPrinter = if (enumsAsInts) {
+    JsonFormat.printer
+      .omittingInsignificantWhitespace()
+      .preservingProtoFieldNames()
+      .printingEnumsAsInts()
+      .usingTypeRegistry(typeRegistry)
+  } else {
+    JsonFormat.printer
+      .omittingInsignificantWhitespace()
+      .preservingProtoFieldNames()
+      .usingTypeRegistry(typeRegistry)
+  }
 
   private def newArrayWriter(
       protoField: FieldDescriptor,
@@ -258,7 +266,14 @@ private[sql] class ProtobufDeserializer(
           updater.set(ordinal, row)
 
       case (ENUM, StringType) =>
-        (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))
+        (updater, ordinal, value) =>
+          updater.set(
+            ordinal,
+            UTF8String.fromString(value.asInstanceOf[EnumValueDescriptor].getName))
+
+      case (ENUM, IntegerType) =>
+        (updater, ordinal, value) =>
+          updater.set(ordinal, value.asInstanceOf[EnumValueDescriptor].getNumber)
 
       case _ =>
         throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(
