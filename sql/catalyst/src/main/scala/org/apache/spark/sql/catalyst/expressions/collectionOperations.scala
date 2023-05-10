@@ -22,6 +22,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -3457,21 +3458,21 @@ object Sequence {
         throw new ArithmeticException("Long overflow (Long.MinValue / -1)")
       }
       val len = if (stop == start) 1L else Math.addExact(1L, (delta / estimatedStep.toLong))
-      require(
-        len <= MAX_ROUNDED_ARRAY_LENGTH,
-        s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
-      )
+      if (len > MAX_ROUNDED_ARRAY_LENGTH) {
+        throw new IllegalArgumentException(s"Too long sequence: $len. Should be <= " +
+          s"$MAX_ROUNDED_ARRAY_LENGTH")
+      }
       len.toInt
     } catch {
       // We handle overflows in the previous try block by raising an appropriate exception.
       case _: ArithmeticException =>
         val safeLen =
           BigInt(1) + (BigInt(stop.toLong) - BigInt(start.toLong)) / BigInt(estimatedStep.toLong)
-        require(
-          safeLen <= MAX_ROUNDED_ARRAY_LENGTH,
-          s"Too long sequence: $safeLen. Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
-        )
-        throw new RuntimeException("Unreachable code reached.")
+        if (safeLen > MAX_ROUNDED_ARRAY_LENGTH) {
+          throw new IllegalArgumentException(s"Too long sequence: $safeLen. Should be <= " +
+            s"$MAX_ROUNDED_ARRAY_LENGTH")
+        }
+        throw internalError("Unreachable code reached.")
       case e: Exception => throw e
     }
   }
