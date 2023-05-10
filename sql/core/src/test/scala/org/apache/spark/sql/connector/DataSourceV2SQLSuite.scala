@@ -2316,6 +2316,20 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      testNotSupportedV2Command("ALTER TABLE",
+        s"$t SET SERDE 'test_serde'",
+        Some("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"))
+      testNotSupportedV2Command("ALTER TABLE",
+        s"$t SET SERDEPROPERTIES ('a' = 'b')",
+        Some("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"))
+    }
+  }
+
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     checkError(
@@ -3258,13 +3272,17 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+  private def testNotSupportedV2Command(
+      sqlCommand: String,
+      sqlParams: String,
+      expectedArgument: Option[String] = None): Unit = {
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"$sqlCommand $sqlParams")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1124",
-      parameters = Map("cmd" -> sqlCommand))
+      errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+      sqlState = "46110",
+      parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
 }
 
