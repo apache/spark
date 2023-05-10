@@ -56,7 +56,7 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       // filter the output via condition
       ctx.currentVars = streamVars2 ++ buildVars
       val bondExpr = BindReferences.bindReference(expr, streamPlan.output ++ buildPlan.output)
-      val initBlock = ctx.subexpressionElimination(Seq(bondExpr))
+      val initBlock = ctx.conditionalSubexpressionElimination(Seq(bondExpr))
       val ev = bondExpr.genCode(ctx)
       val skipRow = s"${ev.isNull} || !${ev.value}"
       s"""

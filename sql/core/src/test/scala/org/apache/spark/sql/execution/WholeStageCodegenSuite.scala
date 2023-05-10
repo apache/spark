@@ -770,4 +770,26 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       }
     }
   }
+
+  test("Give up splitting subexpression code if a parameter length goes over the limit") {
+    withSQLConf(
+        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "false",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
+        "spark.sql.CodeGenerator.validParamLength" -> "0") {
+      withTable("t") {
+        val expectedErrMsg = "Failed to split subexpression code into small functions"
+        Seq(
+          // Test case without keys
+          "SELECT AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1)) t(a, b, c)",
+          // Tet case with keys
+          "SELECT k, AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1, 1)) t(k, a, b, c) " +
+            "GROUP BY k").foreach { query =>
+          val e = intercept[IllegalStateException] {
+            sql(query).collect
+          }
+          assert(e.getMessage.contains(expectedErrMsg))
+        }
+      }
+    }
+  }
 }

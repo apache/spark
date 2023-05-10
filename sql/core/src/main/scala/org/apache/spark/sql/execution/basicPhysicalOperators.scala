@@ -67,12 +67,25 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val exprs = bindReferences[Expression](projectList, child.output)
-    initBlock += ctx.subexpressionElimination(exprs: _*)
-    val resultVars = exprs.map(_.genCode(ctx))
+    val (subExprsCode, resultVars, localValInputs) = if (conf.subexpressionEliminationEnabled) {
+      // subexpression elimination
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+      initBlock += ctx.conditionalSubexpressionElimination(exprs, false)
+      val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
+        exprs.map(_.genCode(ctx))
+      }
+      (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
+        subExprs.exprCodesNeedEvaluate)
+    } else {
+      ("", exprs.map(_.genCode(ctx)), Seq.empty)
+    }
 
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
+       |// common sub-expressions
+       |${evaluateVariables(localValInputs)}
+       |$subExprsCode
        |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
        |${consume(ctx, resultVars)}
      """.stripMargin
@@ -166,8 +179,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
-    initBlock +=
-      ctx.subexpressionElimination(otherPreds.map(BindReferences.bindReference(_, inputAttrs)): _*)
+    initBlock += ctx.conditionalSubexpressionElimination(
+      otherPreds.map(BindReferences.bindReference(_, inputAttrs)))
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}

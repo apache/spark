@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, ExpressionEquals, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -207,9 +207,13 @@ trait AggregateCodegenSupport
     val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
-    val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten)
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
+    val initBlock = ctx.conditionalSubexpressionElimination(boundUpdateExprs.flatten, false)
+    val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
     val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
-      boundUpdateExprsForOneFunc.map(_.genCode(ctx))
+      ctx.withSubExprEliminationExprs(subExprs.states) {
+        boundUpdateExprsForOneFunc.map(_.genCode(ctx))
+      }
     }
 
     val aggNames = functions.map(_.prettyName)
@@ -233,11 +237,12 @@ trait AggregateCodegenSupport
     }
 
     val codeToEvalAggFuncs = generateEvalCodeForAggFuncs(
-      ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks)
+      ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks, subExprs)
     s"""
        |// do aggregate
        |// common sub-expressions
        |$initBlock
+       |$effectiveCodes
        |// evaluate aggregate functions and update aggregation buffers
        |$codeToEvalAggFuncs
      """.stripMargin
@@ -252,21 +257,19 @@ trait AggregateCodegenSupport
       inputAttrs: Seq[Attribute],
       boundUpdateExprs: Seq[Seq[Expression]],
       aggNames: Seq[String],
-      aggCodeBlocks: Seq[Block]): String = {
-    val evaluated = boundUpdateExprs.flatten.map { e =>
-      evaluateRequiredVariables(inputAttrs, input, e.references)
-    }.mkString("", "\n", "\n")
+      aggCodeBlocks: Seq[Block],
+      subExprs: SubExprCodes): String = {
     val aggCodes = if (conf.codegenSplitAggregateFunc &&
       aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
       val maybeSplitCodes = splitAggregateExpressions(
-        ctx, aggNames, boundUpdateExprs, aggCodeBlocks)
+        ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
       maybeSplitCodes.getOrElse(aggCodeBlocks.map(_.code))
     } else {
       aggCodeBlocks.map(_.code)
     }
 
-    evaluated + aggCodes.zip(aggregateExpressions.map(ae => (ae.mode, ae.filter))).map {
+    aggCodes.zip(aggregateExpressions.map(ae => (ae.mode, ae.filter))).map {
       case (aggCode, (Partial | Complete, Some(condition))) =>
         // Note: wrap in "do { } while(false);", so the generated checks can jump out
         // with "continue;"
@@ -294,49 +297,59 @@ trait AggregateCodegenSupport
       ctx: CodegenContext,
       aggNames: Seq[String],
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
-      aggCodeBlocks: Seq[Block]): Option[Seq[String]] = {
-    val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
-      val inputVarsForOneFunc = aggExprsForOneFunc.map(
-        CodeGenerator.getLocalInputVariableValues(ctx, _)._1.toSet).reduce(_ ++ _).toSeq
-      val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
-
-      // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
-      if (CodeGenerator.isValidParamLength(paramLength)) {
-        Some(inputVarsForOneFunc)
-      } else {
-        None
-      }
+      aggCodeBlocks: Seq[Block],
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[Seq[String]] = {
+    val exprValsInSubExprs = subExprs.flatMap { case (_, s) =>
+      s.eval.value :: s.eval.isNull :: Nil
     }
-
-    // Checks if all the aggregate code can be split into pieces.
-    // If the parameter length of at lease one `aggExprsForOneFunc` goes over the limit,
-    // we totally give up splitting aggregate code.
-    if (inputVars.forall(_.isDefined)) {
-      val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
-        val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
-        val argList = args.map { v =>
-          s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
-        }.mkString(", ")
-        val doAggFuncName = ctx.addNewFunction(doAggFunc,
-          s"""
-             |private void $doAggFunc($argList) throws java.io.IOException {
-             |  ${aggCodeBlocks(i)}
-             |}
-           """.stripMargin)
-
-        val inputVariables = args.map(_.variableName).mkString(", ")
-        s"$doAggFuncName($inputVariables);"
-      }
-      Some(splitCodes)
+    if (exprValsInSubExprs.exists(_.isInstanceOf[SimpleExprValue])) {
+      // `SimpleExprValue`s cannot be used as an input variable for split functions, so
+      // we give up splitting functions if it exists in `subExprs`.
+      None
     } else {
-      val errMsg = "Failed to split aggregate code into small functions because the parameter " +
-        "length of at least one split function went over the JVM limit: " +
-        CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
-      if (Utils.isTesting) {
-        throw new IllegalStateException(errMsg)
+      val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
+        val inputVarsForOneFunc = aggExprsForOneFunc.map(
+          CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)._1.toSet).reduce(_ ++ _).toSeq
+        val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
+
+        // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
+        if (CodeGenerator.isValidParamLength(paramLength)) {
+          Some(inputVarsForOneFunc)
+        } else {
+          None
+        }
+      }
+
+      // Checks if all the aggregate code can be split into pieces.
+      // If the parameter length of at lease one `aggExprsForOneFunc` goes over the limit,
+      // we totally give up splitting aggregate code.
+      if (inputVars.forall(_.isDefined)) {
+        val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
+          val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
+          val argList = args.map { v =>
+            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+          }.mkString(", ")
+          val doAggFuncName = ctx.addNewFunction(doAggFunc,
+            s"""
+               |private void $doAggFunc($argList) throws java.io.IOException {
+               |  ${aggCodeBlocks(i)}
+               |}
+             """.stripMargin)
+
+          val inputVariables = args.map(_.variableName).mkString(", ")
+          s"$doAggFuncName($inputVariables);"
+        }
+        Some(splitCodes)
       } else {
-        logInfo(errMsg)
-        None
+        val errMsg = "Failed to split aggregate code into small functions because the parameter " +
+          "length of at least one split function went over the JVM limit: " +
+          CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+        if (Utils.isTesting) {
+          throw new IllegalStateException(errMsg)
+        } else {
+          logInfo(errMsg)
+          None
+        }
       }
     }
   }
