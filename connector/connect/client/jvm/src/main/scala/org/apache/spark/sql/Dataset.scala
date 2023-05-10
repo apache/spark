@@ -1286,7 +1286,7 @@ class Dataset[T] private[sql] (
       function = func,
       inputEncoders = encoder :: encoder :: Nil,
       outputEncoder = encoder)
-    val reduceExpr = Column.fn("reduce", udf.apply(col("*"))).expr
+    val reduceExpr = Column.fn("reduce", udf.apply(col("*"), col("*"))).expr
 
     val result = sparkSession
       .newDataset(encoder) { builder =>

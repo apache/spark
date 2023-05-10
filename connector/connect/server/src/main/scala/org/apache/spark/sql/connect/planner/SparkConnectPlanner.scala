@@ -1998,16 +1998,16 @@ class SparkConnectPlanner(val session: SparkSession) {
     if (fun.getArgumentsCount != 1) {
       throw InvalidPlanInput("reduce requires single child expression")
     }
-    val udf = fun.getArgumentsList.asScala.toSeq.head match {
-      case expr
-          if expr.hasCommonInlineUserDefinedFunction
-            && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
-        TypedScalaUdf(expr.getCommonInlineUserDefinedFunction)
+    val udf = fun.getArgumentsList.asScala.toSeq.map(transformExpression) match {
+      case Seq(f: ScalaUDF) =>
+        f
       case other =>
-        throw InvalidPlanInput(s"reduce should be a scalar scala udf, but got $other")
+        throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
     }
-    val reduce = ReduceAggregator(udf.function)(udf.outEnc).toColumn.expr
-    TypedAggUtils.withInputType(reduce, udf.inEnc, dataAttributes)
+    assert(udf.outputEncoder.isDefined)
+    val tEncoder = udf.outputEncoder.get // (T, T) => T
+    val reduce = ReduceAggregator(udf.function)(tEncoder).toColumn.expr
+    TypedAggUtils.withInputType(reduce, tEncoder, dataAttributes)
   }
 
   private def transformExpressionWithTypedReduceExpression(
