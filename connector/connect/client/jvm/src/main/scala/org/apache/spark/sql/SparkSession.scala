@@ -131,7 +131,7 @@ class SparkSession private[sql] (
             .setSchema(encoder.schema.json)
             .setData(arrowData)
         } else {
-          val hash = client.cacheLocalRelation(arrowDataSize, arrowData, encoder.schema.json)
+          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
           builder.getCachedLocalRelationBuilder
             .setUserId(client.userId)
             .setSessionId(client.sessionId)

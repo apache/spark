@@ -333,10 +333,11 @@ case class AlterTableUnsetPropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     if (!ifExists) {
-      propKeys.foreach { k =>
-        if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
-          throw QueryCompilationErrors.unsetNonExistentPropertyError(k, table.identifier)
-        }
+      val nonexistentKeys = propKeys.filter(key => !table.properties.contains(key)
+        && key != TableCatalog.PROP_COMMENT)
+      if (nonexistentKeys.nonEmpty) {
+        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
+          nonexistentKeys, table.identifier)
       }
     }
     // If comment is in the table property, we reset it to None
