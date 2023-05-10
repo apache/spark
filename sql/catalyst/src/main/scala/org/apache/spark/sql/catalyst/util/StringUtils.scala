@@ -99,8 +99,8 @@ object StringUtils extends Logging {
       testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
     } else {
       val split = testStrings.map { ident =>
-        val parts = UnresolvedAttribute.parseAttributeName(ident)
-        (parts.take(parts.size - 1).map(quoteIfNeeded).mkString("."), quoteIfNeeded(parts.last))
+        val parts = UnresolvedAttribute.parseAttributeName(ident).map(quoteIfNeeded)
+        (parts.init.mkString("."), parts.last)
       }
       val sorted =
         split.sortBy(pair => LevenshteinDistance.getDefaultInstance.apply(pair._2, baseString))
