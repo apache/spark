@@ -431,6 +431,106 @@ class Expression(google___protobuf___message___Message):
         year_month_interval: builtin___int = ...
         day_time_interval: builtin___int = ...
 
+        class Map(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_TYPE_FIELD_NUMBER: builtins.int
+            VALUE_TYPE_FIELD_NUMBER: builtins.int
+            KEYS_FIELD_NUMBER: builtins.int
+            VALUES_FIELD_NUMBER: builtins.int
+            @property
+            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def keys(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            @property
+            def values(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                key_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                value_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                keys: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                values: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "key_type", b"key_type", "value_type", b"value_type"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "key_type",
+                    b"key_type",
+                    "keys",
+                    b"keys",
+                    "value_type",
+                    b"value_type",
+                    "values",
+                    b"values",
+                ],
+            ) -> None: ...
+
+        class Struct(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            STRUCT_TYPE_FIELD_NUMBER: builtins.int
+            ELEMENTS_FIELD_NUMBER: builtins.int
+            @property
+            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def elements(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "elements", b"elements", "struct_type", b"struct_type"
+                ],
+            ) -> None: ...
+
+        NULL_FIELD_NUMBER: builtins.int
+        BINARY_FIELD_NUMBER: builtins.int
+        BOOLEAN_FIELD_NUMBER: builtins.int
+        BYTE_FIELD_NUMBER: builtins.int
+        SHORT_FIELD_NUMBER: builtins.int
+        INTEGER_FIELD_NUMBER: builtins.int
+        LONG_FIELD_NUMBER: builtins.int
+        FLOAT_FIELD_NUMBER: builtins.int
+        DOUBLE_FIELD_NUMBER: builtins.int
+        DECIMAL_FIELD_NUMBER: builtins.int
+        STRING_FIELD_NUMBER: builtins.int
+        DATE_FIELD_NUMBER: builtins.int
+        TIMESTAMP_FIELD_NUMBER: builtins.int
+        TIMESTAMP_NTZ_FIELD_NUMBER: builtins.int
+        CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
+        YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
+        DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+        ARRAY_FIELD_NUMBER: builtins.int
+        MAP_FIELD_NUMBER: builtins.int
+        STRUCT_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> spark___connect___types_pb2___DataType: ...
         @property
@@ -460,6 +560,34 @@ class Expression(google___protobuf___message___Message):
             year_month_interval: typing___Optional[builtin___int] = None,
             day_time_interval: typing___Optional[builtin___int] = None,
             array: typing___Optional[type___Expression.Literal.Array] = None,
+        def array(self) -> global___Expression.Literal.Array: ...
+        @property
+        def map(self) -> global___Expression.Literal.Map: ...
+        @property
+        def struct(self) -> global___Expression.Literal.Struct: ...
+        def __init__(
+            self,
+            *,
+            null: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+            binary: builtins.bytes = ...,
+            boolean: builtins.bool = ...,
+            byte: builtins.int = ...,
+            short: builtins.int = ...,
+            integer: builtins.int = ...,
+            long: builtins.int = ...,
+            float: builtins.float = ...,
+            double: builtins.float = ...,
+            decimal: global___Expression.Literal.Decimal | None = ...,
+            string: builtins.str = ...,
+            date: builtins.int = ...,
+            timestamp: builtins.int = ...,
+            timestamp_ntz: builtins.int = ...,
+            calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
+            year_month_interval: builtins.int = ...,
+            day_time_interval: builtins.int = ...,
+            array: global___Expression.Literal.Array | None = ...,
+            map: global___Expression.Literal.Map | None = ...,
+            struct: global___Expression.Literal.Struct | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -490,12 +618,16 @@ class Expression(google___protobuf___message___Message):
                 b"literal_type",
                 "long",
                 b"long",
+                "map",
+                b"map",
                 "null",
                 b"null",
                 "short",
                 b"short",
                 "string",
                 b"string",
+                "struct",
+                b"struct",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -533,12 +665,16 @@ class Expression(google___protobuf___message___Message):
                 b"literal_type",
                 "long",
                 b"long",
+                "map",
+                b"map",
                 "null",
                 b"null",
                 "short",
                 b"short",
                 "string",
                 b"string",
+                "struct",
+                b"struct",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -576,6 +712,25 @@ class Expression(google___protobuf___message___Message):
         unparsed_identifier: typing___Text = ...
         plan_id: builtin___int = ...
 
+            "map",
+            "struct",
+        ] | None: ...
+
+    class UnresolvedAttribute(google.protobuf.message.Message):
+        """An unresolved attribute that is not explicitly bound to a specific column, but the column
+        is resolved during analysis by name.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
+        unparsed_identifier: builtins.str
+        """(Required) An identifier that will be parsed by Catalyst parser. This should follow the
+        Spark SQL identifier syntax.
+        """
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,

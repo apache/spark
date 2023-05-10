@@ -79,7 +79,8 @@ case class LocalRelation(
   }
 
   override def computeStats(): Statistics =
-    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length)
+    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length,
+      rowCount = Some(data.size))
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)
