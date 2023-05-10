@@ -614,6 +614,7 @@ jobs:
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
+    # Run the actual Go tests.
     - name: Run Build & Test
       run: |
         export PATH=$PATH:$HOME/buf/bin
