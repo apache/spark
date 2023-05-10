@@ -90,7 +90,7 @@ object StringUtils extends Logging {
     // Note that identifiers from `testStrings` could represent columns or attributes from different
     // catalogs, schemas or tables. We preserve suggested identifier prefix and reconstruct
     // multi-part identifier after ordering if there are more than one unique prefix in a list. This
-    // will also reconstruct multi-part identifier for the cases of nested columnns. E.g. for a
+    // will also reconstruct multi-part identifier for the cases of nested columns. E.g. for a
     // table `t` with columns `a`, `b`, `c.d` (nested) and requested column `d` we will create
     // prefixes `t`, `t`, and `t.c`. Since there is more than one distinct prefix we will return
     // sorted suggestions as multi-part identifiers => (`t`.`c`.`d`, `t`.`a`, `t`.`b`).
