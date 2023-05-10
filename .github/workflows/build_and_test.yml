@@ -507,6 +507,23 @@ jobs:
     name: Spark Connect Golang Client
     runs-on: ubuntu-22.04
     steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v3
+      # In order to fetch changed files
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v3
       with:
