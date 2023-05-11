@@ -849,4 +849,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       errorClass = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`db_not_exists`"))
   }
+
+  test("SPARK-43383: Add rowCount statistics to LocalRelation") {
+    val optimizedPlan = spark.sql("select * from values(1),(2),(3),(4),(5),(6)")
+      .queryExecution.optimizedPlan
+    assert(optimizedPlan.isInstanceOf[LocalRelation])
+
+    val stats = optimizedPlan.stats
+    assert(stats.rowCount.isDefined && stats.rowCount.get == 6)
+  }
 }

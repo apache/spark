@@ -111,7 +111,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val testPort = 16002
     client = SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
     startDummyServer(testPort)
-    val session = SparkSession.builder().client(client).build()
+    val session = SparkSession.builder().client(client).create()
     val df = session.range(10)
     df.analyze // Trigger RPC
     assert(df.plan === service.getAndClearLatestInputPlan())
