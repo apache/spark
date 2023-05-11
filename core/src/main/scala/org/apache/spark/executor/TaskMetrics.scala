@@ -232,6 +232,15 @@ class TaskMetrics private[spark] () extends Serializable {
     shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
     input.BYTES_READ -> inputMetrics._bytesRead,
     input.RECORDS_READ -> inputMetrics._recordsRead,
+    input.TOTAL_BLOOM_BLOCKS -> inputMetrics._totalBloomBlocks,
+    input.SKIP_BLOOM_BLOCKS -> inputMetrics._skipBloomBlocks,
+    input.SKIP_BLOOM_ROWS -> inputMetrics._skipBloomRows,
+    input.FOOTER_READ_TIME -> inputMetrics._footerReadTime,
+    input.FOOTER_READ_NUMBER -> inputMetrics._footerReadNumber,
+    input.TOTAL_PARQUET_PAGES -> inputMetrics._totalPagesCount,
+    input.FILTERED_PARQUET_PAGES -> inputMetrics._filteredPagesCount,
+    input.AFTER_FILTERED_PARQUET_PAGES -> inputMetrics._afterFilterPagesCount,
+
     output.BYTES_WRITTEN -> outputMetrics._bytesWritten,
     output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
   ) ++ testAccum.map(TEST_ACCUM -> _)

@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.filter2.compat.QueryMetrics;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
@@ -394,6 +395,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       initColumnReader(pages, cv);
     }
     totalCountLoadedSoFar += pages.getRowCount();
+  }
+
+  public QueryMetrics getParquetQueryMetrics() {
+    if(reader != null){
+      return reader.getFileReader().queryMetrics;
+    }else {
+      return new QueryMetrics();
+    }
   }
 
   private void initColumnReader(PageReadStore pages, ParquetColumnVector cv) throws IOException {

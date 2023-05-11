@@ -18,19 +18,17 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.util.{Optional, PrimitiveIterator}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
-
 import org.apache.parquet.column.{ColumnDescriptor, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
 import org.apache.parquet.column.page.mem.MemPageStore
+import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -689,6 +687,8 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     }
 
     override def close(): Unit = {}
+
+    override def getFileReader: ParquetFileReader = null
   }
 
   private case class TestPageReadStore(
