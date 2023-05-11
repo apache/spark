@@ -17,6 +17,7 @@
 
 import datetime
 import unittest
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -115,6 +116,10 @@ class SeriesDateTimeTestsMixin:
         self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
         self.assertRaises(NotImplementedError, lambda: py_datetime - psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43462): Enable SeriesDateTimeTests.test_date_subtraction for pandas 2.0.0.",
+    )
     def test_date_subtraction(self):
         pdf = self.pdf1
         psdf = ps.from_pandas(pdf)
@@ -196,9 +201,17 @@ class SeriesDateTimeTestsMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.dt.nanosecond)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-42617): Support `isocalendar`",
+    )
     def test_week(self):
         self.check_func(lambda x: x.dt.week)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-42617): Support `isocalendar`",
+    )
     def test_weekofyear(self):
         self.check_func(lambda x: x.dt.weekofyear)
 
