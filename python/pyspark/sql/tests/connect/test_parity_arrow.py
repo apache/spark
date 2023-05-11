@@ -106,6 +106,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_toPandas_error(self):
         self.check_toPandas_error(True)
 
+    def test_toPandas_duplicate_field_names(self):
+        self.check_toPandas_duplicate_field_names(True)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_arrow import *  # noqa: F401

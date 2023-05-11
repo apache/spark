@@ -867,7 +867,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_OUT_OF_BOUND",
+            error_class="VALUE_NOT_BETWEEN",
             message_parameters={"arg_name": "end", "min": "-2147483648", "max": "2147483647"},
         )
 

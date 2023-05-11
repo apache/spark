@@ -186,13 +186,25 @@ class AlignAssignmentsSuite extends AnalysisTest {
   }
 
   protected def parseAndResolve(query: String): LogicalPlan = {
-    val analyzer = new Analyzer(catalogManager) {
+    val analyzer = new CustomAnalyzer(catalogManager) {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
         new ResolveSessionCatalog(catalogManager))
     }
     val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
     analyzer.checkAnalysis(analyzed)
     analyzed
+  }
+
+  class CustomAnalyzer(catalogManager: CatalogManager) extends Analyzer(catalogManager) {
+    override def batches: Seq[Batch] = {
+      val defaultBatches = super.batches
+      defaultBatches.map { batch =>
+        val filteredRules = batch.rules.filterNot { rule =>
+          rule.ruleName == "org.apache.spark.sql.catalyst.analysis.RewriteUpdateTable"
+        }
+        Batch(batch.name, batch.strategy, filteredRules: _*)
+      }
+    }
   }
 
   protected def assertNullCheckExists(plan: LogicalPlan, colPath: Seq[String]): Unit = {

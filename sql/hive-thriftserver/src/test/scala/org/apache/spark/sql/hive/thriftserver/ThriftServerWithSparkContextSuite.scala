@@ -217,6 +217,19 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       // scalastyle:on line.size.limit
     }
   }
+
+  test("Support column display size for char/varchar") {
+    withTable("t") {
+      sql("CREATE TABLE t (c char(10), v varchar(11)) using parquet")
+
+      withJdbcStatement { stmt =>
+        val rs = stmt.executeQuery("SELECT * FROM t")
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnDisplaySize(1) === 10)
+        assert(metaData.getColumnDisplaySize(2) === 11)
+      }
+    }
+  }
 }
 
 class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
