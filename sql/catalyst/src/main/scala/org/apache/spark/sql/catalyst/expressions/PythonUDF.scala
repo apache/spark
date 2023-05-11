@@ -52,8 +52,11 @@ object PythonUDF {
 trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression { self: Expression =>
   def name: String
   def func: PythonFunction
+  def evalType: Int
   def udfDeterministic: Boolean
   def resultId: ExprId
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
@@ -78,8 +81,6 @@ case class PythonUDF(
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
@@ -118,6 +119,8 @@ case class PythonUDAF(
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 
+  override def evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"$name($distinct${children.mkString(", ")})"
@@ -127,8 +130,6 @@ case class PythonUDAF(
     val start = if (isDistinct) "(distinct " else "("
     name + children.mkString(start, ", ", ")") + s"#${resultId.id}$typeSuffix"
   }
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDAF)
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
