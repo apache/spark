@@ -1021,6 +1021,54 @@ struct<timestampadd(YEAR, 1, DATE '2022-02-25'):timestamp>
 
 
 -- !query
+select dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`dateadd`",
+    "invalidValue" : "'MICROSECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123')"
+  } ]
+}
+
+
+-- !query
+select dateadd('QUARTER', 5, date'2022-02-25')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`dateadd`",
+    "invalidValue" : "'QUARTER'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "dateadd('QUARTER', 5, date'2022-02-25')"
+  } ]
+}
+
+
+-- !query
 select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001')
 -- !query schema
 struct<timestampdiff(MICROSECOND, TIMESTAMP '2022-02-25 01:02:03.123', TIMESTAMP '2022-02-25 01:02:03.124001'):bigint>
@@ -1098,6 +1146,54 @@ select datediff(YEAR, date'2022-02-25', date'2023-02-25')
 struct<timestampdiff(YEAR, DATE '2022-02-25', DATE '2023-02-25'):bigint>
 -- !query output
 1
+
+
+-- !query
+select datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`datediff`",
+    "invalidValue" : "'MILLISECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 102,
+    "fragment" : "datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')"
+  } ]
+}
+
+
+-- !query
+select datediff('YEAR', date'2022-02-25', date'2023-02-25')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`datediff`",
+    "invalidValue" : "'YEAR'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "datediff('YEAR', date'2022-02-25', date'2023-02-25')"
+  } ]
+}
 
 
 -- !query
@@ -2055,6 +2151,54 @@ struct<timestampadd(SECOND, -1, DATE '2022-02-15'):timestamp>
 
 
 -- !query
+select timestampadd('MONTH', -1, timestamp'2022-02-14 01:02:03')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`timestampadd`",
+    "invalidValue" : "'MONTH'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "timestampadd('MONTH', -1, timestamp'2022-02-14 01:02:03')"
+  } ]
+}
+
+
+-- !query
+select timestampadd('SECOND', -1, date'2022-02-15')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`timestampadd`",
+    "invalidValue" : "'SECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "timestampadd('SECOND', -1, date'2022-02-15')"
+  } ]
+}
+
+
+-- !query
 select timestampdiff(MONTH, timestamp'2022-02-14 01:02:03', timestamp'2022-01-14 01:02:03')
 -- !query schema
 struct<timestampdiff(MONTH, TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-01-14 01:02:03'):bigint>
@@ -2084,3 +2228,51 @@ select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59')
 struct<timestampdiff(SECOND, DATE '2022-02-15', TIMESTAMP '2022-02-14 23:59:59'):bigint>
 -- !query output
 -1
+
+
+-- !query
+select timestampdiff('MINUTE', timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`timestampdiff`",
+    "invalidValue" : "'MINUTE'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 94,
+    "fragment" : "timestampdiff('MINUTE', timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03')"
+  } ]
+}
+
+
+-- !query
+select timestampdiff('YEAR', date'2022-02-15', date'2023-02-15')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`timestampdiff`",
+    "invalidValue" : "'YEAR'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "timestampdiff('YEAR', date'2022-02-15', date'2023-02-15')"
+  } ]
+}

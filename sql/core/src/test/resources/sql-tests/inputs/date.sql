@@ -154,6 +154,9 @@ select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03');
 select dateadd(QUARTER, 5, date'2022-02-25');
 select dateadd(YEAR, 1, date'2022-02-25');
 
+select dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123');
+select dateadd('QUARTER', 5, date'2022-02-25');
+
 -- Get the difference between timestamps or dates in the specified units
 select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001');
 select datediff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
@@ -165,3 +168,6 @@ select datediff(WEEK, timestamp'2022-02-25 01:02:03', timestamp'2022-01-28 01:02
 select datediff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03');
 select datediff(QUARTER, date'2022-02-25', date'2023-05-25');
 select datediff(YEAR, date'2022-02-25', date'2023-02-25');
+
+select datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
+select datediff('YEAR', date'2022-02-25', date'2023-02-25');

@@ -883,6 +883,50 @@ select dateadd(YEAR, 1, date'2022-02-25')
 
 
 -- !query
+select dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`dateadd`",
+    "invalidValue" : "'MICROSECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123')"
+  } ]
+}
+
+
+-- !query
+select dateadd('QUARTER', 5, date'2022-02-25')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`dateadd`",
+    "invalidValue" : "'QUARTER'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "dateadd('QUARTER', 5, date'2022-02-25')"
+  } ]
+}
+
+
+-- !query
 select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -940,3 +984,47 @@ select datediff(QUARTER, date'2022-02-25', date'2023-05-25')
 select datediff(YEAR, date'2022-02-25', date'2023-02-25')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`datediff`",
+    "invalidValue" : "'MILLISECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 102,
+    "fragment" : "datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')"
+  } ]
+}
+
+
+-- !query
+select datediff('YEAR', date'2022-02-25', date'2023-02-25')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`datediff`",
+    "invalidValue" : "'YEAR'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "datediff('YEAR', date'2022-02-25', date'2023-02-25')"
+  } ]
+}
