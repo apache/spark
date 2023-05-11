@@ -390,7 +390,7 @@ message CachedLocalRelation {
   // (Required) An identifier of the Spark SQL session in which the user created the local relation.
   string sessionId = 2;
 
-  // (Required) A sha-256 hash of the serialized local relation.
+  // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
   string hash = 3;
 }
 

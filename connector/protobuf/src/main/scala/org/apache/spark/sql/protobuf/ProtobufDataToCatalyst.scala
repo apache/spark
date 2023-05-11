@@ -76,7 +76,8 @@ private[protobuf] case class ProtobufDataToCatalyst(
       messageDescriptor,
       dataType,
       typeRegistry = typeRegistry,
-      emitDefaultValues = protobufOptions.emitDefaultValues
+      emitDefaultValues = protobufOptions.emitDefaultValues,
+      enumsAsInts = protobufOptions.enumsAsInts
     )
   }
 
