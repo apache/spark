@@ -27,7 +27,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 private[spark] trait JsonUtils {
 
-  protected val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  protected val mapper: ObjectMapper =  new ObjectMapper().registerModule(DefaultScalaModule)
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   def toJsonString(block: JsonGenerator => Unit): String = {
