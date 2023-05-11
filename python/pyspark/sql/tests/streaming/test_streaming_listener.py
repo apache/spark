@@ -65,7 +65,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"
             ),
-            13,
+            14,
             msg,
         )
         self.assertEquals(

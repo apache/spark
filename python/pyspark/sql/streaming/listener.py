@@ -270,6 +270,11 @@ class QueryTerminatedEvent:
         self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
         jexception = jevent.exception()
         self._exception: Optional[str] = jexception.get() if jexception.isDefined() else None
+        jerrorclass = jevent.errorClassOnException()
+        if jerrorclass.isDefined():
+            self._errorClassOnException: Optional[str] = jerrorclass.get()
+        else:
+            self._errorClassOnException: Optional[str] = None
 
     @property
     def id(self) -> uuid.UUID:
@@ -295,6 +300,16 @@ class QueryTerminatedEvent:
         """
         return self._exception
 
+    @property
+    def errorClassOnException(self) -> Optional[str]:
+        """
+        The error class from the exception if the query was terminated
+        with an exception which is a part of error class framework.
+        If the query was terminated without an exception, or the
+        exception is not a part of error class framework, it will be
+        `None`.
+        """
+        return self._errorClassOnException
 
 class StreamingQueryProgress:
     """
