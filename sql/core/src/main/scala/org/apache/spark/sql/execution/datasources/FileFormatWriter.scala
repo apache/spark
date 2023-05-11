@@ -167,6 +167,7 @@ object FileFormatWriter extends Logging {
 
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    // It must be run before `materializeAdaptiveSparkPlan()`
     committer.setupJob(job)
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
