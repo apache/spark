@@ -149,6 +149,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(event.runId, uuid.UUID))
         # TODO: Needs a test for exception.
         self.assertEquals(event.exception, None)
+        self.assertEquals(event.errorClassOnException, None)
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""
