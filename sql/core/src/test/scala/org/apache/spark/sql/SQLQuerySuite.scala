@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.math.RoundingMode
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
@@ -1496,6 +1497,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       df.selectExpr("b * a * b"),
       Seq(Row(d)))
+  }
+
+  test("SPARK-40129: Fix Decimal multiply can produce the wrong answer because it rounds twice") {
+    val sparkValue = Seq("9173594185998001607642838421.5479932913").toDF()
+      .selectExpr("CAST(value as DECIMAL(38,10)) as a")
+      .selectExpr("a * CAST(-12 as DECIMAL(38,10))").head().getDecimal(0)
+
+    val l = new java.math.BigDecimal("9173594185998001607642838421.5479932913")
+    val r = new java.math.BigDecimal("-12.0000000000")
+    val prod = l.multiply(r)
+    val javaValue = prod.setScale(6, RoundingMode.HALF_UP)
+
+    assert(sparkValue == javaValue)
   }
 
   test("precision smaller than scale") {

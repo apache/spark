@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{MathContext, RoundingMode}
+
 import scala.math.{max, min}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -279,7 +281,7 @@ abstract class BinaryArithmetic extends BinaryOperator
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
-  def decimalMethod: String =
+  def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String): String =
     throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
       "decimalMethod", "genCode")
 
@@ -298,6 +300,9 @@ abstract class BinaryArithmetic extends BinaryOperator
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
       val errorContextCode = getContextOrNullCode(ctx, failOnError)
+      val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
+      val mathContextValue = JavaCode.global(ctx.addReferenceObj("mathContext",
+        mathContext, mathContext.getClass.getName), mathContext.getClass)
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -305,7 +310,7 @@ abstract class BinaryArithmetic extends BinaryOperator
       }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-           |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
+           |${ev.value} = ${decimalMethod(mathContextValue, eval1, eval2)}.toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
            |$updateIsNull
        """.stripMargin
@@ -430,7 +435,8 @@ case class Add(
 
   override def symbol: String = "+"
 
-  override def decimalMethod: String = "$plus"
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"$value1.$$plus($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -516,7 +522,8 @@ case class Subtract(
 
   override def symbol: String = "-"
 
-  override def decimalMethod: String = "$minus"
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"$value1.$$minus($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -592,7 +599,10 @@ case class Multiply(
   override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "*"
-  override def decimalMethod: String = "$times"
+
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"Decimal.apply($value1.toJavaBigDecimal()" +
+    s".multiply($value2.toJavaBigDecimal(), $mathContextValue))"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -697,11 +707,15 @@ trait DivModLike extends BinaryArithmetic {
     }
     val javaType = CodeGenerator.javaType(dataType)
     val errorContextCode = getContextOrNullCode(ctx, failOnError)
+    val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
+    val mathContextValue = JavaCode.global(ctx.addReferenceObj("mathContext",
+      mathContext, mathContext.getClass.getName), mathContext.getClass)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
         s"""
-           |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
+           |Decimal $decimalValue =
+           |${decimalMethod(mathContextValue, eval1.value, eval2.value)}.toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
            |if ($decimalValue != null) {
            |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
@@ -793,7 +807,9 @@ case class Divide(
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
-  override def decimalMethod: String = "$div"
+
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"$value1.$$div($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -868,7 +884,10 @@ case class IntegralDivide(
   override def dataType: DataType = LongType
 
   override def symbol: String = "/"
-  override def decimalMethod: String = "quot"
+
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"$value1.quot($value2)"
+
   override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
 
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
@@ -936,7 +955,9 @@ case class Remainder(
   override def inputType: AbstractDataType = NumericType
 
   override def symbol: String = "%"
-  override def decimalMethod: String = "remainder"
+
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"$value1.remainder($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -1019,7 +1040,8 @@ case class Pmod(
 
   override def nullable: Boolean = true
 
-  override def decimalMethod: String = "remainder"
+  override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
+  String = s"$value1.remainder($value2)"
 
   // This follows Remainder rule
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
@@ -1077,14 +1099,21 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
+    val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
+    val mathContextValue = JavaCode.global(ctx.addReferenceObj("mathContext",
+      mathContext, mathContext.getClass.getName), mathContext.getClass)
     val errorContext = getContextOrNullCode(ctx)
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
         s"""
-           |$javaType $remainder = ${eval1.value}.$decimalMethod(${eval2.value});
+           |$javaType $remainder = ${decimalMethod(mathContextValue, eval1.value, eval2.value)};
            |if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-           |  ${ev.value}=($remainder.$decimalAdd(${eval2.value})).$decimalMethod(${eval2.value});
+           |  ${ev.value}=
+           |${
+          decimalMethod(mathContextValue, s"($remainder.$decimalAdd(${eval2.value}))"
+            , eval2.value)
+        };
            |} else {
            |  ${ev.value}=$remainder;
            |}
