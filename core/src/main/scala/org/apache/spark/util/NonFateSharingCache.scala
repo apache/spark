@@ -27,7 +27,10 @@ import com.google.common.cache.LoadingCache
  * when multiple threads access the same key in the cache at the same time when the key is not in
  * the cache, Guava cache will block all requests and load the data only once. If the loading fails,
  * all requests will fail immediately without retry. Therefore individual failure will also fail
- * other irrelevant queries who are waiting for the same key.
+ * other irrelevant queries who are waiting for the same key. Given that spark can cancel tasks at
+ * arbitrary times for many different reasons, fate sharing means that a task which gets canceled
+ * while populating a cache entry can cause spurious failures in tasks from unrelated jobs -- even
+ * though those tasks would have successfully populated the cache if they had been allowed to try.
  *
  * This util Cache wrapper with KeyLock to synchronize threads looking for the same key
  * so that they should run individually and fail as if they had arrived one at a time.

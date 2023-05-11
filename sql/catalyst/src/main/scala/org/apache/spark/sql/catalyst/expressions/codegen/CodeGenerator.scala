@@ -1577,10 +1577,9 @@ object CodeGenerator extends Logging {
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
    *
-   * We wrap Guava Cache with NonFateSharingCache: tasks for similar queries that run concurrently
-   * can hit the same codegen cache key at the same time. If one query fails or gets canceled while
-   * some of its tasks are doing codegen, it will cause spurious failures in all other queries with
-   * tasks that wait on the same cache key. See NonFateSharingCache for more details.
+   * Codegen can be slow. Use a non fate sharing cache in case a query gets canceled during codegen
+   * while other queries wait on the same code, so that those other queries don't get wrongly
+   * aborted. See [[NonFateSharingCache]] for more details.
    */
   private val cache = NonFateSharingCache(CacheBuilder.newBuilder()
     .maximumSize(SQLConf.get.codegenCacheMaxEntries)
