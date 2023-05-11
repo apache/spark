@@ -17,12 +17,11 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.TimeoutException
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
