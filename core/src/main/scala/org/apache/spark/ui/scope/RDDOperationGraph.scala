@@ -258,6 +258,7 @@ private[spark] object RDDOperationGraph extends Logging {
       case DeterministicLevel.DETERMINATE => ""
       case DeterministicLevel.INDETERMINATE => " [Indeterminate]"
       case DeterministicLevel.UNORDERED => " [Unordered]"
+      case _ => ""
     }
     val escapedCallsite = Utility.escape(node.callsite)
     val label = s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
