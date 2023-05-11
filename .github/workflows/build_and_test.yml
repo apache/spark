@@ -597,8 +597,8 @@ jobs:
         java-version: 8
     - name: Install Golang
       run: |
-        apt update
-        apt-get install -y golang-go
+        curl -LO https://go.dev/dl/go1.19.9.linux-amd64.tar.gz
+        tar -C /usr/local -xzf go1.19.9.linux-amd64.tar.gz
     - name: Install Python linter dependencies
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
@@ -618,8 +618,10 @@ jobs:
     - name: Run Build & Test
       run: |
         export PATH=$PATH:$HOME/buf/bin
+        export PATH=$PATH:/usr/local/go/bin
+        pwd
         cd connector/connect/client/go
-        go mod download
+        go mod download -x
         make
         make fulltest
 
