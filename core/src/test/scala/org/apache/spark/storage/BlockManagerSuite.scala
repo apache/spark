@@ -131,10 +131,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       None
     }
     val bmSecurityMgr = new SecurityManager(bmConf, encryptionKey)
-    val transfer = transferService
-      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
-    val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, bmConf)
+    val transfer = transferService.getOrElse(new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1))
+    val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
     val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", 0)
       Some(new ExternalBlockStoreClient(transConf, bmSecurityMgr,
@@ -1308,9 +1308,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -1357,8 +1358,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
       val securityMgr = new SecurityManager(conf, ioEncryptionKey)
       val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
-      val transfer =
-        new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+      val transfer = new NettyBlockTransferService(
+        conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
       val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
         serializerManager, conf, memoryManager, mapOutputTracker,
@@ -2193,9 +2194,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     case class User(id: Long, name: String)
 
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -2216,9 +2218,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       = createKryoSerializerWithDiskCorruptedInputStream()
 
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)

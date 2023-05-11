@@ -53,7 +53,6 @@ if TYPE_CHECKING:
 def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
-    evalType: int,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     from pyspark.sql.udf import _create_arrow_py_udf
@@ -68,7 +67,7 @@ def _create_py_udf(
             else useArrow
         )
 
-    regular_udf = _create_udf(f, returnType, evalType)
+    regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
     return_type = regular_udf.returnType
     try:
         is_func_with_args = len(getfullargspec(f).args) > 0
