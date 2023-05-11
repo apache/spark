@@ -271,10 +271,9 @@ class QueryTerminatedEvent:
         jexception = jevent.exception()
         self._exception: Optional[str] = jexception.get() if jexception.isDefined() else None
         jerrorclass = jevent.errorClassOnException()
-        if jerrorclass.isDefined():
-            self._errorClassOnException: Optional[str] = jerrorclass.get()
-        else:
-            self._errorClassOnException: Optional[str] = None
+        self._errorClassOnException: Optional[str] = (
+            jerrorclass.get() if jerrorclass.isDefined() else None
+        )
 
     @property
     def id(self) -> uuid.UUID:
