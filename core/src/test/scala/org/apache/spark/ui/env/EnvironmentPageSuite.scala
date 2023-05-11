@@ -25,7 +25,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, RuntimeInfo}
-import org.apache.spark.status.api.v1.ApplicationEnvironmentInfo
 
 class EnvironmentPageSuite extends SparkFunSuite {
 
