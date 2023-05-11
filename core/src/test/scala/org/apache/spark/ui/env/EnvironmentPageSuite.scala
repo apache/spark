@@ -28,7 +28,7 @@ import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, RuntimeInfo}
 
 class EnvironmentPageSuite extends SparkFunSuite {
 
-  test("Handle missing hadoopProperties and metricsProperties") {
+  test("SPARK-43471: Handle missing hadoopProperties and metricsProperties") {
     val environmentTab = mock(classOf[EnvironmentTab])
     when(environmentTab.appName).thenReturn("Environment")
     when(environmentTab.basePath).thenReturn("http://localhost:4040")
