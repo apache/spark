@@ -21,7 +21,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
-from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type, _create_converter_from_pandas
+from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type, _create_converter_from_pandas, _create_converter_to_pandas
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
 
 
@@ -168,23 +168,21 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._safecheck = safecheck
 
     def arrow_to_pandas(self, arrow_column):
-        from pyspark.sql.pandas.types import (
-            _check_series_localize_timestamps,
-            _convert_map_items_to_dict,
-        )
-        import pyarrow
-
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
         s = arrow_column.to_pandas(date_as_object=True)
 
-        if pyarrow.types.is_timestamp(arrow_column.type) and arrow_column.type.tz is not None:
-            return _check_series_localize_timestamps(s, self._timezone)
-        elif pyarrow.types.is_map(arrow_column.type):
-            return _convert_map_items_to_dict(s)
-        else:
-            return s
+        # TODO: cache the converter for reuse
+        converter = _create_converter_to_pandas(
+            data_type=from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
+            nullable=True,
+            timezone=self._timezone,
+            struct_in_pandas="dict",
+            error_on_duplicated_field_names=True,
+        )
+        return converter(s)
 
     def _create_array(self, series, arrow_type):
         """
