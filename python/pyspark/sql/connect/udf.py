@@ -36,7 +36,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.types import ArrayType, DataType, MapType, StringType, StructType
-from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration, _create_arrow_py_udf
+from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
 from pyspark.errors import PySparkTypeError
 
 
@@ -55,6 +55,7 @@ def _create_py_udf(
     returnType: "DataTypeOrString",
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
+    from pyspark.sql.udf import _create_arrow_py_udf
     from pyspark.sql.connect.session import _active_spark_session
 
     if _active_spark_session is None:
