@@ -311,6 +311,7 @@ class QueryTerminatedEvent:
         """
         return self._errorClassOnException
 
+
 class StreamingQueryProgress:
     """
     .. versionadded:: 3.4.0
