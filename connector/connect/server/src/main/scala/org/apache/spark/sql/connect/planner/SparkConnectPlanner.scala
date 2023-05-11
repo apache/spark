@@ -672,7 +672,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       apply(transformRelation(input), groupingExprs, sortOrder)
     }
 
-    private def apply(
+    def apply(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
@@ -1913,14 +1913,12 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
-    val ds = UntypedKeyValueGroupedDataset(
-      rel.getInput,
-      rel.getGroupingExpressionsList,
-      java.util.Collections.emptyList())
+    val input = transformRelation(rel.getInput)
+    val ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
 
     val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
     val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr, ds.dataAttributes))
+      .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
       .map(toNamedExpression)
     logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
   }
@@ -1933,7 +1931,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr, input.output))
+      .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
     val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
@@ -2012,12 +2010,12 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformExpressionWithTypedReduceExpression(
       expr: proto.Expression,
-      dataAttributes: Seq[Attribute]): Expression = {
+      plan: LogicalPlan): Expression = {
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
-        transformTypedReduceExpression(expr.getUnresolvedFunction, dataAttributes)
+        transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
       case _ => transformExpression(expr)
     }
   }
