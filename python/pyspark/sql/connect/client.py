@@ -25,6 +25,7 @@ check_dependencies(__name__)
 
 import logging
 import os
+import platform
 import random
 import time
 import urllib.parse
@@ -299,7 +300,11 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return user_agent
+        return " ".join([
+            user_agent,
+            f"os/{platform.uname().system.lower()}",
+            f"python/{platform.python_version()}"
+        ])
 
     def get(self, key: str) -> Any:
         """
