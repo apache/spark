@@ -17,6 +17,8 @@
 
 import unittest
 
+from pyspark.sql.connect.types import UnparsedDataType
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -32,28 +34,37 @@ class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
     def test_pandas_udf_timestamp_ntz(self):
         super().test_pandas_udf_timestamp_ntz()
 
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_detect_unsafe_type_conversion(self):
-        super().test_pandas_udf_detect_unsafe_type_conversion()
+    def test_pandas_udf_decorator_with_return_type_string(self):
+        @pandas_udf("v double", PandasUDFType.GROUPED_MAP)
+        def foo(x):
+            return x
 
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_arrow_overflow(self):
-        super().test_pandas_udf_arrow_overflow()
+        self.assertEqual(foo.returnType, UnparsedDataType("v double"))
+        self.assertEqual(foo.evalType, PandasUDFType.GROUPED_MAP)
 
-    # TODO(SPARK-42247): standardize `returnType` attribute of UDF
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_pandas_udf_decorator(self):
-        super().test_pandas_udf_decorator()
+        @pandas_udf(returnType="double", functionType=PandasUDFType.SCALAR)
+        def foo(x):
+            return x
 
-    # TODO(SPARK-42247): standardize `returnType` attribute of UDF
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_pandas_udf_basic(self):
-        super().test_pandas_udf_basic()
+        self.assertEqual(foo.returnType, UnparsedDataType("double"))
+        self.assertEqual(foo.evalType, PandasUDFType.SCALAR)
 
-    # TODO(SPARK-42340): implement GroupedData.applyInPandas
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_stopiteration_in_grouped_map(self):
-        super().test_stopiteration_in_grouped_map()
+    def test_pandas_udf_basic_with_return_type_string(self):
+        udf = pandas_udf(lambda x: x, "double", PandasUDFType.SCALAR)
+        self.assertEqual(udf.returnType, UnparsedDataType("double"))
+        self.assertEqual(udf.evalType, PandasUDFType.SCALAR)
+
+        udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
+
+        udf = pandas_udf(lambda x: x, "v double", functionType=PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
+
+        udf = pandas_udf(lambda x: x, returnType="v double", functionType=PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
 
 
 if __name__ == "__main__":

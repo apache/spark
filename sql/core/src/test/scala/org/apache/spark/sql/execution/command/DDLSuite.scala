@@ -2071,7 +2071,10 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
-    val directoryToAdd = Utils.createTempDir("/tmp/spark/addDirectory/")
+    // SPARK-43093: Don't use `withTempDir` to clean up temp dir, it will cause test cases in
+    // shared session that need to execute `Executor.updateDependencies` test fail.
+    val directoryToAdd = Utils.createDirectory(
+      root = Utils.createTempDir().getCanonicalPath, namePrefix = "addDirectory")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
     assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
@@ -2180,6 +2183,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("REFRESH FUNCTION default.rand")
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
+  }
+
+  test("SPARK-41290: No generated columns with V1") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"create table t(a int, b int generated always as (a + 1)) using parquet")
+      },
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+        "operation" -> "generated columns")
+    )
   }
 }
 

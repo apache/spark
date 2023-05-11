@@ -17,52 +17,14 @@
 
 package org.apache.spark.sql.connector
 
-import java.util.Collections
-
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, QueryTest, Row}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
-import org.apache.spark.sql.connector.expressions.LogicalExpressions._
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
 
-abstract class DeleteFromTableSuiteBase
-  extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
+abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
-
-  before {
-    spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
-  }
-
-  after {
-    spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
-  }
-
-  protected val namespace: Array[String] = Array("ns1")
-  protected val ident: Identifier = Identifier.of(namespace, "test_table")
-  protected val tableNameAsString: String = "cat." + ident.toString
-
-  protected def extraTableProps: java.util.Map[String, String] = {
-    Collections.emptyMap[String, String]
-  }
-
-  protected def catalog: InMemoryRowLevelOperationTableCatalog = {
-    val catalog = spark.sessionState.catalogManager.catalog("cat")
-    catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
-  }
-
-  protected def table: InMemoryRowLevelOperationTable = {
-    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
-  }
 
   test("EXPLAIN only delete") {
     createAndInitTable("id INT, dep STRING", """{ "id": 1, "dep": "hr" }""")
@@ -559,33 +521,6 @@ abstract class DeleteFromTableSuiteBase
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, 200) :: Row(3, 3, 100) :: Nil)
-    }
-  }
-
-  protected def createTable(schemaString: String): Unit = {
-    val schema = StructType.fromDDL(schemaString)
-    catalog.createTable(ident, schema, Array(identity(reference(Seq("dep")))), extraTableProps)
-  }
-
-  protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {
-    createTable(schemaString)
-    append(schemaString, jsonData)
-  }
-
-  private def append(schemaString: String, jsonData: String): Unit = {
-    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
-      val df = toDF(jsonData, schemaString)
-      df.coalesce(1).writeTo(tableNameAsString).append()
-    }
-  }
-
-  private def toDF(jsonData: String, schemaString: String = null): DataFrame = {
-    val jsonRows = jsonData.split("\\n").filter(str => str.trim.nonEmpty)
-    val jsonDS = spark.createDataset(jsonRows)(Encoders.STRING)
-    if (schemaString == null) {
-      spark.read.json(jsonDS)
-    } else {
-      spark.read.schema(schemaString).json(jsonDS)
     }
   }
 

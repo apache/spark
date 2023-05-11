@@ -455,11 +455,8 @@ abstract class OrcSuite
             throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
         }
 
-        checkError(
-          exception = innerException.asInstanceOf[SparkException],
-          errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
-          parameters = Map("left" -> "\"BIGINT\"", "right" -> "\"STRING\"")
-        )
+        assert(innerException.asInstanceOf[SparkException].getErrorClass ===
+          "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 
       // it is ok if no schema merging

@@ -70,15 +70,16 @@ case class LogicalRelation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = relation match {
     case relation: HadoopFsRelation =>
-      metadataOutputWithOutConflicts(
-        Seq(FileFormat.createFileMetadataCol(relation.fileFormat)))
+      metadataOutputWithOutConflicts(Seq(relation.fileFormat.createFileMetadataCol))
     case _ => Nil
   }
 
   override def withMetadataColumns(): LogicalRelation = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      this.copy(output = output ++ newMetadata)
+      val newRelation = this.copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
     } else {
       this
     }

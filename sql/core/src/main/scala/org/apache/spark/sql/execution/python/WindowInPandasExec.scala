@@ -27,6 +27,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -110,14 +111,15 @@ case class WindowInPandasExec(
 
   private val windowBoundTypeConf = "pandas_window_bound_types"
 
-  private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
+  private def collectFunctions(
+      udf: PythonFuncExpression): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
-      case Seq(u: PythonUDF) =>
+      case Seq(u: PythonFuncExpression) =>
         val (chained, children) = collectFunctions(u)
         (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
-        assert(children.forall(!_.exists(_.isInstanceOf[PythonUDF])))
+        assert(children.forall(!_.exists(_.isInstanceOf[PythonFuncExpression])))
         (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
   }
@@ -186,7 +188,9 @@ case class WindowInPandasExec(
 
     // Extract window expressions and window functions
     val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
-    val udfExpressions = windowExpressions.map(_.windowFunction.asInstanceOf[PythonUDF])
+    val udfExpressions = windowExpressions.map { e =>
+      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction.asInstanceOf[PythonUDAF]
+    }
 
     // We shouldn't be chaining anything here.
     // All chained python functions should only contain one function.

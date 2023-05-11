@@ -228,17 +228,16 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
   }
 
   test("SPARK-26352: join reordering should not change the order of attributes") {
-    // This test case does not rely on CBO.
     // It's similar to the test case above, but catches a reordering bug that the one above doesn't
     val tab1 = LocalRelation($"x".int, $"y".int)
     val tab2 = LocalRelation($"i".int, $"j".int)
     val tab3 = LocalRelation($"a".int, $"b".int)
     val original =
       tab1.join(tab2, Cross)
-          .join(tab3, Inner, Some($"a" === $"x" && $"b" === $"i"))
+          .join(tab3, Inner, Some($"a" === $"x"))
     val expected =
       tab1.join(tab3, Inner, Some($"a" === $"x"))
-          .join(tab2, Cross, Some($"b" === $"i"))
+          .join(tab2, Cross)
           .select(outputsOf(tab1, tab2, tab3): _*)
 
     assertEqualJoinPlans(Optimize, original, expected)

@@ -19,7 +19,8 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
-from typing import Optional, TYPE_CHECKING
+import itertools
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 from pyspark.sql.types import (
     cast,
@@ -27,6 +28,7 @@ from pyspark.sql.types import (
     ByteType,
     ShortType,
     IntegerType,
+    IntegralType,
     LongType,
     FloatType,
     DoubleType,
@@ -43,9 +45,13 @@ from pyspark.sql.types import (
     StructField,
     NullType,
     DataType,
+    Row,
+    _create_row,
 )
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException
 
 if TYPE_CHECKING:
+    import pandas as pd
     import pyarrow as pa
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
@@ -87,27 +93,43 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
         if type(dt.elementType) == TimestampType:
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": str(dt)},
+            )
         elif type(dt.elementType) == StructType:
             if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                raise TypeError(
-                    "Array of StructType is only supported with pyarrow 2.0.0 and above"
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                    message_parameters={"data_type": "Array of StructType"},
                 )
             if any(type(field.dataType) == StructType for field in dt.elementType):
-                raise TypeError("Nested StructType not supported in conversion to Arrow")
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                    message_parameters={"data_type": "Nested StructType"},
+                )
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "MapType"},
+            )
         if type(dt.keyType) in [StructType, TimestampType] or type(dt.valueType) in [
             StructType,
             TimestampType,
         ]:
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(dt)},
+            )
         arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
     elif type(dt) == StructType:
         if any(type(field.dataType) == StructType for field in dt):
-            raise TypeError("Nested StructType not supported in conversion to Arrow")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": "Nested StructType"},
+            )
         fields = [
             pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
             for field in dt
@@ -116,7 +138,10 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == NullType:
         arrow_type = pa.null()
     else:
-        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            message_parameters={"data_type": str(dt)},
+        )
     return arrow_type
 
 
@@ -168,17 +193,29 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
         if types.is_timestamp(at.value_type):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(at)},
+            )
         spark_type = ArrayType(from_arrow_type(at.value_type))
     elif types.is_map(at):
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "MapType"},
+            )
         if types.is_timestamp(at.key_type) or types.is_timestamp(at.item_type):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(at)},
+            )
         spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
     elif types.is_struct(at):
         if any(types.is_struct(field.type) for field in at):
-            raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": "Nested StructType"},
+            )
         return StructType(
             [
                 StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
@@ -190,7 +227,10 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_null(at):
         spark_type = NullType()
     else:
-        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            message_parameters={"data_type": str(at)},
+        )
     return spark_type
 
 
@@ -427,3 +467,236 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :return: pandas.Series of lists of (key, value) pairs
     """
     return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))
+
+
+def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
+    """
+    When converting Spark SQL records to Pandas `pandas.DataFrame`, the inferred data type
+    may be wrong. This method gets the corrected data type for Pandas if that type may be
+    inferred incorrectly.
+    """
+    import numpy as np
+
+    if type(dt) == ByteType:
+        return np.int8
+    elif type(dt) == ShortType:
+        return np.int16
+    elif type(dt) == IntegerType:
+        return np.int32
+    elif type(dt) == LongType:
+        return np.int64
+    elif type(dt) == FloatType:
+        return np.float32
+    elif type(dt) == DoubleType:
+        return np.float64
+    elif type(dt) == BooleanType:
+        return bool
+    elif type(dt) == TimestampType:
+        return np.dtype("datetime64[ns]")
+    elif type(dt) == TimestampNTZType:
+        return np.dtype("datetime64[ns]")
+    elif type(dt) == DayTimeIntervalType:
+        return np.dtype("timedelta64[ns]")
+    else:
+        return None
+
+
+def _create_converter_to_pandas(
+    data_type: DataType,
+    nullable: bool = True,
+    *,
+    timezone: Optional[str] = None,
+    struct_in_pandas: Optional[str] = None,
+    error_on_duplicated_field_names: bool = True,
+) -> Callable[["pd.Series"], "pd.Series"]:
+    """
+    Create a converter of pandas Series that is created from Spark's Python objects,
+    or `pyarrow.Table.to_pandas` method.
+
+    Parameters
+    ----------
+    data_type : :class:`DataType`
+        The data type corresponding to the pandas Series to be converted.
+    nullable : bool, optional
+        Whether the column is nullable or not. (default ``True``)
+    timezone : str, optional
+        The timezone to convert from. If there is a timestamp type, it's required.
+    struct_in_pandas : str, optional
+        How to handle struct type. If there is a struct type, it's required.
+        When ``row``, :class:`Row` object will be used.
+        When ``dict``, :class:`dict` will be used. If there are duplicated field names,
+        The fields will be suffixed, like `a_0`, `a_1`.
+        Must be one of: ``row``, ``dict``.
+    error_on_duplicated_field_names : bool, optional
+        Whether raise an exception when there are duplicated field names.
+        (default ``True``)
+
+    Returns
+    -------
+    The converter of `pandas.Series`
+    """
+    import numpy as np
+    import pandas as pd
+    from pandas.core.dtypes.common import is_datetime64tz_dtype
+
+    pandas_type = _to_corrected_pandas_type(data_type)
+
+    if pandas_type is not None:
+        # SPARK-21766: if an integer field is nullable and has null values, it can be
+        # inferred by pandas as a float column. If we convert the column with NaN back
+        # to integer type e.g., np.int16, we will hit an exception. So we use the
+        # pandas-inferred float type, rather than the corrected type from the schema
+        # in this case.
+        if isinstance(data_type, IntegralType) and nullable:
+
+            def correct_dtype(pser: pd.Series) -> pd.Series:
+                if pser.isnull().any():
+                    return pser.astype(np.float64, copy=False)
+                else:
+                    return pser.astype(pandas_type, copy=False)
+
+        elif isinstance(data_type, BooleanType) and nullable:
+
+            def correct_dtype(pser: pd.Series) -> pd.Series:
+                if pser.isnull().any():
+                    return pser.astype(object, copy=False)
+                else:
+                    return pser.astype(pandas_type, copy=False)
+
+        elif isinstance(data_type, TimestampType):
+            assert timezone is not None
+
+            def correct_dtype(pser: pd.Series) -> pd.Series:
+                if not is_datetime64tz_dtype(pser.dtype):
+                    pser = pser.astype(pandas_type, copy=False)
+                return _check_series_convert_timestamps_local_tz(pser, timezone=cast(str, timezone))
+
+        else:
+
+            def correct_dtype(pser: pd.Series) -> pd.Series:
+                return pser.astype(pandas_type, copy=False)
+
+        return correct_dtype
+
+    def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
+
+        if isinstance(dt, ArrayType):
+            _element_conv = _converter(dt.elementType)
+            if _element_conv is None:
+                return None
+
+            def convert_array(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif isinstance(value, np.ndarray):
+                    # `pyarrow.Table.to_pandas` uses `np.ndarray`.
+                    return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
+                else:
+                    assert isinstance(value, list)
+                    # otherwise, `list` should be used.
+                    return [_element_conv(v) for v in value]  # type: ignore[misc]
+
+            return convert_array
+
+        elif isinstance(dt, MapType):
+            _key_conv = _converter(dt.keyType) or (lambda x: x)
+            _value_conv = _converter(dt.valueType) or (lambda x: x)
+
+            def convert_map(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif isinstance(value, list):
+                    # `pyarrow.Table.to_pandas` uses `list` of key-value tuple.
+                    return {_key_conv(k): _value_conv(v) for k, v in value}
+                else:
+                    assert isinstance(value, dict)
+                    # otherwise, `dict` should be used.
+                    return {_key_conv(k): _value_conv(v) for k, v in value.items()}
+
+            return convert_map
+
+        elif isinstance(dt, StructType):
+            assert struct_in_pandas is not None
+
+            field_names = dt.names
+
+            if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
+                raise UnsupportedOperationException(
+                    error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                    message_parameters={"field_names": str(field_names)},
+                )
+
+            dedup_field_names = _dedup_names(field_names)
+
+            field_convs = [_converter(f.dataType) or (lambda x: x) for f in dt.fields]
+
+            if struct_in_pandas == "row":
+
+                def convert_struct_as_row(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, dict):
+                        # `pyarrow.Table.to_pandas` uses `dict`.
+                        _values = [
+                            field_convs[i](value.get(name, None))
+                            for i, name in enumerate(dedup_field_names)
+                        ]
+                        return _create_row(field_names, _values)
+                    else:
+                        assert isinstance(value, Row)
+                        # otherwise, `Row` should be used.
+                        _values = [field_convs[i](value[i]) for i, name in enumerate(value)]
+                        return _create_row(field_names, _values)
+
+                return convert_struct_as_row
+
+            elif struct_in_pandas == "dict":
+
+                def convert_struct_as_dict(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, dict):
+                        # `pyarrow.Table.to_pandas` uses `dict`.
+                        return {
+                            name: field_convs[i](value.get(name, None))
+                            for i, name in enumerate(dedup_field_names)
+                        }
+                    else:
+                        assert isinstance(value, Row)
+                        # otherwise, `Row` should be used.
+                        return {
+                            dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
+                        }
+
+                return convert_struct_as_dict
+
+            else:
+                raise ValueError(f"Unknown value for `struct_in_pandas`: {struct_in_pandas}")
+
+        else:
+            return None
+
+    conv = _converter(data_type)
+    if conv is not None:
+        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+    else:
+        return lambda pser: pser
+
+
+def _dedup_names(names: List[str]) -> List[str]:
+    if len(set(names)) == len(names):
+        return names
+    else:
+
+        def _gen_dedup(_name: str) -> Callable[[], str]:
+            _i = itertools.count()
+            return lambda: f"{_name}_{next(_i)}"
+
+        def _gen_identity(_name: str) -> Callable[[], str]:
+            return lambda: _name
+
+        gen_new_name = {
+            name: _gen_dedup(name) if len(list(group)) > 1 else _gen_identity(name)
+            for name, group in itertools.groupby(sorted(names))
+        }
+        return [gen_new_name[name]() for name in names]

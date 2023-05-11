@@ -122,6 +122,12 @@ if ! is_dry_run; then
   git push origin $RELEASE_TAG
   if [[ $RELEASE_VERSION != *"preview"* ]]; then
     git push origin HEAD:$GIT_BRANCH
+    if git branch -r --contains tags/$RELEASE_TAG | grep origin; then
+      echo "Pushed $RELEASE_TAG to $GIT_BRANCH."
+    else
+      echo "Failed to push $RELEASE_TAG to $GIT_BRANCH. Please start over."
+      exit 1
+    fi
   else
     echo "It's preview release. We only push $RELEASE_TAG to remote."
   fi

@@ -148,4 +148,24 @@ class CollapseWindowSuite extends PlanTest {
 
     comparePlans(optimized, query)
   }
+
+  test("SPARK-42525: collapse two adjacent windows with the same partition/order " +
+    "but qualifiers are different ") {
+
+    val query = testRelation
+      .window(Seq(min(a).as("_we0")), Seq(c.withQualifier(Seq("0"))), Seq(c.asc))
+      .select($"a", $"b", $"c", $"_we0" as "min_a")
+      .window(Seq(max(a).as("_we1")), Seq(c.withQualifier(Seq("1"))), Seq(c.asc))
+      .select($"a", $"b", $"c", $"min_a", $"_we1" as "max_a")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer = testRelation
+      .window(Seq(min(a).as("_we0"), max(a).as("_we1")), Seq(c), Seq(c.asc))
+      .select(a, b, c, $"_we0" as "min_a", $"_we1" as "max_a")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

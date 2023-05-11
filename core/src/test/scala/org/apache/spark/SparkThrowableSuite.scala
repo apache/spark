@@ -130,6 +130,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
       .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)
@@ -207,6 +208,17 @@ class SparkThrowableSuite extends SparkFunSuite {
       ) ==
       "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
         "name `foo` cannot be resolved. Did you mean one of the following? [`bar`, `baz`]."
+    )
+  }
+
+  test("Error message does not do substitution on values") {
+    assert(
+      getMessage(
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
+      ) ==
+        "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
     )
   }
 

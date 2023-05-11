@@ -42,7 +42,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string, is_testing
 
 
-class DataFrameTest(ComparisonTestBase, SQLTestUtils):
+class DataFrameTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -238,14 +238,22 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test with ps.DataFrame and pd.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
-                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+                ps.DataFrame(
+                    data=psdf, index=pd.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
+                pd.DataFrame(
+                    data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
             )
 
             # test with ps.DataFrame and ps.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=ps.Index(["Hello", "Universe", "Databricks"])),
-                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+                ps.DataFrame(
+                    data=psdf, index=ps.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
+                pd.DataFrame(
+                    data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
             )
 
         # test DatetimeIndex
@@ -4509,6 +4517,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             NotImplementedError, 'axis should be either 0 or "index" currently.'
         ):
             psdf.any(axis=1)
+
+
+class DataFrameTests(DataFrameTestsMixin, ComparisonTestBase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

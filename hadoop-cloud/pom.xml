@@ -65,13 +65,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
     <!--
@@ -108,30 +108,6 @@
         <exclusion>
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-openstack</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>${hadoop.deps.scope}</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-common</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>junit</groupId>
-          <artifactId>junit</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.mockito</groupId>
-          <artifactId>mockito-all</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -208,13 +184,6 @@
   </dependencies>
 
   <profiles>
-    <!--
-     hadoop-3 profile is activated by default so hadoop-2 profile
-     also needs to be declared here for building with -Phadoop-2.
-    -->
-    <profile>
-      <id>hadoop-2</id>
-    </profile>
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
@@ -312,6 +281,14 @@
               -->
               <groupId>org.jacoco</groupId>
               <artifactId>org.jacoco.agent</artifactId>
+            </exclusion>
+            <!--
+              SPARK-42913: `hadoop-cos`is not a dependency of `hadoop-cloud-storage` 3.3.4,
+              manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
+            -->
+            <exclusion>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-cos</artifactId>
             </exclusion>
           </exclusions>
         </dependency>

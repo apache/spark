@@ -86,7 +86,10 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = schema()
+    override def readSchema(): StructType = {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      columns.asSchema
+    }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
       new TextSocketMicroBatchStream(host, port, numPartitions)

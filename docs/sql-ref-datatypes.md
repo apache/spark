@@ -108,67 +108,6 @@ Spark SQL and DataFrames support the following data types:
     `null` values.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
-You can access them by doing
-
-{% include_example data_types scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
-
-|Data type|Value type in Scala|API to access or create a data type|
-|---------|-------------------|-----------------------------------|
-|**ByteType**|Byte|ByteType|
-|**ShortType**|Short|ShortType|
-|**IntegerType**|Int|IntegerType|
-|**LongType**|Long|LongType|
-|**FloatType**|Float|FloatType|
-|**DoubleType**|Double|DoubleType|
-|**DecimalType**|java.math.BigDecimal|DecimalType|
-|**StringType**|String|StringType|
-|**BinaryType**|Array[Byte]|BinaryType|
-|**BooleanType**|Boolean|BooleanType|
-|**TimestampType**|java.sql.Timestamp|TimestampType|
-|**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
-|**DateType**|java.sql.Date|DateType|
-|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
-|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
-|**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
-|**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
-|**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in Scala of the data type of this field(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is true.|
-
-</div>
-
-<div data-lang="java" markdown="1">
-
-All data types of Spark SQL are located in the package of
-`org.apache.spark.sql.types`. To access or create a data type,
-please use factory methods provided in
-`org.apache.spark.sql.types.DataTypes`.
-
-|Data type|Value type in Java|API to access or create a data type|
-|---------|------------------|-----------------------------------|
-|**ByteType**|byte or Byte|DataTypes.ByteType|
-|**ShortType**|short or Short|DataTypes.ShortType|
-|**IntegerType**|int or Integer|DataTypes.IntegerType|
-|**LongType**|long or Long|DataTypes.LongType|
-|**FloatType**|float or Float|DataTypes.FloatType|
-|**DoubleType**|double or Double|DataTypes.DoubleType|
-|**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
-|**StringType**|String|DataTypes.StringType|
-|**BinaryType**|byte[]|DataTypes.BinaryType|
-|**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
-|**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
-|**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
-|**DateType**|java.sql.Date|DataTypes.DateType|
-|**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
-|**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
-|**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
-|**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
-|**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in Java of the data type of this field (For example, int for a StructField with the data type IntegerType)|DataTypes.createStructField(*name*, *dataType*, *nullable*)| 
-
-</div>
 
 <div data-lang="python"  markdown="1">
 
@@ -198,6 +137,68 @@ from pyspark.sql.types import *
 |**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
 |**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
 |**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
+
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
+You can access them by doing
+
+{% include_example data_types scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
+
+|Data type|Value type in Scala|API to access or create a data type|
+|---------|-------------------|-----------------------------------|
+|**ByteType**|Byte|ByteType|
+|**ShortType**|Short|ShortType|
+|**IntegerType**|Int|IntegerType|
+|**LongType**|Long|LongType|
+|**FloatType**|Float|FloatType|
+|**DoubleType**|Double|DoubleType|
+|**DecimalType**|java.math.BigDecimal|DecimalType|
+|**StringType**|String|StringType|
+|**BinaryType**|Array[Byte]|BinaryType|
+|**BooleanType**|Boolean|BooleanType|
+|**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
+|**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
+|**DateType**|java.time.LocalDate or java.sql.Date|DateType|
+|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
+|**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
+|**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
+|**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Scala of the data type of this field(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is true.|
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+All data types of Spark SQL are located in the package of
+`org.apache.spark.sql.types`. To access or create a data type,
+please use factory methods provided in
+`org.apache.spark.sql.types.DataTypes`.
+
+|Data type|Value type in Java|API to access or create a data type|
+|---------|------------------|-----------------------------------|
+|**ByteType**|byte or Byte|DataTypes.ByteType|
+|**ShortType**|short or Short|DataTypes.ShortType|
+|**IntegerType**|int or Integer|DataTypes.IntegerType|
+|**LongType**|long or Long|DataTypes.LongType|
+|**FloatType**|float or Float|DataTypes.FloatType|
+|**DoubleType**|double or Double|DataTypes.DoubleType|
+|**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
+|**StringType**|String|DataTypes.StringType|
+|**BinaryType**|byte[]|DataTypes.BinaryType|
+|**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
+|**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
+|**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
+|**DateType**|java.time.LocalDate or java.sql.Date|DataTypes.DateType|
+|**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
+|**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
+|**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
+|**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Java of the data type of this field (For example, int for a StructField with the data type IntegerType)|DataTypes.createStructField(*name*, *dataType*, *nullable*)| 
 
 </div>
 

@@ -19,20 +19,25 @@ package org.apache.spark.sql.connect
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.BasicFileAttributes
+import java.sql.DriverManager
 import java.util
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 // scalastyle:off
 /**
@@ -53,30 +58,75 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * }}}
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
-  protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests").toAbsolutePath
+class ProtoToParsedPlanTestSuite
+    extends SparkFunSuite
+    with SharedSparkSession
+    with ResourceHelper {
+  val url = "jdbc:h2:mem:testdb0"
+  var conn: java.sql.Connection = null
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    Utils.classForName("org.h2.Driver")
+    // Extra properties that will be specified for our database. We need these to test
+    // usage of parameters from OPTIONS clause in queries.
+    val properties = new util.Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+
+    conn = DriverManager.getConnection(url, properties)
+    conn.prepareStatement("create schema test").executeUpdate()
+    conn
+      .prepareStatement(
+        "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)")
+      .executeUpdate()
+    conn
+      .prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))")
+      .executeUpdate()
+    conn
+      .prepareStatement(
+        "create table test.emp(name TEXT(32) NOT NULL," +
+          " theid INTEGER, \"Dept\" INTEGER)")
+      .executeUpdate()
+    conn.commit()
   }
 
-  protected val inputFilePath: Path = baseResourcePath.resolve("queries")
-  protected val goldenFilePath: Path = baseResourcePath.resolve("explain-results")
+  override def afterAll(): Unit = {
+    conn.close()
+    super.afterAll()
+  }
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(
+        Connect.CONNECT_EXTENSIONS_RELATION_CLASSES.key,
+        "org.apache.spark.sql.connect.plugin.ExampleRelationPlugin")
+      .set(
+        Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES.key,
+        "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin")
+      .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
+  }
+
+  protected val suiteBaseResourcePath = commonResourcePath.resolve("query-tests")
+  protected val inputFilePath: Path = suiteBaseResourcePath.resolve("queries")
+  protected val goldenFilePath: Path = suiteBaseResourcePath.resolve("explain-results")
+  private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
   private val analyzer = {
     val inMemoryCatalog = new InMemoryCatalog
     inMemoryCatalog.initialize("primary", CaseInsensitiveStringMap.empty())
-    inMemoryCatalog.createNamespace(Array("tempdb"), util.Collections.emptyMap())
+    inMemoryCatalog.createNamespace(Array("tempdb"), emptyProps)
     inMemoryCatalog.createTable(
       Identifier.of(Array("tempdb"), "myTable"),
       new StructType().add("id", "long"),
-      Array.empty,
-      util.Collections.emptyMap())
+      Array.empty[Transform],
+      emptyProps)
+    inMemoryCatalog.createTable(
+      Identifier.of(Array("tempdb"), "myStreamingTable"),
+      new StructType().add("id", "long"),
+      Array.empty[Transform],
+      emptyProps)
 
     val catalogManager = new CatalogManager(
       inMemoryCatalog,
@@ -115,7 +165,8 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = normalizeExprIds(catalystPlan).treeString
+      val actual =
+        removeMemoryAddress(normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString)
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.
@@ -143,6 +194,10 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
+  private def removeMemoryAddress(expr: String): String = {
+    expr.replaceAll("@[0-9a-f]+,", ",")
+  }
+
   private def readRelation(path: Path): proto.Relation = {
     val input = Files.newInputStream(path)
     try proto.Relation.parseFrom(input)
@@ -152,7 +207,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   private def readGoldenFile(path: Path): String = {
-    new String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+    removeMemoryAddress(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
   }
 
   private def writeGoldenFile(path: Path, value: String): Unit = {

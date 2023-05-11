@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -194,12 +194,12 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def allDuplicateAgnostic(
-      aggregateExpressions: Seq[NamedExpression]): Boolean = {
-    !aggregateExpressions.exists(_.exists {
-      case agg: AggregateFunction => !EliminateDistinct.isDuplicateAgnostic(agg)
-      case _ => false
-    })
+  private def allDuplicateAgnostic(a: Aggregate): Boolean = {
+    a.groupOnly || a.aggregateExpressions.flatMap { e =>
+      e.collect {
+        case ae: AggregateExpression => ae
+      }
+    }.forall(ae => ae.isDistinct || EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -208,19 +208,19 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, aggExprs, Join(left, _, LeftOuter, _, _))
-        if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(aggExprs) =>
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = left)
-    case a @ Aggregate(_, aggExprs, Join(_, right, RightOuter, _, _))
-        if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(aggExprs) =>
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = right)
-    case a @ Aggregate(_, aggExprs, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
+    case a @ Aggregate(_, _, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
         if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
-          allDuplicateAgnostic(aggExprs) =>
+          allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, aggExprs, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
+    case a @ Aggregate(_, _, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
         if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
-          allDuplicateAgnostic(aggExprs) =>
+          allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = right))
 
     case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))

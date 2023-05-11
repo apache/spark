@@ -1399,6 +1399,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
     sc.stop()
   }
+
+  test("SPARK-42689: ShuffleDataIO initialized after application id has been configured") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    // TestShuffleDataIO will validate if application id has been configured in its constructor
+    conf.set(SHUFFLE_IO_PLUGIN_CLASS.key, classOf[TestShuffleDataIOWithMockedComponents].getName)
+    sc = new SparkContext(conf)
+    sc.stop()
+  }
 }
 
 object SparkContextSuite {

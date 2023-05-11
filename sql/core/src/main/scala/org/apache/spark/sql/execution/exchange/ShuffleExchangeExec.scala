@@ -56,6 +56,11 @@ trait ShuffleExchangeLike extends Exchange {
   def numPartitions: Int
 
   /**
+   * Returns the advisory partition size.
+   */
+  def advisoryPartitionSize: Option[Long]
+
+  /**
    * The origin of this shuffle operator.
    */
   def shuffleOrigin: ShuffleOrigin
@@ -115,7 +120,8 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
+    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
+    advisoryPartitionSize: Option[Long] = None)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =

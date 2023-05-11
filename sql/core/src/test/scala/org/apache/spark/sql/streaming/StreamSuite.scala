@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{File, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
@@ -666,26 +666,8 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("handle IOException when the streaming thread is interrupted (pre Hadoop 2.8)") {
-    // This test uses a fake source to throw the same IOException as pre Hadoop 2.8 when the
-    // streaming thread is interrupted. We should handle it properly by not failing the query.
-    ThrowingIOExceptionLikeHadoop12074.createSourceLatch = new CountDownLatch(1)
-    val query = spark
-      .readStream
-      .format(classOf[ThrowingIOExceptionLikeHadoop12074].getName)
-      .load()
-      .writeStream
-      .format("console")
-      .start()
-    assert(ThrowingIOExceptionLikeHadoop12074.createSourceLatch
-      .await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS),
-      "ThrowingIOExceptionLikeHadoop12074.createSource wasn't called before timeout")
-    query.stop()
-    assert(query.exception.isEmpty)
-  }
-
-  test("handle InterruptedIOException when the streaming thread is interrupted (Hadoop 2.8+)") {
-    // This test uses a fake source to throw the same InterruptedIOException as Hadoop 2.8+ when the
+  test("handle InterruptedIOException when the streaming thread is interrupted") {
+    // This test uses a fake source to throw the same InterruptedIOException as Hadoop when the
     // streaming thread is interrupted. We should handle it properly by not failing the query.
     ThrowingInterruptedIOException.createSourceLatch = new CountDownLatch(1)
     val query = spark
@@ -1363,36 +1345,7 @@ class FakeDefaultSource extends FakeSource {
   }
 }
 
-/** A fake source that throws the same IOException like pre Hadoop 2.8 when it's interrupted. */
-class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
-  import ThrowingIOExceptionLikeHadoop12074._
-
-  override def createSource(
-      spark: SQLContext,
-      metadataPath: String,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): Source = {
-    createSourceLatch.countDown()
-    try {
-      Thread.sleep(30000)
-      throw new TimeoutException("sleep was not interrupted in 30 seconds")
-    } catch {
-      case ie: InterruptedException =>
-        throw new IOException(ie.toString)
-    }
-  }
-}
-
-object ThrowingIOExceptionLikeHadoop12074 {
-  /**
-   * A latch to allow the user to wait until `ThrowingIOExceptionLikeHadoop12074.createSource` is
-   * called.
-   */
-  @volatile var createSourceLatch: CountDownLatch = null
-}
-
-/** A fake source that throws InterruptedIOException like Hadoop 2.8+ when it's interrupted. */
+/** A fake source that throws InterruptedIOException like Hadoop when it's interrupted. */
 class ThrowingInterruptedIOException extends FakeSource {
   import ThrowingInterruptedIOException._
 

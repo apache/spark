@@ -28,7 +28,7 @@ from pyspark.errors import AnalysisException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ReshapeTest(PandasOnSparkTestCase):
+class ReshapeTestsMixin:
     def test_get_dummies(self):
         for pdf_or_ps in [
             pd.Series([1, 1, 1, 2, 2, 1, 3, 4]),
@@ -476,6 +476,10 @@ class ReshapeTest(PandasOnSparkTestCase):
         psdf_right.columns = ["A", "B", "C"]
         with self.assertRaisesRegex(ValueError, "No common columns to perform merge on."):
             ps.merge_asof(psdf_left, psdf_right)
+
+
+class ReshapeTests(ReshapeTestsMixin, PandasOnSparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

@@ -1227,25 +1227,29 @@ object DateTimeUtils {
     try {
       unit.toUpperCase(Locale.ROOT) match {
         case "MICROSECOND" =>
-          timestampAddDayTime(micros, quantity, zoneId)
+          timestampAddInterval(micros, 0, 0, quantity, zoneId)
         case "MILLISECOND" =>
-          timestampAddDayTime(micros, quantity * MICROS_PER_MILLIS, zoneId)
+          timestampAddInterval(micros, 0, 0,
+            Math.multiplyExact(quantity.toLong, MICROS_PER_MILLIS), zoneId)
         case "SECOND" =>
-          timestampAddDayTime(micros, quantity * MICROS_PER_SECOND, zoneId)
+          timestampAddInterval(micros, 0, 0,
+            Math.multiplyExact(quantity.toLong, MICROS_PER_SECOND), zoneId)
         case "MINUTE" =>
-          timestampAddDayTime(micros, quantity * MICROS_PER_MINUTE, zoneId)
+          timestampAddInterval(micros, 0, 0,
+            Math.multiplyExact(quantity.toLong, MICROS_PER_MINUTE), zoneId)
         case "HOUR" =>
-          timestampAddDayTime(micros, quantity * MICROS_PER_HOUR, zoneId)
+          timestampAddInterval(micros, 0, 0,
+            Math.multiplyExact(quantity.toLong, MICROS_PER_HOUR), zoneId)
         case "DAY" | "DAYOFYEAR" =>
-          timestampAddDayTime(micros, quantity * MICROS_PER_DAY, zoneId)
+          timestampAddInterval(micros, 0, quantity, 0, zoneId)
         case "WEEK" =>
-          timestampAddDayTime(micros, quantity * MICROS_PER_DAY * DAYS_PER_WEEK, zoneId)
+          timestampAddInterval(micros, 0, Math.multiplyExact(quantity, DAYS_PER_WEEK), 0, zoneId)
         case "MONTH" =>
           timestampAddMonths(micros, quantity, zoneId)
         case "QUARTER" =>
-          timestampAddMonths(micros, quantity * 3, zoneId)
+          timestampAddMonths(micros, Math.multiplyExact(quantity, 3), zoneId)
         case "YEAR" =>
-          timestampAddMonths(micros, quantity * MONTHS_PER_YEAR, zoneId)
+          timestampAddMonths(micros, Math.multiplyExact(quantity, MONTHS_PER_YEAR), zoneId)
       }
     } catch {
       case _: scala.MatchError =>

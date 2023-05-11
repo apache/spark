@@ -19,13 +19,13 @@ import sys
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 
-def check_dependencies(mod_name: str, file_name: str) -> None:
+def check_dependencies(mod_name: str) -> None:
     if mod_name == "__main__":
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
         if not should_test_connect:
             print(
-                f"Skipping {file_name} doctests: {connect_requirement_message}",
+                f"Skipping {mod_name} doctests: {connect_requirement_message}",
                 file=sys.stderr,
             )
             sys.exit(0)
@@ -45,10 +45,10 @@ def require_minimum_grpc_version() -> None:
         import grpc
     except ImportError as error:
         raise ImportError(
-            "grpc >= %s must be installed; however, " "it was not found." % minimum_grpc_version
+            "grpcio >= %s must be installed; however, " "it was not found." % minimum_grpc_version
         ) from error
     if LooseVersion(grpc.__version__) < LooseVersion(minimum_grpc_version):
         raise ImportError(
-            "gRPC >= %s must be installed; however, "
+            "grpcio >= %s must be installed; however, "
             "your version was %s." % (minimum_grpc_version, grpc.__version__)
         )

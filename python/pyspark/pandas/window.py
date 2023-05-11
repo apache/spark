@@ -1440,7 +1440,7 @@ class Expanding(ExpandingLike[FrameLike]):
                 return partial(property_or_func, self)
         raise AttributeError(item)
 
-    # TODO: when add 'center' and 'axis' parameter, should add to here too.
+    # TODO: when add 'axis' parameter, should add to here too.
     def __repr__(self) -> str:
         return "Expanding [min_periods={}]".format(self._min_periods)
 

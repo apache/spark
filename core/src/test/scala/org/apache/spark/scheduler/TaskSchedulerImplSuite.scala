@@ -1648,6 +1648,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         // Since we only submit one stage attempt, the following call is sufficient to mark the
         // task as killed.
         taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+        assert(reason == "Stage cancelled: test message")
       }
     })
 
@@ -1661,7 +1662,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
     assert(2 === tsm.runningTasks)
 
-    taskScheduler.cancelTasks(0, false)
+    taskScheduler.cancelTasks(0, false, "test message")
     assert(0 === tsm.runningTasks)
     assert(tsm.isZombie)
     assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)

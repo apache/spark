@@ -16,105 +16,61 @@
  */
 package org.apache.spark.sql
 
-import io.grpc.Server
-import io.grpc.netty.NettyServerBuilder
-import java.util.concurrent.TimeUnit
-import org.scalatest.BeforeAndAfterEach
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
-import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
-
-class SparkSessionSuite
-    extends AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterEach {
-
-  private var server: Server = _
-  private var service: DummySparkConnectService = _
-  private val SERVER_PORT = 15250
-
-  private def startDummyServer(port: Int): Unit = {
-    service = new DummySparkConnectService()
-    val sb = NettyServerBuilder
-      .forPort(port)
-      .addService(service)
-
-    server = sb.build
-    server.start()
+/**
+ * Tests for non-dataframe related SparkSession operations.
+ */
+class SparkSessionSuite extends ConnectFunSuite {
+  test("default") {
+    val session = SparkSession.builder().getOrCreate()
+    assert(session.client.configuration.host == "localhost")
+    assert(session.client.configuration.port == 15002)
+    session.close()
   }
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    startDummyServer(SERVER_PORT)
+  test("remote") {
+    val session = SparkSession.builder().remote("sc://test.me:14099").getOrCreate()
+    assert(session.client.configuration.host == "test.me")
+    assert(session.client.configuration.port == 14099)
+    session.close()
   }
 
-  override def afterEach(): Unit = {
-    if (server != null) {
-      server.shutdownNow()
-      assert(server.awaitTermination(5, TimeUnit.SECONDS), "server failed to shutdown")
+  test("getOrCreate") {
+    val connectionString = "sc://test.it:17865"
+    val session1 = SparkSession.builder().remote(connectionString).getOrCreate()
+    val session2 = SparkSession.builder().remote(connectionString).getOrCreate()
+    try {
+      assert(session1 eq session2)
+    } finally {
+      session1.close()
+      session2.close()
     }
   }
 
-  test("SparkSession initialisation with connection string") {
-    val ss = SparkSession
-      .builder()
-      .client(
-        SparkConnectClient
-          .builder()
-          .connectionString(s"sc://localhost:$SERVER_PORT")
-          .build())
-      .build()
-    val plan = proto.Plan.newBuilder().build()
-    ss.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
-    assert(plan.equals(service.getAndClearLatestInputPlan()))
+  test("create") {
+    val connectionString = "sc://test.it:17845"
+    val session1 = SparkSession.builder().remote(connectionString).create()
+    val session2 = SparkSession.builder().remote(connectionString).create()
+    try {
+      assert(session1 ne session2)
+      assert(session1.client.configuration == session2.client.configuration)
+    } finally {
+      session1.close()
+      session2.close()
+    }
   }
 
-  private def rangePlanCreator(
-      start: Long,
-      end: Long,
-      step: Long,
-      numPartitions: Option[Int]): proto.Plan = {
-    val builder = proto.Relation.newBuilder()
-    val rangeBuilder = builder.getRangeBuilder
-      .setStart(start)
-      .setEnd(end)
-      .setStep(step)
-    numPartitions.foreach(rangeBuilder.setNumPartitions)
-    proto.Plan.newBuilder().setRoot(builder).build()
+  test("newSession") {
+    val connectionString = "sc://doit:16845"
+    val session1 = SparkSession.builder().remote(connectionString).create()
+    val session2 = session1.newSession()
+    try {
+      assert(session1 ne session2)
+      assert(session1.client.configuration == session2.client.configuration)
+    } finally {
+      session1.close()
+      session2.close()
+    }
   }
-
-  private def testRange(
-      start: Long,
-      end: Long,
-      step: Long,
-      numPartitions: Option[Int],
-      failureHint: String): Unit = {
-    val expectedPlan = rangePlanCreator(start, end, step, numPartitions)
-    val actualPlan = service.getAndClearLatestInputPlan()
-    assert(actualPlan.equals(expectedPlan), failureHint)
-  }
-
-  test("range query") {
-    val ss = SparkSession
-      .builder()
-      .client(
-        SparkConnectClient
-          .builder()
-          .connectionString(s"sc://localhost:$SERVER_PORT")
-          .build())
-      .build()
-
-    ss.range(10).analyze
-    testRange(0, 10, 1, None, "Case: range(10)")
-
-    ss.range(0, 20).analyze
-    testRange(0, 20, 1, None, "Case: range(0, 20)")
-
-    ss.range(6, 20, 3).analyze
-    testRange(6, 20, 3, None, "Case: range(6, 20, 3)")
-
-    ss.range(10, 100, 5, 2).analyze
-    testRange(10, 100, 5, Some(2), "Case: range(6, 20, 3, Some(2))")
-  }
-
 }

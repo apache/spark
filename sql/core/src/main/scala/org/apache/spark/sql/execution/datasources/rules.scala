@@ -89,9 +89,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 /**
  * Preprocess [[CreateTable]], to do some normalization and checking.
  */
-case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
-  private def catalog = sparkSession.sessionState.catalog
+case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
@@ -245,7 +243,6 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     case create: V2CreateTablePlan if create.childrenResolved =>
       val schema = create.tableSchema
       val partitioning = create.partitioning
-      val identifier = create.tableName
       val isCaseSensitive = conf.caseSensitiveAnalysis
       // Check that columns are not duplicated in the schema
       val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)

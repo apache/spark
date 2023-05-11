@@ -22,7 +22,10 @@ import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
 import org.apache.spark.TestUtils
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -58,6 +61,10 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
   private val METADATA_FILE_SIZE = "_metadata.file_size"
 
+  private val METADATA_FILE_BLOCK_START = "_metadata.file_block_start"
+
+  private val METADATA_FILE_BLOCK_LENGTH = "_metadata.file_block_length"
+
   private val METADATA_FILE_MODIFICATION_TIME = "_metadata.file_modification_time"
 
   private val METADATA_ROW_INDEX = "_metadata.row_index"
@@ -66,10 +73,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
   private def getMetadataRow(f: Map[String, Any]): Row = f(FILE_FORMAT) match {
     case "parquet" =>
-      Row(f(METADATA_FILE_PATH), f(METADATA_FILE_NAME), f(METADATA_FILE_SIZE),
+      Row(f(METADATA_FILE_PATH), f(METADATA_FILE_NAME),
+        f(METADATA_FILE_SIZE), f(METADATA_FILE_BLOCK_START), f(METADATA_FILE_BLOCK_LENGTH),
         f(METADATA_FILE_MODIFICATION_TIME), f(METADATA_ROW_INDEX))
     case _ =>
-      Row(f(METADATA_FILE_PATH), f(METADATA_FILE_NAME), f(METADATA_FILE_SIZE),
+      Row(f(METADATA_FILE_PATH), f(METADATA_FILE_NAME),
+        f(METADATA_FILE_SIZE), f(METADATA_FILE_BLOCK_START), f(METADATA_FILE_BLOCK_LENGTH),
         f(METADATA_FILE_MODIFICATION_TIME))
   }
 
@@ -78,6 +87,10 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       METADATA_FILE_PATH -> f.toURI.toString,
       METADATA_FILE_NAME -> f.getName,
       METADATA_FILE_SIZE -> f.length(),
+      // test file is small enough so we would not do splitting files,
+      // then the file block start is always 0 and file block length is same with file size
+      METADATA_FILE_BLOCK_START -> 0,
+      METADATA_FILE_BLOCK_LENGTH -> f.length(),
       METADATA_FILE_MODIFICATION_TIME -> new Timestamp(f.lastModified()),
       METADATA_ROW_INDEX -> 0,
       FILE_FORMAT -> f.getName.split("\\.").last
@@ -137,14 +150,17 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select("name", "age", "info",
         METADATA_FILE_NAME, METADATA_FILE_PATH,
-        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
+        METADATA_FILE_SIZE, METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH,
+        METADATA_FILE_MODIFICATION_TIME),
       Seq(
         Row("jack", 24, Row(12345L, "uom"),
           f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
-          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_BLOCK_START), f0(METADATA_FILE_BLOCK_LENGTH),
+          f0(METADATA_FILE_MODIFICATION_TIME)),
         Row("lily", 31, Row(54321L, "ucb"),
           f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
-          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
+          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_BLOCK_START), f1(METADATA_FILE_BLOCK_LENGTH),
+          f1(METADATA_FILE_MODIFICATION_TIME))
       )
     )
 
@@ -231,15 +247,119 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
   }
 
+  metadataColumnsTest("SPARK-42683: df metadataColumn - schema conflict",
+    schemaWithNameConflicts) { (df, f0, f1) =>
+    // the user data has the schema: name, age, _metadata.id, _metadata.university
+
+    // select user data + metadata
+    checkAnswer(
+      df.select("name", "age", "_METADATA", "_metadata")
+        .withColumn("file_name", df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", 24, Row(12345L, "uom"), Row(12345L, "uom"), f0(METADATA_FILE_NAME)),
+        Row("lily", 31, Row(54321L, "ucb"), Row(54321L, "ucb"), f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: df metadataColumn - no schema conflict",
+    schema) { (df, f0, f1) =>
+
+    // select user data + metadata
+    checkAnswer(
+      df.select("name", "age")
+        .withColumn("file_name", df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", 24, f0(METADATA_FILE_NAME)),
+        Row("lily", 31, f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: df metadataColumn - manually renamed",
+    schema) { (baseDf, f0, f1) =>
+
+    // select renamed metadata column
+    var df = baseDf.select(col("_metadata").as("renamed_metadata"))
+    checkAnswer(
+      df.select(df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row(f0(METADATA_FILE_NAME)),
+        Row(f1(METADATA_FILE_NAME))
+      )
+    )
+
+    df = baseDf.withColumnRenamed("_metadata", "renamed_metadata")
+    checkAnswer(
+      df.select(df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row(f0(METADATA_FILE_NAME)),
+        Row(f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: df metadataColumn - column not found",
+    schema) { (df, f0, f1) =>
+
+    // Not a column at all
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.metadataColumn("foo")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`foo`", "proposal" -> "`_metadata`"))
+
+    // Name exists, but does not reference a metadata column
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.metadataColumn("name")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`name`", "proposal" -> "`_metadata`"))
+  }
+
+  metadataColumnsTest("SPARK-42683: metadata name conflict resolved by leading underscores - one",
+    schemaWithNameConflicts) { (df, f0, f1) =>
+    // the user data has the schema: name, age, _metadata.id, _metadata.university
+
+    checkAnswer(
+      df.select("name", "age", "_metadata", "__metadata.file_name"),
+      Seq(
+        Row("jack", 24, Row(12345L, "uom"), f0(METADATA_FILE_NAME)),
+        Row("lily", 31, Row(54321L, "ucb"), f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: metadata name conflict resolved by leading underscores - many",
+    new StructType()
+      .add(schema("name").copy(name = "_metadata"))
+      .add(schema("age").copy(name = "__metadata"))
+      .add(schema("info").copy(name = "___metadata"))) { (df, f0, f1) =>
+    // the user data has the schema: _metadata, __metadata, ___metadata.id, ___metadata.university
+
+    checkAnswer(
+      df.select("_metadata", "__metadata", "___metadata", "____metadata.file_name"),
+      Seq(
+        Row("jack", 24, Row(12345L, "uom"), f0(METADATA_FILE_NAME)),
+        Row("lily", 31, Row(54321L, "ucb"), f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
   metadataColumnsTest("select only metadata", schema) { (df, f0, f1) =>
     checkAnswer(
       df.select(METADATA_FILE_NAME, METADATA_FILE_PATH,
-        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
+        METADATA_FILE_SIZE, METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH,
+        METADATA_FILE_MODIFICATION_TIME),
       Seq(
         Row(f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
-          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+          f0(METADATA_FILE_SIZE), f0(METADATA_FILE_BLOCK_START), f0(METADATA_FILE_BLOCK_LENGTH),
+          f0(METADATA_FILE_MODIFICATION_TIME)),
         Row(f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
-          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
+          f1(METADATA_FILE_SIZE), f1(METADATA_FILE_BLOCK_START), f1(METADATA_FILE_BLOCK_LENGTH),
+          f1(METADATA_FILE_MODIFICATION_TIME))
       )
     )
     checkAnswer(
@@ -255,7 +375,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select("name", "age", "info",
         METADATA_FILE_NAME, METADATA_FILE_PATH,
-        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME)
+        METADATA_FILE_SIZE, METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH,
+        METADATA_FILE_MODIFICATION_TIME)
         .select("name", "file_path"), // cast _metadata.file_path as file_path
       Seq(
         Row("jack", f0(METADATA_FILE_PATH)),
@@ -332,7 +453,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     val filteredDF = df.select("name", "age", "info",
       METADATA_FILE_NAME, METADATA_FILE_PATH,
-      METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME)
+      METADATA_FILE_SIZE, METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH,
+      METADATA_FILE_MODIFICATION_TIME)
       // mix metadata column + user column
       .where(Column(METADATA_FILE_NAME) === f1(METADATA_FILE_NAME) and Column("name") === "lily")
       // only metadata columns
@@ -354,7 +476,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       filteredDF,
       Seq(Row("lily", 31, Row(54321L, "ucb"),
         f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
-        f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+        f1(METADATA_FILE_SIZE), f1(METADATA_FILE_BLOCK_START), f1(METADATA_FILE_BLOCK_LENGTH),
+        f1(METADATA_FILE_MODIFICATION_TIME)))
     )
   }
 
@@ -420,12 +543,15 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         checkAnswer(
           df.select("name", "age", "info",
             METADATA_FILE_NAME, METADATA_FILE_PATH,
-            METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
+            METADATA_FILE_SIZE, METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH,
+            METADATA_FILE_MODIFICATION_TIME),
           Seq(
             Row("jack", 24, Row(12345L, "uom"), f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
-              f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+              f0(METADATA_FILE_SIZE), f0(METADATA_FILE_BLOCK_START), f0(METADATA_FILE_BLOCK_LENGTH),
+              f0(METADATA_FILE_MODIFICATION_TIME)),
             Row("lily", 31, Row(54321L, "ucb"), f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
-              f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
+              f1(METADATA_FILE_SIZE), f1(METADATA_FILE_BLOCK_START), f1(METADATA_FILE_BLOCK_LENGTH),
+              f1(METADATA_FILE_MODIFICATION_TIME))
           )
         )
 
@@ -561,6 +687,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         METADATA_FILE_PATH -> sourceFile.toURI.toString,
         METADATA_FILE_NAME -> sourceFile.getName,
         METADATA_FILE_SIZE -> sourceFile.length(),
+        METADATA_FILE_BLOCK_START -> 0,
+        METADATA_FILE_BLOCK_LENGTH -> sourceFile.length(),
         METADATA_FILE_MODIFICATION_TIME -> new Timestamp(sourceFile.lastModified())
       )
 
@@ -570,21 +698,26 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         newDF.select(col("name"), col("age"), col("info"),
           col(METADATA_FILE_PATH), col(METADATA_FILE_NAME),
+          col(METADATA_FILE_SIZE), col(METADATA_FILE_BLOCK_START), col(METADATA_FILE_BLOCK_LENGTH),
           // since we are writing _metadata to a json file,
           // we should explicitly cast the column to timestamp type
-          col(METADATA_FILE_SIZE), to_timestamp(col(METADATA_FILE_MODIFICATION_TIME))),
+          to_timestamp(col(METADATA_FILE_MODIFICATION_TIME))),
         Seq(
           Row(
             "jack", 24, Row(12345L, "uom"),
             sourceFileMetadata(METADATA_FILE_PATH),
             sourceFileMetadata(METADATA_FILE_NAME),
             sourceFileMetadata(METADATA_FILE_SIZE),
+            sourceFileMetadata(METADATA_FILE_BLOCK_START),
+            sourceFileMetadata(METADATA_FILE_BLOCK_LENGTH),
             sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME)),
           Row(
             "lily", 31, Row(54321L, "ucb"),
             sourceFileMetadata(METADATA_FILE_PATH),
             sourceFileMetadata(METADATA_FILE_NAME),
             sourceFileMetadata(METADATA_FILE_SIZE),
+            sourceFileMetadata(METADATA_FILE_BLOCK_START),
+            sourceFileMetadata(METADATA_FILE_BLOCK_LENGTH),
             sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME))
         )
       )
@@ -797,6 +930,129 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         assert(testFilePartition === udfFilterResult.getLong(0))
         assert(testFilePath === udfFilterResult.getString(1))
       }
+    }
+  }
+
+  test("SPARK-42423: Add metadata column file block start and length") {
+    withSQLConf(
+        SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1",
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1") {
+      withTempPath { path =>
+        spark.range(2).write.json(path.getCanonicalPath)
+        assert(path.listFiles().count(_.getName.endsWith("json")) == 1)
+
+        val df = spark.read.json(path.getCanonicalPath)
+          .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
+        assert(df.rdd.partitions.length > 1)
+        val res = df.collect()
+        assert(res.length == 2)
+        assert(res.head.getLong(0) == 0) // id
+        assert(res.head.getLong(1) == 0) // file_block_start
+        assert(res.head.getLong(2) > 0) // file_block_length
+        assert(res(1).getLong(0) == 1L) // id
+        assert(res(1).getLong(1) > 0) // file_block_start
+        assert(res(1).getLong(2) > 0) // file_block_length
+
+        // make sure `_metadata.file_block_start` and `_metadata.file_block_length` does not affect
+        // pruning listed files
+        val df2 = spark.read.json(path.getCanonicalPath)
+          .where("_metadata.File_bLoCk_start > 0 and _metadata.file_block_length > 0 " +
+            "and _metadata.file_SizE > 0")
+          .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
+        val fileSourceScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec])
+        assert(fileSourceScan2.isDefined)
+        val files2 = fileSourceScan2.get.asInstanceOf[FileSourceScanExec].selectedPartitions
+        assert(files2.length == 1 && files2.head.files.length == 1)
+        val res2 = df2.collect()
+        assert(res2.length == 1)
+        assert(res2.head.getLong(0) == 1L) // id
+        assert(res2.head.getLong(1) > 0) // file_block_start
+        assert(res2.head.getLong(2) > 0) // file_block_length
+
+        // make sure `_metadata.file_size > 1000000` still work for pruning listed files
+        val df3 = spark.read.json(path.getCanonicalPath)
+          .where("_metadata.File_bLoCk_start > 0 and _metadata.file_SizE > 1000000")
+          .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
+        val fileSourceScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec])
+        assert(fileSourceScan3.isDefined)
+        val files3 = fileSourceScan3.get.asInstanceOf[FileSourceScanExec].selectedPartitions
+        assert(files3.length == 1 && files3.head.files.isEmpty)
+        assert(df3.collect().isEmpty)
+      }
+    }
+  }
+
+
+  Seq("parquet", "json", "csv", "text", "orc").foreach { format =>
+    test(s"metadata file path is url encoded for format: $format") {
+      withTempPath { f =>
+        val dirWithSpace = s"$f/with space"
+        spark.range(10)
+          .selectExpr("cast(id as string) as str")
+          .repartition(1)
+          .write
+          .format(format)
+          .mode("append")
+          .save(dirWithSpace)
+
+        val encodedPath = SparkPath.fromPathString(dirWithSpace).urlEncoded
+        val df = spark.read.format(format).load(dirWithSpace)
+        val metadataPath = df.select(METADATA_FILE_PATH).as[String].head()
+        assert(metadataPath.contains(encodedPath))
+      }
+    }
+
+    test(s"metadata file name is url encoded for format: $format") {
+      val suffix = if (format == "text") ".txt" else s".$format"
+      withTempPath { f =>
+        val dirWithSpace = s"$f/with space"
+        spark.range(10)
+          .selectExpr("cast(id as string) as str")
+          .repartition(1)
+          .write
+          .format(format)
+          .mode("append")
+          .save(dirWithSpace)
+
+        val pathWithSpace = s"$dirWithSpace/file with space.$suffix"
+        new File(dirWithSpace)
+          .listFiles((_, f) => f.endsWith(suffix))
+          .headOption
+          .getOrElse(fail(s"no file with suffix $suffix in $dirWithSpace"))
+          .renameTo(new File(pathWithSpace))
+
+        val encodedPath = SparkPath.fromPathString(pathWithSpace).urlEncoded
+        val encodedName = encodedPath.split("/").last
+        val df = spark.read.format(format).load(dirWithSpace)
+        val metadataName = df.select(METADATA_FILE_NAME).as[String].head()
+        assert(metadataName == encodedName)
+      }
+    }
+  }
+
+  test("SPARK-43422: Keep tags during optimization when adding metadata columns") {
+    withTempPath { path =>
+      spark.range(end = 10).write.format("parquet").save(path.toString)
+
+      // Add the tag to the base Dataframe before selecting a metadata column.
+      val customTag = TreeNodeTag[Boolean]("customTag")
+      val baseDf = spark.read.format("parquet").load(path.toString)
+      val tagsPut = baseDf.queryExecution.analyzed.collect {
+        case rel: LogicalRelation => rel.setTagValue(customTag, true)
+      }
+
+      assert(tagsPut.nonEmpty)
+
+      val dfWithMetadata = baseDf.select("_metadata.row_index")
+
+      // Expect the tag in the analyzed and optimized plan after querying a metadata column.
+      def isTaggedRelation(plan: LogicalPlan): Boolean = plan match {
+        case rel: LogicalRelation => rel.getTagValue(customTag).getOrElse(false)
+        case _ => false
+      }
+
+      assert(dfWithMetadata.queryExecution.analyzed.exists(isTaggedRelation))
+      assert(dfWithMetadata.queryExecution.optimizedPlan.exists(isTaggedRelation))
     }
   }
 }

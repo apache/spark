@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import sys
 import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
@@ -3585,6 +3584,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Concatenate two or more Series.
 
+        .. deprecated:: 3.4.0
+
         Parameters
         ----------
         to_append : Series or list/tuple of Series
@@ -3632,6 +3633,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         5    6
         dtype: int64
         """
+        warnings.warn(
+            "The Series.append method is deprecated "
+            "and will be removed in a future version. "
+            "Use pyspark.pandas.concat instead.",
+            FutureWarning,
+        )
         return first_series(
             self.to_frame().append(to_append.to_frame(), ignore_index, verify_integrity)
         ).rename(self.name)
@@ -5924,6 +5931,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Return the mean absolute deviation of values.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> s = ps.Series([1, 2, 3, 4])
@@ -5937,7 +5946,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.mad()
         1.0
         """
-
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         sdf = self._internal.spark_frame
         spark_column = self.spark.column
         avg = unpack_scalar(sdf.select(F.avg(spark_column)))
@@ -6800,6 +6813,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return (left_ser.copy(), right.copy()) if copy else (left_ser, right)
 
+    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
+    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
@@ -6822,8 +6837,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             End time as a time filter limit.
         include_start : bool, default True
             Whether the start time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         include_end : bool, default True
             Whether the end time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
 
@@ -7337,15 +7358,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __iter__(self) -> None:
         return MissingPandasLikeSeries.__iter__(self)
 
-    if sys.version_info >= (3, 7):
-        # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
-        def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
-            return create_type_for_series_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark Series.
-        is_series = None
+    # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
+    def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
+        return create_type_for_series_type(params)
 
 
 def unpack_scalar(sdf: SparkDataFrame) -> Any:

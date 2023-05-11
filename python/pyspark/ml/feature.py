@@ -3476,7 +3476,7 @@ class QuantileDiscretizer(
     non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
 
     Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
-    :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
+    :py:meth:`pyspark.sql.DataFrameStatFunctions.approxQuantile` for a detailed description).
     The precision of the approximation can be controlled with the
     :py:attr:`relativeError` parameter.
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
@@ -5313,7 +5313,7 @@ class VectorAssembler(
     +---+---+----+-------------+
     |  a|  b|   c|     features|
     +---+---+----+-------------+
-    |1.0|2.0|null|[1.0,2.0,NaN]|
+    |1.0|2.0|NULL|[1.0,2.0,NaN]|
     |3.0|NaN| 4.0|[3.0,NaN,4.0]|
     |5.0|6.0| 7.0|[5.0,6.0,7.0]|
     +---+---+----+-------------+

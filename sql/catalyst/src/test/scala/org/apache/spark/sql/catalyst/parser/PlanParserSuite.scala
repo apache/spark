@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Parameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
@@ -242,6 +242,12 @@ class PlanParserSuite extends AnalysisTest {
         fragment = sql2,
         start = 0,
         stop = 25))
+  }
+
+  test("SPARK-42552: select and union without parentheses") {
+    val plan = Distinct(OneRowRelation().select(Literal(1))
+      .union(OneRowRelation().select(Literal(1))))
+    assertEqual("select 1 union select 1", plan)
   }
 
   test("set operations") {
@@ -1596,5 +1602,14 @@ class PlanParserSuite extends AnalysisTest {
       exception = parseException(s"SELECT :"),
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
+  }
+
+  test("SPARK-42553: NonReserved keyword 'interval' can be column name") {
+    comparePlans(
+      parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
+      UnresolvedInlineTable(
+        Seq("interval"),
+        Seq(Literal("abc")) :: Nil).as("tbl").select($"interval")
+    )
   }
 }

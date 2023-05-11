@@ -21,6 +21,8 @@ package spark.connect;
 
 import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
+import "spark/connect/common.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -38,35 +40,7 @@ message Plan {
   }
 }
 
-// Explains the input plan based on a configurable mode.
-message Explain {
-  // Plan explanation mode.
-  enum ExplainMode {
-    MODE_UNSPECIFIED = 0;
 
-    // Generates only physical plan.
-    SIMPLE = 1;
-
-    // Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
-    // Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
-    // transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
-    // The optimized logical plan transforms through a set of optimization rules, resulting in the
-    // physical plan.
-    EXTENDED = 2;
-
-    // Generates code for the statement, if any and a physical plan.
-    CODEGEN = 3;
-
-    // If plan node statistics are available, generates a logical plan and also the statistics.
-    COST = 4;
-
-    // Generates a physical plan outline and also node details.
-    FORMATTED = 5;
-  }
-
-  // (Required) For analyzePlan rpc calls, configure the mode to explain plan in strings.
-  ExplainMode explain_mode= 1;
-}
 
 // User Context is used to refer to one particular user session that is executing
 // queries in the backend.
@@ -85,57 +59,225 @@ message UserContext {
 message AnalyzePlanRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
   UserContext user_context = 2;
 
-  // (Required) The logical plan to be analyzed.
-  Plan plan = 3;
-
   // Provides optional information about the client sending the request. This field
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
-  optional string client_type = 4;
+  optional string client_type = 3;
 
-  // (Optional) Get the explain string of the plan.
-  Explain explain = 5;
+  oneof analyze {
+    Schema schema = 4;
+    Explain explain = 5;
+    TreeString tree_string = 6;
+    IsLocal is_local = 7;
+    IsStreaming is_streaming = 8;
+    InputFiles input_files = 9;
+    SparkVersion spark_version = 10;
+    DDLParse ddl_parse = 11;
+    SameSemantics same_semantics = 12;
+    SemanticHash semantic_hash = 13;
+    Persist persist = 14;
+    Unpersist unpersist = 15;
+    GetStorageLevel get_storage_level = 16;
+  }
+
+  message Schema {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  // Explains the input plan based on a configurable mode.
+  message Explain {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+
+    // (Required) For analyzePlan rpc calls, configure the mode to explain plan in strings.
+    ExplainMode explain_mode = 2;
+
+    // Plan explanation mode.
+    enum ExplainMode {
+      EXPLAIN_MODE_UNSPECIFIED = 0;
+
+      // Generates only physical plan.
+      EXPLAIN_MODE_SIMPLE = 1;
+
+      // Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+      // Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
+      // transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
+      // The optimized logical plan transforms through a set of optimization rules, resulting in the
+      // physical plan.
+      EXPLAIN_MODE_EXTENDED = 2;
+
+      // Generates code for the statement, if any and a physical plan.
+      EXPLAIN_MODE_CODEGEN = 3;
+
+      // If plan node statistics are available, generates a logical plan and also the statistics.
+      EXPLAIN_MODE_COST = 4;
+
+      // Generates a physical plan outline and also node details.
+      EXPLAIN_MODE_FORMATTED = 5;
+    }
+  }
+
+  message TreeString {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+
+    // (Optional) Max level of the schema.
+    optional int32 level = 2;
+  }
+
+  message IsLocal {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message IsStreaming {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message InputFiles {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message SparkVersion { }
+
+  message DDLParse {
+    // (Required) The DDL formatted string to be parsed.
+    string ddl_string = 1;
+  }
+
+
+  // Returns `true` when the logical query plans  are equal and therefore return same results.
+  message SameSemantics {
+    // (Required) The plan to be compared.
+    Plan target_plan = 1;
+
+    // (Required) The other plan to be compared.
+    Plan other_plan = 2;
+  }
+
+  message SemanticHash {
+    // (Required) The logical plan to get a hashCode.
+    Plan plan = 1;
+  }
+
+  message Persist {
+    // (Required) The logical plan to persist.
+    Relation relation = 1;
+
+    // (Optional) The storage level.
+    optional StorageLevel storage_level = 2;
+  }
+
+  message Unpersist {
+    // (Required) The logical plan to unpersist.
+    Relation relation = 1;
+
+    // (Optional) Whether to block until all blocks are deleted.
+    optional bool blocking = 2;
+  }
+
+  message GetStorageLevel {
+    // (Required) The logical plan to get the storage level.
+    Relation relation = 1;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
 message AnalyzePlanResponse {
-  string client_id = 1;
-  DataType schema = 2;
+  string session_id = 1;
 
-  // The extended explain string as produced by Spark.
-  string explain_string = 3;
+  oneof result {
+    Schema schema = 2;
+    Explain explain = 3;
+    TreeString tree_string = 4;
+    IsLocal is_local = 5;
+    IsStreaming is_streaming = 6;
+    InputFiles input_files = 7;
+    SparkVersion spark_version = 8;
+    DDLParse ddl_parse = 9;
+    SameSemantics same_semantics = 10;
+    SemanticHash semantic_hash = 11;
+    Persist persist = 12;
+    Unpersist unpersist = 13;
+    GetStorageLevel get_storage_level = 14;
+  }
 
-  // Get the tree string of the schema.
-  string tree_string = 4;
+  message Schema {
+    DataType schema = 1;
+  }
 
-  // Whether the 'collect' and 'take' methods can be run locally.
-  bool is_local = 5;
+  message Explain {
+    string explain_string = 1;
+  }
 
-  // Whether this plan contains one or more sources that continuously
-  // return data as it arrives.
-  bool is_streaming = 6;
+  message TreeString {
+    string tree_string = 1;
+  }
 
-  // A best-effort snapshot of the files that compose this Dataset
-  repeated string input_files = 7;
+  message IsLocal {
+    bool is_local = 1;
+  }
+
+  message IsStreaming {
+    bool is_streaming = 1;
+  }
+
+  message InputFiles {
+    // A best-effort snapshot of the files that compose this Dataset
+    repeated string files = 1;
+  }
+
+  message SparkVersion {
+    string version = 1;
+  }
+
+  message DDLParse {
+    DataType parsed = 1;
+  }
+
+  message SameSemantics {
+    bool result = 1;
+  }
+
+  message SemanticHash {
+    int32 result = 1;
+  }
+
+  message Persist { }
+
+  message Unpersist { }
+
+  message GetStorageLevel {
+    // (Required) The StorageLevel as a result of get_storage_level request.
+    StorageLevel storage_level = 1;
+  }
 }
 
 // A request to be executed by the service.
 message ExecutePlanRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
   UserContext user_context = 2;
 
   // (Required) The logical plan to be executed / analyzed.
@@ -145,18 +287,62 @@ message ExecutePlanRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 4;
+
+  // Repeated element for options that can be passed to the request. This element is currently
+  // unused but allows to pass in an extension value used for arbitrary options.
+  repeated RequestOption request_options = 5;
+
+  message RequestOption {
+    oneof request_option {
+      // Extension type for request options
+      google.protobuf.Any extension = 999;
+    }
+  }
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
-// same input query, carry the same `client_id`.
+// same input query, carry the same `session_id`.
 message ExecutePlanResponse {
-  string client_id = 1;
+  string session_id = 1;
 
-  ArrowBatch arrow_batch = 2;
+  // Union type for the different response messages.
+  oneof response_type {
+    ArrowBatch arrow_batch = 2;
+
+    // Special case for executing SQL commands.
+    SqlCommandResult sql_command_result = 5;
+
+    // Response for a streaming query.
+    WriteStreamOperationStartResult write_stream_operation_start_result = 8;
+
+    // Response for commands on a streaming query.
+    StreamingQueryCommandResult streaming_query_command_result = 9;
+
+    // Response for 'SparkContext.resources'.
+    GetResourcesCommandResult get_resources_command_result = 10;
+
+    // Response for commands on the streaming query manager.
+    StreamingQueryManagerCommandResult streaming_query_manager_command_result = 11;
+
+    // Support arbitrary result objects.
+    google.protobuf.Any extension = 999;
+  }
 
   // Metrics for the query execution. Typically, this field is only present in the last
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
+
+  // The metrics observed during the execution of the query plan.
+  repeated ObservedMetrics observed_metrics = 6;
+
+  // (Optional) The Spark schema. This field is available when `collect` is called.
+  DataType schema = 7;
+
+  // A SQL command returns an opaque Relation that can be directly used as input for the next
+  // call.
+  message SqlCommandResult {
+    Relation relation = 1;
+  }
 
   // Batch results of metrics.
   message ArrowBatch {
@@ -181,6 +367,261 @@ message ExecutePlanResponse {
       string metric_type = 3;
     }
   }
+
+  message ObservedMetrics {
+    string name = 1;
+    repeated Expression.Literal values = 2;
+  }
+}
+
+// The key-value pair for the config request and response.
+message KeyValue {
+  // (Required) The key.
+  string key = 1;
+  // (Optional) The value.
+  optional string value = 2;
+}
+
+// Request to update or fetch the configurations.
+message ConfigRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // (Required) The operation for the config.
+  Operation operation = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
+
+  message Operation {
+    oneof op_type {
+      Set set = 1;
+      Get get = 2;
+      GetWithDefault get_with_default = 3;
+      GetOption get_option = 4;
+      GetAll get_all = 5;
+      Unset unset = 6;
+      IsModifiable is_modifiable = 7;
+    }
+  }
+
+  message Set {
+    // (Required) The config key-value pairs to set.
+    repeated KeyValue pairs = 1;
+  }
+
+  message Get {
+    // (Required) The config keys to get.
+    repeated string keys = 1;
+  }
+
+  message GetWithDefault {
+    // (Required) The config key-value paris to get. The value will be used as the default value.
+    repeated KeyValue pairs = 1;
+  }
+
+  message GetOption {
+    // (Required) The config keys to get optionally.
+    repeated string keys = 1;
+  }
+
+  message GetAll {
+    // (Optional) The prefix of the config key to get.
+    optional string prefix = 1;
+  }
+
+  message Unset {
+    // (Required) The config keys to unset.
+    repeated string keys = 1;
+  }
+
+  message IsModifiable {
+    // (Required) The config keys to check the config is modifiable.
+    repeated string keys = 1;
+  }
+}
+
+// Response to the config request.
+message ConfigResponse {
+  string session_id = 1;
+
+  // (Optional) The result key-value pairs.
+  //
+  // Available when the operation is 'Get', 'GetWithDefault', 'GetOption', 'GetAll'.
+  // Also available for the operation 'IsModifiable' with boolean string "true" and "false".
+  repeated KeyValue pairs = 2;
+
+  // (Optional)
+  //
+  // Warning messages for deprecated or unsupported configurations.
+  repeated string warnings = 3;
+}
+
+// Request to transfer client-local artifacts.
+message AddArtifactsRequest {
+
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 6;
+
+  // A chunk of an Artifact.
+  message ArtifactChunk {
+    // Data chunk.
+    bytes data = 1;
+    // CRC to allow server to verify integrity of the chunk.
+    int64 crc = 2;
+  }
+
+  // An artifact that is contained in a single `ArtifactChunk`.
+  // Generally, this message represents tiny artifacts such as REPL-generated class files.
+  message SingleChunkArtifact {
+    // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+    // sequence of directories and the final file element.
+    // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+    // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+    // The relative path of the file on the server's filesystem will be the same as the name of
+    // the provided artifact)
+    string name = 1;
+    // A single data chunk.
+    ArtifactChunk data = 2;
+  }
+
+  // A number of `SingleChunkArtifact` batched into a single RPC.
+  message Batch {
+    repeated SingleChunkArtifact artifacts = 1;
+  }
+
+  // Signals the beginning/start of a chunked artifact.
+  // A large artifact is transferred through a payload of `BeginChunkedArtifact` followed by a
+  // sequence of `ArtifactChunk`s.
+  message BeginChunkedArtifact {
+    // Name of the artifact undergoing chunking. Follows the same conventions as the `name` in
+    // the `Artifact` message.
+    string name = 1;
+    // Total size of the artifact in bytes.
+    int64 total_bytes = 2;
+    // Number of chunks the artifact is split into.
+    // This includes the `initial_chunk`.
+    int64 num_chunks = 3;
+    // The first/initial chunk.
+    ArtifactChunk initial_chunk = 4;
+  }
+
+  // The payload is either a batch of artifacts or a partial chunk of a large artifact.
+  oneof payload {
+    Batch batch = 3;
+    // The metadata and the initial chunk of a large artifact chunked into multiple requests.
+    // The server side is notified about the total size of the large artifact as well as the
+    // number of chunks to expect.
+    BeginChunkedArtifact begin_chunk = 4;
+    // A chunk of an artifact excluding metadata. This can be any chunk of a large artifact
+    // excluding the first chunk (which is included in `BeginChunkedArtifact`).
+    ArtifactChunk chunk = 5;
+  }
+}
+
+// Response to adding an artifact. Contains relevant metadata to verify successful transfer of
+// artifact(s).
+message AddArtifactsResponse {
+  // Metadata of an artifact.
+  message ArtifactSummary {
+    string name = 1;
+    // Whether the CRC (Cyclic Redundancy Check) is successful on server verification.
+    // The server discards any artifact that fails the CRC.
+    // If false, the client may choose to resend the artifact specified by `name`.
+    bool is_crc_successful = 2;
+  }
+
+  // The list of artifact(s) seen by the server.
+  repeated ArtifactSummary artifacts = 1;
+}
+
+// Request to get current statuses of artifacts at the server side.
+message ArtifactStatusesRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+  // sequence of directories and the final file element.
+  // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+  // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+  // The relative path of the file on the server's filesystem will be the same as the name of
+  // the provided artifact)
+  repeated string names = 4;
+}
+
+// Response to checking artifact statuses.
+message ArtifactStatusesResponse {
+  message ArtifactStatus {
+    // Exists or not particular artifact at the server.
+    bool exists = 1;
+  }
+
+  // A map of artifact names to their statuses.
+  map<string, ArtifactStatus> statuses = 1;
+}
+
+message InterruptRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // (Required) The type of interrupt to execute.
+  InterruptType interrupt_type = 4;
+
+  enum InterruptType {
+    INTERRUPT_TYPE_UNSPECIFIED = 0;
+
+    // Interrupt all running executions within session with provided session_id.
+    INTERRUPT_TYPE_ALL = 1;
+  }
+}
+
+message InterruptResponse {
+  string session_id = 1;
 }
 
 // Main interface for the SparkConnect service.
@@ -193,5 +634,18 @@ service SparkConnectService {
 
   // Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
   rpc AnalyzePlan(AnalyzePlanRequest) returns (AnalyzePlanResponse) {}
+
+  // Update or fetch the configurations and returns a [[ConfigResponse]] containing the result.
+  rpc Config(ConfigRequest) returns (ConfigResponse) {}
+
+  // Add artifacts to the session and returns a [[AddArtifactsResponse]] containing metadata about
+  // the added artifacts.
+  rpc AddArtifacts(stream AddArtifactsRequest) returns (AddArtifactsResponse) {}
+
+  // Check statuses of artifacts in the session and returns them in a [[ArtifactStatusesResponse]]
+  rpc ArtifactStatus(ArtifactStatusesRequest) returns (ArtifactStatusesResponse) {}
+
+  // Interrupts running executions
+  rpc Interrupt(InterruptRequest) returns (InterruptResponse) {}
 }
 

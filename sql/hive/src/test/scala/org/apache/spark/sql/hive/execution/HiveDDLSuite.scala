@@ -770,8 +770,8 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')",
-          "Attempted to unset non-existent property 'p' in table " +
-            s"'`$SESSION_CATALOG_NAME`.`default`.`view1`'")
+          "Attempted to unset non-existent properties [`p`] in table " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
       }
     }
   }
@@ -1748,7 +1748,9 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')",
-          s"${forbiddenPrefix}foo")
+          s"${(forbiddenPrefix.split(".") :+ "foo")
+            .map(part => s"`$part`")
+            .mkString(".")}")
 
         assertAnalysisError(
           s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')",

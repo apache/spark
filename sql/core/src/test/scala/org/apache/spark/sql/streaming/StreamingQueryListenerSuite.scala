@@ -291,10 +291,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // This test will start a query but not push any data, and then check if we push too many events
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100ms") {
       @volatile var numProgressEvent = 0
+      @volatile var numIdleEvent = 0
       val listener = new StreamingQueryListener {
         override def onQueryStarted(event: QueryStartedEvent): Unit = {}
         override def onQueryProgress(event: QueryProgressEvent): Unit = {
           numProgressEvent += 1
+        }
+        override def onQueryIdle(event: QueryIdleEvent): Unit = {
+          numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
       }
@@ -319,14 +323,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
           true
         }
-        // `recentProgress` should not receive too many no data events
+        // `recentProgress` should not receive any events
         actions += AssertOnQuery { q =>
-          q.recentProgress.size > 1 && q.recentProgress.size <= 11
+          q.recentProgress.isEmpty
         }
         testStream(input.toDS)(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
-        assert(numProgressEvent > 1 && numProgressEvent <= 11)
+        assert(numIdleEvent > 1 && numIdleEvent <= 11)
       } finally {
         spark.streams.removeListener(listener)
       }
@@ -457,10 +461,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(metrics.get("other_event") === Row(8))
         },
 
-        // Batch 3 - no data
-        AdvanceManualClock(100),
-        checkMetrics { metrics =>
-          assert(metrics.isEmpty)
+        // Batch 3 - no data, does not produce query progress event
+        AdvanceManualClock(110),
+        AssertOnQuery { _ =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(listener.idleEvent != null)
+            true
+          }
         },
         StopStream
       )
@@ -472,10 +479,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-31593: remove unnecessary streaming query progress update") {
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100") {
       @volatile var numProgressEvent = 0
+      @volatile var numIdleEvent = 0
       val listener = new StreamingQueryListener {
         override def onQueryStarted(event: QueryStartedEvent): Unit = {}
         override def onQueryProgress(event: QueryProgressEvent): Unit = {
           numProgressEvent += 1
+        }
+        override def onQueryIdle(event: QueryIdleEvent): Unit = {
+          numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
       }
@@ -489,6 +500,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           true
         }
       }
+      def checkIdleEvent(count: Int): StreamAction = {
+        AssertOnQuery { _ =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(numIdleEvent == count)
+          }
+          true
+        }
+      }
 
       try {
         val input = new MemoryStream[Int](0, sqlContext)
@@ -497,13 +516,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         testStream(result)(
           StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
           AddData(input, 10),
+          // checkProgressEvent(1),
+          AdvanceManualClock(10),
           checkProgressEvent(1),
-          AdvanceManualClock(10),
-          checkProgressEvent(2),
           AdvanceManualClock(90),
-          checkProgressEvent(2),
-          AdvanceManualClock(10),
-          checkProgressEvent(3)
+          checkIdleEvent(0),
+          AdvanceManualClock(20),
+          checkIdleEvent(1)
         )
       } finally {
         spark.streams.removeListener(listener)
@@ -556,6 +575,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     @volatile var startEvent: QueryStartedEvent = null
     @volatile var terminationEvent: QueryTerminatedEvent = null
+    @volatile var idleEvent: QueryIdleEvent = null
 
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
 
@@ -569,6 +589,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     def reset(): Unit = {
       startEvent = null
+      idleEvent = null
       terminationEvent = null
       _progressEvents.clear()
       asyncTestWaiter = new Waiter
@@ -588,6 +609,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter {
         assert(startEvent != null, "onQueryProgress called before onQueryStarted")
         _progressEvents.synchronized { _progressEvents += queryProgress.progress }
+      }
+    }
+
+    override def onQueryIdle(queryIdle: QueryIdleEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryIdle called before onQueryStarted")
+        idleEvent = queryIdle
       }
     }
 
