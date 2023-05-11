@@ -102,6 +102,12 @@ class AnalysisException(PySparkException):
     """
 
 
+class SessionNotSameException(PySparkException):
+    """
+    Performed the same operation on different SparkSession.
+    """
+
+
 class TempTableAlreadyExistsException(AnalysisException):
     """
     Failed to create temp view since it is already exists.
