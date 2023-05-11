@@ -38,8 +38,7 @@ object NonFateSharingCacheSuite {
     def waitUntilThread2Waiting(): Unit = {
       while (true) {
         Thread.sleep(100)
-        val t2 = THREAD2_HOLDER.get()
-        if (t2 != null && t2.getState.equals(Thread.State.WAITING)) {
+        if (Option(THREAD2_HOLDER.get()).exists(_.getState.equals(Thread.State.WAITING))) {
           return
         }
       }
@@ -65,7 +64,7 @@ class NonFateSharingCacheSuite extends SparkFunSuite {
 
   import NonFateSharingCacheSuite._
 
-  test("test LoadingCache") {
+  test("loading cache loading failure should not affect concurrent query on same key") {
     val loader = new TestCacheLoader
     val loadingCache: NonFateSharingLoadingCache[String, String] =
       NonFateSharingCache(CacheBuilder.newBuilder.build(loader))
@@ -79,16 +78,14 @@ class NonFateSharingCacheSuite extends SparkFunSuite {
     testImpl(loadingCache, loader, thread1Task, thread2Task)
   }
 
-  test("test LoadingCache mix usage of default loader and provided loader") {
+  test("loading cache mix usage of default loader and provided loader") {
     // Intentionally mix usage of default loader and provided value loader.
     val loader = new TestCacheLoader
     val loadingCache: NonFateSharingLoadingCache[String, String] =
       NonFateSharingCache(CacheBuilder.newBuilder.build(loader))
     val thread1Task: WorkerFunc = () => {
       loader.intentionalFail.set(true)
-      loadingCache.get(
-        TEST_KEY,
-        () => loader.load(TEST_KEY)
+      loadingCache.get(TEST_KEY, () => loader.load(TEST_KEY)
       )
     }
     val thread2Task: WorkerFunc = () => {
@@ -97,7 +94,7 @@ class NonFateSharingCacheSuite extends SparkFunSuite {
     testImpl(loadingCache, loader, thread1Task, thread2Task)
   }
 
-  test("test Cache") {
+  test("cache loading failure should not affect concurrent query on same key") {
     val loader = new TestCacheLoader
     val cache = NonFateSharingCache(CacheBuilder.newBuilder.build[String, String])
     val thread1Task: WorkerFunc = () => {
@@ -117,31 +114,27 @@ class NonFateSharingCacheSuite extends SparkFunSuite {
   }
 
   def testImpl(
-    cache: NonFateSharingCache[String, String],
-    loader: TestCacheLoader,
-    thread1Task: WorkerFunc,
-    thread2Task: WorkerFunc): Unit = {
+      cache: NonFateSharingCache[String, String],
+      loader: TestCacheLoader,
+      thread1Task: WorkerFunc,
+      thread2Task: WorkerFunc): Unit = {
     val executor1 = ThreadUtils.newDaemonSingleThreadExecutor("test-executor1")
     val executor2 = ThreadUtils.newDaemonSingleThreadExecutor("test-executor2")
-    val f1 = executor1.submit(new Runnable {
-      override def run(): Unit = {
-        thread1Task()
-      }
-    })
-    val f2 = executor2.submit(new Runnable {
-      override def run(): Unit = {
-        loader.startLoading.acquire() // wait until thread1 start loading
-        THREAD2_HOLDER.set(Thread.currentThread())
-        thread2Task()
-      }
-    })
+    val r1: Runnable = () => thread1Task()
+    val r2: Runnable = () => {
+      loader.startLoading.acquire() // wait until thread1 start loading
+      THREAD2_HOLDER.set(Thread.currentThread())
+      thread2Task()
+    }
+    val f1 = executor1.submit(r1)
+    val f2 = executor2.submit(r2)
     // thread1 should fail intentionally
     val e = intercept[ExecutionException] {
       f1.get
     }
     assert(e.getMessage.contains(FAIL_MESSAGE))
-    f2.get // thread 2 should not be affected by thread 1 failure
 
+    f2.get // thread 2 should not be affected by thread 1 failure
     assert(cache.getIfPresent(TEST_KEY) != null)
   }
 }

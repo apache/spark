@@ -29,14 +29,17 @@ import com.google.common.cache.LoadingCache
  * all requests will fail immediately without retry. Therefore individual failure will also fail
  * other irrelevant queries who are waiting for the same key.
  *
- * This util create a delegation Cache with KeyLock to synchronize threads looking for the same key
+ * This util Cache wrapper with KeyLock to synchronize threads looking for the same key
  * so that they should run individually and fail as if they had arrived one at a time.
  *
- * Instead of implementing Guava Cache and LoadingCache interface, we defined our own narrower APIs
- * so that we can control at compile time what cache operations are allowed. Feel free to add new
- * APIs when needed.
+ * There are so many ways to add cache entries in Guava Cache, instead of implementing Guava Cache
+ * and LoadingCache interface, we expose a subset of APIs so that we can control at compile time
+ * what cache operations are allowed.
  */
 object NonFateSharingCache {
+  /**
+   * This will return a NonFateSharingLoadingCache instance if user happens to pass a LoadingCache
+   */
   def apply[K, V](cache: Cache[K, V]): NonFateSharingCache[K, V] = cache match {
     case loadingCache: LoadingCache[K, V] => apply(loadingCache)
     case _ => new NonFateSharingCache(cache)
