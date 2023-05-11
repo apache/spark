@@ -131,6 +131,7 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.streaming.DataStreamReader.*"),
       IncludeByName("org.apache.spark.sql.streaming.DataStreamWriter.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQuery.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryManager.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQueryProgress.*"))
     val excludeRules = Seq(

@@ -303,10 +303,15 @@ object RemoteStreamingQuery {
       sparkSession: SparkSession,
       q: StreamingQueryInstance): RemoteStreamingQuery = {
 
+    val name = if (q.hasName) {
+      q.getName
+    } else {
+      null
+    }
     new RemoteStreamingQuery(
       UUID.fromString(q.getId.getId),
       UUID.fromString(q.getId.getRunId),
-      q.getName,
+      name,
       sparkSession)
   }
 }

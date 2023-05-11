@@ -70,7 +70,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
@@ -2438,6 +2438,21 @@ class SparkConnectPlanner(val session: SparkSession) {
         .build())
   }
 
+  private def buildStreamingQueryInstance(query: StreamingQuery): StreamingQueryInstance = {
+    val builder = StreamingQueryInstance
+      .newBuilder()
+      .setId(
+        StreamingQueryInstanceId
+          .newBuilder()
+          .setId(query.id.toString)
+          .setRunId(query.runId.toString)
+          .build())
+    if (query.name != null) {
+      builder.setName(query.name)
+    }
+    builder.build()
+  }
+
   def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       sessionId: String,
@@ -2450,30 +2465,13 @@ class SparkConnectPlanner(val session: SparkSession) {
         val active_queries = session.streams.active
         respBuilder.getActiveBuilder.addAllActiveQueries(
           active_queries
-            .map(query =>
-              StreamingQueryInstance
-                .newBuilder()
-                .setId(
-                  StreamingQueryInstanceId
-                    .newBuilder()
-                    .setId(query.id.toString)
-                    .setRunId(query.runId.toString)
-                    .build())
-                .setName(SparkConnectService.convertNullString(query.name))
-                .build())
+            .map(query => buildStreamingQueryInstance(query))
             .toIterable
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET =>
         val query = session.streams.get(command.getGet)
-        respBuilder.getQueryBuilder
-          .setId(
-            StreamingQueryInstanceId
-              .newBuilder()
-              .setId(query.id.toString)
-              .setRunId(query.runId.toString)
-              .build())
-          .setName(SparkConnectService.convertNullString(query.name))
+        respBuilder.setQuery(buildStreamingQueryInstance(query))
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {

@@ -144,4 +144,30 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       // }
     }
   }
+
+  test("streaming query manager") {
+    assert(spark.streams.active.isEmpty)
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    assert(q.name == null)
+    val q1 = spark.streams.get(q.id)
+    val q2 = spark.streams.active(0)
+    assert(q.id == q1.id && q.id == q2.id)
+    assert(q.runId == q1.runId && q.runId == q2.runId)
+    assert(q1.name == null && q2.name == null)
+
+    val start = System.nanoTime
+    val terminated = spark.streams.awaitAnyTermination(500)
+    val end = System.nanoTime
+    assert((end - start) / 1e6 >= 500)
+    assert(!terminated)
+
+    q.stop()
+    assert(!q1.isActive)
+  }
 }
