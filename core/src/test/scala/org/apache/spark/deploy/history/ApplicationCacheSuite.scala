@@ -24,22 +24,22 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.mutable
 
 import com.codahale.metrics.Counter
+import org.apache.hadoop.conf.Configuration
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History.{HISTORY_LOG_DIR, LOCAL_STORE_DIR}
+import org.apache.spark.scheduler.SparkListenerApplicationStart
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, Utils}
 
 class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matchers {
 
@@ -385,37 +385,85 @@ class ApplicationCacheSuite extends SparkFunSuite with MockitoSugar with Matcher
     verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }
 
-  test("Load new SparkUI during old one is detaching") {
-    val awaitRemoval = new CountDownLatch(1)
-    val blockDetach = new CountDownLatch(1)
-    val operations = new StubCacheOperations() {
+  test("SPARK-43403: Load new SparkUI during old one is detaching") {
+    val historyLogDir = Utils.createTempDir()
+    val sparkConf = new SparkConf()
+      .set(HISTORY_LOG_DIR, historyLogDir.getAbsolutePath())
+      .set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
+
+    val detachStarted = new CountDownLatch(1)
+    val detachFinished = new CountDownLatch(1)
+    val blockBeforeDetach = new CountDownLatch(1)
+    val blockAfterDetach = new CountDownLatch(1)
+    val fsHistoryProvider = new FsHistoryProvider(sparkConf)
+
+    val operations = new ApplicationCacheOperations {
+
+      override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] =
+        fsHistoryProvider.getAppUI(appId, attemptId)
+
+      override def attachSparkUI(
+        appId: String,
+        attemptId: Option[String],
+        ui: SparkUI, completed: Boolean): Unit = {}
+
       override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
-        awaitRemoval.countDown()
-        super.detachSparkUI(appId, attemptId, ui)
-        blockDetach.await()
+        detachStarted.countDown()
+        blockBeforeDetach.await()
+        try {
+          fsHistoryProvider.onUIDetached(appId, attemptId, ui)
+        } finally {
+          detachFinished.countDown()
+          blockAfterDetach.await()
+        }
       }
     }
     val cache = new ApplicationCache(operations, 2, new ManualClock())
     val metrics = cache.metrics
-    val appId = "app1"
-    operations.putAndAttach(appId, None, true, 0, 10)
-    cache.get(appId)
+
+    val index = 1
+    val appId = s"app$index"
+    EventLogTestHelper.writeEventLogFile(sparkConf, new Configuration(), historyLogDir, index,
+      Seq(SparkListenerApplicationStart("SPARK-43403", Some(appId), 3L, "test", None)))
+    fsHistoryProvider.checkForLogs()
+
+    // Load first SparkUI
+    val ui = cache.get(appId)
     val loadCount = metrics.loadCount.getCount
+
+    // Invalidate LoadedAppUI, for example, because EventLog has changed
+    ui.loadedUI.invalidate()
+    ui.loadedUI.ui.store.close()
 
     val t1 = new Thread(() => cache.invalidate(CacheKey(appId, None)))
     t1.start()
 
-    // Wait for old SparkUI being removed from cache
-    awaitRemoval.await()
+    // Wait for first SparkUI to detach after being removed from cache
+    detachStarted.await()
 
-    // Expect TimeoutException when loading of new SparkUI is blocked too long.
-    eventually(Timeout(11.seconds)) {
-      intercept[TimeoutException](cache.get(appId))
+    // Expect TimeoutException when loading of new SparkUI is blocked too long
+    var loadedUI: LoadedAppUI = null
+    var exception: Exception = null
+    try {
+      loadedUI = cache.get(appId).loadedUI
+    } catch {
+      case e: Exception =>
+        exception = e
     }
+    // Unblock to start detaching
+    blockBeforeDetach.countDown()
+    // Wait for old SparkUI detached
+    detachFinished.await()
+    // Without this PR, java.lang.IllegalStateException with message "DB is closed" would be
+    // thrown when reading from newly loaded SparkUI
+    if (loadedUI != null) {
+      loadedUI.ui.store.appSummary()
+    }
+    assert(exception != null && exception.isInstanceOf[TimeoutException])
     assert(loadCount == metrics.loadCount.getCount)
 
-    // Unblock detaching and load new SparkUI again.
-    blockDetach.countDown()
+    // Unblock method `onUIDetached` so that new SparkUI can be loaded.
+    blockAfterDetach.countDown()
     cache.get(appId)
     assert(loadCount + 1 == metrics.loadCount.getCount)
   }
