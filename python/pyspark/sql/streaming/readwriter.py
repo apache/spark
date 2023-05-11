@@ -24,11 +24,11 @@ from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.types import Row, StructType
-from pyspark.sql.utils import (
-    ForeachBatchFunction,
-    construct_foreach_function,
+from pyspark.sql.utils import ForeachBatchFunction
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
 )
-from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession

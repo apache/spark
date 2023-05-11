@@ -345,7 +345,7 @@ message StreamingQueryManagerCommand {
     // active() API, returns a list of active queries.
     bool active = 1;
     // get() API, returns the StreamingQuery identified by id.
-    string get = 2;
+    string get_query = 2;
     // awaitAnyTermination() API, wait until any query terminates or timeout.
     AwaitAnyTerminationCommand await_any_termination = 3;
     // resetTerminated() API.

@@ -1342,12 +1342,12 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["timeout_ms"] | None: ...
 
     ACTIVE_FIELD_NUMBER: builtins.int
-    GET_FIELD_NUMBER: builtins.int
+    GET_QUERY_FIELD_NUMBER: builtins.int
     AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
     RESET_TERMINATED_FIELD_NUMBER: builtins.int
     active: builtins.bool
     """active() API, returns a list of active queries."""
-    get: builtins.str
+    get_query: builtins.str
     """get() API, returns the StreamingQuery identified by id."""
     @property
     def await_any_termination(
@@ -1360,7 +1360,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         self,
         *,
         active: builtins.bool = ...,
-        get: builtins.str = ...,
+        get_query: builtins.str = ...,
         await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
         | None = ...,
         reset_terminated: builtins.bool = ...,
@@ -1374,8 +1374,8 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             b"await_any_termination",
             "command",
             b"command",
-            "get",
-            b"get",
+            "get_query",
+            b"get_query",
             "reset_terminated",
             b"reset_terminated",
         ],
@@ -1389,8 +1389,8 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             b"await_any_termination",
             "command",
             b"command",
-            "get",
-            b"get",
+            "get_query",
+            b"get_query",
             "reset_terminated",
             b"reset_terminated",
         ],
@@ -1398,7 +1398,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> typing_extensions.Literal[
-        "active", "get", "await_any_termination", "reset_terminated"
+        "active", "get_query", "await_any_termination", "reset_terminated"
     ] | None: ...
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand

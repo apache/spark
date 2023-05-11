@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.datasketches.hll.{HllSketch, Union}
+import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -76,6 +76,9 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     with ExpectsInputTypes
     with NullIntolerant {
 
+  // The default target type (register size) to use.
+  private val targetType = TgtHllType.HLL_8
+
   def this(first: Expression, second: Expression) = {
     this(first, second, Literal(false))
   }
@@ -108,6 +111,6 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)
     union.update(sketch2)
-    union.getResult.toUpdatableByteArray
+    union.getResult(targetType).toUpdatableByteArray
   }
 }

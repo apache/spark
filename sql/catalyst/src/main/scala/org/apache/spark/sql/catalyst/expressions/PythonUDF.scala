@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
+    PythonEvalType.SQL_ARROW_BATCHED_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
   )
