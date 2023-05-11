@@ -114,7 +114,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.8.7</maven.version>
+    <maven.version>3.8.8</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>2.0.7</slf4j.version>
@@ -215,13 +215,13 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
-    <tink.version>1.7.0</tink.version>
+    <tink.version>1.9.0</tink.version>
     <netty.version>4.1.89.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>11.0.0</arrow.version>
+    <arrow.version>12.0.0</arrow.version>
     <ammonite.version>2.5.8</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -788,7 +788,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-1</version>
+        <version>1.5.5-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2653,6 +2653,16 @@
         <groupId>com.google.crypto.tink</groupId>
         <artifactId>tink</artifactId>
         <version>${tink.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.http-client</groupId>
+            <artifactId>google-http-client</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
