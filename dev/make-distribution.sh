@@ -163,12 +163,12 @@ cd "$SPARK_HOME"
 
 export MAVEN_OPTS="${MAVEN_OPTS:--Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m}"
 
-SKIP_PROP="-DskipTests -Dmaven.javadoc.skip=true -Dskip=true -Dmaven.source.skip -Dmaven.test.skip"
+SKIP_PROPS="-DskipTests -Dmaven.javadoc.skip=true -Dskip=true -Dmaven.source.skip"
 
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" clean package ${SKIP_PROP} $@)
+BUILD_COMMAND=("$MVN" clean package ${SKIP_PROPS} $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
