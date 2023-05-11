@@ -288,6 +288,17 @@ message ExecutePlanRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 4;
+
+  // Repeated element for options that can be passed to the request. This element is currently
+  // unused but allows to pass in an extension value used for arbitrary options.
+  repeated RequestOption request_options = 5;
+
+  message RequestOption {
+    oneof request_option {
+      // Extension type for request options
+      google.protobuf.Any extension = 999;
+    }
+  }
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
