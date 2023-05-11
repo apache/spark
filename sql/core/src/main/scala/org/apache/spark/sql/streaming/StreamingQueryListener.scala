@@ -166,5 +166,10 @@ object StreamingQueryListener {
       val id: UUID,
       val runId: UUID,
       val exception: Option[String],
-      val errorClassOnException: Option[String]) extends Event
+      val errorClassOnException: Option[String]) extends Event {
+    // compatibility with versions in prior to 3.5.0
+    def this(id: UUID, runId: UUID, exception: Option[String]) = {
+      this(id, runId, exception, None)
+    }
+  }
 }
