@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -101,6 +101,19 @@ object LiteralExpressionProtoConverter {
         expressions.Literal.create(
           LiteralValueProtoConverter.toCatalystArray(lit.getArray),
           ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
+
+      case proto.Expression.Literal.LiteralTypeCase.MAP =>
+        expressions.Literal.create(
+          LiteralValueProtoConverter.toCatalystMap(lit.getMap),
+          MapType(
+            DataTypeProtoConverter.toCatalystType(lit.getMap.getKeyType),
+            DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)))
+
+      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+        val dataType = DataTypeProtoConverter.toCatalystType(lit.getStruct.getStructType)
+        val structData = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
+        val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+        expressions.Literal(convert(structData), dataType)
 
       case _ =>
         throw InvalidPlanInput(
