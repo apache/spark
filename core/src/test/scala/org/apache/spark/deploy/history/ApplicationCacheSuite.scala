@@ -18,11 +18,10 @@
 package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeoutException}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
-import scala.concurrent.TimeoutException
 
 import com.codahale.metrics.Counter
 import org.eclipse.jetty.servlet.ServletContextHandler

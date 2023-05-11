@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
