@@ -1014,7 +1014,7 @@ private[spark] class SparkSubmit extends Logging {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass) &&
-          sparkConf.getBoolean("spark.kubernetes.submit.autoStopActiveSparkContexts", false)) {
+          sparkConf.getBoolean("spark.kubernetes.submit.autoStopActiveSparkContexts", true)) {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {

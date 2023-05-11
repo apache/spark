@@ -323,7 +323,7 @@ private[spark] object Config extends Logging {
       .doc("When set to true, Spark on Kubernetes will stop all active Spark contexts once " +
         "non-shell application' main methods are finished.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_SCHEDULER_NAME =
     ConfigBuilder("spark.kubernetes.scheduler.name")
