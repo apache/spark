@@ -21,26 +21,27 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryCatalog, InMemoryPartitionTableCatalog, InMemoryTableWithV2FilterCatalog, StagingInMemoryTableCatalog}
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait DatasourceV2SQLBase
   extends QueryTest with SharedSparkSession with BeforeAndAfter {
+
+  protected def registerCatalog[T <: CatalogPlugin](name: String, clazz: Class[T]): Unit = {
+    spark.conf.set(s"spark.sql.catalog.$name", clazz.getName)
+  }
 
   protected def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
   }
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testv2filter",
-      classOf[InMemoryTableWithV2FilterCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testpart", classOf[InMemoryPartitionTableCatalog].getName)
-    spark.conf.set(
-      "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryCatalog].getName)
-    spark.conf.set(
-      V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
+    registerCatalog("testcat", classOf[InMemoryCatalog])
+    registerCatalog("testv2filter", classOf[InMemoryTableWithV2FilterCatalog])
+    registerCatalog("testpart", classOf[InMemoryPartitionTableCatalog])
+    registerCatalog("testcat_atomic", classOf[StagingInMemoryTableCatalog])
+    registerCatalog("testcat2", classOf[InMemoryCatalog])
+    registerCatalog(SESSION_CATALOG_NAME, classOf[InMemoryTableSessionCatalog])
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")

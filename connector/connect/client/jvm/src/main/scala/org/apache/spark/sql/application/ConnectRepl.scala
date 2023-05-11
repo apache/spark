@@ -74,7 +74,7 @@ object ConnectRepl {
       }
 
     // Build the session.
-    val spark = SparkSession.builder().client(client).build()
+    val spark = SparkSession.builder().client(client).getOrCreate()
     val sparkBind = new Bind("spark", spark)
 
     // Add the proper imports and register a [[ClassFinder]].
