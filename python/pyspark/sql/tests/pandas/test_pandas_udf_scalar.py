@@ -135,6 +135,27 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
 
+    def test_pandas_udf_nested_maps_input(self):
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField(
+                    "attributes", MapType(StringType(), MapType(StringType(), StringType())), True
+                ),
+            ]
+        )
+        data = [("1", {"personal": {"name": "John", "city": "New York"}})]
+        df = self.spark.createDataFrame(data, schema)
+
+        @pandas_udf(StringType())
+        def f(s: pd.Series) -> pd.Series:
+            return s.astype(str)
+
+        self.assertEquals(
+            df.select(f(df.attributes).alias("res")).first(),
+            Row(res="{'personal': {'name': 'John', 'city': 'New York'}}"),
+        )
+
     @unittest.skipIf(
         pyarrow_version_less_than_minimum("2.0.0"),
         "Pyarrow version must be 2.0.0 or higher",
