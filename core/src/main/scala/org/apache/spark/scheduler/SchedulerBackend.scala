@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Locale
+
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.BlockManagerId
 
@@ -74,14 +76,24 @@ private[spark] trait SchedulerBackend {
    * Executors tab for the driver.
    * @return Map containing the log names and their respective URLs
    */
-  def getDriverLogUrls: Option[Map[String, String]] = None
+  def getDriverLogUrls: Option[Map[String, String]] = {
+    val prefix = "SPARK_DRIVER_LOG_URL_"
+    val driverLogUrls = sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
+    if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
+  }
 
   /**
    * Get the attributes on driver. These attributes are used to replace log URLs when
    * custom log url pattern is specified.
    * @return Map containing attributes on driver.
    */
-  def getDriverAttributes: Option[Map[String, String]] = None
+  def getDriverAttributes: Option[Map[String, String]] = {
+    val prefix = "SPARK_DRIVER_ATTRIBUTE_"
+    val driverAttributes = sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
+    if (driverAttributes.nonEmpty) Some(driverAttributes) else None
+  }
 
   /**
    * Get the max number of tasks that can be concurrent launched based on the ResourceProfile
