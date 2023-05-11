@@ -1310,8 +1310,8 @@ class CodegenContext extends Logging {
     val (inputVars, _) = getLocalInputVariableValues(this, stats.expr, subExprEliminationExprs)
     val (initialized, isNull, value) = (stats.initialized.get, stats.isNull.get, stats.value.get)
     val validParamLength = isValidParamLength(calculateParamLengthFromExprValues(inputVars))
-    if(!stats.addedFunction && validParamLength) {
-      // Generate the code for this expression tree and wrap it in a function.
+    if (!stats.addedFunction && validParamLength) {
+      // Wrap the expression code in a function.
       val argList =
         inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
       val fn =
@@ -1329,8 +1329,11 @@ class CodegenContext extends Logging {
       stats.params = Some(inputVars.map(_.javaType))
       stats.addedFunction = true
     }
-    // input vars changed, e.g. some input vars now are GlobalValue.
-    if (inputVars.map(_.javaType) != stats.params.get) {
+    if (!classFunctions.values.map(_.keys).flatten.toSet.contains(stats.funcName.get)) {
+      // The CodegenContext has changed, all the corresponding variables will also not be available
+      eval
+    } else if (inputVars.map(_.javaType) != stats.params.get) {
+      // input vars changed, e.g. some input vars now are GlobalValue.
       eval
     } else {
       val code =
@@ -1345,7 +1348,7 @@ class CodegenContext extends Logging {
                 |  $isNull = ${eval.isNull};
                 |  $value = ${eval.value};
                 |}
-           """.stripMargin
+                """.stripMargin
         }
       ExprCode(code, isNull, value)
     }
