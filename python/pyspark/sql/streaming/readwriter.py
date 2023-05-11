@@ -26,7 +26,12 @@ from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.utils import ForeachBatchFunction
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkAttributeError,
+    PySparkRuntimeError,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
@@ -1251,10 +1256,13 @@ class DataStreamWriter:
             # 'close(error)' methods.
 
             if not hasattr(f, "process"):
-                raise AttributeError("Provided object does not have a 'process' method")
+                raise PySparkAttributeError(
+                    error_class="ATTRIBUTE_NOT_CALLABLE",
+                    message_parameters={"attr_name": "process", "obj_name": "f"},
+                )
 
             if not callable(getattr(f, "process")):
-                raise PySparkTypeError(
+                raise PySparkAttributeError(
                     error_class="ATTRIBUTE_NOT_CALLABLE",
                     message_parameters={"attr_name": "process", "obj_name": "f"},
                 )
@@ -1262,7 +1270,7 @@ class DataStreamWriter:
             def doesMethodExist(method_name: str) -> bool:
                 exists = hasattr(f, method_name)
                 if exists and not callable(getattr(f, method_name)):
-                    raise PySparkTypeError(
+                    raise PySparkAttributeError(
                         error_class="ATTRIBUTE_NOT_CALLABLE",
                         message_parameters={"attr_name": method_name, "obj_name": "f"},
                     )
@@ -1278,7 +1286,10 @@ class DataStreamWriter:
                 if epoch_id:
                     int_epoch_id = int(epoch_id)
                 else:
-                    raise RuntimeError("Could not get batch id from TaskContext")
+                    raise PySparkRuntimeError(
+                        error_class="CANNOT_GET_BATCH_ID",
+                        message_parameters={"obj_name": "TaskContext"},
+                    )
 
                 # Check if the data should be processed
                 should_process = True

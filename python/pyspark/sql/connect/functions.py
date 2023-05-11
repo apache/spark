@@ -2504,8 +2504,6 @@ def udf(
     returnType: "DataTypeOrString" = StringType(),
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
-    from pyspark.rdd import PythonEvalType
-
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
@@ -2513,13 +2511,10 @@ def udf(
         return functools.partial(
             _create_py_udf,
             returnType=return_type,
-            evalType=PythonEvalType.SQL_BATCHED_UDF,
             useArrow=useArrow,
         )
     else:
-        return _create_py_udf(
-            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
-        )
+        return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__

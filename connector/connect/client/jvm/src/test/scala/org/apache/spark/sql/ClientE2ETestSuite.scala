@@ -32,11 +32,13 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -191,6 +193,34 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
     }
+  }
+
+  test("different spark session join/union") {
+    val df = spark.range(10).limit(3)
+
+    val spark2 = SparkSession
+      .builder()
+      .client(
+        SparkConnectClient
+          .builder()
+          .port(port)
+          .build())
+      .create()
+
+    val df2 = spark2.range(10).limit(3)
+
+    assertThrows[SparkException] {
+      df.union(df2).collect()
+    }
+
+    assertThrows[SparkException] {
+      df.unionByName(df2).collect()
+    }
+
+    assertThrows[SparkException] {
+      df.join(df2).collect()
+    }
+
   }
 
   test("write without table or path") {

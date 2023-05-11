@@ -880,7 +880,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case Literal(value, _: IntegralType) => Some(value.toString)
         case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
         case Literal(value, _: DateType) =>
-          Some(dateFormatter.format(value.asInstanceOf[Int]))
+          Some(quoteStringLiteral(dateFormatter.format(value.asInstanceOf[Int])))
         case _ => None
       }
     }
@@ -933,7 +933,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableDateValues {
       private lazy val valueToLiteralString: PartialFunction[Any, String] = {
-        case value: Int => dateFormatter.format(value)
+        case value: Int => quoteStringLiteral(dateFormatter.format(value))
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {

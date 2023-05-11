@@ -322,6 +322,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
+      RewriteUpdateTable ::
       typeCoercionRules ++
       Seq(
         ResolveWithCTE,

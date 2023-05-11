@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` is not supported."
     ]
   },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -84,9 +89,19 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_EMPTY_SCHEMA": {
+    "message": [
+      "Can not infer schema from empty dataset."
     ]
   },
   "CANNOT_INFER_SCHEMA_FOR_TYPE": {
@@ -190,6 +205,11 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_NDARRAY_DIMENSION": {
+    "message": [
+      "NumPy array input should be of <dimensions> dimensions."
+    ]
+  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
@@ -208,6 +228,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_TYPE" : {
+    "message" : [
+      "Argument `<arg_name>` should not be a <data_type>."
     ]
   },
   "INVALID_TYPENAME_CALL" : {
@@ -551,6 +576,11 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_OR_CONTEXT_EXISTS" : {
+    "message" : [
+      "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
@@ -604,6 +634,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW" : {
+    "message" : [
+      "Single data type <data_type> is not supported with Arrow."
     ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {
