@@ -94,8 +94,8 @@ class NettyBlockRpcServer(
           } else {
             val startAndEndId = fetchShuffleBlocks.reduceIds(index)
             if (startAndEndId.length != 2) {
-              throw SparkException.internalError(s"Invalid shuffle fetch request when batch mode " +
-                s"is enabled: $fetchShuffleBlocks", category = "INTERNAL_ERROR_NETWORK")
+              throw SparkException.internalError("Invalid shuffle fetch request when batch mode " +
+                s"is enabled: $fetchShuffleBlocks", category = "NETWORK")
             }
             Array(blockManager.getLocalBlockData(
               ShuffleBlockBatchId(
@@ -128,8 +128,8 @@ class NettyBlockRpcServer(
         } else {
           val exception = SparkException.internalError(
             s"Upload block for $blockId failed. This mostly happens " +
-            s"when there is not sufficient space available to store the block.",
-            category = "INTERNAL_ERROR_NETWORK")
+            "when there is not sufficient space available to store the block.",
+            category = "NETWORK")
           responseContext.onFailure(exception)
         }
 
@@ -141,14 +141,14 @@ class NettyBlockRpcServer(
             s"${if (isIncorrectAppId) s"incorrect application id: ${getLocalDirs.appId};"}" +
             s"${if (execNum != 1) s"incorrect executor number: $execNum (expected 1);"}"
           responseContext.onFailure(
-            SparkException.internalError(errorMsg, "INTERNAL_ERROR_NETWORK"))
+            SparkException.internalError(errorMsg, category = "NETWORK"))
         } else {
           val expectedExecId = blockManager.asInstanceOf[BlockManager].executorId
           val actualExecId = getLocalDirs.execIds.head
           if (actualExecId != expectedExecId) {
             responseContext.onFailure(SparkException.internalError(
               s"Invalid executor id: $actualExecId, expected $expectedExecId.",
-              "INTERNAL_ERROR_NETWORK"))
+              category = "NETWORK"))
           } else {
             responseContext.onSuccess(new LocalDirsForExecutors(
               Map(actualExecId -> blockManager.getLocalDiskDirs).asJava).toByteBuffer)
