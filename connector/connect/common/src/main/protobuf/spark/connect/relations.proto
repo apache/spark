@@ -70,6 +70,7 @@ message Relation {
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
     CachedLocalRelation cached_local_relation = 36;
+    CachedDataFrame cached_dataframe = 37;
 
     // NA functions
     NAFill fill_na = 90;
@@ -393,6 +394,13 @@ message CachedLocalRelation {
 
   // (Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation.
   string hash = 3;
+}
+
+// Represents a DataFrame that has been cached on server.
+message CachedDataFrame {
+  string userId = 1;
+  string sessionId = 2;
+  string key = 3;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

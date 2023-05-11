@@ -98,6 +98,7 @@ class Relation(google.protobuf.message.Message):
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
     HTML_STRING_FIELD_NUMBER: builtins.int
     CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    CACHED_DATAFRAME_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -185,6 +186,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def cached_local_relation(self) -> global___CachedLocalRelation: ...
     @property
+    def cached_dataframe(self) -> global___CachedDataFrame: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -257,6 +260,7 @@ class Relation(google.protobuf.message.Message):
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         html_string: global___HtmlString | None = ...,
         cached_local_relation: global___CachedLocalRelation | None = ...,
+        cached_dataframe: global___CachedDataFrame | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -281,6 +285,8 @@ class Relation(google.protobuf.message.Message):
             b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
+            "cached_dataframe",
+            b"cached_dataframe",
             "cached_local_relation",
             b"cached_local_relation",
             "catalog",
@@ -388,6 +394,8 @@ class Relation(google.protobuf.message.Message):
             b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
+            "cached_dataframe",
+            b"cached_dataframe",
             "cached_local_relation",
             b"cached_local_relation",
             "catalog",
@@ -524,6 +532,7 @@ class Relation(google.protobuf.message.Message):
         "apply_in_pandas_with_state",
         "html_string",
         "cached_local_relation",
+        "cached_dataframe",
         "fill_na",
         "drop_na",
         "replace",
@@ -1592,6 +1601,33 @@ class CachedLocalRelation(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
+
+class CachedDataFrame(google.protobuf.message.Message):
+    """Represents a DataFrame that has been cached on server."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    SESSIONID_FIELD_NUMBER: builtins.int
+    KEY_FIELD_NUMBER: builtins.int
+    userId: builtins.str
+    sessionId: builtins.str
+    key: builtins.str
+    def __init__(
+        self,
+        *,
+        userId: builtins.str = ...,
+        sessionId: builtins.str = ...,
+        key: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "key", b"key", "sessionId", b"sessionId", "userId", b"userId"
+        ],
+    ) -> None: ...
+
+global___CachedDataFrame = CachedDataFrame
 
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""

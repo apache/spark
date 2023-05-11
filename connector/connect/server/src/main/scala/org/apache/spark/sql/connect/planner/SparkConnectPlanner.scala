@@ -143,6 +143,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.CACHED_DATAFRAME =>
+        transformCachedDataFrame(rel.getCachedDataframe)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -783,6 +785,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         stateSchema,
         rel.getOutputMode,
         rel.getTimeoutConf)
+      .logicalPlan
+  }
+
+  private def transformCachedDataFrame(rel: proto.CachedDataFrame): LogicalPlan = {
+    SparkConnectService.cachedDataFrameManager.get(rel.getUserId, rel.getSessionId, rel.getKey)
       .logicalPlan
   }
 

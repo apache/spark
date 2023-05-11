@@ -517,6 +517,20 @@ class WithWatermark(LogicalPlan):
         return plan
 
 
+class CachedDataFrame(LogicalPlan):
+    def __init__(self, key: str):
+        super().__init__(None)
+        self._key = key
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.cached_dataframe.key = self._key
+        plan.cached_dataframe.userId = session._user_id
+        plan.cached_dataframe.sessionId = session._session_id
+
+        return plan
+
+
 class Hint(LogicalPlan):
     """Logical plan object for a Hint operation."""
 
