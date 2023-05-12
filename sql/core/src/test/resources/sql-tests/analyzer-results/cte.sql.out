@@ -436,7 +436,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`id`",
-    "proposal" : "`cte`.`id_alias`"
+    "proposal" : "`id_alias`"
   },
   "queryContext" : [ {
     "objectType" : "",
