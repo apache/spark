@@ -169,8 +169,7 @@ class Iso8601TimestampFormatter(
     try {
       val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
       if (parsed != null) {
-        val (epochSeconds, microsOfSecond) = extractSeconds(parsed)
-        Some(Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond))
+        Some(extractMicros(parsed))
       } else {
         None
       }
@@ -179,21 +178,19 @@ class Iso8601TimestampFormatter(
     }
   }
 
-  private def extractSeconds(parsed: TemporalAccessor): (Long, Long) = {
+  private def extractMicros(parsed: TemporalAccessor): Long = {
     val parsedZoneId = parsed.query(TemporalQueries.zone())
     val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
     val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
     val epochSeconds = zonedDateTime.toEpochSecond
     val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
-    (epochSeconds, microsOfSecond)
+    Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
   }
 
   override def parse(s: String): Long = {
     try {
       val parsed = formatter.parse(s)
-      val (epochSeconds, microsOfSecond) = extractSeconds(parsed)
-
-      Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
+      extractMicros(parsed)
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
