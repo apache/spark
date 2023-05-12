@@ -350,7 +350,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
-            if self._df_for_struct and t is not None and pa.types.is_struct(t):
+            if t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError(
                         "A field of type StructType expects a pandas.DataFrame, "
