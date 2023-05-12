@@ -398,8 +398,13 @@ message CachedLocalRelation {
 
 // Represents a DataFrame that has been cached on server.
 message CachedDataFrame {
+  // (Required) An identifier of the user which cached the dataframe
   string userId = 1;
+
+  // (Required) An identifier of the Spark session in which the dataframe is cached
   string sessionId = 2;
+
+  // (Required) A key represents the id of the cached dataframe
   string key = 3;
 }
 

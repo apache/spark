@@ -23,8 +23,18 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 
+/**
+ * This class caches DataFrame on the server side with a given key as id. The Spark Connect client
+ * can create a DataFrame reference with the key. When server transforms the DataFrame reference,
+ * it finds the DataFrame from the cache and replace the reference.
+ *
+ * Each (userId, sessionId) has a corresponding DataFrame map. A cached DataFrame can only be
+ * accessed from the same user within the same session. The DataFrame will be removed from the cache
+ * when the session expires.
+ */
 private[connect] class SparkConnectCachedDataFrameManager extends Logging {
 
+  // Each (userId, sessionId) has a DataFrame cache map.
   private val dataFrameCache = mutable.Map[(String, String), mutable.Map[String, DataFrame]]()
 
   def put(userId: String, sessionId: String, key: String, value: DataFrame): Unit = synchronized {

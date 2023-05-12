@@ -518,6 +518,8 @@ class WithWatermark(LogicalPlan):
 
 
 class CachedDataFrame(LogicalPlan):
+    """Logical plan object for a DataFrame reference which represents a DataFrame that's been
+    cached on the server with a given key."""
     def __init__(self, key: str):
         super().__init__(None)
         self._key = key
