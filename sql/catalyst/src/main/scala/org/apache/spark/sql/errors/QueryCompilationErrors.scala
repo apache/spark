@@ -2050,14 +2050,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "inputTypesLen" -> bound.inputTypes().length.toString))
   }
 
-  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1200",
-      messageParameters = Map(
-        "name" -> name,
-        "config" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
-  }
-
   def commandUnsupportedInV2TableError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1200",
@@ -3231,6 +3223,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1347",
       messageParameters = Map.empty)
+  }
+
+  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1348",
+      messageParameters = Map(
+        "name" -> name,
+        "config" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
   }
 
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {

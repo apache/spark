@@ -74,7 +74,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "t"
@@ -117,7 +117,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "t"
@@ -177,7 +177,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "t"
@@ -198,7 +198,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "t"
@@ -220,7 +220,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "t"
@@ -240,7 +240,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "t"
@@ -275,7 +275,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "aBc"
@@ -294,7 +294,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "_LEGACY_ERROR_TEMP_1348",
   "messageParameters" : {
     "config" : "spark.sql.legacy.ctePrecedencePolicy",
     "name" : "aBc"
