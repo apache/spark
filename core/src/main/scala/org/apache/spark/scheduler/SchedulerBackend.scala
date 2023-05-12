@@ -79,7 +79,7 @@ private[spark] trait SchedulerBackend {
   def getDriverLogUrls: Option[Map[String, String]] = {
     val prefix = "SPARK_DRIVER_LOG_URL_"
     val driverLogUrls = sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
     if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
   }
 
@@ -91,7 +91,7 @@ private[spark] trait SchedulerBackend {
   def getDriverAttributes: Option[Map[String, String]] = {
     val prefix = "SPARK_DRIVER_ATTRIBUTE_"
     val driverAttributes = sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
     if (driverAttributes.nonEmpty) Some(driverAttributes) else None
   }
 
