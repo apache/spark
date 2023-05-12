@@ -30,6 +30,7 @@ import scala.language.existentials
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.hdfs.DistributedFileSystem.HdfsDataOutputStreamBuilder
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -566,24 +567,16 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (allowEC) {
       fs.create(path)
     } else {
-      try {
-        // the builder api does not resolve relative paths, nor does it create parent dirs, while
-        // the old api does.
-        if (!fs.mkdirs(path.getParent())) {
-          throw new IOException(s"Failed to create parents of $path")
-        }
-        val qualifiedPath = fs.makeQualified(path)
-        val builder = fs.createFile(qualifiedPath)
-        val builderCls = builder.getClass()
-        // this may throw a NoSuchMethodException if the path is not on hdfs
-        val replicateMethod = builderCls.getMethod("replicate")
-        val buildMethod = builderCls.getMethod("build")
-        val b2 = replicateMethod.invoke(builder)
-        buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
-      } catch {
-        case  _: NoSuchMethodException =>
-          // No replicate() method, so just create a file with old apis.
-          fs.create(path)
+      // the builder api does not resolve relative paths, nor does it create parent dirs, while
+      // the old api does.
+      if (!fs.mkdirs(path.getParent())) {
+        throw new IOException(s"Failed to create parents of $path")
+      }
+      val qualifiedPath = fs.makeQualified(path)
+      val builder = fs.createFile(qualifiedPath)
+      builder match {
+        case hb: HdfsDataOutputStreamBuilder => hb.replicate().build()
+        case _ => fs.create(path)
       }
     }
   }
