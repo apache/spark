@@ -2588,6 +2588,10 @@ class SeriesTestsMixin:
         self.assert_eq(psser[4], pser[4])
         self.assert_eq(psdf, pdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43480): Enable SeriesTests.test_iteritems for pandas 2.0.0.",
+    )
     def test_iteritems(self):
         pser = pd.Series(["A", "B", "C"])
         psser = ps.from_pandas(pser)
@@ -2685,6 +2689,10 @@ class SeriesTestsMixin:
         with self.assertRaisesRegex(TypeError, "bad operand type for unary -: 'str'"):
             psser.tail("10")
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43481): Enable SeriesTests.test_product for pandas 2.0.0.",
+    )
     def test_product(self):
         pser = pd.Series([10, 20, 30, 40, 50])
         psser = ps.from_pandas(pser)
@@ -3191,6 +3199,10 @@ class SeriesTestsMixin:
         with self.assertWarns(FutureWarning):
             psser.between(1, 4, inclusive=True)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.",
+    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
