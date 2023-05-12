@@ -486,5 +486,10 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(formatter.parseOptional("abc").isEmpty)
     assert(
       formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
+
+    assert(formatter.parseOptional("2012-00-65 23:59:59.9990").isEmpty)
+    assert(
+      formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false)
+        .isEmpty)
   }
 }
