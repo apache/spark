@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.{StateSchemaNotCompatible, StateStore, StreamingAggregationStateManager}
+import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateSchemaNotCompatible, StateStore, StreamingAggregationStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -953,6 +953,38 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     override def schema: StructType = MockSourceProvider.fakeSchema
     override def stop(): Unit = {
       blockMgr.getMatchingBlockIds(_.isInstanceOf[TestBlockId]).foreach(blockMgr.removeBlock(_))
+    }
+  }
+}
+
+class RocksDBStateStoreStreamingAggregationSuite extends StreamingAggregationSuite {
+  override def testWithAllStateVersions(name: String, confPairs: (String, String)*)
+                              (func: => Any): Unit = {
+    Seq(false, true).foreach{ enableChangelogCheckpointing =>
+      val rocksdbConf = Seq("spark.sql.streaming.stateStore.rocksdb" +
+        ".changelogCheckpointing.enabled" -> enableChangelogCheckpointing.toString,
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName)
+      for (version <- StreamingAggregationStateManager.supportedVersions) {
+        test(s"$name - state format version $version," +
+          s" rocksdb state store changelogCheckpointing.enabled=$enableChangelogCheckpointing") {
+          executeFuncWithStateVersionSQLConf(version, confPairs ++ rocksdbConf, func)
+        }
+      }
+    }
+  }
+
+  override def testQuietlyWithAllStateVersions(name: String, confPairs: (String, String)*)
+                                     (func: => Any): Unit = {
+    Seq(false, true).foreach{ enableChangelogCheckpointing =>
+      val rocksdbConf = Seq("spark.sql.streaming.stateStore.rocksdb" +
+        ".changelogCheckpointing.enabled" -> enableChangelogCheckpointing.toString,
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName)
+      for (version <- StreamingAggregationStateManager.supportedVersions) {
+        testQuietly(s"$name - state format version $version," +
+          s" rocksdb state store changelogCheckpointing.enabled=$enableChangelogCheckpointing") {
+          executeFuncWithStateVersionSQLConf(version, confPairs ++ rocksdbConf, func)
+        }
+      }
     }
   }
 }
