@@ -462,6 +462,8 @@ class SparkSession:
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
     def _createCachedDataFrame(self, key: str) -> "DataFrame":
+        """This function creates a DataFrame given a key. It expects that on the server side, the
+        actual DataFrame is cached with the key as the id. This function is for internal use."""
         return DataFrame.withPlan(CachedDataFrame(key), self)
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
