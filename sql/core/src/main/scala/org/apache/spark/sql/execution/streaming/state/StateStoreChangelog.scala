@@ -96,6 +96,7 @@ class StateStoreChangelogWriter(fm: CheckpointFileManager, file: Path,
     } catch {
       case e: Throwable =>
         abort()
+        logError(s"Fail to commit changelog file $file because of exception $e")
         throw e
     } finally {
       backingFileStream = null

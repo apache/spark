@@ -333,9 +333,14 @@ class RocksDB(
 
       logInfo(s"Flushing updates for $newVersion")
 
+      var compactTimeMs = 0L
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
       if (shouldCreateSnapshot()) {
+        if (conf.compactOnCommit) {
+          logInfo("Compacting")
+          compactTimeMs = timeTakenMs { db.compactRange() }
+        }
         // Need to flush the change to disk before creating a checkpoint
         // because rocksdb wal is disabled.
         flushTimeMs = timeTakenMs { db.flush(flushOptions) }
@@ -674,7 +679,7 @@ object RocksDBConf {
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
   private val COMPACT_ON_COMMIT_CONF = SQLConfEntry("compactOnCommit", "false")
   private val ENABLE_CHANGELOG_CHECKPOINTING_CONF = SQLConfEntry(
-    "enableChangelogCheckpointing", "false")
+    "changelogCheckpointing.enabled", "false")
   private val BLOCK_SIZE_KB_CONF = SQLConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = SQLConfEntry("blockCacheSizeMB", "8")
   // See SPARK-42794 for details.

@@ -39,7 +39,7 @@ trait AlsoTestWithChangelogCheckpointingEnabled extends SQLTestUtils {
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
-      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED.key -> "false",
+      withSQLConf(rocksdbChangelogCheckpointingConfKey -> "false",
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
         testBody
       }
@@ -50,15 +50,18 @@ trait AlsoTestWithChangelogCheckpointingEnabled extends SQLTestUtils {
     super.test(testName + " (with changelog checkpointing)") {
       // in case tests have any code that needs to execute before every test
       super.beforeEach()
-      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED.key -> "true",
+      withSQLConf(rocksdbChangelogCheckpointingConfKey -> "true",
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
         testBody
       }
     }
   }
 
+  def rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
+    ".changelogCheckpointing.enabled"
+
   def isChangelogCheckpointingEnabled: Boolean =
-    SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED)
+    SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
 }
 
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
@@ -245,63 +248,72 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("RocksDB: get, put, iterator, commit, load") {
-    val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
-    withDB(remoteDir) { db =>
-      assert(db.get("a") === null)
-      assert(iterator(db).isEmpty)
+    def testOps(compactOnCommit: Boolean): Unit = {
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete()  // to make sure that the directory gets created
 
-      db.put("a", "1")
-      assert(toStr(db.get("a")) === "1")
-      db.commit()
+      val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
+      withDB(remoteDir, conf = conf) { db =>
+        assert(db.get("a") === null)
+        assert(iterator(db).isEmpty)
+
+        db.put("a", "1")
+        assert(toStr(db.get("a")) === "1")
+        db.commit()
+      }
+
+      withDB(remoteDir, conf = conf, version = 0) { db =>
+        // version 0 can be loaded again
+        assert(toStr(db.get("a")) === null)
+        assert(iterator(db).isEmpty)
+      }
+
+      withDB(remoteDir, conf = conf, version = 1) { db =>
+        // version 1 data recovered correctly
+        assert(toStr(db.get("a")) === "1")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+        // make changes but do not commit version 2
+        db.put("b", "2")
+        assert(toStr(db.get("b")) === "2")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+      }
+
+      withDB(remoteDir, conf = conf, version = 1) { db =>
+        // version 1 data not changed
+        assert(toStr(db.get("a")) === "1")
+        assert(db.get("b") === null)
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+        // commit version 2
+        db.put("b", "2")
+        assert(toStr(db.get("b")) === "2")
+        db.commit()
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+      }
+
+      withDB(remoteDir, conf = conf, version = 1) { db =>
+        // version 1 data not changed
+        assert(toStr(db.get("a")) === "1")
+        assert(db.get("b") === null)
+      }
+
+      withDB(remoteDir, conf = conf, version = 2) { db =>
+        // version 2 can be loaded again
+        assert(toStr(db.get("b")) === "2")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+        db.load(1)
+        assert(toStr(db.get("b")) === null)
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+      }
     }
 
-    withDB(remoteDir, version = 0) { db =>
-      // version 0 can be loaded again
-      assert(toStr(db.get("a")) === null)
-      assert(iterator(db).isEmpty)
+    for (compactOnCommit <- Seq(false, true)) {
+      withClue(s"compactOnCommit = $compactOnCommit") {
+        testOps(compactOnCommit)
+      }
     }
-
-    withDB(remoteDir, version = 1) { db =>
-      // version 1 data recovered correctly
-      assert(toStr(db.get("a")) === "1")
-      assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-
-      // make changes but do not commit version 2
-      db.put("b", "2")
-      assert(toStr(db.get("b")) === "2")
-      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-    }
-
-    withDB(remoteDir, version = 1) { db =>
-      // version 1 data not changed
-      assert(toStr(db.get("a")) === "1")
-      assert(db.get("b") === null)
-      assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-
-      // commit version 2
-      db.put("b", "2")
-      assert(toStr(db.get("b")) === "2")
-      db.commit()
-      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-    }
-
-    withDB(remoteDir, version = 1) { db =>
-      // version 1 data not changed
-      assert(toStr(db.get("a")) === "1")
-      assert(db.get("b") === null)
-    }
-
-    withDB(remoteDir, version = 2) { db =>
-      // version 2 can be loaded again
-      assert(toStr(db.get("b")) === "2")
-      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
-
-      db.load(1)
-      assert(toStr(db.get("b")) === null)
-      assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-    }
-
   }
 
   test("RocksDB: handle commit failures and aborts") {
