@@ -1,7 +1,7 @@
 ---
 layout: global
-title: LIMIT Clause
-displayTitle: LIMIT Clause
+title: OFFSET Clause
+displayTitle: OFFSET Clause
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,23 +21,18 @@ license: |
 
 ### Description
 
-The `LIMIT` clause is used to constrain the number of rows returned by
-the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
+The `OFFSET` clause is used to specify the number of rows to skip before beginning to return rows
+returned by the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
 is used in conjunction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
 ensure that the results are deterministic.
 
 ### Syntax
 
 ```sql
-LIMIT { ALL | integer_expression }
+OFFSET integer_expression
 ```
 
 ### Parameters
-
-* **ALL**
-
-    If specified, the query returns all the rows. In other words, no limit is applied if this
-    option is specified.
 
 * **integer_expression**
 
@@ -55,54 +50,49 @@ INSERT INTO person VALUES
     ('John A', 18),
     ('Jack N', 16);
 
--- Select the first two rows.
-SELECT name, age FROM person ORDER BY name LIMIT 2;
-+------+---+
-|  name|age|
-+------+---+
-|Anil B| 18|
-|Jack N| 16|
-+------+---+
-
--- Specifying ALL option on LIMIT returns all the rows.
-SELECT name, age FROM person ORDER BY name LIMIT ALL;
+-- Skip the first two rows.
+SELECT name, age FROM person ORDER BY name OFFSET 2;
 +-------+---+
 |   name|age|
 +-------+---+
-| Anil B| 18|
-| Jack N| 16|
 | John A| 18|
 | Mike A| 25|
 |Shone S| 16|
 |Zen Hui| 25|
 +-------+---+
 
--- A function expression as an input to LIMIT.
-SELECT name, age FROM person ORDER BY name LIMIT length('SPARK');
+-- Skip the first two rows and returns the next three rows.
+SELECT name, age FROM person ORDER BY name LIMIT 3 OFFSET 2;
 +-------+---+
 |   name|age|
 +-------+---+
-| Anil B| 18|
-| Jack N| 16|
 | John A| 18|
 | Mike A| 25|
 |Shone S| 16|
 +-------+---+
 
--- A non-foldable expression as an input to LIMIT is not allowed.
-SELECT name, age FROM person ORDER BY name LIMIT length(name);
+-- A function expression as an input to OFFSET.
+SELECT name, age FROM person ORDER BY name OFFSET length('SPARK');
++-------+---+
+|   name|age|
++-------+---+
+|Zen Hui| 25|
++-------+---+
+
+-- A non-foldable expression as an input to OFFSET is not allowed.
+SELECT name, age FROM person ORDER BY name OFFSET length(name);
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_2400",
   "messageParameters" : {
     "limitExpr" : "length(person.name)",
-    "name" : "limit"
+    "name" : "offset"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 50,
-    "stopIndex" : 61,
+    "startIndex" : 51,
+    "stopIndex" : 62,
     "fragment" : "length(name)"
   } ]
 }
@@ -118,7 +108,7 @@ org.apache.spark.sql.AnalysisException
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
-* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
 * [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
