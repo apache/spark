@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 from pyspark.sql.connect.utils import check_dependencies
+from pyspark.version import __version__
 
 check_dependencies(__name__)
 
@@ -302,6 +303,7 @@ class ChannelBuilder:
             )
         return " ".join([
             user_agent,
+            f"spark/{__version__}",
             f"os/{platform.uname().system.lower()}",
             f"python/{platform.python_version()}"
         ])
