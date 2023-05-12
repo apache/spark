@@ -185,6 +185,16 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
+    SQLExecution.checkSQLExecutionId(sparkSession)
+
+    // propagate the description UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
+
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    committer.setupJob(job)
+
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val requiredOrdering =
       partitionColumns ++ writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
@@ -207,16 +217,6 @@ object FileFormatWriter extends Logging {
           requiredOrder.semanticEquals(childOutputOrder)
       }
     }
-
-    SQLExecution.checkSQLExecutionId(sparkSession)
-
-    // propagate the description UUID into the jobs, so that committers
-    // get an ID guaranteed to be unique.
-    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
-
-    // This call shouldn't be put into the `try` block below because it only initializes and
-    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-    committer.setupJob(job)
 
     try {
       val (rdd, concurrentOutputWriterSpec) = if (orderingMatched) {
