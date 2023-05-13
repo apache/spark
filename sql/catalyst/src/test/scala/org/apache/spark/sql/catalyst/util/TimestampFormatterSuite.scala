@@ -480,16 +480,13 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
       isParsing = true, zoneId = DateTimeTestUtils.LA)
     assert(formatter.parseOptional("9999-12-31 23:59:59.9990").contains(253402329599999000L))
-    assert(
-      formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.9990", false)
-        .contains(253402300799999000L))
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.9990", false)
+      .contains(253402300799999000L))
     assert(formatter.parseOptional("abc").isEmpty)
-    assert(
-      formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
 
     assert(formatter.parseOptional("2012-00-65 23:59:59.9990").isEmpty)
-    assert(
-      formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false)
-        .isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false)
+      .isEmpty)
   }
 }

@@ -198,8 +198,7 @@ class Iso8601TimestampFormatter(
     try {
       val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
       if (parsed != null) {
-        val (localDate, localTime) = extractDateAndTime(s, parsed, allowTimeZone)
-        Some(DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime)))
+        Some(extractMicrosNTZ(s, parsed, allowTimeZone))
       } else {
         None
       }
@@ -208,21 +207,22 @@ class Iso8601TimestampFormatter(
     }
   }
 
-  private def extractDateAndTime(s: String, parsed: TemporalAccessor, allowTimeZone: Boolean):
-  (LocalDate, LocalTime) = {
+  private def extractMicrosNTZ(
+      s: String,
+      parsed: TemporalAccessor,
+      allowTimeZone: Boolean): Long = {
     if (!allowTimeZone && parsed.query(TemporalQueries.zone()) != null) {
       throw QueryExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
     }
     val localDate = toLocalDate(parsed)
     val localTime = toLocalTime(parsed)
-    (localDate, localTime)
+    DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
   }
 
   override def parseWithoutTimeZone(s: String, allowTimeZone: Boolean): Long = {
     try {
       val parsed = formatter.parse(s)
-      val (localDate, localTime) = extractDateAndTime(s, parsed, allowTimeZone)
-      DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
+      extractMicrosNTZ(s, parsed, allowTimeZone)
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
