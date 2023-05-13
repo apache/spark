@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -392,8 +393,8 @@ abstract class TypeCoercionBase {
         // When dataTypes of elements in IN expression are the same, it should
         // behaviour as same as BinaryComparison like EqualTo.
         if (conf.inExpressionCompatibleWithEqualToEnabled && b.map(_.dataType).distinct.size == 1 &&
-          findCommonTypeForBinaryComparison(b.head, a, conf).isDefined) {
-          val commonType = findCommonTypeForBinaryComparison(b.head, a, conf).get
+          findCommonTypeForBinaryComparison(b.head.dataType, a.dataType, conf).isDefined) {
+          val commonType = findCommonTypeForBinaryComparison(b.head.dataType, a.dataType, conf).get
           In(castExpr(a, commonType), b.map(castExpr(_, commonType)))
         } else {
           findWiderCommonType(i.children.map(_.dataType)) match {
@@ -920,7 +921,8 @@ object TypeCoercion extends TypeCoercionBase {
     case _ => false
   }
 
-  private def castExpr(expr: Expression, targetType: DataType): Expression = {
+  /** Cast Expression to a targetType. */
+  def castExpr(expr: Expression, targetType: DataType): Expression = {
     (expr.dataType, targetType) match {
       case (NullType, dt) => Literal.create(null, targetType)
       case (l, dt) if (l != dt) => Cast(expr, targetType)
