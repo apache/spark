@@ -43,6 +43,17 @@ trait AliasHelper {
     AttributeMap(aliasMap)
   }
 
+  protected def getAliasMap(plan: Window): AttributeMap[Alias] = {
+    // Find all the aliased expressions in the window expression list that don't include any actual
+    // WindowFunctions or PythonUDF, and create a map from the alias to the expression
+    val aliasMap = plan.projectList.collect {
+      case a: Alias if a.child.collectFirst {
+        case w: WindowExpression => true
+        case e if PythonUDF.isWindowPandasUDF(e) => true }.isEmpty => (a.toAttribute, a)
+    }
+    AttributeMap(aliasMap)
+  }
+
   protected def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {
     // Create a map of Aliases to their values from the child projection.
     // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).

@@ -666,4 +666,374 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInAndInSet(In(Literal(Double.NaN),
       Seq(Literal(Double.NaN), Literal(2d), Literal.create(null, DoubleType))), true)
   }
+
+  test("SPARK-43475: Expression lineage tracking over aggregate") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val expectedResolution = tr.outputSet.filter(_.name == "a").head
+
+    val query = tr.select('a as "aa", 'b as "bb").groupBy('aa)('aa as 'aaa).analyze
+    val out = query.outputSet.head
+    val (exp, plan) = findExpressionAndTrackLineageDown(out, query).get
+    assertResult(plan)(tr)
+    assertResult(exp)(expectedResolution)
+  }
+
+  test("SPARK-43475: Expression lineage tracking over AggregatePart") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val expectedResolution = tr.outputSet.filter(_.name == "a").head
+
+    val query = tr.select('a as "aa", 'b as "bb").analyze
+    val out = query.outputSet.head
+    val (exp, plan) = findExpressionAndTrackLineageDown(out, query).get
+    assertResult(plan)(tr)
+    assertResult(exp)(expectedResolution)
+
+    val x = tr.select('a as 'aa, 'b as 'bb).subquery('x)
+    val y = tr2.select('a2 as 'aaa2, 'b2 as 'bb2).subquery('y)
+    val jq = x.join(y, Inner, condition = Some('aa === 'aaa2))
+      .select('aa as "aa2", 'bb, 'bb2)
+      .groupBy('aa2, 'bb, 'bb2)('aa2, 'bb, 'bb2).analyze
+
+    withSQLConf(AGGREGATE_PUSHDOWN_EXTRA_KEYS.key -> "true") {
+      val optimized = Optimize.execute(jq)
+      assert(optimized.collect { case a: AggregatePart => a }.nonEmpty)
+      val out = optimized.outputSet.head
+      val (exp2, plan2) = findExpressionAndTrackLineageDown(out, optimized).get
+      assertResult(plan2)(tr)
+      assertResult(exp2)(expectedResolution)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over Window function") {
+    val partitionSpec = Seq('a.expr)
+    val orderSpec = Seq('a.asc)
+    val spec = WindowSpecDefinition(partitionSpec, orderSpec, UnspecifiedFrame)
+
+    def lag(e: Expression): Lag = new Lag(e)
+
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val expectedResolution = tr.outputSet.filter(_.name == "a").head
+
+    val query = tr
+      .select('a, 'b, 'c)
+      .window(Seq(
+        'a,
+        lag('a).over(spec).as("w_0"),
+        lag('b).over(spec).as("w_1")),
+        partitionSpec,
+        orderSpec)
+      .select('a, ('w_0).as("lc"), ('w_1).as("ld"))
+      .analyze
+
+    val out = query.outputSet.head
+    val (exp, plan) = findExpressionAndTrackLineageDown(out, query).get
+    assertResult(plan)(tr)
+    assertResult(exp)(expectedResolution)
+
+    val windowExp = query.outputSet.toSeq(1)
+    assert(!findExpressionAndTrackLineageDown(windowExp, query).isDefined)
+  }
+
+  test("SPARK-43475: Expression lineage tracking over LeftOuter join") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val expectedResolutionFromTr = tr.outputSet.filter(_.name == "a").head
+    val expectedResolutionFromTr2 = tr2.outputSet.filter(_.name == "a2").head
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val leftOuterQ = x.join(y, LeftOuter, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias, 'a2_alias)
+      .groupBy('a_alias_alias, 'b_alias, 'a2_alias)('a_alias_alias, 'b_alias, 'a2_alias).analyze
+
+    // track the lineage of outer rel attribute of left outer join
+    leftOuterQ.output.head.map{ exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, leftOuterQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+
+      // Restricting lineage on outer of outer joins shouldn't effect outer relation lineage
+      originInfo = findExpressionAndTrackLineageDownBase(exp, leftOuterQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+    }
+
+    // track the lineage of inner rel attribute of left outer join
+    // third projection a2_alias is from inner relation tr2
+    leftOuterQ.output(2).map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, leftOuterQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assert(originInfo.size == 1)
+      assertResult(originInfo.head._2)(tr2)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr2)
+
+      // Restricting lineage on inner of left outer join should result in None
+      originInfo = findExpressionAndTrackLineageDownBase(exp, leftOuterQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.isEmpty)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over RightOuter join") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val expectedResolutionFromTr = tr.outputSet.filter(_.name == "a").head
+    val expectedResolutionFromTr2 = tr2.outputSet.filter(_.name == "a2").head
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val rightOuterQ = y.join(x, RightOuter, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias, 'a2_alias)
+      .groupBy('a_alias_alias, 'b_alias, 'a2_alias)('a_alias_alias, 'b_alias, 'a2_alias).analyze
+
+    // track the lineage of outer rel attribute of right outer join
+    // third projection a2_alias is from inner relation tr2
+    rightOuterQ.output.head.map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, rightOuterQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+
+      // Restricting lineage on outer of outer joins shouldn't effect outer relation lineage
+      originInfo = findExpressionAndTrackLineageDownBase(exp, rightOuterQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+    }
+
+    // track the lineage of inner rel attribute of right outer join
+    rightOuterQ.output(2).map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, rightOuterQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assert(originInfo.size == 1)
+      assertResult(originInfo.head._2)(tr2)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr2)
+
+      // Restricting lineage on inner of right outer joins should result in None
+      originInfo = findExpressionAndTrackLineageDownBase(exp, rightOuterQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.isEmpty)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over FullOuter join") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val fullOuterQ = x.join(y, FullOuter, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias, 'a2_alias)
+      .groupBy('a_alias_alias, 'b_alias, 'a2_alias)('a_alias_alias, 'b_alias, 'a2_alias).analyze
+
+    // both relations are inner as this is a FULL OUTER
+    fullOuterQ.output.map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, fullOuterQ,
+        noLineageOnNullPaddingSide = false, None)
+
+      assert(originInfo.nonEmpty)
+
+      // Restricting lineage on inner of full outer join should result in None
+      // for all projections
+      originInfo = findExpressionAndTrackLineageDownBase(exp, fullOuterQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.isEmpty)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over LeftSemi join") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val leftSemiQ = x.join(y, LeftSemi, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias)
+      .groupBy('a_alias_alias, 'b_alias)('a_alias_alias, 'b_alias).analyze
+
+    // LeftSemi has no restrictions in lineage irrespective of
+    // the flag setting noLineageThroughNullPaddingSideOfOuterJoins; Also, doesn't
+    // allow any projections from inner side
+    leftSemiQ.output.map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, leftSemiQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+
+      originInfo = findExpressionAndTrackLineageDownBase(exp, leftSemiQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.nonEmpty)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over LeftAnti join") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val expectedResolutionFromTr = tr.outputSet.filter(_.name == "a").head
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val leftAntiQ = x.join(y, LeftAnti, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias)
+      .groupBy('a_alias_alias, 'b_alias)('a_alias_alias, 'b_alias).analyze
+
+    // track the lineage of outer rel attribute of an left anti join
+    leftAntiQ.output.head.map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, leftAntiQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+
+      // Restricting lineage on outer of left joins shouldn't effect outer relation lineage
+      originInfo = findExpressionAndTrackLineageDownBase(exp, leftAntiQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+    }
+
+    // LeftAnti - no restrictions in lineage irrespective of the flag setting
+    // noLineageThroughNullPaddingSideOfOuterJoins as projections are not allowed
+    // from inner side of the LeftAnti
+    leftAntiQ.output.map { exp =>
+      var originInfo = findExpressionAndTrackLineageDownBase(exp, leftAntiQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+
+      originInfo = findExpressionAndTrackLineageDownBase(exp, leftAntiQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.nonEmpty)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over Union operator") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val expectedResolutionFromTr = tr.outputSet.filter(_.name == "a").head
+    val expectedResolutionFromTr2 = tr2.outputSet.filter(_.name == "a2").head
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val unionQ = x.union(y)
+      .select('a_alias as "a_alias_alias")
+      .groupBy('a_alias_alias)('a_alias_alias).analyze
+
+    // track the lineage of UNION projections
+    // Try with original signature; should see lineage only from the first branch
+    unionQ.output.head.map { exp =>
+      val originInfo = findExpressionAndTrackLineageDown(exp, unionQ)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr)
+    }
+
+    // Try the enhanced base signature; should see lineage from all branches
+    unionQ.output.map { exp =>
+      val originInfo = findExpressionAndTrackLineageDownBase(exp, unionQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assert(originInfo.size == 2)
+
+      // Should have lineage from first branch
+      assertResult(originInfo(0)._2)(tr)
+      assertResult(originInfo(0)._1)(expectedResolutionFromTr)
+
+      // Should have lineage from second branch
+      assertResult(originInfo(1)._2)(tr2)
+      assertResult(originInfo(1)._1)(expectedResolutionFromTr2)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking over combination of Union and LeftJoin") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+    val tr3 = LocalRelation('a3.int, 'b3.int, 'c3.int)
+
+    val expectedResolutionFromTr2 = tr2.outputSet.filter(_.name == "a2").head
+    val expectedResolutionFromTr3 = tr3.outputSet.filter(_.name == "c3").head
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val z = tr3.select('a3 as 'a3_alias, 'b3 as 'b3_alias, 'c3).subquery('z)
+
+    val leftOuterQ = x.join(y, LeftOuter, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias, 'a2_alias)
+      .groupBy('a_alias_alias, 'b_alias, 'a2_alias)('a_alias_alias, 'b_alias, 'a2_alias).analyze
+
+    val unionQ = leftOuterQ.union(z)
+      .select('a2_alias as "a2_alias")
+      .groupBy('a2_alias)('a2_alias).analyze
+
+    // track the lineage of UNION projections
+    // Try with original signature; should see lineage only from the first branch
+    unionQ.output.head.map { exp =>
+      val originInfo = findExpressionAndTrackLineageDown(exp, unionQ)
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(tr2)
+      assertResult(originInfo.head._1)(expectedResolutionFromTr2)
+    }
+
+    // Try the enhanced base signature; should see lineage from all branches
+    unionQ.output.map { exp =>
+      val originInfo = findExpressionAndTrackLineageDownBase(exp, unionQ,
+        noLineageOnNullPaddingSide = false, None)
+      assert(originInfo.nonEmpty)
+      assert(originInfo.size == 2)
+
+      // Should have lineage from first branch
+      assertResult(originInfo(0)._2)(tr2)
+      assertResult(originInfo(0)._1)(expectedResolutionFromTr2)
+
+      // Should have lineage from second branch
+      assertResult(originInfo(1)._2)(tr3)
+      assertResult(originInfo(1)._1)(expectedResolutionFromTr3)
+    }
+
+    // Try the enhanced base signature with restriction on inner of outer joins
+    // Should see lineage only from right leg of the UNION as left leg lineage
+    // is from inner of LeftOuter join
+    unionQ.output.map { exp =>
+      val originInfo = findExpressionAndTrackLineageDownBase(exp, unionQ,
+        noLineageOnNullPaddingSide = true, None)
+      assert(originInfo.nonEmpty)
+      assert(originInfo.size == 1)
+
+      // Should have lineage from second branch
+      assertResult(originInfo(0)._2)(tr3)
+      assertResult(originInfo(0)._1)(expectedResolutionFromTr3)
+    }
+  }
+
+  test("SPARK-43475: Expression lineage tracking with stopAtSubPlan parameter") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    val tr2 = LocalRelation('a2.int, 'b2.int, 'c2.int)
+
+    val x = tr.select('a as 'a_alias, 'b as 'b_alias).subquery('x)
+    val y = tr2.select('a2 as 'a2_alias, 'b2 as 'b2_alias).subquery('y)
+    val innerJoinQ = x.join(y, Inner, condition = Some('a_alias === 'a2_alias))
+      .select('a_alias as "a_alias_alias", 'b_alias, 'a2_alias)
+      .groupBy('a_alias_alias, 'b_alias, 'a2_alias)('a_alias_alias, 'b_alias, 'a2_alias).analyze
+
+    // Lineage tracking should stop at the specified subplan
+    innerJoinQ.output.head.map { exp =>
+      val originInfo = findExpressionAndTrackLineageDownBase(exp, innerJoinQ,
+        noLineageOnNullPaddingSide = false, Some(innerJoinQ.children(0)))
+      assert(originInfo.nonEmpty)
+      assertResult(originInfo.head._2)(innerJoinQ.children(0))
+    }
+  }
 }

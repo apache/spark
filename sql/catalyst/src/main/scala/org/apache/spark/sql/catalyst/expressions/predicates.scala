@@ -107,41 +107,128 @@ trait PredicateHelper extends AliasHelper with Logging {
    * Find the origin of where the input references of expression exp were scanned in the tree of
    * plan, and if they originate from a single leaf node.
    * Returns optional tuple with Expression, undoing any projections and aliasing that has been done
-   * along the way from plan to origin, and the origin LeafNode plan from which all the exp
+   * along the way from plan to origin, and the origin LeafNode plan from which all the exp.
+   * Note: This returns only the first origin. For example, if the expression is derived from
+   * a UNION set operation, there are multiple origins. This routine returns only the first
+   * origin of the UNION branch.
    */
   def findExpressionAndTrackLineageDown(
       exp: Expression,
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
-    if (exp.references.isEmpty) return None
+    val result = findExpressionAndTrackLineageDownBase(exp, plan,
+      noLineageOnNullPaddingSide = false, stopAtSubPlan = None)
 
-    plan match {
-      case p: Project =>
-        val aliases = getAliasMap(p)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
-      // we can unwrap only if there are row projections, and no aggregation operation
-      case a: Aggregate =>
-        val aliasMap = getAliasMap(a)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
-      case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
-        Some((exp, l))
-      case u: Union =>
-        val index = u.output.indexWhere(_.semanticEquals(exp))
-        if (index > -1) {
-          u.children
-            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
-            .headOption
-        } else {
-          None
-        }
-      case other =>
-        other.children.flatMap {
-          child => if (exp.references.subsetOf(child.outputSet)) {
-            findExpressionAndTrackLineageDown(exp, child)
+    if (result.nonEmpty) Some(result.head) else None
+  }
+
+  /**
+   * Base logic to track down the lineage of a given expression. Accepts various options
+   * to control the traversal.
+   *
+   * @param exp Expression for whose references lineage to be traced down to its leaf node
+   * @param plan Logical plan to traverse to find the lineage of the expression references
+   * @param noLineageOnNullPaddingSide If true, traversal is denied to the null
+   * padding side of the outer joins. Returns None if the expression is originating from null
+   * padding side.
+   * Note that if there are SET operations such as UNION branches having outer join, we may
+   * see lineage from partial branches as we exclude the origin from inner of outer joins.
+   * @param stopAtSubPlan If set, stops the lineage once this operator is hit.
+   * @return Sequence of (exp, plan) pairs of expression origin. The origin is a single entry
+   * in general; however, of cases such as set operations UNION operator, returns all
+   * origins.
+   */
+  def findExpressionAndTrackLineageDownBase(
+      exp: Expression,
+      plan: LogicalPlan,
+      noLineageOnNullPaddingSide: Boolean,
+      stopAtSubPlan: Option[LogicalPlan]): Seq[(Expression, LogicalPlan)] = {
+
+    def visitExpression(exp: Expression, plan: LogicalPlan): Seq[(Expression, LogicalPlan)] = {
+      if (exp.references.isEmpty) return Seq.empty
+
+      if (stopAtSubPlan.exists(_.fastEquals(plan))) {
+        return Seq((exp, plan))
+      }
+
+      plan match {
+        case p: Project =>
+          val aliases = getAliasMap(p)
+          visitExpression(replaceAlias(exp, aliases), p.child)
+        // we can unwrap only if there are row projections, and no aggregation operation
+        // Handle both Aggregate and AggregatePart by matching with base class Aggregation
+        case a: Aggregation =>
+          val aliasMap = getAliasMap(a)
+          visitExpression(replaceAlias(exp, aliasMap), a.child)
+        // we can unwrap only if there are row projections, and no window operation
+        case w: Window =>
+          val aliasMap = getAliasMap(w)
+          visitExpression(replaceAlias(exp, aliasMap), w.child)
+        case l: LeafNode if exp.references.subsetOf(l.outputSet) => Seq((exp, l))
+        // Handle Union; Intersect and Except gets translated to equivalent operations
+        case u: Union =>
+          val index = u.output.indexWhere(_.semanticEquals(exp))
+          if (index > -1) {
+            u.children
+              .flatMap(child => visitExpression(child.output(index)
+                , child))
           } else {
-            None
+            Seq.empty
           }
-        }.headOption
+        case j: Join =>
+          j.joinType match {
+            // As projections are not allowed from inner side of LeftSemi or LeftAnti, they can be
+            // clubbed with inner joins
+            case _: InnerLike | LeftSemi | LeftAnti | ExistenceJoin(_) =>
+              if (exp.references.subsetOf(j.left.outputSet)) {
+                visitExpression(exp, j.left)
+              } else if (exp.references.subsetOf(j.right.outputSet)) {
+                visitExpression(exp, j.right)
+              } else {
+                Seq.empty
+              }
+            case LeftOuter =>
+              if (exp.references.subsetOf(j.left.outputSet)) {
+                visitExpression(exp, j.left)
+              } else if (!noLineageOnNullPaddingSide &&
+                exp.references.subsetOf(j.right.outputSet)) {
+                visitExpression(exp, j.right)
+              } else {
+                Seq.empty
+              }
+            case RightOuter =>
+              if (!noLineageOnNullPaddingSide &&
+                exp.references.subsetOf(j.left.outputSet)) {
+                visitExpression(exp, j.left)
+              } else if (exp.references.subsetOf(j.right.outputSet)) {
+                visitExpression(exp, j.right)
+              } else {
+                Seq.empty
+              }
+            case FullOuter =>
+              // For outer join both left and right act as null padding sides
+              if (noLineageOnNullPaddingSide) {
+                Seq.empty
+              } else if (exp.references.subsetOf(j.left.outputSet)) {
+                visitExpression(exp, j.left)
+              } else if (exp.references.subsetOf(j.right.outputSet)) {
+                visitExpression(exp, j.right)
+              } else {
+                Seq.empty
+              }
+            case _ => Seq.empty // Should never happen
+          }
+        case other =>
+          other.children.flatMap {
+            child =>
+              if (exp.references.subsetOf(child.outputSet)) {
+                visitExpression(exp, child)
+              } else {
+                Seq.empty
+              }
+          }
+      }
     }
+    visitExpression(exp, plan)
   }
 
   protected def splitDisjunctivePredicates(condition: Expression): Seq[Expression] = {
