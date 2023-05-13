@@ -39,7 +39,7 @@ import com.google.common.cache.LoadingCache
  * and LoadingCache interface, we expose a subset of APIs so that we can control at compile time
  * what cache operations are allowed.
  */
-object NonFateSharingCache {
+private[spark] object NonFateSharingCache {
   /**
    * This will return a NonFateSharingLoadingCache instance if user happens to pass a LoadingCache
    */
@@ -52,7 +52,7 @@ object NonFateSharingCache {
     new NonFateSharingLoadingCache(loadingCache)
 }
 
-class NonFateSharingCache[K, V](protected val cache: Cache[K, V]) {
+private[spark] class NonFateSharingCache[K, V](protected val cache: Cache[K, V]) {
 
   protected val keyLock = new KeyLock[K]
 
@@ -69,7 +69,7 @@ class NonFateSharingCache[K, V](protected val cache: Cache[K, V]) {
   def size(): Long = cache.size()
 }
 
-class NonFateSharingLoadingCache[K, V](
+private[spark] class NonFateSharingLoadingCache[K, V](
   protected val loadingCache: LoadingCache[K, V]) extends NonFateSharingCache[K, V](loadingCache) {
 
   def get(key: K): V = keyLock.withLock(key) {
