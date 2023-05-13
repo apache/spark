@@ -2052,10 +2052,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1200",
+      errorClass = "AMBIGUOUS_RELATION_ALIAS",
       messageParameters = Map(
         "name" -> name,
-        "config" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
+        "configKey" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
   }
 
   def commandUnsupportedInV2TableError(name: String): Throwable = {

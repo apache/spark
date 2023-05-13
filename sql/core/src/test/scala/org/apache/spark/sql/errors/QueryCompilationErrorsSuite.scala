@@ -857,6 +857,18 @@ class QueryCompilationErrorsSuite
       )
     }
   }
+
+  test("ambiguous relation alias name in nested CTE") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("WITH t AS (SELECT 1), t2 AS ( WITH t AS (SELECT 2) SELECT * FROM t) SELECT * FROM t2")
+      },
+      errorClass = "AMBIGUOUS_RELATION_ALIAS",
+      parameters = Map(
+        "name" -> "t",
+        "configKey" -> "spark.sql.legacy.ctePrecedencePolicy")
+    )
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
