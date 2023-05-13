@@ -197,9 +197,12 @@ class PandasConversionMixin:
 
         # Below is toPandas without Arrow optimization.
         rows = self.collect()
-        pdf = pd.DataFrame.from_records(
-            rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
-        )
+        if len(rows) > 0:
+            pdf = pd.DataFrame.from_records(
+                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
+            )
+        else:
+            pdf = pd.DataFrame(columns=self.columns)
 
         if len(pdf.columns) > 0:
             timezone = jconf.sessionLocalTimeZone()
