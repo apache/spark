@@ -4238,6 +4238,13 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
 
+  val LEGACY_IN_EXPRESSION_COMPATIBLE_WITH_EQUAL_TO_ENABLED =
+    buildConf("spark.sql.legacy.inExpressionCompatibleWithEqualTo.enabled")
+      .internal()
+      .doc("When true, we will try to support In expression compatible with EqualTo expression.")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5074,6 +5081,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
+  def inExpressionCompatibleWithEqualToEnabled: Boolean =
+    getConf(LEGACY_IN_EXPRESSION_COMPATIBLE_WITH_EQUAL_TO_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

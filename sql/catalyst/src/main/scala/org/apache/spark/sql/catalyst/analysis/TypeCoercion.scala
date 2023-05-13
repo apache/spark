@@ -389,9 +389,17 @@ abstract class TypeCoercionBase {
         }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        findWiderCommonType(i.children.map(_.dataType)) match {
-          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
-          case None => i
+        // When dataTypes of elements in IN expression are the same, it should
+        // behaviour as same as BinaryComparison like EqualTo.
+        if (conf.inExpressionCompatibleWithEqualToEnabled && b.map(_.dataType).distinct.size == 1 &&
+          findCommonTypeForBinaryComparison(b.head, a, conf).isDefined) {
+          val commonType = findCommonTypeForBinaryComparison(b.head, a, conf).get
+          In(castExpr(a, commonType), b.map(castExpr(_, commonType)))
+        } else {
+          findWiderCommonType(i.children.map(_.dataType)) match {
+            case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+            case None => i
+          }
         }
     }
   }
@@ -912,6 +920,14 @@ object TypeCoercion extends TypeCoercionBase {
     case _ => false
   }
 
+  private def castExpr(expr: Expression, targetType: DataType): Expression = {
+    (expr.dataType, targetType) match {
+      case (NullType, dt) => Literal.create(null, targetType)
+      case (l, dt) if (l != dt) => Cast(expr, targetType)
+      case _ => expr
+    }
+  }
+
   /**
    * This function determines the target type of a comparison operator when one operand
    * is a String and the other is not. It also handles when one op is a Date and the
@@ -1093,14 +1109,6 @@ object TypeCoercion extends TypeCoercionBase {
    * Promotes strings that appear in arithmetic expressions.
    */
   object PromoteStrings extends TypeCoercionRule {
-    private def castExpr(expr: Expression, targetType: DataType): Expression = {
-      (expr.dataType, targetType) match {
-        case (NullType, dt) => Literal.create(null, targetType)
-        case (l, dt) if (l != dt) => Cast(expr, targetType)
-        case _ => expr
-      }
-    }
-
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e

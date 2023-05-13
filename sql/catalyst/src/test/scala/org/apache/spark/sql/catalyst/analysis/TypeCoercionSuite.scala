@@ -1550,6 +1550,24 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+    // Casts String to Integer as same as EqualTo
+    withSQLConf(
+      "spark.sql.legacy.inExpressionCompatibleWithEqualTo.enabled" -> "true") {
+      ruleTest(inConversion,
+        In(Literal(0), Seq(Literal("00"), Literal("15"), Literal("30"), Literal("45"))),
+        In(Literal(0), Seq(Cast(Literal("00"), IntegerType), Cast(Literal("15"), IntegerType),
+          Cast(Literal("30"), IntegerType), Cast(Literal("45"), IntegerType)))
+      )
+    }
+    withSQLConf(
+      "spark.sql.legacy.inExpressionCompatibleWithEqualTo.enabled" -> "false") {
+      ruleTest(inConversion,
+        In(Literal(0), Seq(Literal("00"), Literal("15"), Literal("30"), Literal("45"))),
+        In(Cast(Literal(0), StringType), Seq(Cast(Literal("00"), StringType),
+          Cast(Literal("15"), StringType), Cast(Literal("30"), StringType),
+          Cast(Literal("45"), StringType)))
+      )
+    }
   }
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
