@@ -28,10 +28,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkException}
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
@@ -1500,16 +1500,24 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-40129: Fix Decimal multiply can produce the wrong answer because it rounds twice") {
-    val sparkValue = Seq("9173594185998001607642838421.5479932913").toDF()
-      .selectExpr("CAST(value as DECIMAL(38,10)) as a")
-      .selectExpr("a * CAST(-12 as DECIMAL(38,10))").head().getDecimal(0)
+    Seq((false, CodegenObjectFactoryMode.NO_CODEGEN),
+      (true, CodegenObjectFactoryMode.CODEGEN_ONLY)).foreach(v => {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> v._1.toString) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> v._2.toString) {
+          val multiplicandStr = "9173594185998001607642838421.5479932913"
+          val sparkValue = Seq(multiplicandStr).toDF()
+            .selectExpr("CAST(value as DECIMAL(38,10)) as a")
+            .selectExpr("a * CAST(-12 as DECIMAL(38,10))").head().getDecimal(0)
 
-    val l = new java.math.BigDecimal("9173594185998001607642838421.5479932913")
-    val r = new java.math.BigDecimal("-12.0000000000")
-    val prod = l.multiply(r)
-    val javaValue = prod.setScale(6, RoundingMode.HALF_UP)
+          val l = new java.math.BigDecimal(multiplicandStr)
+          val r = new java.math.BigDecimal("-12.0000000000")
+          val prod = l.multiply(r)
+          val javaValue = prod.setScale(6, RoundingMode.HALF_UP)
 
-    assert(sparkValue == javaValue)
+          assert(sparkValue == javaValue)
+        }
+      }
+    })
   }
 
   test("precision smaller than scale") {

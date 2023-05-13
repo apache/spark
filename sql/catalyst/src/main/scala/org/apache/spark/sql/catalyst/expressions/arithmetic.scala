@@ -24,6 +24,7 @@ import scala.math.{max, min}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.BinaryArithmetic.getMathContextValue
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -300,9 +301,7 @@ abstract class BinaryArithmetic extends BinaryOperator
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
       val errorContextCode = getContextOrNullCode(ctx, failOnError)
-      val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
-      val mathContextValue = JavaCode.global(ctx.addReferenceObj("mathContext",
-        mathContext, mathContext.getClass.getName), mathContext.getClass)
+      val mathContextValue = getMathContextValue(ctx)
       val updateIsNull = if (failOnError) {
         ""
       } else {
@@ -410,6 +409,15 @@ abstract class BinaryArithmetic extends BinaryOperator
 }
 
 object BinaryArithmetic {
+
+  def getMathContextValue(ctx: CodegenContext): GlobalValue = {
+    // SPARK-40129: We need to use `MathContext` with precision = `Decimal.MAX_PRECISION + 1`,
+    // to fix decimal multipy bug. See SPARK-40129 for more details.
+    val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
+    JavaCode.global(ctx.addReferenceObj("mathContext",
+      mathContext, mathContext.getClass.getName), mathContext.getClass)
+  }
+
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
@@ -625,7 +633,12 @@ case class Multiply(
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      checkDecimalOverflow(numeric.times(input1, input2).asInstanceOf[Decimal], precision, scale)
+      // SPARK-40129: We need to use `MathContext` with precision = `Decimal.MAX_PRECISION + 1`,
+      // to fix decimal multipy bug. See SPARK-40129 for more details.
+      checkDecimalOverflow(Decimal(input1.asInstanceOf[Decimal].toJavaBigDecimal
+        .multiply(input2.asInstanceOf[Decimal].toJavaBigDecimal,
+          new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP))),
+        precision, scale)
     case _: IntegerType if failOnError =>
       MathUtils.multiplyExact(
         input1.asInstanceOf[Int],
@@ -707,9 +720,7 @@ trait DivModLike extends BinaryArithmetic {
     }
     val javaType = CodeGenerator.javaType(dataType)
     val errorContextCode = getContextOrNullCode(ctx, failOnError)
-    val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
-    val mathContextValue = JavaCode.global(ctx.addReferenceObj("mathContext",
-      mathContext, mathContext.getClass.getName), mathContext.getClass)
+    val mathContextValue = getMathContextValue(ctx)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalValue = ctx.freshName("decimalValue")
@@ -1099,9 +1110,7 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    val mathContext = new MathContext(DecimalType.MAX_PRECISION + 1, RoundingMode.HALF_UP)
-    val mathContextValue = JavaCode.global(ctx.addReferenceObj("mathContext",
-      mathContext, mathContext.getClass.getName), mathContext.getClass)
+    val mathContextValue = getMathContextValue(ctx)
     val errorContext = getContextOrNullCode(ctx)
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
