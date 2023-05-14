@@ -2321,6 +2321,11 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>False</td>
   </tr>
   <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled</td>
+    <td>Whether to upload changelog instead of snapshot during RocksDB StateStore commit</td>
+    <td>False</td>
+  </tr>
+  <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.blockSizeKB</td>
     <td>Approximate size in KB of user data packed per block for a RocksDB BlockBasedTable, which is a RocksDB's default SST file format.</td>
     <td>4</td>
