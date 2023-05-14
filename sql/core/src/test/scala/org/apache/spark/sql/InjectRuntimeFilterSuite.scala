@@ -644,4 +644,32 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
+
+ test("Runtime Filter supports pruning side with Window exp and column aliasing") {
+   withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+     assertRewroteWithBloomFilter(
+       """
+         |SELECT *
+         |FROM   (SELECT a1, b1, c1,
+         |               Row_number() OVER (PARTITION BY c1 ORDER BY f1)
+         |        FROM   bf1) as bf1(a1_alias, b1_alias, c1_alias, rn)
+         |       JOIN bf2 ON bf1.c1_alias = bf2.c2
+         |WHERE  bf2.a2 = 62
+     """.stripMargin)
+   }
+ }
+
+ test("Runtime Filter: do not create bloom filter based on window function") {
+   withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+     assertDidNotRewriteWithBloomFilter(
+       """
+         |SELECT *
+         |FROM   (SELECT a1, b1, c1,
+         |               Row_number() OVER (PARTITION BY c1 ORDER BY f1)
+         |        FROM   bf1) as bf1(a1_alias, b1_alias, c1_alias, rn)
+         |       JOIN bf2 ON bf1.rn = bf2.c2
+         |WHERE  bf2.a2 = 62
+     """.stripMargin)
+   }
+ }
 }
