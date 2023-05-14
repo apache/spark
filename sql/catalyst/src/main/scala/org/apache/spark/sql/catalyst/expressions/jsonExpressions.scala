@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.parsing.combinator.RegexParsers
 
@@ -978,4 +979,123 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)
+}
+
+
+/**
+ * A function which returns the value of the specified index in the json array
+ */
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(json_object) - Returns the value as string of the specified index in the json array.",
+  arguments =
+    """
+    Arguments:
+      * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
+          `NULL`, an invalid JSON or specified index does not exist.
+  """,
+  examples =
+    """
+    Examples:
+      > SELECT _FUNC_('[]', 1);
+        NULL
+      > SELECT _FUNC_('[1, 2, 3]', 2);
+        3
+      > SELECT _FUNC_('[1,2,3,{"f1":1,"f2":[5,6]},4]', 3);
+        {"f1":1,"f2":[5,6]}
+  """,
+  group = "json_funcs",
+  since = "3.5.0"
+)
+// scalastyle:on line.size.limit line.contains.tab
+case class JsonArrayGet(child: Expression, index: Expression) extends BinaryExpression
+  with CodegenFallback
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType)
+
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = true
+
+  override def left: Expression = child
+
+  override def right: Expression = index
+
+  override def prettyName: String = "json_array_get"
+
+  override def nullSafeEval(value: Any, index: Any): Any = {
+    val json = value.asInstanceOf[UTF8String]
+
+    try {
+      Utils.tryWithResource(CreateJacksonParser.utf8String(SharedFactory.jsonFactory, json)) {
+        parser => {
+          // return null if an empty string or any other valid JSON string is encountered
+          if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_ARRAY) {
+            return null
+          }
+          // Parse the JSON string to get the value of the specified index in the JSON array
+          getJsonArrayValue(parser, index.asInstanceOf[Int])
+        }
+      }
+    } catch {
+      case _: JsonProcessingException | _: IOException => null
+    }
+  }
+
+  private def getJsonArrayValue(parser: JsonParser, index: Int): Any = {
+    var i = 0
+    // return null if the specified index does not exist
+    var r: UTF8String = null
+    // Keep traversing until the end of JSON array
+    while (parser.nextToken() != JsonToken.END_ARRAY && parser.currentToken() != null) {
+      if (i == index) {
+        r = UTF8String.fromString(trimQuote(getJsonText(parser)))
+      }
+      // skip all the child of inner object or array
+      parser.skipChildren()
+      i += 1
+    }
+    r
+  }
+
+  private def trimQuote(text: String): String = {
+    if (text != null && text.startsWith("\"") && text.endsWith("\"")) {
+      text.substring(1, text.length - 1)
+    } else {
+      text
+    }
+  }
+
+  private def getJsonText(parser: JsonParser): String = {
+    parser.currentToken() match {
+      case JsonToken.START_OBJECT =>
+        val textList = mutable.ListBuffer[String]()
+        while (JsonToken.END_OBJECT != parser.currentToken() &&
+          JsonToken.END_OBJECT != parser.nextToken()) {
+          textList += getJsonText(parser)
+        }
+        parser.nextToken()
+        textList.mkString("{", ",", "}")
+      case JsonToken.START_ARRAY =>
+        val textList = mutable.ListBuffer[String]()
+        while (JsonToken.END_ARRAY != parser.currentToken() &&
+          JsonToken.END_ARRAY != parser.nextToken()) {
+          textList += getJsonText(parser)
+        }
+        parser.nextToken()
+        textList.mkString("[", ",", "]")
+      case JsonToken.FIELD_NAME =>
+        parser.nextToken()
+        s""""${parser.getCurrentName}":${getJsonText(parser)}"""
+      case JsonToken.VALUE_STRING =>
+        s""""${parser.getText}"""" // add double quotes to string
+      case _ => parser.getText
+    }
+  }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression):
+  Expression = {
+    copy(child = newLeft, index = newRight)
+  }
 }

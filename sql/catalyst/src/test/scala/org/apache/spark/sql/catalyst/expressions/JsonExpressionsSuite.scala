@@ -880,6 +880,29 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }
   }
 
+  test("Use specified index get value from JSON array") {
+    Seq(
+      ("", 1, null),
+      ("[1,2,3]", 2, "3"),
+      ("[]", 0, null),
+      ("[[1],[2,3],[]]", 4, null),
+      ("""[1,2,3,4,5""", 1, null),
+      ("""[1,2,3,4,5]""", 1, "2"),
+      ("""["k1","k2","k3","k4","k5"]""", 1, "k2"),
+      ("Random String", 1, null),
+      ("""{"key":"not a json array"}""", 1, null),
+      ("""{"key": 25}""", 1, null),
+      ("[[1],[2,3],[]]", 2, "[]"),
+      ("[[1],[2,3],{}]", 2, "{}"),
+      ("""[{"a":123},{"b":"hello"}]""", 1, """{"b":"hello"}"""),
+      ("""[1,2,3,[33,44],{"key":[2,3,4]}]""", 4, """{"key":[2,3,4]}"""),
+      ("""[1,2,3,{"f1":1,"f2":[5,6]},4]""", 3, """{"f1":1,"f2":[5,6]}""")
+    ).foreach {
+      case (literal, index, expectedValue) =>
+        checkEvaluation(JsonArrayGet(Literal(literal), Literal(index)), expectedValue)
+    }
+  }
+
   test("SPARK-35320: from_json should fail with a key type different of StringType") {
     Seq(
       (MapType(IntegerType, StringType), """{"1": "test"}"""),

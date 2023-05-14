@@ -719,6 +719,97 @@ Project [json_object_keys([1, 2, 3]) AS json_object_keys([1, 2, 3])#x]
 
 
 -- !query
+select json_array_get("",1)
+-- !query analysis
+Project [json_array_get(, 1) AS json_array_get(, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("[1,2,3]", 2)
+-- !query analysis
+Project [json_array_get([1,2,3], 2) AS json_array_get([1,2,3], 2)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("[]", 0)
+-- !query analysis
+Project [json_array_get([], 0) AS json_array_get([], 0)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("[[1],[2,3],[]]", 4)
+-- !query analysis
+Project [json_array_get([[1],[2,3],[]], 4) AS json_array_get([[1],[2,3],[]], 4)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("[1,2,3,4,5", 1)
+-- !query analysis
+Project [json_array_get([1,2,3,4,5, 1) AS json_array_get([1,2,3,4,5, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("[1,2,3,4,5]", 1)
+-- !query analysis
+Project [json_array_get([1,2,3,4,5], 1) AS json_array_get([1,2,3,4,5], 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get('["k1","k2","k3","k4","k5"]', 1)
+-- !query analysis
+Project [json_array_get(["k1","k2","k3","k4","k5"], 1) AS json_array_get(["k1","k2","k3","k4","k5"], 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("Random String", 1)
+-- !query analysis
+Project [json_array_get(Random String, 1) AS json_array_get(Random String, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get('{"key":"not a json array"}', 1)
+-- !query analysis
+Project [json_array_get({"key":"not a json array"}, 1) AS json_array_get({"key":"not a json array"}, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get('{"key": 25}', 1)
+-- !query analysis
+Project [json_array_get({"key": 25}, 1) AS json_array_get({"key": 25}, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get("[[1],[2,3],[]]", 2)
+-- !query analysis
+Project [json_array_get([[1],[2,3],[]], 2) AS json_array_get([[1],[2,3],[]], 2)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get('[{"a":123},{"b":"hello"}]', 1)
+-- !query analysis
+Project [json_array_get([{"a":123},{"b":"hello"}], 1) AS json_array_get([{"a":123},{"b":"hello"}], 1)#x]
++- OneRowRelation
+
+
+-- !query
+select json_array_get('[1,2,3,[33,44],{"key":[2,3,4]}]', 4)
+-- !query analysis
+Project [json_array_get([1,2,3,[33,44],{"key":[2,3,4]}], 4) AS json_array_get([1,2,3,[33,44],{"key":[2,3,4]}], 4)#x]
++- OneRowRelation
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
 DropTempViewCommand jsonTable

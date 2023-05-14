@@ -107,5 +107,20 @@ select json_object_keys('{[1,2]}');
 select json_object_keys('{"key": 45, "random_string"}');
 select json_object_keys('[1, 2, 3]');
 
+-- json_array_get
+select json_array_get("",1);
+select json_array_get("[1,2,3]", 2);
+select json_array_get("[]", 0);
+select json_array_get("[[1],[2,3],[]]", 4);
+select json_array_get("[1,2,3,4,5", 1);
+select json_array_get("[1,2,3,4,5]", 1);
+select json_array_get('["k1","k2","k3","k4","k5"]', 1);
+select json_array_get("Random String", 1);
+select json_array_get('{"key":"not a json array"}', 1);
+select json_array_get('{"key": 25}', 1);
+select json_array_get("[[1],[2,3],[]]", 2);
+select json_array_get('[{"a":123},{"b":"hello"}]', 1);
+select json_array_get('[1,2,3,[33,44],{"key":[2,3,4]}]', 4);
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;

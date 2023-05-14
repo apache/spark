@@ -816,6 +816,110 @@ NULL
 
 
 -- !query
+select json_array_get("",1)
+-- !query schema
+struct<json_array_get(, 1):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get("[1,2,3]", 2)
+-- !query schema
+struct<json_array_get([1,2,3], 2):string>
+-- !query output
+3
+
+
+-- !query
+select json_array_get("[]", 0)
+-- !query schema
+struct<json_array_get([], 0):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get("[[1],[2,3],[]]", 4)
+-- !query schema
+struct<json_array_get([[1],[2,3],[]], 4):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get("[1,2,3,4,5", 1)
+-- !query schema
+struct<json_array_get([1,2,3,4,5, 1):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get("[1,2,3,4,5]", 1)
+-- !query schema
+struct<json_array_get([1,2,3,4,5], 1):string>
+-- !query output
+2
+
+
+-- !query
+select json_array_get('["k1","k2","k3","k4","k5"]', 1)
+-- !query schema
+struct<json_array_get(["k1","k2","k3","k4","k5"], 1):string>
+-- !query output
+k2
+
+
+-- !query
+select json_array_get("Random String", 1)
+-- !query schema
+struct<json_array_get(Random String, 1):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get('{"key":"not a json array"}', 1)
+-- !query schema
+struct<json_array_get({"key":"not a json array"}, 1):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get('{"key": 25}', 1)
+-- !query schema
+struct<json_array_get({"key": 25}, 1):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_array_get("[[1],[2,3],[]]", 2)
+-- !query schema
+struct<json_array_get([[1],[2,3],[]], 2):string>
+-- !query output
+[]
+
+
+-- !query
+select json_array_get('[{"a":123},{"b":"hello"}]', 1)
+-- !query schema
+struct<json_array_get([{"a":123},{"b":"hello"}], 1):string>
+-- !query output
+{"b":"hello"}
+
+
+-- !query
+select json_array_get('[1,2,3,[33,44],{"key":[2,3,4]}]', 4)
+-- !query schema
+struct<json_array_get([1,2,3,[33,44],{"key":[2,3,4]}], 4):string>
+-- !query output
+{"key":[2,3,4]}
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query schema
 struct<>
