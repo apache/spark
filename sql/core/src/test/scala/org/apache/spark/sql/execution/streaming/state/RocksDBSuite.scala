@@ -47,7 +47,7 @@ trait AlsoTestWithChangelogCheckpointingEnabled extends SQLTestUtils {
       super.afterEach()
     }
 
-    super.test(testName + " (with changelog checkpointing)") {
+    super.test(testName + " (with changelog checkpointing)", testTags: _*) {
       // in case tests have any code that needs to execute before every test
       super.beforeEach()
       withSQLConf(rocksdbChangelogCheckpointingConfKey -> "true",

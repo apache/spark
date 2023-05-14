@@ -458,7 +458,9 @@ class RocksDB(
       flushOptions.close()
       dbOptions.close()
       dbLogger.close()
-      latestCheckpoint.foreach(_.close())
+      synchronized {
+        latestCheckpoint.foreach(_.close())
+      }
       silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {
       case e: Exception =>
