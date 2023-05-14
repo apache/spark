@@ -816,7 +816,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.39</version>
+        <version>0.9.44</version>
       </dependency>
 
       <!-- Netty Begin -->
