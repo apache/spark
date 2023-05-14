@@ -473,6 +473,23 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
   }
 
+  test("SPARK-39280: support returning optional parse results in the iso8601 formatter") {
+    val formatter = new Iso8601TimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss.SSSS",
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true, zoneId = DateTimeTestUtils.LA)
+    assert(formatter.parseOptional("9999-12-31 23:59:59.9990").contains(253402329599999000L))
+    assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.9990", false)
+      .contains(253402300799999000L))
+    assert(formatter.parseOptional("abc").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("abc", false).isEmpty)
+
+    assert(formatter.parseOptional("2012-00-65 23:59:59.9990").isEmpty)
+    assert(formatter.parseWithoutTimeZoneOptional("2012-00-65 23:59:59.9990", false)
+      .isEmpty)
+  }
+
   test("SPARK-39281: support returning optional parse results in the legacy formatter") {
     val fastFormatter = new LegacyFastTimestampFormatter(
       "yyyy-MM-dd HH:mm:ss.SSSS",

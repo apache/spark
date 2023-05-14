@@ -352,7 +352,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`year`",
-    "proposal" : "`__auto_generated_subquery_name`.`course`, `__auto_generated_subquery_name`.`earnings`"
+    "proposal" : "`course`, `earnings`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -510,7 +510,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`s`",
-    "proposal" : "`coursesales`.`year`, `coursesales`.`course`, `coursesales`.`earnings`"
+    "proposal" : "`year`, `course`, `earnings`"
   },
   "queryContext" : [ {
     "objectType" : "",

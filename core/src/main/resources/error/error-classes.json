@@ -789,6 +789,23 @@
     ],
     "sqlState" : "21S01"
   },
+  "INSUFFICIENT_TABLE_PROPERTY" : {
+    "message" : [
+      "Can't find table property:"
+    ],
+    "subClass" : {
+      "MISSING_KEY" : {
+        "message" : [
+          "<key>."
+        ]
+      },
+      "MISSING_KEY_PART" : {
+        "message" : [
+          "<key>, <totalAmountOfParts> parts are expected."
+        ]
+      }
+    }
+  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -802,6 +819,12 @@
     "sqlState" : "XX000"
   },
   "INTERNAL_ERROR_EXECUTOR" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_MEMORY" : {
     "message" : [
       "<message>"
     ],
@@ -853,11 +876,23 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_DRIVER_MEMORY" : {
+    "message" : [
+      "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+    ],
+    "sqlState" : "F0000"
+  },
   "INVALID_EMPTY_LOCATION" : {
     "message" : [
       "The location name cannot be empty string, but `<location>` was given."
     ],
     "sqlState" : "42K05"
+  },
+  "INVALID_EXECUTOR_MEMORY" : {
+    "message" : [
+      "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+    ],
+    "sqlState" : "F0000"
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
@@ -1014,11 +1049,6 @@
       "AES_KEY_LENGTH" : {
         "message" : [
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
-        ]
-      },
-      "AES_SALTED_MAGIC" : {
-        "message" : [
-          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
         ]
       },
       "PATTERN" : {
@@ -1248,6 +1278,30 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
+    "message" : [
+      "<cmd> is not supported for v2 tables."
+    ],
+    "sqlState" : "46110"
+  },
+  "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
+    "message" : [
+      "Not supported command in JDBC catalog:"
+    ],
+    "subClass" : {
+      "COMMAND" : {
+        "message" : [
+          "<cmd>"
+        ]
+      },
+      "COMMAND_WITH_PROPERTY" : {
+        "message" : [
+          "<cmd> with property <property>."
+        ]
+      }
+    },
+    "sqlState" : "46110"
   },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
@@ -1674,6 +1728,11 @@
       "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
     ],
     "sqlState" : "42703"
+  },
+  "UNSET_NONEXISTENT_PROPERTIES" : {
+    "message" : [
+      "Attempted to unset non-existent properties [<properties>] in table <table>."
+    ]
   },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
@@ -2672,11 +2731,6 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1091" : {
-    "message" : [
-      "Cannot read table property '<key>' as it's corrupted.<details>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1097" : {
     "message" : [
       "The field for corrupt records must be string type and nullable."
@@ -2744,11 +2798,6 @@
       "Sources support continuous: <continuousSources>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1119" : {
-    "message" : [
-      "<cmd> is not supported in JDBC catalog."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1120" : {
     "message" : [
       "Unsupported NamespaceChange <changes> in JDBC catalog."
@@ -2767,11 +2816,6 @@
   "_LEGACY_ERROR_TEMP_1123" : {
     "message" : [
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1124" : {
-    "message" : [
-      "<cmd> is not supported for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1125" : {
@@ -3264,11 +3308,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1244" : {
-    "message" : [
-      "Attempted to unset non-existent property '<property>' in table '<table>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1245" : {

@@ -542,8 +542,14 @@ class ArrowTestsMixin:
     def check_createDataFrame_with_single_data_type(self):
         for schema in ["int", IntegerType()]:
             with self.subTest(schema=schema):
-                with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema=schema).collect()
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    message_parameters={"data_type": "IntegerType()"},
+                )
 
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
