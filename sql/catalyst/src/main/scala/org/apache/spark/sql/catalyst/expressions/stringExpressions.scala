@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -2142,22 +2143,124 @@ case class OctetLength(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes with NullIntolerant {
+case class Levenshtein(
+    left: Expression,
+    right: Expression,
+    threshold: Option[Expression] = None)
+  extends Expression with ImplicitCastInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  def this(left: Expression, right: Expression, threshold: Expression) =
+    this(left, right, Option(threshold))
 
-  override def dataType: DataType = IntegerType
-  protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
-    leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
+  def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (left, right) =>
-      s"${ev.value} = $left.levenshteinDistance($right);")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length > 3 || children.length < 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq(2, 3), children.length)
+    } else if (!DataTypeUtils.sameType(left.dataType, right.dataType)) {
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
+        )
+      )
+    } else {
+      super.checkInputDataTypes()
+    }
   }
 
-  override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): Levenshtein = copy(left = newLeft, right = newRight)
+  override def inputTypes: Seq[AbstractDataType] = if (threshold.isDefined) {
+    Seq(StringType, StringType, IntegerType)
+  } else {
+    Seq(StringType, StringType)
+  }
+
+  override def children: Seq[Expression] = if (threshold.isDefined) {
+    Seq(left, right, threshold.get)
+  } else {
+    Seq(left, right)
+  }
+
+  override def dataType: DataType = IntegerType
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    if (threshold.isDefined) {
+      copy(left = newChildren(0), right = newChildren(1), threshold = Some(newChildren(2)))
+    } else {
+      copy(left = newChildren(0), right = newChildren(1))
+    }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val leftEval = left.eval(input)
+    if (leftEval == null) return null
+    val rightEval = right.eval(input)
+    if (rightEval == null) return null
+
+    val thresholdEval = threshold.map(_.eval(input))
+    if (thresholdEval.isDefined) {
+      leftEval.asInstanceOf[UTF8String].levenshteinDistance(
+        rightEval.asInstanceOf[UTF8String], thresholdEval.get.asInstanceOf[Int])
+    } else {
+      leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = children.head.genCode(ctx)
+    val rightGen = children(1).genCode(ctx)
+    val thresholdGen = if (threshold.isDefined) children(2).genCode(ctx) else null
+    val resultCode = if (threshold.isDefined) {
+      s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value}, " +
+        s"${thresholdGen.value});"
+    } else {
+      s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
+    }
+    if (nullable) {
+      val nullSafeEval = if (threshold.isDefined) {
+        leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            thresholdGen.code + ctx.nullSafeExec(children(2).nullable, thresholdGen.isNull) {
+              s"""
+                ${ev.isNull} = false;
+                $resultCode
+              """
+            }
+          }
+        }
+      } else {
+        leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+          rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+            """
+          }
+        }
+      }
+      ev.copy(code =
+        code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      val eval = if (threshold.isDefined) {
+        leftGen.code + rightGen.code + thresholdGen.code
+      } else {
+        leftGen.code + rightGen.code
+      }
+      ev.copy(code =
+        code"""
+        $eval
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
 }
 
 /**
