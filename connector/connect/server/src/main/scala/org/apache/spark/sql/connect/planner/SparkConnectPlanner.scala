@@ -2301,7 +2301,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     if (writeOp.hasForeach) {
       val foreach = writeOp.getForeach.getPythonWriter
       val pythonFcn = transformPythonForeachFunction(foreach)
-      writer.foreachPython(new PythonForeachWriter(pythonFcn, dataset.schema))
+      writer.foreachConnect(new PythonForeachWriter(pythonFcn, dataset.schema))
     }
 
     val query = writeOp.getPath match {

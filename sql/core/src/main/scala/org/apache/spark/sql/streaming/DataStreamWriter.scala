@@ -362,7 +362,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         startQuery(sink, extraOptions, catalogTable = catalogTable)
       } else {
         val sink = new ForeachWriterTable[UnsafeRow](
-          pythonForeachWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
+          connectForeachWriter.asInstanceOf[ForeachWriter[UnsafeRow]],
+          Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
         startQuery(sink, extraOptions, catalogTable = catalogTable)
       }
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
@@ -464,9 +465,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
-  private[sql] def foreachPython(writer: PythonForeachWriter): DataStreamWriter[T] = {
+  private[sql] def foreachConnect(writer: PythonForeachWriter): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
-    this.pythonForeachWriter = if (writer != null) {
+    this.connectForeachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
       throw new IllegalArgumentException("foreach writer cannot be null")
@@ -553,7 +554,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var foreachWriter: ForeachWriter[T] = null
 
-  private var pythonForeachWriter: PythonForeachWriter = null
+  private var connectForeachWriter: PythonForeachWriter = null
 
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 
