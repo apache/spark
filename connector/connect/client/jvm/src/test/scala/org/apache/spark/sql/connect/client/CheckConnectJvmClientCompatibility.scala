@@ -180,6 +180,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.levenshtein"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
