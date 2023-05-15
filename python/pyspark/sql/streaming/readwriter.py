@@ -1123,7 +1123,7 @@ class DataStreamWriter:
         return self
 
     @staticmethod
-    def construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"]):
+    def _construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"]):
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
@@ -1317,7 +1317,7 @@ class DataStreamWriter:
         from pyspark.rdd import _wrap_function
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 
-        func = self.construct_foreach_function(f)
+        func = self._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         assert self._spark._sc._jvm is not None
