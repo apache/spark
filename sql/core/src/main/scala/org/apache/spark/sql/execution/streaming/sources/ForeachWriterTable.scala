@@ -99,14 +99,11 @@ object ForeachWriterTable {
       encoder: ExpressionEncoder[T]): ForeachWriterTable[_] = {
     writer match {
       case pythonWriter: PythonForeachWriter =>
-        new ForeachWriterTable[UnsafeRow](pythonWriter, Right(createPythonEncoder))
+        new ForeachWriterTable[UnsafeRow](
+          pythonWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
       case _ =>
         new ForeachWriterTable[T](writer, Left(encoder))
     }
-  }
-
-  def createPythonEncoder: InternalRow => UnsafeRow = {
-    (x: InternalRow) => x.asInstanceOf[UnsafeRow]
   }
 }
 
