@@ -307,6 +307,8 @@ class QueryTerminatedEvent:
         If the query was terminated without an exception, or the
         exception is not a part of error class framework, it will be
         `None`.
+
+        .. versionadded:: 3.5.0
         """
         return self._errorClassOnException
 
