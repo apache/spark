@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.concurrent.TimeUnit
+
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -164,7 +166,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     val start = System.nanoTime
     val terminated = spark.streams.awaitAnyTermination(500)
     val end = System.nanoTime
-    assert((end - start) / 1e6 >= 500)
+    assert((end - start) >= TimeUnit.MILLISECONDS.toNanos(500))
     assert(!terminated)
 
     q.stop()
