@@ -385,12 +385,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings))
+    getWithSubstitution(key)
   }
 
   /** Get an optional value, applying variable substitution. */
   private[spark] def getWithSubstitution(key: String): Option[String] = {
-    getOption(key).map(reader.substitute)
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings)).map(reader.substitute)
   }
 
   /** Get all parameters as a list of pairs */
@@ -403,7 +403,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) }
-      .map { case (k, v) => (k.substring(prefix.length), v) }
+      .map { case (k, v) => (k.substring(prefix.length), reader.substitute(v)) }
   }
 
   /**

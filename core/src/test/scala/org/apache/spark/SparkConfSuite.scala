@@ -33,7 +33,7 @@ import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -497,6 +497,27 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
           assert(reqs.head.numParts == 1)
         }
     }
+  }
+
+  test("SPARK-43454: getOption and getAllWithPrefix should be substituted") {
+    val conf = new SparkConfWithEnv(Map(
+      "ENV_A" -> "a",
+      "ENV_B" -> "b",
+    ))
+    conf.set("spark.executorEnv.A", "${env:ENV_A}")
+    conf.set("spark.executorEnv.B", "${env:ENV_B}")
+    conf.set(SECRET_REDACTION_PATTERN.key, "(?i)${env:ENV_A}")
+
+    // get singe executor env should be substituted.
+    assert(conf.get("spark.executorEnv.A") === "a")
+    assert(conf.get("spark.executorEnv.B") === "b")
+    // regex config should also be substituted, the pattern should be the same
+    assert(conf.get(SECRET_REDACTION_PATTERN).pattern.toString ===
+      conf.get(SECRET_REDACTION_PATTERN.key).r.pattern.toString)
+    assert(conf.get(SECRET_REDACTION_PATTERN).pattern.toString === "(?i)a")
+
+    // getAllWithPrefix should also be substituted
+    assert(conf.getExecutorEnv.toMap === Map("A" -> "a", "B" -> "b"))
   }
 }
 
