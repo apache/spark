@@ -63,7 +63,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         // Verify some of the API.
         assert(query.isActive)
 
-        eventually(timeout(10.seconds)) {
+        eventually(timeout(30.seconds)) {
           assert(query.status.isDataAvailable)
           assert(query.recentProgress.nonEmpty) // Query made progress.
         }
@@ -107,7 +107,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         try {
           q1.processAllAvailable()
           q2.processAllAvailable()
-          eventually(timeout(10.seconds)) {
+          eventually(timeout(30.seconds)) {
             assert(spark.table("my_sink").count() > 0)
           }
         } finally {

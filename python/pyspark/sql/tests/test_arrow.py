@@ -974,6 +974,17 @@ class ArrowTestsMixin:
                             expected = pd.DataFrame.from_records(data, columns=schema.names)
                         assert_frame_equal(df.toPandas(), expected)
 
+    def test_toPandas_empty_columns(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_empty_columns(arrow_enabled)
+
+    def check_toPandas_empty_columns(self, arrow_enabled):
+        df = self.spark.range(2).select([])
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            assert_frame_equal(df.toPandas(), pd.DataFrame(index=range(2)))
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
