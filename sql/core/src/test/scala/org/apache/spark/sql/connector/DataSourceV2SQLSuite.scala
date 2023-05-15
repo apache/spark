@@ -132,7 +132,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`invalid_col`",
-          "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"),
+          "proposal" -> "`id`, `data`"),
         context = ExpectedContext(
           fragment = "DESCRIBE testcat.tbl invalid_col",
           start = 0,
@@ -2086,8 +2086,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+          "proposal" -> "`name`, `age`, `id`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy='abc'",
@@ -2098,8 +2097,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+          "proposal" -> "`name`, `age`, `id`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy",
@@ -2313,6 +2311,20 @@ class DataSourceV2SQLSuiteV1Filter
       testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
       testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
       testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
+    }
+  }
+
+  test("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      testNotSupportedV2Command("ALTER TABLE",
+        s"$t SET SERDE 'test_serde'",
+        Some("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"))
+      testNotSupportedV2Command("ALTER TABLE",
+        s"$t SET SERDEPROPERTIES ('a' = 'b')",
+        Some("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"))
     }
   }
 
@@ -3258,13 +3270,17 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+  private def testNotSupportedV2Command(
+      sqlCommand: String,
+      sqlParams: String,
+      expectedArgument: Option[String] = None): Unit = {
     checkError(
       exception = intercept[AnalysisException] {
         sql(s"$sqlCommand $sqlParams")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1124",
-      parameters = Map("cmd" -> sqlCommand))
+      errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+      sqlState = "46110",
+      parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
 }
 
