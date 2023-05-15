@@ -126,6 +126,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   test("substituteHadoopVariables") {
     val hadoopConf = new Configuration(false)
     hadoopConf.set("xxx", "yyy")
+
     val text1 = "${hadoopconf-xxx}"
     val result1 = new SparkHadoopUtil().substituteHadoopVariables(text1, hadoopConf)
     assert(result1 == "yyy")
@@ -133,6 +134,45 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     val text2 = "${hadoopconf-xxx"
     val result2 = new SparkHadoopUtil().substituteHadoopVariables(text2, hadoopConf)
     assert(result2 == "${hadoopconf-xxx")
+
+    val text3 = "${hadoopconf-xxx}zzz"
+    val result3 = new SparkHadoopUtil().substituteHadoopVariables(text3, hadoopConf)
+    assert(result3 == "yyyzzz")
+
+    val text4 = "www${hadoopconf-xxx}zzz"
+    val result4 = new SparkHadoopUtil().substituteHadoopVariables(text4, hadoopConf)
+    assert(result4 == "wwwyyyzzz")
+
+    val text5 = "www${hadoopconf-xxx}"
+    val result5 = new SparkHadoopUtil().substituteHadoopVariables(text5, hadoopConf)
+    assert(result5 == "wwwyyy")
+
+    val text6 = "www${hadoopconf-xxx"
+    val result6 = new SparkHadoopUtil().substituteHadoopVariables(text6, hadoopConf)
+    assert(result6 == "www${hadoopconf-xxx")
+
+    val text7 = "www$hadoopconf-xxx}"
+    val result7 = new SparkHadoopUtil().substituteHadoopVariables(text7, hadoopConf)
+    assert(result7 == "www$hadoopconf-xxx}")
+
+    val text8 = "www{hadoopconf-xxx}"
+    val result8 = new SparkHadoopUtil().substituteHadoopVariables(text8, hadoopConf)
+    assert(result8 == "www{hadoopconf-xxx}")
+  }
+
+  test("Redundant character escape '\\}' in RegExp ") {
+    val HADOOP_CONF_PATTERN_1 = "(\\$\\{hadoopconf-[^}$\\s]+})".r.unanchored
+    val HADOOP_CONF_PATTERN_2 = "(\\$\\{hadoopconf-[^}$\\s]+\\})".r.unanchored
+
+    val text = "www${hadoopconf-xxx}zzz"
+    val target1 = text match {
+      case HADOOP_CONF_PATTERN_1(matched) => text.replace(matched, "yyy")
+    }
+    val target2 = text match {
+      case HADOOP_CONF_PATTERN_2(matched) => text.replace(matched, "yyy")
+    }
+    assert(target1 == "wwwyyyzzz")
+    assert(target2 == "wwwyyyzzz")
   }
 
   /**
