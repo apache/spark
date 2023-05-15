@@ -2147,7 +2147,9 @@ case class Levenshtein(
     left: Expression,
     right: Expression,
     threshold: Option[Expression] = None)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression
+  with ImplicitCastInputTypes
+  with NullIntolerant{
 
   def this(left: Expression, right: Expression, threshold: Expression) =
     this(left, right, Option(threshold))
