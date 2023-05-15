@@ -81,21 +81,7 @@ SELECT name, age FROM person ORDER BY name OFFSET length('SPARK');
 
 -- A non-foldable expression as an input to OFFSET is not allowed.
 SELECT name, age FROM person ORDER BY name OFFSET length(name);
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_2400",
-  "messageParameters" : {
-    "limitExpr" : "length(person.name)",
-    "name" : "offset"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 51,
-    "stopIndex" : 62,
-    "fragment" : "length(name)"
-  } ]
-}
+org.apache.spark.sql.AnalysisException: The offset expression must evaluate to a constant value ...
 ```
 
 ### Related Statements
