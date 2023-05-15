@@ -502,7 +502,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("SPARK-43454: getOption and getAllWithPrefix should be substituted") {
     val conf = new SparkConfWithEnv(Map(
       "ENV_A" -> "a",
-      "ENV_B" -> "b",
+      "ENV_B" -> "b"
     ))
     conf.set("spark.executorEnv.A", "${env:ENV_A}")
     conf.set("spark.executorEnv.B", "${env:ENV_B}")
