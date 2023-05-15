@@ -238,14 +238,22 @@ class DataFrameTestsMixin:
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test with ps.DataFrame and pd.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
-                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+                ps.DataFrame(
+                    data=psdf, index=pd.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
+                pd.DataFrame(
+                    data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
             )
 
             # test with ps.DataFrame and ps.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=ps.Index(["Hello", "Universe", "Databricks"])),
-                pd.DataFrame(data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])),
+                ps.DataFrame(
+                    data=psdf, index=ps.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
+                pd.DataFrame(
+                    data=pdf, index=pd.Index(["Hello", "Universe", "Databricks"])
+                ).sort_index(),
             )
 
         # test DatetimeIndex

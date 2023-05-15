@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -862,11 +862,14 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                 )
 
         # check error
-        with self.assertRaisesRegex(
-            ValueError,
-            "end is out of bound",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.sum("a").over(CW.orderBy("b").rowsBetween(0, (1 << 33)))).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_BETWEEN",
+            message_parameters={"arg_name": "end", "min": "-2147483648", "max": "2147483647"},
+        )
 
         with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(CF.rank().over(cdf.a))

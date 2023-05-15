@@ -742,7 +742,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
+      Map("objectName" -> "`y`", "proposal" -> "`x`"),
       Array(ExpectedContext("y", 46, 46))
     )
   }
@@ -1523,5 +1523,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     resolvedListQueries.foreach { l =>
       assert(l.childOutputs == l.plan.output)
     }
+  }
+
+  test("SPARK-43293: __qualified_access_only should be ignored in normal columns") {
+    val attr = $"a".int.markAsQualifiedAccessOnly()
+    val rel = LocalRelation(attr)
+    checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
   }
 }

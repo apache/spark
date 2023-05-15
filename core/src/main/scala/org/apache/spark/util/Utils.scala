@@ -197,7 +197,7 @@ private[spark] object Utils extends Logging {
   /**
    * Get the ClassLoader which loaded Spark.
    */
-  def getSparkClassLoader: ClassLoader = getClass.getClassLoader
+  def getSparkClassLoader: ClassLoader = SparkClassUtils.getSparkClassLoader
 
   /**
    * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
@@ -206,8 +206,7 @@ private[spark] object Utils extends Logging {
    * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
    * active loader when setting up ClassLoader delegation chains.
    */
-  def getContextOrSparkClassLoader: ClassLoader =
-    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
+  def getContextOrSparkClassLoader: ClassLoader = SparkClassUtils.getContextOrSparkClassLoader
 
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
@@ -223,12 +222,7 @@ private[spark] object Utils extends Logging {
       className: String,
       initialize: Boolean = true,
       noSparkClassLoader: Boolean = false): Class[C] = {
-    if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
-    } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
-        asInstanceOf[Class[C]]
-    }
+    SparkClassUtils.classForName(className, initialize, noSparkClassLoader);
     // scalastyle:on classforname
   }
 

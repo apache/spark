@@ -17,151 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Collections
-
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when}
-import org.mockito.invocation.InvocationOnMock
-
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, FunctionRegistry, NoSuchTableException, ResolveSessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{ArrayTransform, AttributeReference, BooleanLiteral, Cast, CheckOverflowInTableInsert, CreateNamedStruct, EvalMode, GetStructField, IntegerLiteral, LambdaFunction, LongLiteral, MapFromArrays, StringLiteral}
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, StaticInvoke}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan, UpdateTable}
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog}
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
+import org.apache.spark.sql.types.IntegerType
 
-class AlignUpdateAssignmentsSuite extends AnalysisTest {
-
-  private val primitiveTable = {
-    val t = mock(classOf[SupportsRowLevelOperations])
-    val schema = new StructType()
-      .add("i", "INT", nullable = false)
-      .add("l", "LONG")
-      .add("txt", "STRING")
-    when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
-    when(t.partitioning()).thenReturn(Array.empty[Transform])
-    t
-  }
-
-  private val nestedStructTable = {
-    val t = mock(classOf[SupportsRowLevelOperations])
-    val schema = new StructType()
-      .add("i", "INT")
-      .add(
-        "s",
-        "STRUCT<n_i: INT NOT NULL, n_s: STRUCT<dn_i: INT NOT NULL, dn_l: LONG>>",
-        nullable = false)
-      .add("txt", "STRING")
-    when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
-    when(t.partitioning()).thenReturn(Array.empty[Transform])
-    t
-  }
-
-  private val mapArrayTable = {
-    val t = mock(classOf[SupportsRowLevelOperations])
-    val schema = new StructType()
-      .add("i", "INT")
-      .add("a", "ARRAY<STRUCT<i1: INT, i2: INT>>")
-      .add("m", "MAP<STRING, STRING>")
-      .add("txt", "STRING")
-    when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
-    when(t.partitioning()).thenReturn(Array.empty[Transform])
-    t
-  }
-
-  private val charVarcharTable = {
-    val t = mock(classOf[SupportsRowLevelOperations])
-    val schema = new StructType()
-      .add("c", "CHAR(5)")
-      .add(
-        "s",
-        "STRUCT<n_i: INT, n_vc: VARCHAR(5)>",
-        nullable = false)
-      .add(
-        "a",
-        "ARRAY<STRUCT<n_i: INT, n_vc: VARCHAR(5)>>",
-        nullable = false)
-      .add(
-        "mk",
-        "MAP<STRUCT<n_i: INT, n_vc: VARCHAR(5)>, STRING>",
-        nullable = false)
-      .add(
-        "mv",
-        "MAP<STRING, STRUCT<n_i: INT, n_vc: VARCHAR(5)>>",
-        nullable = false)
-    when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
-    when(t.partitioning()).thenReturn(Array.empty[Transform])
-    t
-  }
-
-  private val acceptsAnySchemaTable = {
-    val t = mock(classOf[SupportsRowLevelOperations])
-    val schema = new StructType()
-      .add("i", "INT", nullable = false)
-      .add("l", "LONG")
-      .add("txt", "STRING")
-    when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
-    when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
-    t
-  }
-
-  private val defaultValuesTable = {
-    val t = mock(classOf[SupportsRowLevelOperations])
-    val iDefault = new ColumnDefaultValue("42", LiteralValue(42, IntegerType))
-    when(t.columns()).thenReturn(Array(
-      Column.create("b", BooleanType, true, null, null),
-      Column.create("i", IntegerType, true, null, iDefault, null)))
-    when(t.partitioning()).thenReturn(Array.empty[Transform])
-    t
-  }
-
-  private val v2Catalog = {
-    val newCatalog = mock(classOf[TableCatalog])
-    when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      val ident = invocation.getArgument[Identifier](0)
-      ident.name match {
-        case "primitive_table" => primitiveTable
-        case "nested_struct_table" => nestedStructTable
-        case "map_array_table" => mapArrayTable
-        case "char_varchar_table" => charVarcharTable
-        case "accepts_any_schema_table" => acceptsAnySchemaTable
-        case "default_values_table" => defaultValuesTable
-        case name => throw new NoSuchTableException(Seq(name))
-      }
-    })
-    when(newCatalog.name()).thenReturn("cat")
-    newCatalog
-  }
-
-  private val v1SessionCatalog =
-    new SessionCatalog(new InMemoryCatalog(), FunctionRegistry.builtin, new SQLConf())
-
-  private val v2SessionCatalog = new V2SessionCatalog(v1SessionCatalog)
-
-  private val catalogManager = {
-    val manager = mock(classOf[CatalogManager])
-    when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[String](0) match {
-        case "testcat" => v2Catalog
-        case CatalogManager.SESSION_CATALOG_NAME => v2SessionCatalog
-        case name => throw new CatalogNotFoundException(s"No such catalog: $name")
-      }
-    })
-    when(manager.currentCatalog).thenReturn(v2Catalog)
-    when(manager.currentNamespace).thenReturn(Array.empty[String])
-    when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
-    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
-    manager
-  }
+class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuite {
 
   test("align assignments (primitive types)") {
     val sql1 = "UPDATE primitive_table AS t SET t.txt = 'new', t.i = 1"
@@ -751,29 +614,5 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
       case UpdateTable(_, assignments, _) => assignments
       case plan => fail("Expected UpdateTable, but got:\n" + plan.treeString)
     }
-  }
-
-  private def parseAndResolve(query: String): LogicalPlan = {
-    val analyzer = new Analyzer(catalogManager) {
-      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
-        new ResolveSessionCatalog(catalogManager))
-    }
-    val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
-    analyzer.checkAnalysis(analyzed)
-    analyzed
-  }
-
-  private def assertAnalysisException(query: String, messages: String*): Unit = {
-    val exception = intercept[AnalysisException] {
-      parseAndResolve(query)
-    }
-    messages.foreach(message => assert(exception.message.contains(message)))
-  }
-
-  private def assertNullCheckExists(plan: LogicalPlan, colPath: Seq[String]): Unit = {
-    val asserts = plan.expressions.flatMap(e => e.collect {
-      case assert: AssertNotNull if assert.walkedTypePath == colPath => assert
-    })
-    assert(asserts.nonEmpty, s"Must have NOT NULL checks for col $colPath")
   }
 }

@@ -79,7 +79,11 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
       <scope>compile</scope>
     </dependency>
   </dependencies>
@@ -145,6 +149,7 @@
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
                   <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
                 </configuration>
               </execution>
             </executions>

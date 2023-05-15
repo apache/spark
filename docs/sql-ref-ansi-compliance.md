@@ -415,7 +415,9 @@ Below is a list of all the keywords in Spark SQL.
 |DATABASE|non-reserved|non-reserved|non-reserved|
 |DATABASES|non-reserved|non-reserved|non-reserved|
 |DATEADD|non-reserved|non-reserved|non-reserved|
+|DATE_ADD|non-reserved|non-reserved|non-reserved|
 |DATEDIFF|non-reserved|non-reserved|non-reserved|
+|DATE_DIFF|non-reserved|non-reserved|non-reserved|
 |DAY|non-reserved|non-reserved|non-reserved|
 |DAYS|non-reserved|non-reserved|non-reserved|
 |DAYOFYEAR|non-reserved|non-reserved|non-reserved|

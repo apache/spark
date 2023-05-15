@@ -26,6 +26,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
+from pyspark.rdd import PythonEvalType
 
 
 @unittest.skipIf(
@@ -49,9 +50,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
 
     def test_nested_input_error(self):
-        with self.assertRaisesRegexp(
-            Exception, "NotImplementedError: Struct input type are not supported"
-        ):
+        with self.assertRaisesRegexp(Exception, "[NotImplementedError]"):
             self.spark.range(1).selectExpr("struct(1, 2) as struct").select(
                 udf(lambda x: x)("struct")
             ).collect()
@@ -111,6 +110,14 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
+
+    def test_eval_type(self):
+        self.assertEquals(
+            udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+        )
+        self.assertEquals(
+            udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
+        )
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
