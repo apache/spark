@@ -597,8 +597,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Levenshtein(Literal("abc"), Literal("acb"),
       Some(Literal(1))), -1)
 
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(Levenshtein(Literal("千世"), Literal("fog"), Some(Literal(3))), 3)
     checkEvaluation(Levenshtein(Literal("世界千世"), Literal("大a界b"), Some(Literal(4))), 4)
+    // scalastyle:on
   }
 
   test("Levenshtein distance") {
