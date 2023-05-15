@@ -2459,7 +2459,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
-        val query = session.streams.get(command.getGet)
+        val query = session.streams.get(command.getGetQuery)
         respBuilder.setQuery(buildStreamingQueryInstance(query))
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
