@@ -596,7 +596,8 @@ class RocksDBFileManager(
   }
 
   private def dfsBatchZipFile(version: Long): Path = new Path(s"$dfsRootDir/$version.zip")
-
+  // We use changelog suffix intentionally so that we can tell the difference from changelog file of
+  // HDFSBackedStateStore which is named version.delta.
   private def dfsDeltaFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
