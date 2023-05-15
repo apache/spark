@@ -19,6 +19,7 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
@@ -230,7 +231,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 "Exception thrown when converting pandas.Series (%s) "
                 "with name '%s' to Arrow Array (%s)."
             )
-            raise TypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
+            raise PySparkTypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
         except ValueError as e:
             error_msg = (
                 "Exception thrown when converting pandas.Series (%s) "
@@ -243,7 +244,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                     "can be disabled by using SQL config "
                     "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                 )
-            raise ValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
+            raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
 
     def _create_batch(self, series):
         """
