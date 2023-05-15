@@ -133,17 +133,29 @@ class PandasUDFTestsMixin:
                 def foo(x):
                     return x
 
-            with self.assertRaisesRegex(ValueError, "Invalid return type.*None"):
+            with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf(functionType=PandasUDFType.SCALAR)
                 def foo(x):
                     return x
 
-            with self.assertRaisesRegex(ValueError, "Invalid function"):
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_BE_NONE",
+                message_parameters={"arg_name": "returnType"},
+            )
+
+            with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf("double", 100)
                 def foo(x):
                     return x
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="INVALID_PANDAS_UDF_TYPE",
+                message_parameters={"arg_name": "functionType", "arg_type": "100"},
+            )
 
             with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
                 pandas_udf(lambda: 1, LongType(), PandasUDFType.SCALAR)

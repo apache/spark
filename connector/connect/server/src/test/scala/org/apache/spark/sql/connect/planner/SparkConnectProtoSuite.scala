@@ -1042,7 +1042,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         StructType.fromAttributes(attributes),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
     proto.Relation
       .newBuilder()

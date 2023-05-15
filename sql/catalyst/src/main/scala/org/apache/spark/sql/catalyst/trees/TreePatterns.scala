@@ -76,6 +76,7 @@ object TreePattern extends Enumeration  {
   val PARAMETERIZED_QUERY: Value = Value
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
+  val PYTHON_UDAF: Value = Value
   val PYTHON_UDF: Value = Value
   val REGEXP_EXTRACT_FAMILY: Value = Value
   val REGEXP_REPLACE: Value = Value

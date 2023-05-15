@@ -1148,7 +1148,7 @@ class SubquerySuite extends QueryTest
         sqlState = None,
         parameters = Map(
           "objectName" -> "`a`",
-          "proposal" -> "`v`.`i`, `v`.`j`"),
+          "proposal" -> "`i`, `j`"),
         context = ExpectedContext(
           fragment = "a",
           start = 37,
@@ -2337,15 +2337,9 @@ class SubquerySuite extends QueryTest
           case rs: ReusedSubqueryExec => rs.child.id
         }
 
-        if (enableAQE) {
-          assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 4,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        } else {
-          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 5,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        }
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 5,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
   }
@@ -2413,15 +2407,9 @@ class SubquerySuite extends QueryTest
           case rs: ReusedSubqueryExec => rs.child.id
         }
 
-        if (enableAQE) {
-          assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 3,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        } else {
-          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
-          assert(reusedSubqueryIds.size == 4,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        }
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 4,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
       }
     }
   }

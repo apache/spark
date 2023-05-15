@@ -103,6 +103,15 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_timestamp_nat(self):
         self.check_timestamp_nat(True)
 
+    def test_toPandas_error(self):
+        self.check_toPandas_error(True)
+
+    def test_toPandas_duplicate_field_names(self):
+        self.check_toPandas_duplicate_field_names(True)
+
+    def test_toPandas_empty_columns(self):
+        self.check_toPandas_empty_columns(True)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_arrow import *  # noqa: F401

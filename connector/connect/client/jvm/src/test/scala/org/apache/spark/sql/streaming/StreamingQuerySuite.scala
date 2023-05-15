@@ -63,7 +63,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         // Verify some of the API.
         assert(query.isActive)
 
-        eventually(timeout(10.seconds)) {
+        eventually(timeout(30.seconds)) {
           assert(query.status.isDataAvailable)
           assert(query.recentProgress.nonEmpty) // Query made progress.
         }
@@ -75,6 +75,10 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       } finally {
         // Don't wait for any processed data. Otherwise the test could take multiple seconds.
         query.stop()
+
+        // The query should still be accessible after stopped.
+        assert(!query.isActive)
+        assert(query.recentProgress.nonEmpty)
       }
     }
   }
@@ -103,7 +107,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         try {
           q1.processAllAvailable()
           q2.processAllAvailable()
-          eventually(timeout(10.seconds)) {
+          eventually(timeout(30.seconds)) {
             assert(spark.table("my_sink").count() > 0)
           }
         } finally {
@@ -112,6 +116,32 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
           spark.sql("DROP TABLE my_table")
         }
       }
+    }
+  }
+
+  test("awaitTermination") {
+    withSQLConf(
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
+      val q = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("test")
+        .start()
+
+      val start = System.nanoTime
+      val terminated = q.awaitTermination(500)
+      val end = System.nanoTime
+      assert((end - start) / 1e6 >= 500)
+      assert(!terminated)
+
+      q.stop()
+      // TODO (SPARK-43032): uncomment below
+      // eventually(timeout(1.minute)) {
+      // q.awaitTermination()
+      // }
     }
   }
 }

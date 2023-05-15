@@ -114,16 +114,13 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.8.7</maven.version>
+    <maven.version>3.8.8</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>2.0.7</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.5</hadoop.version>
-    <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
-    <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
-    <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>3.22.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
@@ -184,8 +181,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.14.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.14.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.15.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.15.0</fasterxml.jackson.databind.version>
     <snappy.version>1.1.9.1</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -215,18 +212,18 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
-    <tink.version>1.7.0</tink.version>
+    <tink.version>1.9.0</tink.version>
     <netty.version>4.1.89.Final</netty.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>11.0.0</arrow.version>
+    <arrow.version>12.0.0</arrow.version>
     <ammonite.version>2.5.8</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.5.1</kubernetes-client.version>
+    <kubernetes-client.version>6.6.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -270,27 +267,6 @@
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
 
-    <!--
-      These default to Hadoop 3.x shaded client/minicluster jars, but since the shaded jars are
-      only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
-      profile is hadoop-2.
-
-      To make the above work, in the hadoop-2 profile section we bind hadoop-client-api to
-      hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
-      former. This effectively moves the hadoop-yarn-api to the same level as hadoop-client, but
-      should be fine since both dependencies are required. We cannot use hadoop-client for both
-      of these because the maven enforcer plugin bans duplicate dependencies.
-
-      We still leave hadoop-client-minicluster to use hadoop-client because it is of test scope,
-      and is only used by spark-yarn module. To avoid the duplicate dependency issue we only
-      declare the dependency when we're using hadoop-3 profile, in
-      resource-managers/yarn/pom.xml.
-
-      Please check SPARK-36835 for more details.
-    -->
-    <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
-    <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
-    <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
     <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
     <!--
@@ -809,7 +785,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-1</version>
+        <version>1.5.5-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -823,21 +799,22 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- In theory we need not directly depend on protobuf since Spark does not directly
-           use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
-           the protobuf version up from the one Mesos gives. For now we include this variable
-           to explicitly bump the version when building with YARN. It would be nice to figure
-           out why Maven can't resolve this correctly (like SBT does). -->
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>${protobuf.hadoopDependency.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+        <version>${protobuf.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java-util</artifactId>
+        <version>${protobuf.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.39</version>
+        <version>0.9.44</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1284,19 +1261,19 @@
       <!-- Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>${hadoop-client-api.artifact}</artifactId>
+        <artifactId>hadoop-client-api</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+        <artifactId>hadoop-client-runtime</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>${hadoop-client-minicluster.artifact}</artifactId>
+        <artifactId>hadoop-client-minicluster</artifactId>
         <version>${yarn.version}</version>
         <scope>test</scope>
       </dependency>
@@ -2674,6 +2651,16 @@
         <groupId>com.google.crypto.tink</groupId>
         <artifactId>tink</artifactId>
         <version>${tink.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.http-client</groupId>
+            <artifactId>google-http-client</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
