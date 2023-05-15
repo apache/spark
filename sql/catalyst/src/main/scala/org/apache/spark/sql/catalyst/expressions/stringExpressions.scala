@@ -2160,14 +2160,6 @@ case class Levenshtein(
     if (children.length > 3 || children.length < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq(2, 3), children.length)
-    } else if (!DataTypeUtils.sameType(left.dataType, right.dataType)) {
-      DataTypeMismatch(
-        errorSubClass = "DATA_DIFF_TYPES",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "dataType" -> children.map(_.dataType).map(toSQLType).mkString("[", ", ", "]")
-        )
-      )
     } else {
       super.checkInputDataTypes()
     }
