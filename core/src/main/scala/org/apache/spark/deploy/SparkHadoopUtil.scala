@@ -174,7 +174,7 @@ private[spark] class SparkHadoopUtil extends Logging {
      * So we need a map to track the bytes read from the child threads and parent thread,
      * summing them together to get the bytes read of this task.
      */
-    new Function0[Long] {
+    new (() => Long) {
       private val bytesReadMap = new mutable.HashMap[Long, Long]()
 
       override def apply(): Long = {
@@ -248,7 +248,7 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
-  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
+  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^}$\\s]+})".r.unanchored
 
   /**
    * Substitute variables by looking them up in Hadoop configs. Only variables that match the
