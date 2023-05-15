@@ -37,6 +37,7 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.*;
 
+
 /**
  * A UTF-8 String for internal Spark use.
  * <p>
