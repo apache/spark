@@ -1123,7 +1123,7 @@ class DataStreamWriter:
         return self
 
     @staticmethod
-    def _construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"]):
+    def _construct_foreach_function(f: Union[Callable[[Row], None], "SupportsProcess"]) -> callable:
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
@@ -1199,7 +1199,7 @@ class DataStreamWriter:
 
                 return iter([])
 
-            return func_with_open_process_close  # type: ignore[assignment]
+            return func_with_open_process_close
 
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
