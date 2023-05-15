@@ -422,7 +422,7 @@ class UserDefinedFunction:
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
                 jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = self._get_UDF_id(jPythonUDF.expr())
+                id = self._get_udf_id(jPythonUDF.expr())
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
@@ -439,14 +439,14 @@ class UserDefinedFunction:
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
                 jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = self._get_UDF_id(jPythonUDF.expr())
+                id = self._get_udf_id(jPythonUDF.expr())
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
             jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jPythonUDF)
 
-    def _get_UDF_id(self, jexpr: JavaObject) -> int:
+    def _get_udf_id(self, jexpr: JavaObject) -> int:
         if is_instance_of(
             sc._gateway,
             jexpr,
