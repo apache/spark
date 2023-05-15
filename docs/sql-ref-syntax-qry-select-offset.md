@@ -1,7 +1,7 @@
 ---
 layout: global
-title: DISTRIBUTE BY Clause
-displayTitle: DISTRIBUTE BY Clause
+title: OFFSET Clause
+displayTitle: OFFSET Clause
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,21 +21,22 @@ license: |
 
 ### Description
 
-The `DISTRIBUTE BY` clause is used to repartition the data based
-on the input expressions. Unlike the [CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)
-clause, this does not sort the data within each partition.
+The `OFFSET` clause is used to specify the number of rows to skip before beginning to return rows
+returned by the [SELECT](sql-ref-syntax-qry-select.html) statement. In general, this clause
+is used in conjunction with [ORDER BY](sql-ref-syntax-qry-select-orderby.html) to
+ensure that the results are deterministic.
 
 ### Syntax
 
 ```sql
-DISTRIBUTE BY { expression [ , ... ] }
+OFFSET integer_expression
 ```
 
 ### Parameters
 
-* **expression**
+* **integer_expression**
 
-    Specifies combination of one or more values, operators and SQL functions that results in a value.
+    Specifies a foldable expression that returns an integer.
 
 ### Examples
 
@@ -49,39 +50,38 @@ INSERT INTO person VALUES
     ('John A', 18),
     ('Jack N', 16);
 
--- Reduce the number of shuffle partitions to 2 to illustrate the behavior of `DISTRIBUTE BY`.
--- It's easier to see the clustering and sorting behavior with less number of partitions.
-SET spark.sql.shuffle.partitions = 2;
+-- Skip the first two rows.
+SELECT name, age FROM person ORDER BY name OFFSET 2;
++-------+---+
+|   name|age|
++-------+---+
+| John A| 18|
+| Mike A| 25|
+|Shone S| 16|
+|Zen Hui| 25|
++-------+---+
 
--- Select the rows with no ordering. Please note that without any sort directive, the result
--- of the query is not deterministic. It's included here to just contrast it with the
--- behavior of `DISTRIBUTE BY`. The query below produces rows where age columns are not
--- clustered together.
-SELECT age, name FROM person;
-+---+-------+
-|age|   name|
-+---+-------+
-| 16|Shone S|
-| 25|Zen Hui|
-| 16| Jack N|
-| 25| Mike A|
-| 18| John A|
-| 18| Anil B|
-+---+-------+
+-- Skip the first two rows and returns the next three rows.
+SELECT name, age FROM person ORDER BY name LIMIT 3 OFFSET 2;
++-------+---+
+|   name|age|
++-------+---+
+| John A| 18|
+| Mike A| 25|
+|Shone S| 16|
++-------+---+
 
--- Produces rows clustered by age. Persons with same age are clustered together.
--- Unlike `CLUSTER BY` clause, the rows are not sorted within a partition.
-SELECT age, name FROM person DISTRIBUTE BY age;
-+---+-------+
-|age|   name|
-+---+-------+
-| 25|Zen Hui|
-| 25| Mike A|
-| 18| John A|
-| 18| Anil B|
-| 16|Shone S|
-| 16| Jack N|
-+---+-------+
+-- A function expression as an input to OFFSET.
+SELECT name, age FROM person ORDER BY name OFFSET length('SPARK');
++-------+---+
+|   name|age|
++-------+---+
+|Zen Hui| 25|
++-------+---+
+
+-- A non-foldable expression as an input to OFFSET is not allowed.
+SELECT name, age FROM person ORDER BY name OFFSET length(name);
+org.apache.spark.sql.AnalysisException: The offset expression must evaluate to a constant value ...
 ```
 
 ### Related Statements
@@ -93,8 +93,8 @@ SELECT age, name FROM person DISTRIBUTE BY age;
 * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
-* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
 * [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)

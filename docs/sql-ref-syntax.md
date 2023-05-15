@@ -70,6 +70,7 @@ ability to generate logical and physical plan for a given query using
    * [JOIN](sql-ref-syntax-qry-select-join.html)
    * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
    * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+   * [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
    * [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
    * [Set Operators](sql-ref-syntax-qry-select-setops.html)
    * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
