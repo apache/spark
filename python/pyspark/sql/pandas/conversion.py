@@ -85,8 +85,6 @@ class PandasConversionMixin:
         import pandas as pd
 
         jconf = self.sparkSession._jconf
-        timezone = jconf.sessionLocalTimeZone()
-        struct_in_pandas = jconf.pandasStructHandlingMode()
 
         if jconf.arrowPySparkEnabled():
             use_arrow = True
@@ -159,24 +157,30 @@ class PandasConversionMixin:
                     else:
                         pdf = pd.DataFrame(columns=self.columns)
 
-                    error_on_duplicated_field_names = False
-                    if struct_in_pandas == "legacy":
-                        error_on_duplicated_field_names = True
-                        struct_in_pandas = "dict"
+                    if len(pdf.columns) > 0:
+                        timezone = jconf.sessionLocalTimeZone()
+                        struct_in_pandas = jconf.pandasStructHandlingMode()
 
-                    return pd.concat(
-                        [
-                            _create_converter_to_pandas(
-                                field.dataType,
-                                field.nullable,
-                                timezone=timezone,
-                                struct_in_pandas=struct_in_pandas,
-                                error_on_duplicated_field_names=error_on_duplicated_field_names,
-                            )(pser)
-                            for (_, pser), field in zip(pdf.items(), self.schema.fields)
-                        ],
-                        axis="columns",
-                    )
+                        error_on_duplicated_field_names = False
+                        if struct_in_pandas == "legacy":
+                            error_on_duplicated_field_names = True
+                            struct_in_pandas = "dict"
+
+                        return pd.concat(
+                            [
+                                _create_converter_to_pandas(
+                                    field.dataType,
+                                    field.nullable,
+                                    timezone=timezone,
+                                    struct_in_pandas=struct_in_pandas,
+                                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                                )(pser)
+                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                            ],
+                            axis="columns",
+                        )
+                    else:
+                        return pdf
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
@@ -192,21 +196,35 @@ class PandasConversionMixin:
                     raise
 
         # Below is toPandas without Arrow optimization.
-        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        rows = self.collect()
+        if len(rows) > 0:
+            pdf = pd.DataFrame.from_records(
+                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
+            )
+        else:
+            pdf = pd.DataFrame(columns=self.columns)
 
-        return pd.concat(
-            [
-                _create_converter_to_pandas(
-                    field.dataType,
-                    field.nullable,
-                    timezone=timezone,
-                    struct_in_pandas=("row" if struct_in_pandas == "legacy" else struct_in_pandas),
-                    error_on_duplicated_field_names=False,
-                )(pser)
-                for (_, pser), field in zip(pdf.items(), self.schema.fields)
-            ],
-            axis="columns",
-        )
+        if len(pdf.columns) > 0:
+            timezone = jconf.sessionLocalTimeZone()
+            struct_in_pandas = jconf.pandasStructHandlingMode()
+
+            return pd.concat(
+                [
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=(
+                            "row" if struct_in_pandas == "legacy" else struct_in_pandas
+                        ),
+                        error_on_duplicated_field_names=False,
+                    )(pser)
+                    for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                ],
+                axis="columns",
+            )
+        else:
+            return pdf
 
     def _collect_as_arrow(self, split_batches: bool = False) -> List["pa.RecordBatch"]:
         """
