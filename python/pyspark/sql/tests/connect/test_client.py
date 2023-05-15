@@ -49,8 +49,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
         self.assertRegex(
-            mock.req.client_type,
-            r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
+            mock.req.client_type, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
 
     def test_properties(self):
         client = SparkConnectClient("sc://foo/;token=bar")

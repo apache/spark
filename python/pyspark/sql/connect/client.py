@@ -301,12 +301,14 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return " ".join([
-            user_agent,
-            f"spark/{__version__}",
-            f"os/{platform.uname().system.lower()}",
-            f"python/{platform.python_version()}"
-        ])
+        return " ".join(
+            [
+                user_agent,
+                f"spark/{__version__}",
+                f"os/{platform.uname().system.lower()}",
+                f"python/{platform.python_version()}",
+            ]
+        )
 
     def get(self, key: str) -> Any:
         """

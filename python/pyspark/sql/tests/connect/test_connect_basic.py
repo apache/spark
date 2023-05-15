@@ -3404,13 +3404,15 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = ChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
-        self.assertEqual(chan.userAgent, "_SPARK_CONNECT_PYTHON")
+        self.assertRegex(
+            chan.userAgent, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_user_agent(self):
         chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
-        self.assertEqual("Agent123 /3.4", chan.userAgent)
+        self.assertIn("Agent123 /3.4", chan.userAgent)
 
     def test_user_agent_len(self):
         user_agent = "x" * 2049
@@ -3422,7 +3424,7 @@ class ChannelBuilderTests(unittest.TestCase):
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
-        self.assertEqual(expected, chan.userAgent)
+        self.assertIn(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
