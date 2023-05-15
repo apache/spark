@@ -123,6 +123,18 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     assertConfigValue(hadoopConf, "fs.s3a.session.token", null)
   }
 
+  test("substituteHadoopVariables") {
+    val hadoopConf = new Configuration(false)
+    hadoopConf.set("xxx", "yyy")
+    val text1 = "${hadoopconf-xxx}"
+    val result1 = new SparkHadoopUtil().substituteHadoopVariables(text1, hadoopConf)
+    assert(result1 == "yyy")
+
+    val text2 = "${hadoopconf-xxx"
+    val result2 = new SparkHadoopUtil().substituteHadoopVariables(text2, hadoopConf)
+    assert(result2 == "${hadoopconf-xxx")
+  }
+
   /**
    * Assert that a hadoop configuration option has the expected value.
    * @param hadoopConf configuration to query
