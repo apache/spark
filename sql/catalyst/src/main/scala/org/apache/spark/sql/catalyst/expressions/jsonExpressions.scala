@@ -1010,6 +1010,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonArrayGet(child: Expression, index: Expression) extends BinaryExpression
   with CodegenFallback
+  with NullIntolerant
   with ExpectsInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType)
