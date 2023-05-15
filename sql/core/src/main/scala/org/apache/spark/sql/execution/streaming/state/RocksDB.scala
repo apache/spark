@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
@@ -147,14 +147,29 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
-        val loadSnapshotVersion = if (enableChangelogCheckpointing) {
-          fileManager.getLatestSnapshotVersion(version)
-        } else version
-        val metadata = fileManager.loadCheckpointFromDfs(loadSnapshotVersion, workingDir)
-        loadedVersion = loadSnapshotVersion
+        var metadata: RocksDBCheckpointMetadata = null
+        // If changelog checkpointing has never been enabled, should be able to load
+        // any version of snapshot.
+        if (!enableChangelogCheckpointing) {
+          try {
+            metadata = fileManager.loadCheckpointFromDfs(version, workingDir)
+            loadedVersion = version
+          } catch {
+            // It is possible that changelog checkpointing was enabled during the last query run
+            // and this version of snapshot is unavailable, in that case fallback to
+            // loading latest snapshot available and replaying changelog.
+            case _: FileNotFoundException => loadedVersion = -1
+          }
+        }
+
+        if (loadedVersion != version) {
+          val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
+          metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+          loadedVersion = latestSnapshotVersion
+        }
         openDB()
 
-        val numKeys = if (!conf.trackTotalNumberOfRows) {
+        numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
           // we don't track the total number of rows - discard the number being track
           -1L
         } else if (metadata.numKeys < 0) {
@@ -164,8 +179,7 @@ class RocksDB(
         } else {
           metadata.numKeys
         }
-        numKeysOnWritingVersion = numKeys
-        if (enableChangelogCheckpointing) replayChangelog(version)
+        if (loadedVersion != version) replayChangelog(version)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
@@ -337,15 +351,17 @@ class RocksDB(
       var flushTimeMs = 0L
       var checkpointTimeMs = 0L
       if (shouldCreateSnapshot()) {
+        // Need to flush the change to disk before creating a checkpoint
+        // because rocksdb wal is disabled.
+        logInfo(s"Flushing updates for $newVersion")
+        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
         if (conf.compactOnCommit) {
           logInfo("Compacting")
           compactTimeMs = timeTakenMs { db.compactRange() }
         }
-        // Need to flush the change to disk before creating a checkpoint
-        // because rocksdb wal is disabled.
-        flushTimeMs = timeTakenMs { db.flush(flushOptions) }
         checkpointTimeMs = timeTakenMs {
           val checkpointDir = createTempDir("checkpoint")
+          logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
           // Make sure the directory does not exist. Native RocksDB fails if the directory to
           // checkpoint exists.
           Utils.deleteRecursively(checkpointDir)

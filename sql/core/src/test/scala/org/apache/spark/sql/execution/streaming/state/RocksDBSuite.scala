@@ -106,14 +106,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     withDB(remoteDir) { db =>
-      if (isChangelogCheckpointingEnabled) {
-        intercept[IllegalStateException] {
-          db.load(1)
-        }
-      } else {
-        intercept[FileNotFoundException] {
-          db.load(1)
-        }
+      intercept[IllegalStateException] {
+        db.load(1)
       }
     }
   }
@@ -198,6 +192,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  // A rocksdb instance with changelog checkpointing enabled should be able to load
+  // an existing checkpoint without changelog.
   test("RocksDB: changelog checkpointing backward compatibility") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
@@ -241,6 +237,57 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       assert(changelogVersionsPresent(remoteDir) === (30 to 60))
       // Verify the content of retained versions.
       for (version <- 30 to 60) {
+        db.load(version, readOnly = true)
+        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      }
+    }
+  }
+
+  // A rocksdb instance with changelog checkpointing disabled should be able to load
+  // an existing checkpoint with changelog.
+  test("RocksDB: changelog checkpointing forward compatibility") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()  // to make sure that the directory gets created
+    val enableChangelogCheckpointingConf =
+      dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
+        minDeltasForSnapshot = 3)
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
+      for (version <- 1 to 30) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.remove((version - 1).toString)
+        db.commit()
+      }
+    }
+
+    // Now disable changelog checkpointing in a checkpoint created by a state store
+    // that enable changelog checkpointing.
+    val disableChangelogCheckpointingConf =
+    dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 20,
+      minDeltasForSnapshot = 1)
+    withDB(remoteDir, conf = disableChangelogCheckpointingConf) { db =>
+      for (version <- 1 to 30) {
+        db.load(version)
+        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      }
+      for (version <- 31 to 60) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.remove((version - 1).toString)
+        db.commit()
+      }
+      assert(changelogVersionsPresent(remoteDir) === (1 to 30))
+      assert(snapshotVersionsPresent(remoteDir) === (31 to 60))
+      for (version <- 1 to 60) {
+        db.load(version, readOnly = true)
+        assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
+      }
+      // Check that snapshots and changelogs get purged correctly.
+      db.doMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) === (41 to 60))
+      assert(changelogVersionsPresent(remoteDir) === Seq.empty)
+      // Verify the content of retained versions.
+      for (version <- 41 to 60) {
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
