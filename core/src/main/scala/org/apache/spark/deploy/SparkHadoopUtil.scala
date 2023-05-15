@@ -26,6 +26,7 @@ import java.util.{Date, Locale}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -566,15 +567,13 @@ private[spark] object SparkHadoopUtil extends Logging {
       fs.create(path)
     } else {
       try {
-        // Use reflection as this uses APIs only available in Hadoop 3
-        val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
         // the builder api does not resolve relative paths, nor does it create parent dirs, while
         // the old api does.
         if (!fs.mkdirs(path.getParent())) {
           throw new IOException(s"Failed to create parents of $path")
         }
         val qualifiedPath = fs.makeQualified(path)
-        val builder = builderMethod.invoke(fs, qualifiedPath)
+        val builder = fs.createFile(qualifiedPath)
         val builderCls = builder.getClass()
         // this may throw a NoSuchMethodException if the path is not on hdfs
         val replicateMethod = builderCls.getMethod("replicate")
@@ -583,9 +582,7 @@ private[spark] object SparkHadoopUtil extends Logging {
         buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
       } catch {
         case  _: NoSuchMethodException =>
-          // No createFile() method, we're using an older hdfs client, which doesn't give us control
-          // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
-          // old apis.
+          // No replicate() method, so just create a file with old apis.
           fs.create(path)
       }
     }
