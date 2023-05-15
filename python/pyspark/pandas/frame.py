@@ -740,7 +740,7 @@ class DataFrame(Frame, Generic[T]):
 
         >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
         >>> df.axes
-        [Int64Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
+        [Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
         """
         return [self.index, self.columns]
 
@@ -1888,7 +1888,8 @@ class DataFrame(Frame, Generic[T]):
         >>> for label, content in df.iteritems():
         ...    print('label:', label)
         ...    print('content:', content.to_string())
-        ...
+        ...  # doctest: +SKIP
+        # TODO(SPARK-43480): Enable SeriesTests.test_iteritems for pandas 2.0.0.
         label: species
         content: panda         bear
         polar         bear
@@ -3567,7 +3568,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2018-04-11 00:40:00  3
         2018-04-12 01:00:00  4
 
-        >>> psdf.between_time('0:15', '0:45')
+        >>> psdf.between_time('0:15', '0:45')  # doctest: +SKIP
+        # TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.
                              A
         2018-04-10 00:20:00  2
         2018-04-11 00:40:00  3
@@ -3575,7 +3577,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         You get the times that are *not* between two times by setting
         ``start_time`` later than ``end_time``:
 
-        >>> psdf.between_time('0:45', '0:15')
+        >>> psdf.between_time('0:45', '0:15')  # doctest: +SKIP
+        # TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.
                              A
         2018-04-09 00:00:00  1
         2018-04-12 01:00:00  4
@@ -8720,7 +8723,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
         >>> join_psdf.index
-        Int64Index([0, 1, 2, 3], dtype='int64')
+        Index([0, 1, 2, 3], dtype='int64')
         """
         if isinstance(right, ps.Series):
             common = list(self.columns.intersection([right.name]))
