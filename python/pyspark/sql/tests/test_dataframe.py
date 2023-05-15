@@ -156,6 +156,30 @@ class DataFrameTestsMixin:
         self.assertEqual(df3.drop("name", df3.age, "unknown").columns, ["height"])
         self.assertEqual(df3.drop("name", "age", df3.height).columns, [])
 
+    def test_drop_empty_column(self):
+        df = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+
+        self.assertEqual(df.drop().columns, ["age", "name"])
+        self.assertEqual(df.drop(*[]).columns, ["age", "name"])
+
+    def test_drop_column_name_with_dot(self):
+        df = (
+            self.spark.range(1, 3)
+            .withColumn("first.name", lit("Peter"))
+            .withColumn("city.name", lit("raleigh"))
+            .withColumn("state", lit("nc"))
+        )
+
+        self.assertEqual(df.drop("first.name").columns, ["id", "city.name", "state"])
+        self.assertEqual(df.drop("city.name").columns, ["id", "first.name", "state"])
+        self.assertEqual(df.drop("first.name", "city.name").columns, ["id", "state"])
+        self.assertEqual(
+            df.drop("first.name", "city.name", "unknown.unknown").columns, ["id", "state"]
+        )
+        self.assertEqual(
+            df.drop("unknown.unknown").columns, ["id", "first.name", "city.name", "state"]
+        )
+
     def test_dropna(self):
         schema = StructType(
             [
