@@ -206,7 +206,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`non_existing`",
-    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -262,7 +262,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`k`",
-    "proposal" : "`testdata`.`a`, `testdata`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",

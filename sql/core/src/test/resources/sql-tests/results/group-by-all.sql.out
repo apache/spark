@@ -278,7 +278,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`non_exist`",
-    "proposal" : "`data`.`city`, `data`.`id`, `data`.`name`, `data`.`power`, `data`.`country`"
+    "proposal" : "`name`, `power`, `city`, `country`, `id`"
   },
   "queryContext" : [ {
     "objectType" : "",
