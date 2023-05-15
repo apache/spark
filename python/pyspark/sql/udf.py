@@ -453,7 +453,7 @@ class UserDefinedFunction:
             "org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression",
         ):
             return jexpr.child().resultId().id() # PythonUDAF
-        else
+        else:
             return jexpr.resultId().id() # PythonUDF
 
     # This function is for improving the online help system in the interactive interpreter.
