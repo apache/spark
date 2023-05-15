@@ -905,7 +905,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         dtype: int64
 
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
-        Int64Index([1, 2], dtype='int64', name='a')
+        Index([1, 2], dtype='int64', name='a')
         """
         return self._dtype_op.astype(self, dtype)
 
@@ -1248,7 +1248,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Name: Col2, dtype: int64
 
         >>> df.index.shift(periods=3, fill_value=0)
-        Int64Index([0, 0, 0, 0, 1], dtype='int64')
+        Index([0, 0, 0, 0, 1], dtype='int64')
         """
         return self._shift(periods, fill_value).spark.analyzed
 
@@ -1342,7 +1342,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> idx = ps.Index([3, 1, 2, 3, 4, np.nan])
         >>> idx
-        Float64Index([3.0, 1.0, 2.0, 3.0, 4.0, nan], dtype='float64')
+        Index([3.0, 1.0, 2.0, 3.0, 4.0, nan], dtype='float64')
 
         >>> idx.value_counts().sort_index()
         1.0    1
@@ -1506,7 +1506,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> idx = ps.Index([1, 1, 2, None])
         >>> idx
-        Float64Index([1.0, 1.0, 2.0, nan], dtype='float64')
+        Index([1.0, 1.0, 2.0, nan], dtype='float64')
 
         >>> idx.nunique()
         2
@@ -1581,10 +1581,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> psidx = ps.Index([100, 200, 300, 400, 500])
         >>> psidx
-        Int64Index([100, 200, 300, 400, 500], dtype='int64')
+        Index([100, 200, 300, 400, 500], dtype='int64')
 
         >>> psidx.take([0, 2, 4]).sort_values()
-        Int64Index([100, 300, 500], dtype='int64')
+        Index([100, 300, 500], dtype='int64')
 
         MultiIndex
 
