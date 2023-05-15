@@ -819,11 +819,11 @@ class StreamingForeachWriter(google.protobuf.message.Message):
 
     PYTHON_WRITER_FIELD_NUMBER: builtins.int
     @property
-    def python_writer(self) -> global___StreamingPythonForeachWriter: ...
+    def python_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
     def __init__(
         self,
         *,
-        python_writer: global___StreamingPythonForeachWriter | None = ...,
+        python_writer: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -842,28 +842,6 @@ class StreamingForeachWriter(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["python_writer"] | None: ...
 
 global___StreamingForeachWriter = StreamingForeachWriter
-
-class StreamingPythonForeachWriter(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    COMMAND_FIELD_NUMBER: builtins.int
-    PYTHON_VER_FIELD_NUMBER: builtins.int
-    command: builtins.bytes
-    """(Required) The encoded commands of the Python foreach function"""
-    python_ver: builtins.str
-    """(Required) Python version being used in the client."""
-    def __init__(
-        self,
-        *,
-        command: builtins.bytes = ...,
-        python_ver: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal["command", b"command", "python_ver", b"python_ver"],
-    ) -> None: ...
-
-global___StreamingPythonForeachWriter = StreamingPythonForeachWriter
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

@@ -215,15 +215,8 @@ message WriteStreamOperationStart {
 
 message StreamingForeachWriter {
   oneof writer {
-    StreamingPythonForeachWriter python_writer = 1;
+    PythonUDF python_writer = 1;
   }
-}
-
-message StreamingPythonForeachWriter {
-  // (Required) The encoded commands of the Python foreach function
-  bytes command = 1;
-  // (Required) Python version being used in the client.
-  string python_ver = 2;
 }
 
 message WriteStreamOperationStartResult {

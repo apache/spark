@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.Right
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
@@ -41,11 +40,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
-<<<<<<< HEAD
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, SparkSession}
-=======
-import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession}
->>>>>>> master
+import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -72,7 +67,6 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
-import org.apache.spark.sql.execution.streaming.sources.ForeachWriterTable
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.streaming.Trigger
@@ -1422,22 +1416,6 @@ class SparkConnectPlanner(val session: SparkSession) {
       accumulator = null)
   }
 
-  private def transformPythonForeachFunction(
-      fun: proto.StreamingPythonForeachWriter): SimplePythonFunction = {
-    SimplePythonFunction(
-      command = fun.getCommand.toByteArray,
-      // Empty environment variables
-      envVars = Maps.newHashMap(),
-      // No imported Python libraries
-      pythonIncludes = Lists.newArrayList(),
-      pythonExec = pythonExec,
-      pythonVer = fun.getPythonVer,
-      // Empty broadcast variables
-      broadcastVars = Lists.newArrayList(),
-      // Null accumulator
-      accumulator = null)
-  }
-
   /**
    * Translates a LambdaFunction from proto to the Catalyst expression.
    */
@@ -2409,10 +2387,9 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     if (writeOp.hasForeachWriter) {
       val foreach = writeOp.getForeachWriter.getPythonWriter
-      val pythonFcn = transformPythonForeachFunction(foreach)
+      val pythonFcn = transformPythonFunction(foreach)
       writer.foreachConnect(
-        new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]],
-        Right(ForeachWriterTable.createPythonEncoder))
+        new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]])
     }
 
     val query = writeOp.getPath match {
