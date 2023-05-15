@@ -17,7 +17,7 @@
 
 package org.apache.spark.memory
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.BlockId
@@ -216,17 +216,23 @@ object UnifiedMemoryManager {
       if (conf.contains(IS_TESTING)) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
     val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     if (systemMemory < minSystemMemory) {
-      throw new IllegalArgumentException(s"System memory $systemMemory must " +
-        s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
-        s"option or ${config.DRIVER_MEMORY.key} in Spark configuration.")
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_DRIVER_MEMORY",
+        messageParameters = Map(
+          "systemMemory" -> systemMemory.toString,
+          "minSystemMemory" -> minSystemMemory.toString,
+          "config" -> config.DRIVER_MEMORY.key))
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
     if (conf.contains(config.EXECUTOR_MEMORY)) {
       val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
-        throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
-          s"$minSystemMemory. Please increase executor memory using the " +
-          s"--executor-memory option or ${config.EXECUTOR_MEMORY.key} in Spark configuration.")
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_EXECUTOR_MEMORY",
+          messageParameters = Map(
+            "executorMemory" -> executorMemory.toString,
+            "minSystemMemory" -> minSystemMemory.toString,
+            "config" -> config.EXECUTOR_MEMORY.key))
       }
     }
     val usableMemory = systemMemory - reservedMemory

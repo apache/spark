@@ -129,9 +129,7 @@ class HiveParquetSuite extends QueryTest
       checkError(
         exception = ex,
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`c3`",
-          "proposal" -> ("`__auto_generated_subquery_name`.`c1`, " +
-            "`__auto_generated_subquery_name`.`c2`")),
+        parameters = Map("objectName" -> "`c3`", "proposal" -> "`c1`, `c2`"),
         context = ExpectedContext(
           fragment = "c3",
           start = 61,
