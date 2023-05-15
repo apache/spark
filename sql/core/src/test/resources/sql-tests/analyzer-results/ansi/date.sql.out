@@ -754,7 +754,7 @@ select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123')
 
 
 -- !query
-select dateadd(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
+select date_add(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -766,7 +766,7 @@ select dateadd(SECOND, 58, timestamp'2022-02-25 01:02:03')
 
 
 -- !query
-select dateadd(MINUTE, -100, date'2022-02-25')
+select date_add(MINUTE, -100, date'2022-02-25')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -778,7 +778,7 @@ select dateadd(HOUR, -1, timestamp'2022-02-25 01:02:03')
 
 
 -- !query
-select dateadd(DAY, 367, date'2022-02-25')
+select date_add(DAY, 367, date'2022-02-25')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -790,7 +790,7 @@ select dateadd(WEEK, -4, timestamp'2022-02-25 01:02:03')
 
 
 -- !query
-select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03')
+select date_add(MONTH, -1, timestamp'2022-02-25 01:02:03')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -802,7 +802,7 @@ select dateadd(QUARTER, 5, date'2022-02-25')
 
 
 -- !query
-select dateadd(YEAR, 1, date'2022-02-25')
+select date_add(YEAR, 1, date'2022-02-25')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -830,14 +830,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-select dateadd('QUARTER', 5, date'2022-02-25')
+select date_add('QUARTER', 5, date'2022-02-25')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`dateadd`",
+    "functionName" : "`date_add`",
     "invalidValue" : "'QUARTER'",
     "parameter" : "`unit`"
   },
@@ -845,8 +845,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 46,
-    "fragment" : "dateadd('QUARTER', 5, date'2022-02-25')"
+    "stopIndex" : 47,
+    "fragment" : "date_add('QUARTER', 5, date'2022-02-25')"
   } ]
 }
 
@@ -858,7 +858,7 @@ select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-
 
 
 -- !query
-select datediff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
+select date_diff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -870,7 +870,7 @@ select datediff(SECOND, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 01:
 
 
 -- !query
-select datediff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00')
+select date_diff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -882,7 +882,7 @@ select datediff(HOUR, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 00:02
 
 
 -- !query
-select datediff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00')
+select date_diff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -894,7 +894,7 @@ select datediff(WEEK, timestamp'2022-02-25 01:02:03', timestamp'2022-01-28 01:02
 
 
 -- !query
-select datediff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03')
+select date_diff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -906,20 +906,20 @@ select datediff(QUARTER, date'2022-02-25', date'2023-05-25')
 
 
 -- !query
-select datediff(YEAR, date'2022-02-25', date'2023-02-25')
+select date_diff(YEAR, date'2022-02-25', date'2023-02-25')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
-select datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
+select date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`datediff`",
+    "functionName" : "`date_diff`",
     "invalidValue" : "'MILLISECOND'",
     "parameter" : "`unit`"
   },
@@ -927,8 +927,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 102,
-    "fragment" : "datediff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')"
+    "stopIndex" : 103,
+    "fragment" : "date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')"
   } ]
 }
 

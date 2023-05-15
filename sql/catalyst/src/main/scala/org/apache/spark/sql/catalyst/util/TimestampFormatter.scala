@@ -21,9 +21,11 @@ import java.sql.Timestamp
 import java.text.{ParseException, ParsePosition, SimpleDateFormat}
 import java.time._
 import java.time.format.{DateTimeFormatter, DateTimeParseException}
+import java.time.temporal.{TemporalAccessor, TemporalQueries}
 import java.time.temporal.ChronoField.MICRO_OF_SECOND
-import java.time.temporal.TemporalQueries
 import java.util.{Calendar, GregorianCalendar, Locale, TimeZone}
+
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -163,28 +165,64 @@ class Iso8601TimestampFormatter(
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
     pattern, zoneId, locale, legacyFormat)
 
+  override def parseOptional(s: String): Option[Long] = {
+    try {
+      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
+      if (parsed != null) {
+        Some(extractMicros(parsed))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  private def extractMicros(parsed: TemporalAccessor): Long = {
+    val parsedZoneId = parsed.query(TemporalQueries.zone())
+    val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
+    val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
+    val epochSeconds = zonedDateTime.toEpochSecond
+    val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
+    Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
+  }
+
   override def parse(s: String): Long = {
     try {
       val parsed = formatter.parse(s)
-      val parsedZoneId = parsed.query(TemporalQueries.zone())
-      val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
-      val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
-      val epochSeconds = zonedDateTime.toEpochSecond
-      val microsOfSecond = zonedDateTime.get(MICRO_OF_SECOND)
-
-      Math.addExact(Math.multiplyExact(epochSeconds, MICROS_PER_SECOND), microsOfSecond)
+      extractMicros(parsed)
     } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
+
+  override def parseWithoutTimeZoneOptional(s: String, allowTimeZone: Boolean): Option[Long] = {
+    try {
+      val parsed = formatter.parseUnresolved(s, new ParsePosition(0))
+      if (parsed != null) {
+        Some(extractMicrosNTZ(s, parsed, allowTimeZone))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  private def extractMicrosNTZ(
+      s: String,
+      parsed: TemporalAccessor,
+      allowTimeZone: Boolean): Long = {
+    if (!allowTimeZone && parsed.query(TemporalQueries.zone()) != null) {
+      throw QueryExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
+    }
+    val localDate = toLocalDate(parsed)
+    val localTime = toLocalTime(parsed)
+    DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
   }
 
   override def parseWithoutTimeZone(s: String, allowTimeZone: Boolean): Long = {
     try {
       val parsed = formatter.parse(s)
-      if (!allowTimeZone && parsed.query(TemporalQueries.zone()) != null) {
-        throw QueryExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
-      }
-      val localDate = toLocalDate(parsed)
-      val localTime = toLocalTime(parsed)
-      DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(localDate, localTime))
+      extractMicrosNTZ(s, parsed, allowTimeZone)
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 

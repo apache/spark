@@ -40,7 +40,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -82,7 +82,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -103,7 +103,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -124,7 +124,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -145,7 +145,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -462,7 +462,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -483,7 +483,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
