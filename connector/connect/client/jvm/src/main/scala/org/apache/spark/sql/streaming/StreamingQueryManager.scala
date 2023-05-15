@@ -59,7 +59,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    * @since 3.5.0
    */
   def get(id: String): StreamingQuery = {
-    val response = executeManagerCmd(_.setGet(id))
+    val response = executeManagerCmd(_.setGetQuery(id))
     if (response.hasQuery) {
       RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, response.getQuery)
     } else {
