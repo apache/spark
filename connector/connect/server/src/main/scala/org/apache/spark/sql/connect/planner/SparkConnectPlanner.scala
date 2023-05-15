@@ -2407,8 +2407,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
-    if (writeOp.hasForeach) {
-      val foreach = writeOp.getForeach.getPythonWriter
+    if (writeOp.hasForeachWriter) {
+      val foreach = writeOp.getForeachWriter.getPythonWriter
       val pythonFcn = transformPythonForeachFunction(foreach)
       writer.foreachConnect(
         new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]],

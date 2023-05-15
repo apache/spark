@@ -210,7 +210,7 @@ message WriteStreamOperationStart {
     string table_name = 12;
   }
 
-  StreamingForeachWriter foreach = 13;
+  StreamingForeachWriter foreach_writer = 13;
 }
 
 message StreamingForeachWriter {
