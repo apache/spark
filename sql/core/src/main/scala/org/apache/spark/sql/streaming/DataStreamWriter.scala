@@ -457,8 +457,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
-  private[sql] def foreachConnect(
-      writer: ForeachWriter[Any]): DataStreamWriter[T] = {
+  private[sql] def foreachConnect(writer: ForeachWriter[Any]): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
