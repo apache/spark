@@ -162,11 +162,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         If True, then Pandas DataFrames will get columns by name
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name):
+    def __init__(self, timezone, safecheck):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
-        self._assign_cols_by_name = assign_cols_by_name
 
     def arrow_to_pandas(self, arrow_column):
         from pyspark.sql.pandas.types import (
@@ -301,9 +300,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     """
 
     def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False):
-        super(ArrowStreamPandasUDFSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name
-        )
+        super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
+        self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
 
     def arrow_to_pandas(self, arrow_column):
