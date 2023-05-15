@@ -353,7 +353,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         for s, t in series:
             if t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
-                    raise ValueError(
+                    raise PySparkValueError(
                         "A field of type StructType expects a pandas.DataFrame, "
                         "but got: %s" % str(type(s))
                     )
