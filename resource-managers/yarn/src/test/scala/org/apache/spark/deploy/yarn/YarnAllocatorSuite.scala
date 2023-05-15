@@ -832,4 +832,23 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     verify(rpcEndPoint, times(1)).
       send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
   }
+
+  test("SPARK-43510: Running executors should be none when YarnAllocator adds running executors " +
+    "after processing completed containers") {
+    val (handler, _) = createAllocator(1)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be(0)
+    handler.getNumContainersPendingAllocate should be(1)
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container))
+    handler.getNumExecutorsRunning should be(1)
+    handler.getNumContainersPendingAllocate should be(0)
+
+    val status = ContainerStatus.newInstance(
+      container.getId, ContainerState.COMPLETE, "Finished", 0)
+    handler.processCompletedContainers(Seq(status))
+    handler.updateInternalState(0, "1", container)
+    handler.getNumExecutorsRunning should be(0)
+  }
 }
