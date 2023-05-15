@@ -119,6 +119,24 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
         )
 
+    def test_register(self):
+        df = self.spark.range(1).selectExpr(
+            "array(1, 2, 3) as array",
+        )
+        str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
+
+        # To verify that Arrow optimization is on
+        self.assertEquals(
+            df.selectExpr("str_repr(array) AS str_id").first()[0],
+            "[1 2 3]",  # The input is a NumPy array when the Arrow optimization is on
+        )
+
+        # To verify that a UserDefinedFunction is returned
+        self.assertListEqual(
+            df.selectExpr("str_repr(array) AS str_id").collect(),
+            df.select(str_repr_func("array").alias("str_id")).collect(),
+        )
+
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod

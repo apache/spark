@@ -1148,7 +1148,7 @@ class SubquerySuite extends QueryTest
         sqlState = None,
         parameters = Map(
           "objectName" -> "`a`",
-          "proposal" -> "`v`.`i`, `v`.`j`"),
+          "proposal" -> "`i`, `j`"),
         context = ExpectedContext(
           fragment = "a",
           start = 37,

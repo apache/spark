@@ -1051,6 +1051,11 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "DATETIME_UNIT" : {
+        "message" : [
+          "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
