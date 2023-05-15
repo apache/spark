@@ -412,11 +412,12 @@ class SparkSession(SparkConversionMixin):
 
                 if url.startswith("local"):
                     raise RuntimeError(
-                        "Creating new SparkSessions with `local` connection string is not supported."
+                        "Creating new SparkSessions with `local` "
+                        "connection string is not supported."
                     )
 
-                # Mark this Spark Session as Spark Connect. This prevents that local PySpark is used in conjunction
-                # with Spark Connect mode.
+                # Mark this Spark Session as Spark Connect. This prevents that local PySpark is
+                # used in conjunction with Spark Connect mode.
                 os.environ["SPARK_ENABLE_CONNECT_MODE"] = "1"
                 opts["spark.remote"] = url
                 return RemoteSparkSession.builder.config(map=opts).create()
