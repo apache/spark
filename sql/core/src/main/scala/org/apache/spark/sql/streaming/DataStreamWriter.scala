@@ -448,16 +448,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-    this.source = SOURCE_NAME_FOREACH
-    this.foreachWriter = if (writer != null) {
-      ds.sparkSession.sparkContext.clean(writer.asInstanceOf[ForeachWriter[Any]])
-    } else {
-      throw new IllegalArgumentException("foreach writer cannot be null")
-    }
-    this
+    foreachImplementation(writer.asInstanceOf[ForeachWriter[Any]])
   }
 
-  private[sql] def foreachConnect(writer: ForeachWriter[Any]): DataStreamWriter[T] = {
+  private[sql] def foreachImplementation(writer: ForeachWriter[Any]): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)

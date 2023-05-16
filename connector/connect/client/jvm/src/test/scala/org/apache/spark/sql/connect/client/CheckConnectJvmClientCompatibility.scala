@@ -223,8 +223,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.DataStreamWriter.foreach" // TODO(SPARK-43133)
       ),
       ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.DataStreamWriter.foreachPython"),
-      ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
       ),
       ProblemFilters.exclude[Problem](
