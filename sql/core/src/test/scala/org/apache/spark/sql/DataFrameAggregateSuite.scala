@@ -1538,6 +1538,345 @@ class DataFrameAggregateSuite extends QueryTest
     )
     checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
   }
+
+  test("SPARK-42851: common subexpression should consistently handle aggregate and result exprs") {
+    val res = sql(
+      "select max(transform(array(id), x -> x)), max(transform(array(id), x -> x)) from range(2)"
+    )
+    checkAnswer(res, Row(Array(1), Array(1)))
+  }
+
+  test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
+
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // first test hll_sketch_agg, hll_sketch_estimate via dataframe + sql,
+    // with and without configs, via both DF and SQL implementations
+    val res1 = df1.groupBy("id")
+      .agg(
+        count("value").as("count"),
+        hll_sketch_agg("value").as("sketch_1"),
+        hll_sketch_agg("value", 20).as("sketch_2")
+      )
+      .withColumn("distinct_count_1", hll_sketch_estimate("sketch_1"))
+      .withColumn("distinct_count_2", hll_sketch_estimate("sketch_2"))
+      .drop("sketch_1", "sketch_2")
+    checkAnswer(res1, Row(1, 7, 4, 4))
+
+    val res2 = sql(
+      """with sketches as (
+        |select
+        | id,
+        | count(value) as count,
+        | hll_sketch_agg(value) as sketch_1,
+        | hll_sketch_agg(value, 20) as sketch_2
+        |from df1
+        |group by 1
+        |)
+        |
+        |select
+        | id,
+        | count,
+        | hll_sketch_estimate(sketch_1) as distinct_count_1,
+        | hll_sketch_estimate(sketch_2) as distinct_count_2
+        |from
+        | sketches
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 4, 4))
+
+    // now test hll_union_agg via dataframe + sql, with and without configs,
+    // unioning together sketches with default, non-default and different configurations
+    val df3 = df1.groupBy("id")
+      .agg(
+        count("value").as("count"),
+        hll_sketch_agg("value").as("hllsketch_1"),
+        hll_sketch_agg("value", 20).as("hllsketch_2"),
+        hll_sketch_agg("value").as("hllsketch_3")
+      )
+    df3.createOrReplaceTempView("df3")
+
+    val df4 = sql(
+      """select
+        | id,
+        | count(value) as count,
+        | hll_sketch_agg(value) as hllsketch_1,
+        | hll_sketch_agg(value, 20) as hllsketch_2,
+        | hll_sketch_agg(value, 20) as hllsketch_3
+        |from df2
+        |group by 1
+        |""".stripMargin)
+    df4.createOrReplaceTempView("df4")
+
+    val res3 = df3.union(df4).groupBy("id")
+      .agg(
+        sum("count").as("count"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_1")).as("distinct_count_1"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_2")).as("distinct_count_2"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_3", true)).as("distinct_count_3")
+      )
+    checkAnswer(res3, Row(1, 15, 6, 6, 6))
+
+    val res4 = sql(
+      """select
+        | id,
+        | sum(count) as count,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_1)) as distinct_count_1,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_2)) as distinct_count_2,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_3, true)) as distinct_count_3
+        |from (select * from df3 union all select * from df4)
+        |group by 1
+        |""".stripMargin)
+    checkAnswer(res4, Row(1, 15, 6, 6, 6))
+
+    // add tests to ensure hll_union works via both DF and SQL too
+    val df5 = df3.drop("count")
+    df5.createOrReplaceTempView("df5")
+
+    val df6 = df4.drop("count")
+      .withColumnRenamed("hllsketch_1", "hllsketch_4")
+      .withColumnRenamed("hllsketch_2", "hllsketch_5")
+      .withColumnRenamed("hllsketch_3", "hllsketch_6")
+    df6.createOrReplaceTempView("df6")
+
+    val res5 = df5.join(df6, "id")
+      .withColumn("distinct_count_1",
+        hll_sketch_estimate(hll_union("hllsketch_1", "hllsketch_4")))
+      .withColumn("distinct_count_2",
+        hll_sketch_estimate(hll_union("hllsketch_2", "hllsketch_5")))
+      .withColumn("distinct_count_3",
+        hll_sketch_estimate(hll_union("hllsketch_3", "hllsketch_6", true)))
+      .drop("hllsketch_1", "hllsketch_2", "hllsketch_3",
+        "hllsketch_4", "hllsketch_5", "hllsketch_6")
+    checkAnswer(res5, Row(1, 6, 6, 6))
+
+    val res6 = sql(
+      """with joined as (
+        |  select
+        |    l.id,
+        |    l.hllsketch_1,
+        |    l.hllsketch_2,
+        |    l.hllsketch_3,
+        |    r.hllsketch_4,
+        |    r.hllsketch_5,
+        |    r.hllsketch_6
+        |  from
+        |    df5 l
+        |    join
+        |    df6 r
+        |     on l.id = r.id
+        | )
+        |
+        |select
+        |  id,
+        |  hll_sketch_estimate(hll_union(hllsketch_1, hllsketch_4)) as distinct_count_1,
+        |  hll_sketch_estimate(hll_union(hllsketch_2, hllsketch_5)) as distinct_count_2,
+        |  hll_sketch_estimate(hll_union(hllsketch_3, hllsketch_6, true)) as distinct_count_3
+        |from
+        | joined
+        |""".stripMargin)
+    checkAnswer(res6, Row(1, 6, 6, 6))
+
+    val df7 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, null),
+      (2, null), (2, null), (2, null)
+    ).toDF("id", "value")
+
+    // empty column test
+    val res7 = df7.where(expr("id = 2")).groupBy("id")
+      .agg(
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res7, Row(2, 0))
+
+    // partial empty column test
+    val res8 = df7.groupBy("id")
+      .agg(
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res8, Seq(Row(1, 2), Row(2, 0)))
+  }
+
+  test("SPARK-16484: hll_*_agg + hll_union negative tests") {
+
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
+
+    // validate that the functions error out when lgConfigK < 4 or > 24
+    val error0 = intercept[SparkException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hll_sketch_agg("value", 1).as("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error0.toString contains "SketchesArgumentException")
+
+    val error1 = intercept[SparkException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hll_sketch_agg("value", 25).as("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error1.toString contains "SketchesArgumentException")
+
+    // validate that unions error out by default for different lgConfigK sketches
+    val error2 = intercept[SparkException] {
+      val i1 = df1.groupBy("id")
+        .agg(
+          hll_sketch_agg("value").as("hllsketch_left")
+        )
+      val i2 = df2.groupBy("id")
+        .agg(
+          hll_sketch_agg("value", 20).as("hllsketch_right")
+        )
+      val res = i1.join(i2).withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
+      checkAnswer(res, Nil)
+    }
+    assert(error2.toString contains "UnsupportedOperationException")
+
+    val error3 = intercept[SparkException] {
+      val i1 = df1.groupBy("id")
+        .agg(
+          hll_sketch_agg("value").as("hllsketch")
+        )
+      val i2 = df2.groupBy("id")
+        .agg(
+          hll_sketch_agg("value", 20).as("hllsketch")
+        )
+      val res = i1.union(i2).groupBy("id")
+        .agg(
+          hll_union_agg("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error3.toString contains "UnsupportedOperationException")
+
+    // validate that the functions error out when provided unexpected types
+    val error4 = intercept[AnalysisException] {
+      val res = sql(
+        """
+          |select
+          | id,
+          | hll_sketch_agg(value, 'text')
+          |from
+          | df1
+          |group by 1
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error4.toString contains "UNEXPECTED_INPUT_TYPE")
+
+    val error5 = intercept[AnalysisException] {
+      val res = sql(
+        """with sketch_cte as (
+          |select
+          | id,
+          | hll_sketch_agg(value) as sketch
+          |from
+          | df1
+          |group by 1
+          |)
+          |
+          |select hll_union_agg(sketch, 'Hll_4') from sketch_cte
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error5.toString contains "UNEXPECTED_INPUT_TYPE")
+
+    // validate that unions error out by default for different lgConfigK sketches
+    val error6 = intercept[SparkException] {
+      val res = sql(
+        """with cte1 as (
+          |select
+          | id,
+          | hll_sketch_agg(value) as sketch
+          |from
+          | df1
+          |group by 1
+          |),
+          |
+          |cte2 as (
+          |select
+          | id,
+          | hll_sketch_agg(value, 20) as sketch
+          |from
+          | df2
+          |group by 1
+          |)
+          |
+          |select
+          | cte1.id,
+          | hll_union(cte1.sketch, cte2.sketch) as sketch
+          |from
+          | cte1 join cte2 on cte1.id = cte2.id
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error6.toString contains "UnsupportedOperationException")
+
+    val error7 = intercept[SparkException] {
+      val res = sql(
+        """with cte1 as (
+          |select
+          | id,
+          | hll_sketch_agg(value) as sketch
+          |from
+          | df1
+          |group by 1
+          |),
+          |
+          |cte2 as (
+          |select
+          | id,
+          | hll_sketch_agg(value, 20) as sketch
+          |from
+          | df2
+          |group by 1
+          |)
+          |
+          |select
+          | id,
+          | hll_union_agg(sketch) as sketch
+          |from
+          | (select * from cte1 union all select * from cte2)
+          |group by 1
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error7.toString contains "UnsupportedOperationException")
+  }
 }
 
 case class B(c: Option[Double])

@@ -17,13 +17,22 @@
 import os
 import unittest
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.types import StringType, StructType, StructField, ArrayType, IntegerType
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
+
+if should_test_connect:
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql import functions as SF
+    from pyspark.sql.window import Window as SW
+    from pyspark.sql.dataframe import DataFrame as SDF
+    from pyspark.sql.connect import functions as CF
+    from pyspark.sql.connect.window import Window as CW
+    from pyspark.sql.connect.dataframe import DataFrame as CDF
 
 
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
@@ -47,9 +56,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
-        from pyspark.sql.dataframe import DataFrame as SDF
-        from pyspark.sql.connect.dataframe import DataFrame as CDF
-
         assert isinstance(df1, (SDF, CDF))
         if isinstance(df1, SDF):
             str1 = df1._jdf.showString(n, truncate, False)
@@ -66,10 +72,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     def test_count_star(self):
         # SPARK-42099: test count(*), count(col(*)) and count(expr(*))
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         data = [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")]
 
         cdf = self.connect.createDataFrame(data, schema=["age", "name"])
@@ -123,9 +125,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_broadcast(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (0, float("NAN"), NULL), (1, NULL, 2.0), (2, 2.1, 3.5)
@@ -134,8 +133,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  2| 2.1| 3.5|
         # +---+----+----+
 
@@ -174,9 +173,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_normal_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (0, float("NAN"), NULL), (1, NULL, 2.0), (2, 2.1, 3.5)
@@ -185,8 +181,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  2| 2.1| 3.5|
         # +---+----+----+
 
@@ -261,9 +257,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_when_otherwise(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (0, float("NAN"), NULL), (1, NULL, 2.0), (2, 2.1, 3.5), (3, 3.1, float("NAN"))
@@ -272,8 +265,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  2| 2.1| 3.5|
         # |  3| 3.1| NaN|
         # +---+----+----+
@@ -375,9 +368,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_sorting_functions_with_column(self):
-        from pyspark.sql.connect import functions as CF
-        from pyspark.sql.connect.column import Column
-
         funs = [
             CF.asc_nulls_first,
             CF.asc_nulls_last,
@@ -403,9 +393,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             self.assertIn("""DESC NULLS LAST'""", str(res))
 
     def test_sort_with_nulls_order(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (false, 1, NULL), (true, NULL, 2.0), (NULL, 3, 3.0)
@@ -414,9 +401,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +-----+----+----+
         # |    a|   b|   c|
         # +-----+----+----+
-        # |false|   1|null|
-        # | true|null| 2.0|
-        # | null|   3| 3.0|
+        # |false|   1|NULL|
+        # | true|NULL| 2.0|
+        # | NULL|   3| 3.0|
         # +-----+----+----+
 
         cdf = self.connect.sql(query)
@@ -449,9 +436,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             )
 
     def test_math_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (false, 1, NULL), (true, NULL, 2.0), (NULL, 3, 3.5)
@@ -460,9 +444,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +-----+----+----+
         # |    a|   b|   c|
         # +-----+----+----+
-        # |false|   1|null|
-        # | true|null| 2.0|
-        # | null|   3| 3.5|
+        # |false|   1|NULL|
+        # | true|NULL| 2.0|
+        # | NULL|   3| 3.5|
         # +-----+----+----+
 
         cdf = self.connect.sql(query)
@@ -571,9 +555,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_aggregation_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (0, float("NAN"), NULL), (1, NULL, 2.0), (1, 2.1, 3.5), (0, 0.5, 1.0)
@@ -582,8 +563,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  1| 2.1| 3.5|
         # |  0| 0.5| 1.0|
         # +---+----+----+
@@ -694,11 +675,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_window_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.window import Window as SW
-        from pyspark.sql.connect import functions as CF
-        from pyspark.sql.connect.window import Window as CW
-
         self.assertEqual(CW.unboundedPreceding, SW.unboundedPreceding)
 
         self.assertEqual(CW.unboundedFollowing, SW.unboundedFollowing)
@@ -714,8 +690,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  1| 2.1| 3.5|
         # |  0| 0.5| 1.0|
         # |  0| 1.5| 1.1|
@@ -886,11 +862,14 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
                 )
 
         # check error
-        with self.assertRaisesRegex(
-            ValueError,
-            "end is out of bound",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.sum("a").over(CW.orderBy("b").rowsBetween(0, (1 << 33)))).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_BETWEEN",
+            message_parameters={"arg_name": "end", "min": "-2147483648", "max": "2147483647"},
+        )
 
         with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(CF.rank().over(cdf.a))
@@ -950,12 +929,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     def test_window_order(self):
         # SPARK-41773: test window function with order
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.window import Window as SW
-        from pyspark.sql.connect import functions as CF
-        from pyspark.sql.connect.window import Window as CW
-
         data = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
         # +---+--------+
         # | id|category|
@@ -1000,9 +973,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_collection_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3), 1, 2, 'a'),
@@ -1014,8 +984,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |        a|           b|           c|  d|  e|   f|
         # +---------+------------+------------+---+---+----+
         # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|
-        # |[x, null]|        null|      [1, 3]|  3|  4|   x|
-        # |     null|[-1, -2, -3]|          []|  5|  6|null|
+        # |[x, null]|        NULL|      [1, 3]|  3|  4|   x|
+        # |     NULL|[-1, -2, -3]|          []|  5|  6|NULL|
         # +---------+------------+------------+---+---+----+
 
         cdf = self.connect.sql(query)
@@ -1086,6 +1056,20 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.array_append(cdf.a, cdf.f)).toPandas(),
             sdf.select(SF.array_append(sdf.a, sdf.f)).toPandas(),
+        )
+
+        # test array_prepend
+        self.assert_eq(
+            cdf.select(CF.array_prepend(cdf.a, "xyz")).toPandas(),
+            sdf.select(SF.array_prepend(sdf.a, "xyz")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_prepend(cdf.a, CF.lit("ab"))).toPandas(),
+            sdf.select(SF.array_prepend(sdf.a, SF.lit("ab"))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_prepend(cdf.a, cdf.f)).toPandas(),
+            sdf.select(SF.array_prepend(sdf.a, sdf.f)).toPandas(),
         )
 
         # test array_insert
@@ -1243,9 +1227,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_map_collection_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (MAP('a', 'ab'), MAP('x', 'ab'), MAP(1, 2, 3, 4), 1, 'a', ARRAY(1, 2), ARRAY('X', 'Y')),
@@ -1257,8 +1238,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |        a|          b|                     c|  e|  f|     g|     h|
         # +---------+-----------+----------------------+---+---+------+------+
         # |{a -> ab}|  {x -> ab}|      {1 -> 2, 3 -> 4}|  1|  a|[1, 2]|[X, Y]|
-        # |{x -> yz}|{c -> null}|                  null|  2|  x|[3, 4]|[A, B]|
-        # |{c -> de}|       null|{-1 -> null, -3 -> -4}| -3|  c|  null|   [Z]|
+        # |{x -> yz}|{c -> null}|                  NULL|  2|  x|[3, 4]|[A, B]|
+        # |{c -> de}|       NULL|{-1 -> null, -3 -> -4}| -3|  c|  NULL|   [Z]|
         # +---------+-----------+----------------------+---+---+------+------+
 
         cdf = self.connect.sql(query)
@@ -1301,9 +1282,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_generator_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3),
@@ -1318,8 +1296,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |        a|           b|           c|                     d|  e|  f|  g|
         # +---------+------------+------------+----------------------+---+---+---+
         # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|      {1 -> 2, 3 -> 4}|  1|2.0|  3|
-        # |[x, null]|        null|      [1, 3]|                  null|  3|4.0|  5|
-        # |     null|[-1, -2, -3]|          []|{-1 -> null, -3 -> -4}|  7|NaN|  9|
+        # |[x, null]|        NULL|      [1, 3]|                  NULL|  3|4.0|  5|
+        # |     NULL|[-1, -2, -3]|          []|{-1 -> null, -3 -> -4}|  7|NaN|  9|
         # +---------+------------+------------+----------------------+---+---+---+
 
         cdf = self.connect.sql(query)
@@ -1428,9 +1406,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_lambda_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (ARRAY('a', 'ab'), ARRAY(1, 2, 3), ARRAY(1, NULL, 3), 1, 2, 'a', NULL, MAP(0, 0)),
@@ -1441,9 +1416,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---------+------------+------------+---+---+----+-------------------+---------+
         # |        a|           b|           c|  d|  e|   f|                  g|        h|
         # +---------+------------+------------+---+---+----+-------------------+---------+
-        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|               null| {0 -> 0}|
-        # |[x, null]|        null|      [1, 3]|  3|  4|   x|           {2 -> 0}|{-1 -> 1}|
-        # |     null|[-1, -2, -3]|          []|  5|  6|null|{-1 -> 2, -3 -> -4}|     null|
+        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|               NULL| {0 -> 0}|
+        # |[x, null]|        NULL|      [1, 3]|  3|  4|   x|           {2 -> 0}|{-1 -> 1}|
+        # |     NULL|[-1, -2, -3]|          []|  5|  6|NULL|{-1 -> 2, -3 -> -4}|     NULL|
         # +---------+------------+------------+---+---+----+-------------------+---------+
 
         cdf = self.connect.sql(query)
@@ -1605,10 +1580,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     def test_nested_lambda_function(self):
         # SPARK-42089: test nested lambda function
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = "SELECT array(1, 2, 3) as numbers, array('a', 'b', 'c') as letters"
 
         cdf = self.connect.sql(query).select(
@@ -1638,9 +1609,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_csv_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             ('1,2,3', 'a,b,5.0'),
@@ -1718,9 +1686,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_json_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             ('{"a": 1}', '[1, 2, 3]', '{"f1": "value1", "f2": "value2"}'),
@@ -1855,9 +1820,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_string_functions_one_arg(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             ('   ab   ', 'ab   ', NULL), ('   ab', NULL, 'ab')
@@ -1866,8 +1828,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +--------+-----+----+
         # |       a|    b|   c|
         # +--------+-----+----+
-        # |   ab   |ab   |null|
-        # |      ab| null|  ab|
+        # |   ab   |ab   |NULL|
+        # |      ab| NULL|  ab|
         # +--------+-----+----+
 
         cdf = self.connect.sql(query)
@@ -1899,9 +1861,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             )
 
     def test_string_functions_multi_args(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (1, 'abcdef', 'ghij', 'hello world', 'a.b.c.d'),
@@ -1999,9 +1958,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     # TODO(SPARK-41283): To compare toPandas for test cases with dtypes marked
     def test_date_ts_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             ('1997/02/28 10:30:00', '2023/03/01 06:00:00', 'JST', 1428476400, 2020, 12, 6),
@@ -2146,9 +2102,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_time_window_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (TIMESTAMP('2022-12-25 10:30:00'), 1),
@@ -2250,9 +2203,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_misc_functions(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT a, b, c, BINARY(c) as d FROM VALUES
             (0, float("NAN"), 'x'), (1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
@@ -2262,9 +2212,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |  a|   b|   c|   d|
         # +---+----+----+----+
         # |  0| NaN|   x|[78]|
-        # |  1|null|   y|[79]|
+        # |  1|NULL|   y|[79]|
         # |  1| 2.1|   z|[7A]|
-        # |  0| 0.5|null|null|
+        # |  0| 0.5|NULL|NULL|
         # +---+----+----+----+
 
         cdf = self.connect.sql(query)
@@ -2315,9 +2265,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_call_udf(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT a, b, c, BINARY(c) as d FROM VALUES
             (-1.0, float("NAN"), 'x'), (-2.1, NULL, 'y'), (1, 2.1, 'z'), (0, 0.5, NULL)
@@ -2328,9 +2275,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |   a|   b|   c|   d|
         # +----+----+----+----+
         # |-1.0| NaN|   x|[78]|
-        # |-2.1|null|   y|[79]|
+        # |-2.1|NULL|   y|[79]|
         # | 1.0| 2.1|   z|[7A]|
-        # | 0.0| 0.5|null|null|
+        # | 0.0| 0.5|NULL|NULL|
         # +----+----+----+----+
 
         cdf = self.connect.sql(query)
@@ -2346,9 +2293,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_udf(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT a, b, c FROM VALUES
             (1, 1.0, 'x'), (2, 2.0, 'y'), (3, 3.0, 'z')
@@ -2394,9 +2338,6 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         )
 
     def test_pandas_udf_import(self):
-        from pyspark.sql.connect import functions as CF
-        from pyspark.sql import functions as SF
-
         self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))
 
 

@@ -30,6 +30,7 @@ on:
         description: Branch to run the build against
         required: false
         type: string
+        # Change 'master' to 'branch-3.5' in branch-3.5 branch after cutting it.
         default: master
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
@@ -58,7 +59,7 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: >-
         ${{
-          ((inputs.branch == 'branch-3.2' || inputs.branch == 'branch-3.3') && 'dongjoon/apache-spark-github-action-image:20220207')
+          (inputs.branch == 'branch-3.3' && 'dongjoon/apache-spark-github-action-image:20220207')
           || steps.infra-image-outputs.outputs.image_url
         }}
     steps:
@@ -79,15 +80,12 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
           pyspark=true; sparkr=true; tpcds=true; docker=true;
-          if [ -f "./dev/is-changed.py" ]; then
-            pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-            pyspark=`./dev/is-changed.py -m $pyspark_modules`
-            sparkr=`./dev/is-changed.py -m sparkr`
-            tpcds=`./dev/is-changed.py -m sql`
-            docker=`./dev/is-changed.py -m docker-integration-tests`
-          fi
+          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          pyspark=`./dev/is-changed.py -m $pyspark_modules`
+          sparkr=`./dev/is-changed.py -m sparkr`
+          tpcds=`./dev/is-changed.py -m sql`
+          docker=`./dev/is-changed.py -m docker-integration-tests`
           # 'build', 'scala-213', and 'java-11-17' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
@@ -101,6 +99,7 @@ jobs:
               \"java-11-17\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
+              \"breaking-changes-buf\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -149,7 +148,7 @@ jobs:
             catalyst, hive-thriftserver
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10,
-            mllib-local, mllib-common, mllib,
+            mllib-local, mllib,
             yarn, mesos, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
             connect, protobuf
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -247,7 +246,10 @@ jobs:
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
+      shell: 'script -q -e -c "bash {0}"'
       run: |
+        # Fix for TTY related issues when launching the Ammonite REPL in tests.
+        export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         export SERIAL_SBT_TESTS=1
@@ -273,7 +275,7 @@ jobs:
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
-      (inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3')
+      (inputs.branch != 'branch-3.3')
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -337,6 +339,10 @@ jobs:
             pyspark-pandas-slow
           - >-
             pyspark-connect, pyspark-errors
+          - >-
+            pyspark-pandas-connect
+          - >-
+            pyspark-pandas-slow-connect
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -493,6 +499,36 @@ jobs:
         name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
+  breaking-changes-buf:
+    needs: [precondition]
+    if: always() && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
+    # Change 'branch-3.4' to 'branch-3.5' in master branch after cutting branch-3.5 branch.
+    name: Breaking change detection with Buf (branch-3.4)
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Install Buf
+      uses: bufbuild/buf-setup-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Detect breaking changes
+      uses: bufbuild/buf-breaking-action@v1
+      with:
+        input: connector/connect/common/src/main
+        against: 'https://github.com/apache/spark.git#branch=branch-3.4,subdir=connector/connect/common/src/main'
+
+
   # Static analysis, and documentation build
   lint:
     needs: [precondition, infra-image]
@@ -565,7 +601,7 @@ jobs:
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
-      if: inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3'
+      if: inputs.branch != 'branch-3.3'
       run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies
       run: |
@@ -580,7 +616,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.15.1/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.18.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'

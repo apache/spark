@@ -19,15 +19,15 @@ package org.apache.spark.sql.connect.planner
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter.toCatalystValue
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 
 class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   test("basic proto value and catalyst value conversion") {
     val values = Array(null, true, 1.toByte, 1.toShort, 1, 1L, 1.1d, 1.1f, "spark")
     for (v <- values) {
-      assertResult(v)(toCatalystValue(toLiteralProto(v)))
+      assertResult(v)(
+        LiteralValueProtoConverter.toCatalystValue(LiteralValueProtoConverter.toLiteralProto(v)))
     }
   }
 }

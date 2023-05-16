@@ -38,6 +38,7 @@ import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
@@ -900,16 +901,38 @@ class CacheTable(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     TABLE_NAME_FIELD_NUMBER: builtins.int
+    STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     table_name: builtins.str
     """(Required)"""
+    @property
+    def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
+        """(Optional)"""
     def __init__(
         self,
         *,
         table_name: builtins.str = ...,
+        storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_storage_level", b"_storage_level", "storage_level", b"storage_level"
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_storage_level",
+            b"_storage_level",
+            "storage_level",
+            b"storage_level",
+            "table_name",
+            b"table_name",
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
+    ) -> typing_extensions.Literal["storage_level"] | None: ...
 
 global___CacheTable = CacheTable
 

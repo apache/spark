@@ -58,7 +58,10 @@ import org.apache.spark.util.Utils
  * }}}
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
+class ProtoToParsedPlanTestSuite
+    extends SparkFunSuite
+    with SharedSparkSession
+    with ResourceHelper {
   val url = "jdbc:h2:mem:testdb0"
   var conn: java.sql.Connection = null
 
@@ -105,19 +108,9 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
   }
 
-  protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests").toAbsolutePath
-  }
-
-  protected val inputFilePath: Path = baseResourcePath.resolve("queries")
-  protected val goldenFilePath: Path = baseResourcePath.resolve("explain-results")
+  protected val suiteBaseResourcePath = commonResourcePath.resolve("query-tests")
+  protected val inputFilePath: Path = suiteBaseResourcePath.resolve("queries")
+  protected val goldenFilePath: Path = suiteBaseResourcePath.resolve("explain-results")
   private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
   private val analyzer = {
@@ -126,6 +119,11 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     inMemoryCatalog.createNamespace(Array("tempdb"), emptyProps)
     inMemoryCatalog.createTable(
       Identifier.of(Array("tempdb"), "myTable"),
+      new StructType().add("id", "long"),
+      Array.empty[Transform],
+      emptyProps)
+    inMemoryCatalog.createTable(
+      Identifier.of(Array("tempdb"), "myStreamingTable"),
       new StructType().add("id", "long"),
       Array.empty[Transform],
       emptyProps)
@@ -167,7 +165,8 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString
+      val actual =
+        removeMemoryAddress(normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString)
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.
@@ -195,6 +194,10 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
+  private def removeMemoryAddress(expr: String): String = {
+    expr.replaceAll("@[0-9a-f]+,", ",")
+  }
+
   private def readRelation(path: Path): proto.Relation = {
     val input = Files.newInputStream(path)
     try proto.Relation.parseFrom(input)
@@ -204,7 +207,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   private def readGoldenFile(path: Path): String = {
-    new String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+    removeMemoryAddress(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
   }
 
   private def writeGoldenFile(path: Path, value: String): Unit = {

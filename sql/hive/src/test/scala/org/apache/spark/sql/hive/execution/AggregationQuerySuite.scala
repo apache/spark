@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
 import scala.util.Random
 
 import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, unsafeRowMutableFieldTypes}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
 
@@ -891,12 +890,12 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes
+      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes ++ unsafeRowMutableFieldTypes
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
     // SortAggregate to use a safe row as the aggregation buffer.
-    Seq(dataTypes, UnsafeRow.mutableFieldTypes.asScala.toSeq).foreach { dataTypes =>
+    Seq(dataTypes).foreach { dataTypes =>
       val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
         StructField(s"col$index", dataType, nullable = true)
       }

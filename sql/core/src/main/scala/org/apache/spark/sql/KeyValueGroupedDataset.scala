@@ -21,11 +21,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 
 /**
@@ -199,12 +199,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def flatMapSortedGroups[U : Encoder](
       sortExprs: Column*)(
       f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder => expr
-        case expr: Expression => SortOrder(expr, Ascending)
-      }
-    }
+    val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs.map(_.expr))
 
     Dataset[U](
       sparkSession,
@@ -678,16 +673,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(vExprEnc, dataAttributes).named)
-    val keyColumn = if (!kExprEnc.isSerializedAsStructForTopLevel) {
-      assert(groupingAttributes.length == 1)
-      if (SQLConf.get.nameNonStructGroupingKeyAsValue) {
-        groupingAttributes.head
-      } else {
-        Alias(groupingAttributes.head, "key")()
-      }
-    } else {
-      Alias(CreateStruct(groupingAttributes), "key")()
-    }
+    val keyColumn = TypedAggUtils.aggKeyColumn(kExprEnc, groupingAttributes)
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)
 

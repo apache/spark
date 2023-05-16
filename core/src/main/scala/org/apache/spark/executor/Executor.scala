@@ -561,7 +561,7 @@ private[spark] class Executor(
           if (freedMemory > 0 && !threwException) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, $taskName"
             if (conf.get(UNSAFE_EXCEPTION_ON_MEMORY_LEAK)) {
-              throw new SparkException(errMsg)
+              throw SparkException.internalError(errMsg, category = "EXECUTOR")
             } else {
               logWarning(errMsg)
             }
@@ -572,7 +572,7 @@ private[spark] class Executor(
               s"${releasedLocks.size} block locks were not released by $taskName\n" +
                 releasedLocks.mkString("[", ", ", "]")
             if (conf.get(STORAGE_EXCEPTION_PIN_LEAK)) {
-              throw new SparkException(errMsg)
+              throw SparkException.internalError(errMsg, category = "EXECUTOR")
             } else {
               logInfo(errMsg)
             }
@@ -934,9 +934,9 @@ private[spark] class Executor(
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
-            throw new SparkException(
+            throw SparkException.internalError(
               s"Killing executor JVM because killed task $taskId could not be stopped within " +
-                s"$killTimeoutMs ms.")
+                s"$killTimeoutMs ms.", category = "EXECUTOR")
           }
         }
       } finally {
@@ -992,19 +992,7 @@ private[spark] class Executor(
     val classUri = conf.get("spark.repl.class.uri", null)
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
-      try {
-        val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
-        val klass = Utils.classForName("org.apache.spark.repl.ExecutorClassLoader")
-          .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[SparkConf], classOf[SparkEnv],
-          classOf[String], classOf[ClassLoader], classOf[Boolean])
-        constructor.newInstance(conf, env, classUri, parent, _userClassPathFirst)
-      } catch {
-        case _: ClassNotFoundException =>
-          logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")
-          System.exit(1)
-          null
-      }
+      new ExecutorClassLoader(conf, env, classUri, parent, userClassPathFirst)
     } else {
       parent
     }

@@ -98,6 +98,8 @@ private[sql] class StreamingQueryStatusListener(
     }
   }
 
+  override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {}
+
   override def onQueryTerminated(
       event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     val querySummary = store.read(classOf[StreamingQueryData], event.runId.toString)

@@ -1832,16 +1832,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val msg = intercept[IllegalArgumentException] {
-        evaluateWithoutCodegen(
-          ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
-      }.getMessage
-      assert(msg.contains("Find an invalid url string"))
-    }
+    val url = "https://a.b.c/index.php?params1=a|b&params2=x"
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(
-        ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
+        ParseUrl(Seq(url, "HOST")), null)
     }
   }
 

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -76,7 +76,7 @@ plots (recall, false positive rate) points.
 
 **Available metrics**
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>
@@ -179,7 +179,7 @@ For this section, a modified delta function $\hat{\delta}(x)$ will prove useful
 
 $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>
@@ -296,7 +296,7 @@ The following definition of indicator function $I_A(x)$ on a set $A$ will be nec
 
 $$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>
@@ -447,7 +447,7 @@ documents, returns a relevance score for the recommended document.
 
 $$rel_D(r) = \begin{cases}1 & \text{if $r \in D$}, \\ 0 & \text{otherwise}.\end{cases}$$
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Metric</th><th>Definition</th><th>Notes</th></tr>
   </thead>
@@ -553,7 +553,7 @@ variable from a number of independent variables.
 
 **Available metrics**
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Metric</th><th>Definition</th></tr>
   </thead>

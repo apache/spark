@@ -56,6 +56,20 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
+
+  override def excluded: Seq[String] = Seq(
+    "scan with aggregate push-down: VAR_POP with DISTINCT",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new DatabaseOnDocker {
@@ -92,33 +106,26 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, defaultMetadata)
     assert(t.schema === expectedSchema)
-    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
+    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, defaultMetadata)
     assert(t.schema === expectedSchema)
-    // Update column type from STRING to INTEGER
+    // Update column type from LONG to INTEGER
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
     assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
+      s"Cannot update $catalogName.alt_table field ID: decimal(19,0) cannot be cast to int"))
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  testOffset()
-  testLimitAndOffset()
-  testPaging()
-
-  testVarPop()
-  testVarSamp()
-  testStddevPop()
-  testStddevSamp()
-  testCovarPop()
-  testCovarSamp()
-  testCorr()
-  testRegrIntercept()
-  testRegrSlope()
-  testRegrR2()
-  testRegrSXY()
+  test("SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle JDBC") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 string)")
+      sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
+      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 256)
+    }
+  }
 }

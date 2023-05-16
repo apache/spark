@@ -909,6 +909,31 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return a new RDD by applying an evaluator to each partition of this RDD. The given evaluator
+   * factory will be serialized and sent to executors, and each task will create an evaluator with
+   * the factory, and use the evaluator to transform the data of the input partition.
+   */
+  @DeveloperApi
+  @Since("3.5.0")
+  def mapPartitionsWithEvaluator[U: ClassTag](
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory)
+  }
+
+  /**
+   * Zip this RDD's partitions with another RDD and return a new RDD by applying an evaluator to
+   * the zipped partitions. Assumes that the two RDDs have the *same number of partitions*, but
+   * does *not* require them to have the same number of elements in each partition.
+   */
+  @DeveloperApi
+  @Since("3.5.0")
+  def zipPartitionsWithEvaluator[U: ClassTag](
+      rdd2: RDD[T],
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new ZippedPartitionsWithEvaluatorRDD(this, rdd2, evaluatorFactory)
+  }
+
+  /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    *

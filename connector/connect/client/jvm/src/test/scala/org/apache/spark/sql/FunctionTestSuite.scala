@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
+import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -225,6 +226,13 @@ class FunctionTestSuite extends ConnectFunSuite {
     schema_of_csv("x,y"),
     schema_of_csv(lit("x,y"), Collections.emptyMap()))
   testEquals("to_csv", to_csv(a), to_csv(a, Collections.emptyMap[String, String]))
+  testEquals(
+    "from_avro",
+    avroFn.from_avro(a, """{"type": "int", "name": "id"}"""),
+    avroFn.from_avro(
+      a,
+      """{"type": "int", "name": "id"}""",
+      Collections.emptyMap[String, String]))
 
   test("assert_true no message") {
     val e = assert_true(a).expr

@@ -133,6 +133,10 @@ object StatFunctions extends Logging {
    * @return the covariance of the two columns.
    */
   def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
+    calculateCovImpl(df, cols).head.getDouble(0)
+  }
+
+  private[sql] def calculateCovImpl(df: DataFrame, cols: Seq[String]): DataFrame = {
     require(cols.length == 2,
       "Currently covariance calculation is supported between two columns.")
     val Seq(col1, col2) = cols.map { c =>
@@ -147,7 +151,8 @@ object StatFunctions extends Logging {
     df.select(
       when(isnull(covariance), lit(0.0))
         .otherwise(covariance)
-    ).head.getDouble(0)
+        .as("cov")
+    )
   }
 
   /** Generate a table of frequencies for the elements of two columns. */

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -87,7 +88,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseProject,
         OptimizeWindowFunctions,
         CollapseWindow,
-        CombineFilters,
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
@@ -678,6 +678,8 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
     case d @ Distinct(u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
+    case d @ DeduplicateWithinWatermark(_, u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
@@ -1451,6 +1453,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     // Only handle distinct-like 'Deduplicate', where the keys == output
     case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
+    case DeduplicateWithinWatermark(keys: Seq[Attribute], u: Union)
+      if AttributeSet(keys) == u.outputSet =>
+      DeduplicateWithinWatermark(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
@@ -1613,7 +1618,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
       // Arithmetic operations for floating-point values are order-sensitive
       // (they are not associative).
       case _: Sum | _: Average | _: CentralMomentAgg =>
-        !Seq(FloatType, DoubleType).exists(_.sameType(func.children.head.dataType))
+        !Seq(FloatType, DoubleType)
+          .exists(e => DataTypeUtils.sameType(e, func.children.head.dataType))
       case _ => false
     }
 

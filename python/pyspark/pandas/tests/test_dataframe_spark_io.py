@@ -27,7 +27,7 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
+class DataFrameSparkIOTestsMixin:
     """Test cases for big data I/O using Spark."""
 
     @property
@@ -469,6 +469,10 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 actual.sort_values(by="f").to_spark().toPandas(),
                 expected.sort_values(by="f").to_spark().toPandas(),
             )
+
+
+class DataFrameSparkIOTests(DataFrameSparkIOTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

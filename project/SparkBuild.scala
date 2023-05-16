@@ -57,10 +57,11 @@ object BuildCommons {
   val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
 
   val allProjects@Seq(
-    core, graphx, mllib, mllibLocal, mllibCommon, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
+    commonUtils, _*
   ) = Seq(
-    "core", "graphx", "mllib", "mllib-local", "mllib-common", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore"
+    "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "tags", "sketch", "kvstore", "common-utils"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
@@ -88,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.22.0"
+  val protoVersion = "3.22.3"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -404,7 +405,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
-      mllibCommon
+      commonUtils
     ).contains(x)
   }
 
@@ -855,6 +856,7 @@ object SparkConnectClient {
 
     buildTestDeps := {
       (LocalProject("assembly") / Compile / Keys.`package`).value
+      (LocalProject("catalyst") / Test / Keys.`package`).value
     },
 
     // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.

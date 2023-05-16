@@ -122,12 +122,16 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     }
   }
 
+  // data sources may request a particular advisory partition size for the final write stage
+  // if it happens, the advisory partition size will be set in ShuffleQueryStageExec
+  // only one shuffle stage is expected in such cases
   private def advisoryPartitionSize(shuffleStages: Seq[ShuffleStageInfo]): Long = {
-    val advisorySizes = shuffleStages.flatMap(_.shuffleStage.advisoryPartitionSize).toSet
-    if (advisorySizes.size == 1) {
-      advisorySizes.head
-    } else {
-      conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val defaultAdvisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    shuffleStages match {
+      case Seq(stage) =>
+        stage.shuffleStage.advisoryPartitionSize.getOrElse(defaultAdvisorySize)
+      case _ =>
+        defaultAdvisorySize
     }
   }
 

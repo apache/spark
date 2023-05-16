@@ -27,7 +27,7 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.8.7 and Java 8.
+Building Spark using Maven requires Maven 3.8.8 and Java 8/11/17.
 Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
@@ -47,7 +47,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 **Note:**
 
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
-* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.    
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 
 ### build/mvn
 
@@ -78,10 +78,6 @@ from `hadoop.version`.
 Example:
 
     ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
-
-If you want to build with Hadoop 2.x, enable `hadoop-2` profile:
-
-    ./build/mvn -Phadoop-2 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -290,8 +286,8 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
-<table class="table">
-<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>
   <td>https://github.com/apache/spark</td>

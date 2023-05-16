@@ -63,8 +63,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
       // If the dataSource provided class is a same or subclass of FileFormat class
       case f if classOf[FileFormat].isAssignableFrom(f) =>
         metadataOutputWithOutConflicts(
-          Seq(FileFormat.createFileMetadataCol(
-            dataSource.providingInstance().asInstanceOf[FileFormat])))
+          Seq(dataSource.providingInstance().asInstanceOf[FileFormat].createFileMetadataCol))
       case _ => Nil
     }
   }

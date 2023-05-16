@@ -2282,7 +2282,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # the index in some cases.
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in
-            # https://github.com/pyspark.pandas/issues/628.
+            # https://github.com/databricks/koalas/issues/628.
             pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(
                 pdf, retain_index=retain_index, prefer_timestamp_ntz=prefer_timestamp_ntz
             )
@@ -3550,15 +3550,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if isinstance(self, SeriesGroupBy):
                 raise TypeError("Only numeric aggregation column is accepted.")
 
-            if not numeric_only:
-                if has_non_numeric:
-                    warnings.warn(
-                        "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
-                        "In a future version, a TypeError will be raised. "
-                        "Before calling .%s, select only columns which should be "
-                        "valid for the function." % (function_name, function_name),
-                        FutureWarning,
-                    )
+            if not numeric_only and has_non_numeric:
+                warnings.warn(
+                    "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
+                    "In a future version, a TypeError will be raised. "
+                    "Before calling .%s, select only columns which should be "
+                    "valid for the function." % (function_name, function_name),
+                    FutureWarning,
+                )
 
     def _reduce_for_stat_function(
         self,

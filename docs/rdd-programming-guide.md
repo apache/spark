@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,12 +39,8 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 3.7+. It can use the standard CPython interpreter,
+Spark {{site.SPARK_VERSION}} works with Python 3.8+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used. It also works with PyPy 7.3.6+.
-
-Python 2, 3.4 and 3.5 supports were removed in Spark 3.1.0.
-Python 3.6 support was removed in Spark 3.3.0.
-Python 3.7 support is deprecated as of Spark 3.4.0.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
@@ -382,8 +378,8 @@ resulting Java objects using [pickle](https://github.com/irmen/pickle/). When sa
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
-<table class="table">
-<tr><th>Writable Type</th><th>Python Type</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Writable Type</th><th>Python Type</th></tr></thead>
 <tr><td>Text</td><td>str</td></tr>
 <tr><td>IntWritable</td><td>int</td></tr>
 <tr><td>FloatWritable</td><td>float</td></tr>
@@ -958,8 +954,8 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<table class="table">
-<tr><th style="width:25%">Transformation</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>map</b>(<i>func</i>) </td>
   <td> Return a new distributed dataset formed by passing each element of the source through a function <i>func</i>. </td>
@@ -1073,8 +1069,8 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<table class="table">
-<tr><th>Action</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Action</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>reduce</b>(<i>func</i>) </td>
   <td> Aggregate the elements of the dataset using a function <i>func</i> (which takes two arguments and returns one). The function should be commutative and associative so that it can be computed correctly in parallel. </td>
@@ -1218,8 +1214,8 @@ to `persist()`. The `cache()` method is a shorthand for using the default storag
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
 
-<table class="table">
-<tr><th style="width:23%">Storage Level</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th style="width:23%">Storage Level</th><th>Meaning</th></tr></thead>
 <tr>
   <td> MEMORY_ONLY </td>
   <td> Store RDD as deserialized Java objects in the JVM. If the RDD does not fit in memory, some partitions will

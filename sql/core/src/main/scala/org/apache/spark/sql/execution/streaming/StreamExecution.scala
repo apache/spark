@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -313,12 +313,6 @@ abstract class StreamExecution(
       case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
         // interrupted by stop()
         updateStatusMessage("Stopped")
-      case e: IOException if e.getMessage != null
-        && e.getMessage.startsWith(classOf[InterruptedException].getName)
-        && state.get == TERMINATED =>
-        // This is a workaround for HADOOP-12074: `Shell.runCommand` converts `InterruptedException`
-        // to `new IOException(ie.toString())` before Hadoop 2.8.
-        updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
         streamDeathCause = new StreamingQueryException(
@@ -359,8 +353,15 @@ abstract class StreamExecution(
 
         // Notify others
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+        val errorClassOpt = exception.flatMap {
+          _.cause match {
+            case t: SparkThrowable => Some(t.getErrorClass)
+            case _ => None
+          }
+        }
         postEvent(
-          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
+          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
+            errorClassOpt))
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
