@@ -303,6 +303,17 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
+  test("Not supported rounding mode: UNNECESSARY") {
+    val d = Decimal(10000L, 100, 80)
+    checkError(
+      exception = intercept[SparkException] {
+        d.toPrecision(5, 50, BigDecimal.RoundingMode.UNNECESSARY)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Not supported rounding mode: UNNECESSARY.")
+    )
+  }
+
   test("SPARK-20341: support BigInt's value does not fit in long value range") {
     val bigInt = scala.math.BigInt("9223372036854775808")
     val decimal = Decimal.apply(bigInt)

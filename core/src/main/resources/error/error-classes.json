@@ -3873,11 +3873,6 @@
       "This line should be unreachable<err>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2029" : {
-    "message" : [
-      "Not supported rounding mode: <roundMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2030" : {
     "message" : [
       "Can not handle nested schema yet...  plan <plan>."
