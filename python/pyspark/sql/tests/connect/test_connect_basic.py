@@ -3440,7 +3440,7 @@ class ChannelBuilderTests(unittest.TestCase):
     def test_channel_properties(self):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
         self.assertEqual("host:15002", chan.endpoint)
-        self.assertIn("foo", chan.userAgent.split(' '))
+        self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
