@@ -1401,7 +1401,7 @@ class Frame(object, metaclass=ABCMeta):
         If there is no numeric type columns, returns empty Series.
 
         >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()
-        Series([], dtype: float64)
+        Series([], dtype: object)
 
         On a Series:
 
@@ -1410,12 +1410,14 @@ class Frame(object, metaclass=ABCMeta):
 
         By default, the product of an empty or all-NA Series is ``1``
 
-        >>> ps.Series([]).prod()
+        >>> ps.Series([]).prod()  # doctest: +SKIP
+        # TODO(SPARK-43481): Enable SeriesTests.test_product for pandas 2.0.0.
         1.0
 
         This can be controlled with the ``min_count`` parameter
 
-        >>> ps.Series([]).prod(min_count=1)
+        >>> ps.Series([]).prod(min_count=1)  # doctest: +SKIP
+        # TODO(SPARK-43481): Enable SeriesTests.test_product for pandas 2.0.0.
         nan
         """
         axis = validate_axis(axis)

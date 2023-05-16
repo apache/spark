@@ -1885,10 +1885,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         >>> def plus_min(x):
         ...     return x + x.min()
         >>> g.apply(plus_min).sort_index()  # doctest: +NORMALIZE_WHITESPACE
-            A  B   C
-        0  aa  2   8
-        1  aa  3  10
-        2  bb  6  10
+              A  B   C
+        A
+        a 0  aa  2   8
+          1  aa  3  10
+        b 2  bb  6  10
 
         >>> g.apply(sum).sort_index()  # doctest: +NORMALIZE_WHITESPACE
             A  B   C
@@ -1904,22 +1905,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can specify the type hint and prevent schema inference for better performance.
 
-        >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
+        >>> def pandas_div(x) -> ps.DataFrame[[str ,int], [float, float]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
-            c0   c1
-        0  1.0  1.0
-        1  1.0  1.0
-        2  1.0  1.0
+        >>> g.apply(pandas_div).sort_index()
+              c0   c1
+        a 0  1.0  1.0
+          1  1.0  1.0
+        b 2  1.0  1.0
 
-        >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("f1", float), ("f2", float)]]:
+
+        >>> def pandas_div(x) -> ps.DataFrame[[str, int], [("f1", float), ("f2", float)]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                f1   f2
-        index
-        0      1.0  1.0
-        1      1.0  1.0
-        2      1.0  1.0
+        >>> g.apply(pandas_div).sort_index()
+              f1   f2
+        a 0  1.0  1.0
+          1  1.0  1.0
+        b 2  1.0  1.0
 
         In case of Series, it works as below.
 
@@ -1933,10 +1934,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> df.B.groupby(df.A).apply(plus_min).sort_index()
-        0    2
-        1    3
-        2    6
+        >>> df.B.groupby(df.A).apply(plus_min).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        A
+        a  0    2
+           1    3
+        b  2    6
         Name: B, dtype: int64
 
         You can also return a scalar value as an aggregated value of the group:
