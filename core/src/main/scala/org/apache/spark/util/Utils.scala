@@ -2464,11 +2464,11 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   }
 
   /**
-   * Return the prefix of a command that appends the given library paths to the
-   * system-specific library path environment variable. On Unix, for instance,
-   * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   * Return the library path value that prepends the given paths to the existing
+   * system-specific library path environment variable value. On Unix, for instance,
+   * this returns "path1:path2:$LD_LIBRARY_PATH".
    */
-  def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
+  def libraryPathEnvValue(libraryPaths: Seq[String]): String = {
     val libraryPathScriptVar = if (isWindows) {
       s"%${libraryPathEnvName}%"
     } else {
@@ -2481,7 +2481,17 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     } else {
       ""
     }
-    s"$libraryPathEnvName=$libraryPath$ampersand"
+    s"$libraryPath$ampersand"
+  }
+
+  /**
+   * Return the prefix of a command that appends the given library paths to the
+   * system-specific library path environment variable. On Unix, for instance,
+   * this returns the string LD_LIBRARY_PATH="path1:path2:$LD_LIBRARY_PATH".
+   */
+  def libraryPathEnvPrefix(libraryPaths: Seq[String]): String = {
+    val libraryPath = libraryPathEnvValue(libraryPaths)
+    s"$libraryPathEnvName=$libraryPath"
   }
 
   /**

@@ -141,6 +141,14 @@ private[spark] class BasicExecutorFeatureStep(
         (s"$ENV_JAVA_OPT_PREFIX$index", opt)
       }.toMap
 
+      val extraLibraryPath: Map[String, String] = kubernetesConf.sparkConf
+        .get(EXECUTOR_LIBRARY_PATH)
+        .map { libPath =>
+          val libPathName = Utils.libraryPathEnvName
+          // LD_LIBRARY_PATH=user_set_lib:${LD_LIBRARY_PATH}
+          libPathName -> Utils.libraryPathEnvValue(Seq(libPath))
+        }.toMap
+
       KubernetesUtils.buildEnvVars(
         Seq(
           ENV_DRIVER_URL -> driverUrl,
@@ -154,6 +162,7 @@ private[spark] class BasicExecutorFeatureStep(
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
           ++ Seq(ENV_CLASSPATH -> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
+          ++ extraLibraryPath
           ++ allOpts) ++
       KubernetesUtils.buildEnvVarsWithFieldRef(
         Seq(

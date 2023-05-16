@@ -48,6 +48,11 @@ else
   SPARK_EXECUTOR_JAVA_OPTS=("${(@f)$(< java_opts.txt)}")
 fi
 
+# export environment variables that needs some variable expansion
+if [ -f "${SPARK_HOME}/.profiles/.spark.profile" ]; then
+  . "${SPARK_HOME}/.profiles/.spark.profile"
+fi
+
 if [ -n "$SPARK_EXTRA_CLASSPATH" ]; then
   SPARK_CLASSPATH="$SPARK_CLASSPATH:$SPARK_EXTRA_CLASSPATH"
 fi

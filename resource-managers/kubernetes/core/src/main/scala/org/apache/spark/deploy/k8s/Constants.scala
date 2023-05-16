@@ -76,6 +76,12 @@ private[spark] object Constants {
   val SPARK_CONF_FILE_NAME = "spark.properties"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
+  // Expandable variables which should be exported at entrypoint.sh level
+  val POD_SHELL_PROFILE_VOLUME = "pod-shell-profile-volume"
+  val POD_SHELL_PROFILE_CONFIGMAP = "pod-shell-profile-conf-map"
+  val POD_SHELL_PROFILE_MOUNTPATH = "/opt/spark/.profiles"
+  val POD_SHELL_PROFILE_FILE_NAME = ".spark.profile"
+  val POD_SHELL_PROFILE_KEY = "spark-shell-profile-key"
 
   // BINDINGS
   val ENV_PYSPARK_PYTHON = "PYSPARK_PYTHON"

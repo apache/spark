@@ -524,6 +524,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podConfigured1.container.getPorts.contains(ports))
   }
 
+  test("SPARK-43505: extraLibraryPath should be translated into environment variable") {
+    baseConf.set(config.EXECUTOR_LIBRARY_PATH, "/opt/spark/python/lib")
+    initDefaultProfile(baseConf)
+    val kconf = newExecutorConf(environment = Map("qux" -> "quux"))
+    val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    checkEnv(executor, baseConf,
+      Map(Utils.libraryPathEnvName -> Utils.libraryPathEnvValue(Seq("/opt/spark/python/lib")),
+        "qux" -> "quux"))
+    checkOwnerReferences(executor.pod, DRIVER_POD_UID)
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
