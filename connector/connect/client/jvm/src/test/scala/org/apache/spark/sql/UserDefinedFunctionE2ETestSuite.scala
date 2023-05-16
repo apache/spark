@@ -197,4 +197,22 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     spark.range(10).repartition(1).foreachPartition(func)
     assert(sum.get() == 0) // The value is not 45
   }
+
+  test("Dataset reduce") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
+  }
+
+  test("Dataset reduce - java") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(
+      spark
+        .range(10)
+        .map(_ + 1)
+        .reduce(new ReduceFunction[Long] {
+          override def call(v1: Long, v2: Long): Long = v1 + v2
+        }) == 55)
+  }
 }
