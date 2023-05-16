@@ -159,9 +159,6 @@ class BasicWriteTaskStatsTracker(
   }
 
   override def getFinalStats(taskCommitTime: Long): WriteTaskStats = {
-    submittedFiles.foreach(updateFileStats)
-    submittedFiles.clear()
-
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
     Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
       outputMetrics.setBytesWritten(numBytes)
