@@ -1853,7 +1853,7 @@ abstract class CSVSuite
 
   test("SPARK-24244: Select a subset of all columns") {
     withTempPath { path =>
-      import collection.JavaConverters._
+      import scala.collection.JavaConverters._
       val schema = new StructType()
         .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
         .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)

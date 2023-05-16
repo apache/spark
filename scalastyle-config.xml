@@ -294,7 +294,7 @@ This file is divided into 3 sections:
     <parameters>
       <parameter name="groups">java,scala,3rdParty,spark</parameter>
       <parameter name="group.java">javax?\..*</parameter>
-      <parameter name="group.scala">(collection|scala)\..*</parameter>
+      <parameter name="group.scala">scala\..*</parameter>
       <parameter name="group.3rdParty">(?!org\.apache\.spark\.).*</parameter>
       <parameter name="group.spark">org\.apache\.spark\..*</parameter>
     </parameters>
@@ -344,6 +344,11 @@ This file is divided into 3 sections:
 
       If you really need to use scala.collection.Seq or scala.collection.IndexedSeq, please use the fully-qualified name instead.
     ]]></customMessage>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+    <parameters><parameter name="illegalImports"><![CDATA[collection.JavaConverters._]]></parameter></parameters>
+    <customMessage>Please use scala.collection.JavaConverters._ instead.</customMessage>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">

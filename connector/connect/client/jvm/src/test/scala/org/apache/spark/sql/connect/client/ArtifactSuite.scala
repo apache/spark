@@ -20,7 +20,7 @@ import java.io.InputStream
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}

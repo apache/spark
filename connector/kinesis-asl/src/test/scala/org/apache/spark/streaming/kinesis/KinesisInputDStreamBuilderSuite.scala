@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.Calendar
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
 import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
