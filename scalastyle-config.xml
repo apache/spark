@@ -347,8 +347,8 @@ This file is divided into 3 sections:
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
-    <parameters><parameter name="illegalImports"><![CDATA[collection.JavaConverters._]]></parameter></parameters>
-    <customMessage>Please use scala.collection.JavaConverters._ instead.</customMessage>
+    <parameters><parameter name="illegalImports"><![CDATA[collection]]></parameter></parameters>
+    <customMessage>Please use scala.collection instead.</customMessage>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
