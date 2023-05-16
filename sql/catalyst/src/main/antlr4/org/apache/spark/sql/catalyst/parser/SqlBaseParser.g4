@@ -390,18 +390,11 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=propertyValue)?
+    : key=propertyKey (EQ? value=expression)?
     ;
 
 propertyKey
     : identifier (DOT identifier)*
-    | stringLit
-    ;
-
-propertyValue
-    : INTEGER_VALUE
-    | DECIMAL_VALUE
-    | booleanValue
     | stringLit
     ;
 
