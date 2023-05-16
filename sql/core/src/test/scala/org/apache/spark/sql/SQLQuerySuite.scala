@@ -280,6 +280,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
+  test("SPARK-43522: Fix creating struct column name with index of array") {
+
+    val data = Seq("a=b,c=d,d=f").toDF.withColumn("key_value", split('value, ","))
+
+    val df = data.withColumn("map_entry", transform(col("key_value"), x => struct(split(x, "=")
+      .getItem(0).as("col1"), split(x, "=").getItem(1).as("col2")))).collect()
+
+    val df2 = data.withColumn("map_entry", transform(col("key_value"), x => struct(split(x, "=")
+      .getItem(0), split(x, "=").getItem(1)))).collect()
+
+    assert(df2 sameElements df)
+
+  }
+
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
