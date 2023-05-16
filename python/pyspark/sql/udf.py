@@ -452,9 +452,9 @@ class UserDefinedFunction:
             jexpr,
             "org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression",
         ):
-            return jexpr.child().resultId().id() # PythonUDAF
+            return jexpr.child().resultId().id()  # PythonUDAF
         else:
-            return jexpr.resultId().id() # PythonUDF
+            return jexpr.resultId().id()  # PythonUDF
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
