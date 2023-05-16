@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
@@ -563,6 +564,7 @@ class Dataset[T] private[sql] (
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(sparkSession, plan.getRoot)
 
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
+    checkSameSparkSession(right)
     sparkSession.newDataFrame { builder =>
       val joinBuilder = builder.getJoinBuilder
       joinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
@@ -1240,10 +1242,7 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(
-      toDF(),
-      cols.map(_.expr),
-      proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+    new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
 
   /**
@@ -1271,9 +1270,44 @@ class Dataset[T] private[sql] (
     val colNames: Seq[String] = col1 +: cols
     new RelationalGroupedDataset(
       toDF(),
-      colNames.map(colName => Column(colName).expr),
+      colNames.map(colName => Column(colName)),
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
+
+  /**
+   * (Scala-specific) Reduces the elements of this Dataset using the specified binary function.
+   * The given `func` must be commutative and associative or the result may be non-deterministic.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def reduce(func: (T, T) => T): T = {
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: encoder :: Nil,
+      outputEncoder = encoder)
+    val reduceExpr = Column.fn("reduce", udf.apply(col("*"), col("*"))).expr
+
+    val result = sparkSession
+      .newDataset(encoder) { builder =>
+        builder.getAggregateBuilder
+          .setInput(plan.getRoot)
+          .addAggregateExpressions(reduceExpr)
+          .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+      }
+      .collect()
+    assert(result.length == 1)
+    result(0)
+  }
+
+  /**
+   * (Java-specific) Reduces the elements of this Dataset using the specified binary function. The
+   * given `func` must be commutative and associative or the result may be non-deterministic.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def reduce(func: ReduceFunction[T]): T = reduce(UdfUtils.mapReduceFuncToScalaFunc(func))
 
   /**
    * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
@@ -1283,15 +1317,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    val kEncoder = encoderFor[K]
-    new KeyValueGroupedDatasetImpl[K, T, K, T](
-      this,
-      sparkSession,
-      plan,
-      kEncoder,
-      kEncoder,
-      func,
-      UdfUtils.identical())
+    KeyValueGroupedDatasetImpl[K, T](this, encoderFor[K], func)
   }
 
   /**
@@ -1325,10 +1351,7 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(
-      toDF(),
-      cols.map(_.expr),
-      proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+    new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
   /**
@@ -1358,7 +1381,7 @@ class Dataset[T] private[sql] (
     val colNames: Seq[String] = col1 +: cols
     new RelationalGroupedDataset(
       toDF(),
-      colNames.map(colName => Column(colName).expr),
+      colNames.map(colName => Column(colName)),
       proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
@@ -1383,10 +1406,7 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(
-      toDF(),
-      cols.map(_.expr),
-      proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+    new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 
   /**
@@ -1415,7 +1435,7 @@ class Dataset[T] private[sql] (
     val colNames: Seq[String] = col1 +: cols
     new RelationalGroupedDataset(
       toDF(),
-      colNames.map(colName => Column(colName).expr),
+      colNames.map(colName => Column(colName)),
       proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 
@@ -1647,12 +1667,19 @@ class Dataset[T] private[sql] (
 
   private def buildSetOp(right: Dataset[T], setOpType: proto.SetOperation.SetOpType)(
       f: proto.SetOperation.Builder => Unit): Dataset[T] = {
+    checkSameSparkSession(right)
     sparkSession.newDataset(encoder) { builder =>
       f(
         builder.getSetOpBuilder
           .setSetOpType(setOpType)
           .setLeftInput(plan.getRoot)
           .setRightInput(right.plan.getRoot))
+    }
+  }
+
+  private def checkSameSparkSession(other: Dataset[_]): Unit = {
+    if (this.sparkSession.sessionId != other.sparkSession.sessionId) {
+      throw new SparkException("Both Datasets must belong to the same SparkSession")
     }
   }
 

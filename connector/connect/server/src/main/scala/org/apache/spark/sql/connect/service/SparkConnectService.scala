@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
-import com.google.common.cache.CacheBuilder
+import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.{Server, Status}
@@ -125,22 +125,22 @@ class SparkConnectService(debug: Boolean)
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
-    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key, "true").toBoolean
+    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
 
     {
       case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType", se)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
         observer.onError(
           StatusProto.toStatusRuntimeException(
             buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType", e)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
         observer.onError(
           StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
 
       case e: Throwable =>
-        logError(s"Error during: $opType", e)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
         observer.onError(
           Status.UNKNOWN
             .withCause(e)
@@ -229,15 +229,39 @@ class SparkConnectService(debug: Boolean)
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
     responseObserver)
-}
 
-/**
- * Object used for referring to SparkSessions in the SessionCache.
- *
- * @param userId
- * @param session
- */
-case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
+  /**
+   * This is the entry point for all calls of getting artifact statuses.
+   */
+  override def artifactStatus(
+      request: proto.ArtifactStatusesRequest,
+      responseObserver: StreamObserver[proto.ArtifactStatusesResponse]): Unit = {
+    try {
+      new SparkConnectArtifactStatusesHandler(responseObserver).handle(request)
+    } catch
+      handleError(
+        "artifactStatus",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
+  /**
+   * This is the entry point for calls interrupting running executions.
+   */
+  override def interrupt(
+      request: proto.InterruptRequest,
+      responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+    try {
+      new SparkConnectInterruptHandler(responseObserver).handle(request)
+    } catch
+      handleError(
+        "interrupt",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+}
 
 /**
  * Static instance of the SparkConnectService.
@@ -274,6 +298,15 @@ object SparkConnectService {
       userSessionMapping.getIfPresent((userId, sessionId))
     })
 
+  private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
+    override def onRemoval(
+        notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
+      val SessionHolder(userId, sessionId, session) = notification.getValue
+      val blockManager = session.sparkContext.env.blockManager
+      blockManager.removeCache(userId, sessionId)
+    }
+  }
+
   // Simple builder for creating the cache of Sessions.
   private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
@@ -283,6 +316,7 @@ object SparkConnectService {
     if (timeoutSeconds >= 0) {
       cacheBuilder.expireAfterAccess(timeoutSeconds, TimeUnit.SECONDS)
     }
+    cacheBuilder.removalListener(new RemoveSessionListener)
     cacheBuilder
   }
 
@@ -338,12 +372,17 @@ object SparkConnectService {
         server.shutdownNow()
       }
     }
+    userSessionMapping.invalidateAll()
   }
 
   def extractErrorMessage(st: Throwable): String = {
     val message = StringUtils.abbreviate(st.getMessage, 2048)
-    if (message != null) {
-      message
+    convertNullString(message)
+  }
+
+  def convertNullString(str: String): String = {
+    if (str != null) {
+      str
     } else {
       ""
     }

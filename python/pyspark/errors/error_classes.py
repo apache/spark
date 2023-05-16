@@ -34,6 +34,16 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
+  "ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported."
+    ]
+  },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -79,9 +89,19 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_EMPTY_SCHEMA": {
+    "message": [
+      "Can not infer schema from empty dataset."
     ]
   },
   "CANNOT_INFER_SCHEMA_FOR_TYPE": {
@@ -106,7 +126,7 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_PARSE_DATATYPE": {
     "message": [
-      "Unable to parse datatype from schema. <error>."
+      "Unable to parse datatype. <msg>."
     ]
   },
   "CANNOT_PROVIDE_METADATA": {
@@ -144,6 +164,16 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
     ]
   },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
+    ]
+  },
+  "EXCEED_RETRY" : {
+    "message" : [
+      "Retries exceeded but no exception caught."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -165,9 +195,29 @@ ERROR_CLASSES_JSON = """
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_CONNECT_URL" : {
+    "message" : [
+      "Invalid URL for Spark Connect: <detail>"
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_NDARRAY_DIMENSION": {
+    "message": [
+      "NumPy array input should be of <dimensions> dimensions."
+    ]
+  },
+  "INVALID_PANDAS_UDF" : {
+    "message" : [
+      "Invalid function: <detail>"
+    ]
+  },
+  "INVALID_PANDAS_UDF_TYPE" : {
+    "message" : [
+      "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -178,6 +228,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_TYPE" : {
+    "message" : [
+      "Argument `<arg_name>` should not be a <data_type>."
     ]
   },
   "INVALID_TYPENAME_CALL" : {
@@ -360,6 +415,16 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_IMPLEMENTED" : {
+    "message" : [
+      "<feature> is not implemented."
+    ]
+  },
+  "NOT_INSTANCE_OF" : {
+    "message" : [
+      "<value> is not an instance of type <data_type>."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -386,6 +451,11 @@ ERROR_CLASSES_JSON = """
     ]
   },
   "NOT_LIST_OF_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[Column]."
+    ]
+  },
+  "NOT_LIST_OF_COLUMN_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a list[Column]."
     ]
@@ -506,6 +576,11 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_OR_CONTEXT_EXISTS" : {
+    "message" : [
+      "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
@@ -526,14 +601,44 @@ ERROR_CLASSES_JSON = """
       "pandas iterator UDF should exhaust the input iterator."
     ]
   },
+  "TOO_MANY_VALUES" : {
+    "message" : [
+      "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
     ]
   },
+  "UNEXPECTED_TUPLE_WITH_STRUCT" : {
+    "message" : [
+      "Unexpected tuple <tuple> with StructType."
+    ]
+  },
+  "UNKNOWN_EXPLAIN_MODE" : {
+    "message" : [
+      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+    ]
+  },
+  "UNKNOWN_INTERRUPT_TYPE" : {
+    "message" : [
+      "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
+    ]
+  },
+  "UNKNOWN_RESPONSE" : {
+    "message" : [
+      "Unknown response: <response>."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW" : {
+    "message" : [
+      "Single data type <data_type> is not supported with Arrow."
     ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {
@@ -544,6 +649,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type: <join_type>. Supported join types include: \\"inner\\", \\"outer\\", \\"full\\", \\"fullouter\\", \\"full_outer\\", \\"leftouter\\", \\"left\\", \\"left_outer\\", \\"rightouter\\", \\"right\\", \\"right_outer\\", \\"leftsemi\\", \\"left_semi\\", \\"semi\\", \\"leftanti\\", \\"left_anti\\", \\"anti\\", \\"cross\\"."
     ]
   },
   "UNSUPPORTED_LITERAL" : {
@@ -566,6 +676,16 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
     ]
   },
+  "UNSUPPORTED_SIGNATURE" : {
+    "message" : [
+      "Unsupported signature: <signature>."
+    ]
+  },
+  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
+    "message" : [
+      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."
+    ]
+  },
   "VALUE_NOT_ACCESSIBLE": {
     "message": [
       "Value `<value>` cannot be accessed inside tasks."
@@ -574,6 +694,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_ANY_OR_ALL" : {
     "message" : [
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_BETWEEN" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
     ]
   },
   "VALUE_NOT_NON_EMPTY_STR" : {
@@ -598,7 +723,7 @@ ERROR_CLASSES_JSON = """
   },
   "VALUE_OUT_OF_BOUND" : {
     "message" : [
-      "Value for `<arg_name>` must be between <min> and <max>."
+      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {

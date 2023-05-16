@@ -21,17 +21,16 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.net.InetAddress
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Date, Locale}
+import java.util.{Date, Locale}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.util.control.NonFatal
+import scala.language.existentials
 
-import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.hdfs.DistributedFileSystem.HdfsDataOutputStreamBuilder
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -226,21 +225,6 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
   }
 
-  def listLeafDirStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
-    listLeafDirStatuses(fs, fs.getFileStatus(basePath))
-  }
-
-  def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
-    def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-      val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
-      leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
-    }
-
-    assert(baseStatus.isDirectory)
-    recurse(baseStatus)
-  }
-
   def isGlobPath(pattern: Path): Boolean = {
     pattern.toString.exists("{}[]*?\\".toSet.contains)
   }
@@ -263,41 +247,6 @@ private[spark] class SparkHadoopUtil extends Logging {
   def globPathIfNecessary(fs: FileSystem, pattern: Path): Seq[Path] = {
     if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
-
-  /**
-   * Lists all the files in a directory with the specified prefix, and does not end with the
-   * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
-   * the respective files.
-   */
-  def listFilesSorted(
-      remoteFs: FileSystem,
-      dir: Path,
-      prefix: String,
-      exclusionSuffix: String): Array[FileStatus] = {
-    try {
-      val fileStatuses = remoteFs.listStatus(dir,
-        new PathFilter {
-          override def accept(path: Path): Boolean = {
-            val name = path.getName
-            name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
-          }
-        })
-      Arrays.sort(fileStatuses, (o1: FileStatus, o2: FileStatus) =>
-        Longs.compare(o1.getModificationTime, o2.getModificationTime))
-      fileStatuses
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error while attempting to list files from application staging dir", e)
-        Array.empty
-    }
-  }
-
-  private[spark] def getSuffixForCredentialsPath(credentialsPath: Path): Int = {
-    val fileName = credentialsPath.getName
-    fileName.substring(
-      fileName.lastIndexOf(SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM) + 1).toInt
-  }
-
 
   private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
 
@@ -396,10 +345,6 @@ private[spark] class SparkHadoopUtil extends Logging {
 private[spark] object SparkHadoopUtil extends Logging {
 
   private lazy val instance = new SparkHadoopUtil
-
-  val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
-
-  val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
   /**
    * Number of records to update input metrics when reading from HadoopRDDs.
@@ -622,28 +567,16 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (allowEC) {
       fs.create(path)
     } else {
-      try {
-        // Use reflection as this uses APIs only available in Hadoop 3
-        val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
-        // the builder api does not resolve relative paths, nor does it create parent dirs, while
-        // the old api does.
-        if (!fs.mkdirs(path.getParent())) {
-          throw new IOException(s"Failed to create parents of $path")
-        }
-        val qualifiedPath = fs.makeQualified(path)
-        val builder = builderMethod.invoke(fs, qualifiedPath)
-        val builderCls = builder.getClass()
-        // this may throw a NoSuchMethodException if the path is not on hdfs
-        val replicateMethod = builderCls.getMethod("replicate")
-        val buildMethod = builderCls.getMethod("build")
-        val b2 = replicateMethod.invoke(builder)
-        buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
-      } catch {
-        case  _: NoSuchMethodException =>
-          // No createFile() method, we're using an older hdfs client, which doesn't give us control
-          // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
-          // old apis.
-          fs.create(path)
+      // the builder api does not resolve relative paths, nor does it create parent dirs, while
+      // the old api does.
+      if (!fs.mkdirs(path.getParent())) {
+        throw new IOException(s"Failed to create parents of $path")
+      }
+      val qualifiedPath = fs.makeQualified(path)
+      val builder = fs.createFile(qualifiedPath)
+      builder match {
+        case hb: HdfsDataOutputStreamBuilder => hb.replicate().build()
+        case _ => fs.create(path)
       }
     }
   }

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -52,7 +53,12 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkAttributeError,
+    PySparkValueError,
+    PySparkNotImplementedError,
+)
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -106,7 +112,7 @@ class DataFrame:
                 repl_eager_eval_enabled,
                 repl_eager_eval_max_num_rows,
                 repl_eager_eval_truncate,
-            ) = self._session._get_configs(
+            ) = self._session._client.get_configs(
                 "spark.sql.repl.eagerEval.enabled",
                 "spark.sql.repl.eagerEval.maxNumRows",
                 "spark.sql.repl.eagerEval.truncate",
@@ -126,7 +132,7 @@ class DataFrame:
             repl_eager_eval_enabled,
             repl_eager_eval_max_num_rows,
             repl_eager_eval_truncate,
-        ) = self._session._get_configs(
+        ) = self._session._client.get_configs(
             "spark.sql.repl.eagerEval.enabled",
             "spark.sql.repl.eagerEval.maxNumRows",
             "spark.sql.repl.eagerEval.truncate",
@@ -249,13 +255,17 @@ class DataFrame:
             raise Exception("Cannot cartesian join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot cartesian join when other._plan is empty.")
-
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
 
     crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
+
+    def checkSameSparkSession(self, other: "DataFrame") -> None:
+        if self._session.session_id != other._session.session_id:
+            raise SessionNotSameException("Both Datasets must belong to the same SparkSession")
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
@@ -555,7 +565,7 @@ class DataFrame:
             raise Exception("Cannot join when other._plan is empty.")
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
@@ -1000,6 +1010,7 @@ class DataFrame:
                 error_class="MISSING_VALID_PLAN",
                 message_parameters={"operator": "Union"},
             )
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
@@ -1012,6 +1023,7 @@ class DataFrame:
                 error_class="MISSING_VALID_PLAN",
                 message_parameters={"operator": "UnionByName"},
             )
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(
                 self._plan,
@@ -1594,6 +1606,13 @@ class DataFrame:
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
+    def __dir__(self) -> List[str]:
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
+    __dir__.__doc__ = PySparkDataFrame.__dir__.__doc__
+
     def _print_plan(self) -> str:
         if self._plan:
             return self._plan.print()
@@ -1801,7 +1820,10 @@ class DataFrame:
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "RDD Support for Spark Connect"},
+        )
 
     def cache(self) -> "DataFrame":
         if self._plan is None:
@@ -1853,10 +1875,16 @@ class DataFrame:
         return self.storageLevel != StorageLevel.NONE
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreach() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreach()"},
+        )
 
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreachPartition() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreachPartition()"},
+        )
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
@@ -1882,10 +1910,16 @@ class DataFrame:
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
 
     def checkpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("checkpoint() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "checkpoint()"},
+        )
 
     def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("localCheckpoint() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "localCheckpoint()"},
+        )
 
     def to_pandas_on_spark(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -1972,7 +2006,10 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("toJSON() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "toJSON()"},
+        )
 
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
@@ -2133,6 +2170,9 @@ def _test() -> None:
 
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
     del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
+
+    # TODO(SPARK-43435): should reenable this test
+    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

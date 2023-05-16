@@ -37,7 +37,7 @@ import org.apache.spark.connect.proto
  */
 class RelationalGroupedDataset private[sql] (
     private[sql] val df: DataFrame,
-    private[sql] val groupingExprs: Seq[proto.Expression],
+    private[sql] val groupingExprs: Seq[Column],
     groupType: proto.Aggregate.GroupType,
     pivot: Option[proto.Aggregate.Pivot] = None) {
 
@@ -45,7 +45,7 @@ class RelationalGroupedDataset private[sql] (
     df.sparkSession.newDataFrame { builder =>
       builder.getAggregateBuilder
         .setInput(df.plan.getRoot)
-        .addAllGroupingExpressions(groupingExprs.asJava)
+        .addAllGroupingExpressions(groupingExprs.map(_.expr).asJava)
         .addAllAggregateExpressions(aggExprs.map(e => e.expr).asJava)
 
       groupType match {
@@ -63,6 +63,16 @@ class RelationalGroupedDataset private[sql] (
         case g => throw new UnsupportedOperationException(g.toString)
       }
     }
+  }
+
+  /**
+   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions of
+   * current `RelationalGroupedDataset`.
+   *
+   * @since 3.5.0
+   */
+  def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
+    KeyValueGroupedDatasetImpl[K, T](df, encoderFor[K], encoderFor[T], groupingExprs)
   }
 
   /**

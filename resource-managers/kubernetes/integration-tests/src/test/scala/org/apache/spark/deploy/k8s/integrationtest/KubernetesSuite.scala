@@ -81,6 +81,7 @@ class KubernetesSuite extends SparkFunSuite
     logInfo("END DESCRIBE PODS for the application")
     val driverPodOption = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "driver")
       .list()
@@ -91,12 +92,14 @@ class KubernetesSuite extends SparkFunSuite
       logInfo("BEGIN driver POD log\n" +
         kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
           .getLog)
       logInfo("END driver POD log")
     }
     kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
       .list()
@@ -104,6 +107,7 @@ class KubernetesSuite extends SparkFunSuite
         val podLog = try {
           kubernetesTestComponents.kubernetesClient
             .pods()
+            .inNamespace(kubernetesTestComponents.namespace)
             .withName(execPod.getMetadata.getName)
             .getLog
         } catch {
@@ -318,6 +322,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "driver")
       .list()
@@ -329,6 +334,7 @@ class KubernetesSuite extends SparkFunSuite
       expectedJVMValue.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
           .getLog
           .contains(e), "The application did not complete.")
@@ -385,6 +391,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
@@ -415,6 +422,7 @@ class KubernetesSuite extends SparkFunSuite
                 Eventually.eventually(TIMEOUT, INTERVAL) {
                   assert(kubernetesTestComponents.kubernetesClient
                     .pods()
+                    .inNamespace(kubernetesTestComponents.namespace)
                     .withName(driverPodName)
                     .getLog
                     .contains("Waiting to give nodes time to finish migration, decom exec 1."),
@@ -425,8 +433,12 @@ class KubernetesSuite extends SparkFunSuite
                 // We set an intentionally long grace period to test that Spark
                 // exits once the blocks are done migrating and doesn't wait for the
                 // entire grace period if it does not need to.
-                kubernetesTestComponents.kubernetesClient.pods()
-                  .withName(name).withGracePeriod(Int.MaxValue).delete()
+                kubernetesTestComponents.kubernetesClient
+                  .pods()
+                  .inNamespace(kubernetesTestComponents.namespace)
+                  .withName(name)
+                  .withGracePeriod(Int.MaxValue)
+                  .delete()
                 logDebug(s"Triggered pod decom/delete: $name deleted")
                 // Make sure this pod is deleted
                 Eventually.eventually(TIMEOUT, INTERVAL) {
@@ -458,6 +470,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "driver")
       .list()
@@ -477,6 +490,7 @@ class KubernetesSuite extends SparkFunSuite
     val execPod: Option[Pod] = if (expectedExecutorLogOnCompletion.nonEmpty) {
       Some(kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
         .withLabel("spark-app-locator", appLocator)
         .withLabel("spark-role", "executor")
         .list()
@@ -490,6 +504,7 @@ class KubernetesSuite extends SparkFunSuite
       expectedDriverLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
           .getLog
           .contains(e),
@@ -498,6 +513,7 @@ class KubernetesSuite extends SparkFunSuite
       expectedExecutorLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(execPod.get.getMetadata.getName)
           .getLog
           .contains(e),
@@ -589,7 +605,11 @@ class KubernetesSuite extends SparkFunSuite
   }
 
   private def deleteDriverPod(): Unit = {
-    kubernetesTestComponents.kubernetesClient.pods().withName(driverPodName).delete()
+    kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .withName(driverPodName)
+      .delete()
     Eventually.eventually(TIMEOUT, INTERVAL) {
       assert(kubernetesTestComponents.kubernetesClient
         .pods()
@@ -602,12 +622,14 @@ class KubernetesSuite extends SparkFunSuite
     kubernetesTestComponents
       .kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
       .delete()
     Eventually.eventually(TIMEOUT, INTERVAL) {
       assert(kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
         .withLabel("spark-app-locator", appLocator)
         .withLabel("spark-role", "executor")
         .list()

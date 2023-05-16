@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.DynamicMessage
+import com.google.protobuf.TypeRegistry
 
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -59,7 +60,22 @@ private[protobuf] case class ProtobufDataToCatalyst(
   @transient private lazy val fieldsNumbers =
     messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
 
-  @transient private lazy val deserializer = new ProtobufDeserializer(messageDescriptor, dataType)
+  @transient private lazy val deserializer = {
+    val typeRegistry = fileDescriptorSetBytesOpt match {
+      case Some(descBytes) if protobufOptions.convertAnyFieldsToJson =>
+        ProtobufUtils.buildTypeRegistry(path) // This loads all the messages in the file.
+      case None if protobufOptions.convertAnyFieldsToJson =>
+        ProtobufUtils.buildTypeRegistry(messageDescriptor) // Loads only connected messages.
+      case _ => TypeRegistry.getEmptyTypeRegistry // Default. Json conversion is not enabled.
+    }
+    new ProtobufDeserializer(
+      messageDescriptor,
+      dataType,
+      typeRegistry = typeRegistry,
+      emitDefaultValues = protobufOptions.emitDefaultValues,
+      enumsAsInts = protobufOptions.enumsAsInts
+    )
+  }
 
   @transient private var result: DynamicMessage = _
 

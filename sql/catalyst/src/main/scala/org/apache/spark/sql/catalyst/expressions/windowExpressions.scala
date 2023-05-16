@@ -602,7 +602,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
-    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
+    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError(prettyName)
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
