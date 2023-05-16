@@ -896,6 +896,20 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["extended", b"extended"]
         ) -> None: ...
 
+    class FinishForeachBatchCommand(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        BATCH_ID_FIELD_NUMBER: builtins.int
+        batch_id: builtins.int
+        def __init__(
+            self,
+            *,
+            batch_id: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["batch_id", b"batch_id"]
+        ) -> None: ...
+
     class AwaitTerminationCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -955,7 +969,10 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     def await_termination(self) -> global___StreamingQueryCommand.AwaitTerminationCommand:
         """awaitTermination() API. Waits for the termination of the query."""
     wait_foreach_batch_callback: builtins.bool
-    finish_foreach_batch_callback: builtins.bool
+    @property
+    def finish_foreach_batch_callback(
+        self,
+    ) -> global___StreamingQueryCommand.FinishForeachBatchCommand: ...
     def __init__(
         self,
         *,
@@ -969,7 +986,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
         exception: builtins.bool = ...,
         await_termination: global___StreamingQueryCommand.AwaitTerminationCommand | None = ...,
         wait_foreach_batch_callback: builtins.bool = ...,
-        finish_foreach_batch_callback: builtins.bool = ...,
+        finish_foreach_batch_callback: global___StreamingQueryCommand.FinishForeachBatchCommand
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,

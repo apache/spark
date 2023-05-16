@@ -266,13 +266,17 @@ message StreamingQueryCommand {
     // awaitTermination() API. Waits for the termination of the query.
     AwaitTerminationCommand await_termination = 9;
     bool wait_foreach_batch_callback = 10;
-    bool finish_foreach_batch_callback = 11;
+    FinishForeachBatchCommand finish_foreach_batch_callback = 11;
   }
 
   message ExplainCommand {
     // TODO: Consider reusing Explain from AnalyzePlanRequest message.
     //       We can not do this right now since it base.proto imports this file.
     bool extended = 1;
+  }
+
+  message FinishForeachBatchCommand {
+    int64 batch_id = 1;
   }
 
   message AwaitTerminationCommand {

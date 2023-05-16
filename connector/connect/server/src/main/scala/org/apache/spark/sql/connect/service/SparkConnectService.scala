@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -300,10 +300,7 @@ object SparkConnectService {
 
   private[connect] val cachedDataFrameManager = new SparkConnectCachedDataFrameManager()
 
-  // TODO: move this to a class. The value should be enum.
-  println("##### foreachBatchStateMap is created")
-  @volatile private[connect] var foreachBatchStateMap =
-    new ConcurrentHashMap[(String, String), (String, String, Long)]()
+  private[connect] val foreachBatchStateManager = new SparkConnectForeachBatchStateManager()
 
   private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
     override def onRemoval(

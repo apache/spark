@@ -2291,36 +2291,39 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
-    val forEachBatchFunc: (Dataset[_], Long) => Unit = {
-      (ds: Dataset[_], batchId: Long) => {
-        // Cache the dataframe so that it can be retrieved when calling from spark connect
-        val dfRefId = UUID.randomUUID.toString
-        SparkConnectService.cachedDataFrameManager.put(userId, sessionId, dfRefId, ds.toDF())
-        println(s"##### cached df with id = $dfRefId")
-
-        // Update state to be processing to trigger foreachBatch call back on client side
-        // TODO: the id should be (queryId, runId)
-        SparkConnectService.foreachBatchStateMap
-          .put((userId, sessionId), ("PROCESSING", dfRefId, batchId))
-
-        println(s"##### waiting client side processing id = $dfRefId batchId = $batchId")
-
-        val res = SparkConnectService.foreachBatchStateMap.get((userId, sessionId))
-        println(s"##### verify put into map success userId=$userId sessionId=$sessionId state=${res._1}")
-
-        // Waiting for foreachBatch user function finished on client side
-        while (SparkConnectService.foreachBatchStateMap.get((userId, sessionId))._1 != "FINISHED") {
-          Thread.sleep(1000)
-        }
-
-        println(s"##### finished client side processing id = $dfRefId batchId = $batchId")
-        SparkConnectService.foreachBatchStateMap.put((userId, sessionId), ("WAITING", "", -1L))
-      }
-    }
+    @volatile var queryId: String = ""
+    @volatile var runId: String = ""
+    @volatile var isStateInitialized: Boolean = false
 
     if (writeOp.hasForEachBatch) {
       println("##### write stream has ForEachBatch")
-      SparkConnectService.foreachBatchStateMap.put((userId, sessionId), ("WAITING", "", -1L))
+
+      val forEachBatchFunc: (Dataset[_], Long) => Unit = {
+        (ds: Dataset[_], batchId: Long) => {
+          // wait for state to be initialized
+          while (!isStateInitialized) {
+          }
+
+          println(s"##### run foreach batch function for queryId=$queryId runId=$runId")
+
+          // Cache the dataframe so that it can be retrieved when calling from spark connect
+          val dfRefId = UUID.randomUUID.toString
+          SparkConnectService.cachedDataFrameManager.put(userId, sessionId, dfRefId, ds.toDF())
+          println(s"##### cached df with dfId = $dfRefId")
+
+          SparkConnectService.foreachBatchStateManager
+            .updateToProcessing(queryId, runId, dfRefId, batchId)
+
+          println(s"##### waiting client side processing id = $dfRefId batchId = $batchId")
+          // Waiting for foreachBatch user function finished on client side
+          while (!SparkConnectService.foreachBatchStateManager.isFinished(queryId, runId)) {
+            Thread.sleep(100)
+          }
+
+          println(s"##### finished client side processing id = $dfRefId batchId = $batchId")
+          SparkConnectService.foreachBatchStateManager.updateToWaiting(queryId, runId)
+        }
+      }
 
       val func = forEachBatchFunc(_, _)
       writer.foreachBatch(func)
@@ -2330,6 +2333,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
       case "" => writer.start()
       case path => writer.start(path)
+    }
+
+    if (writeOp.hasForEachBatch) {
+      queryId = query.id.toString
+      runId = query.runId.toString
+      SparkConnectService.foreachBatchStateManager.updateToWaiting(queryId, runId)
+      isStateInitialized = true
     }
 
     // Register the new query so that the session and query references are cached.
@@ -2461,28 +2471,26 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
 
       case StreamingQueryCommand.CommandCase.WAIT_FOREACH_BATCH_CALLBACK =>
-        println(s"##### WAIT_FOREACH_BATCH_CALLBACK is called userId=${userId} sessionId=${sessionId}")
-        while (!SparkConnectService.foreachBatchStateMap.containsKey((userId, sessionId)) ||
-          SparkConnectService.foreachBatchStateMap.get((userId, sessionId))._1 != "PROCESSING"
+        println(s"##### WAIT_FOREACH_BATCH_CALLBACK is called id=${id} runId=${runId}")
+        while (!SparkConnectService.foreachBatchStateManager.isProcessing(id, runId)
         ) {
-          // println(s"##### WAIT_FOREACH_BATCH_CALLBACK size=${SparkConnectService.foreachBatchStateMap.size()} userId=${userId} sessionId=${sessionId}")
-          // println(s"##### WAIT_FOREACH_BATCH_CALLBACK contains=${SparkConnectService.foreachBatchStateMap.containsKey((userId, sessionId))} userId=${userId} sessionId=${sessionId}")
-          // if (SparkConnectService.foreachBatchStateMap.containsKey((userId, sessionId))) {
-          //   println(s"##### WAIT_FOREACH_BATCH_CALLBACK status=${SparkConnectService.foreachBatchStateMap.get((userId, sessionId))._1}")
-          // }
-          Thread.sleep(3000)
+          Thread.sleep(100)
         }
 
-        val (_, dfId, batchId) = SparkConnectService.foreachBatchStateMap.get((userId, sessionId))
+        val stateValue = SparkConnectService
+          .foreachBatchStateManager.getStateValue(id, runId)
+        val dfId = stateValue.dfId.get
+        val batchId = stateValue.batchId.get
         println(s"##### Trigger client to run foreachBatch " +
-          s"user function dfId=$dfId batchId=$batchId")
+          s"user function dfId=$dfId batchId=$batchId id=${id} runId=${runId}")
 
         respBuilder.getWaitForeachBatchCallbackBuilder
           .setCachedDataframeId(dfId).setBatchId(batchId.toInt)
 
       case StreamingQueryCommand.CommandCase.FINISH_FOREACH_BATCH_CALLBACK =>
         println("##### FINISH_FOREACH_BATCH_CALLBACK is called")
-        SparkConnectService.foreachBatchStateMap.put((userId, sessionId), ("FINISHED", "", -1))
+        val batchId = command.getFinishForeachBatchCallback.getBatchId
+        SparkConnectService.foreachBatchStateManager.updateToFinished(id, runId, batchId)
         respBuilder.getFinishForeachBatchCallbackBuilder.setFinished(true)
         println("##### FINISH_FOREACH_BATCH_CALLBACK is done")
 

@@ -549,15 +549,16 @@ class DataStreamWriter:
             def foreach_batch_callback():
                 # Code to be executed in the new thread
                 print("##### client: start foreach_batch_callback thread")
-                print("##### client: streamingQuery.isActive", streamingQuery.isActive)
                 while streamingQuery.isActive:
-                    print("##### client: while for streamingQuery.isActive")
                     dfId, batchId = streamingQuery._waitForeachBatchCallback()
-                    print("##### client: start running foreachBatch", dfId, batchId)
                     df = self._session._createCachedDataFrame(dfId)
                     self._foreach_batch_func(df, batchId)
-                    streamingQuery._finishForeachBatchCallback()
+                    streamingQuery._finishForeachBatchCallback(batchId)
 
+                print("##### client: streamingQuery is not active")
+                return
+
+            # TODO: should use multiprocessing?
             thread = threading.Thread(target=foreach_batch_callback)
             thread.start()
 

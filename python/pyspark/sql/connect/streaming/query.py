@@ -87,7 +87,7 @@ class StreamingQuery:
 
     awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
-    def _waitForeachBatchCallback(self) -> (str, str):
+    def _waitForeachBatchCallback(self) -> (str, int):
         cmd = pb2.StreamingQueryCommand()
         cmd.wait_foreach_batch_callback = True
         res = self._execute_streaming_query_cmd(cmd).wait_foreach_batch_callback
@@ -95,9 +95,9 @@ class StreamingQuery:
         batch_id = res.batch_id
         return df_id, batch_id
 
-    def _finishForeachBatchCallback(self) -> bool:
+    def _finishForeachBatchCallback(self, batchId) -> bool:
         cmd = pb2.StreamingQueryCommand()
-        cmd.finish_foreach_batch_callback = True
+        cmd.finish_foreach_batch_callback.batch_id = batchId
         finished = self._execute_streaming_query_cmd(cmd).finish_foreach_batch_callback.finished
         return finished
 
