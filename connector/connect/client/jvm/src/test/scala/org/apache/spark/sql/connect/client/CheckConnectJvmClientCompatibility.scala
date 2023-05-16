@@ -62,27 +62,25 @@ object CheckConnectJvmClientCompatibility {
           "spark-connect-client-jvm-assembly",
           "spark-connect-client-jvm")
       val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
-      val problems = checkMiMaCompatibility(clientJar, sqlJar)
-      if (problems.nonEmpty) {
-        resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
-        resultWriter.write(s"problems: \n")
-        resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
-        resultWriter.write("\n")
-        resultWriter.write(
-          "Exceptions to binary compatibility can be added in " +
-            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibility'\n")
-      }
+      val problemsWithSqlModule = checkMiMaCompatibilityWithSqlModule(clientJar, sqlJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithSqlModule,
+        clientJar,
+        sqlJar,
+        "Sql")
+
+      val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
+      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, sqlJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithAvroModule,
+        clientJar,
+        avroJar,
+        "Avro")
+
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
-      if (incompatibleApis.nonEmpty) {
-        resultWriter.write(
-          "ERROR: The Dataset apis only exist in the connect client " +
-            "module and not belong to the sql module include: \n")
-        resultWriter.write(incompatibleApis.mkString("\n"))
-        resultWriter.write("\n")
-        resultWriter.write(
-          "Exceptions can be added to exceptionMethods in " +
-            "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
-      }
+      appendIncompatibleDatasetApisErrorMessageIfNeeded(resultWriter, incompatibleApis)
     } catch {
       case e: Throwable =>
         println(e.getMessage)
@@ -94,16 +92,17 @@ object CheckConnectJvmClientCompatibility {
     }
   }
 
-  /**
-   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
-   * incompatibilities found in the new jar. The incompatibility result is then filtered using
-   * include and exclude rules. Include rules are first applied to find all client classes that
-   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
-   * the client classes.
-   */
-  private def checkMiMaCompatibility(clientJar: File, sqlJar: File): List[Problem] = {
-    val mima = new MiMaLib(Seq(clientJar, sqlJar))
-    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
+  private def checkMiMaCompatibilityWithAvroModule(
+      clientJar: File,
+      avroJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithSqlModule(
+      clientJar: File,
+      sqlJar: File): List[Problem] = {
     val includedRules = Seq(
       IncludeByName("org.apache.spark.sql.catalog.Catalog.*"),
       IncludeByName("org.apache.spark.sql.catalog.CatalogMetadata.*"),
@@ -242,6 +241,23 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+    checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
+  }
+
+  /**
+   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
+   * incompatibilities found in the new jar. The incompatibility result is then filtered using
+   * include and exclude rules. Include rules are first applied to find all client classes that
+   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
+   * the client classes.
+   */
+  private def checkMiMaCompatibility(
+      clientJar: File,
+      sqlJar: File,
+      includedRules: Seq[IncludeByName],
+      excludeRules: Seq[ProblemFilter]): List[Problem] = {
+    val mima = new MiMaLib(Seq(clientJar, sqlJar))
+    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
@@ -279,6 +295,39 @@ object CheckConnectJvmClientCompatibility {
 
     // Find new public functions that are not in sql module `Dataset`.
     clientMethods.diff(sqlMethods).diff(exceptionMethods)
+  }
+
+  private def appendMimaCheckErrorMessageIfNeeded(
+      resultWriter: Writer,
+      problems: List[Problem],
+      clientModule: File,
+      targetModule: File,
+      targetName: String): Unit = {
+    if (problems.nonEmpty) {
+      resultWriter.write(
+        s"ERROR: Comparing Client jar: $clientModule and $targetName jar: $targetModule \n")
+      resultWriter.write(s"problems with $targetName module: \n")
+      resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
+      resultWriter.write("\n")
+      resultWriter.write(
+        "Exceptions to binary compatibility can be added in " +
+          s"'CheckConnectJvmClientCompatibility#checkMiMaCompatibilityWith${targetName}Module'\n")
+    }
+  }
+
+  private def appendIncompatibleDatasetApisErrorMessageIfNeeded(
+      resultWriter: Writer,
+      incompatibleApis: Seq[String]): Unit = {
+    if (incompatibleApis.nonEmpty) {
+      resultWriter.write(
+        "ERROR: The Dataset apis only exist in the connect client " +
+          "module and not belong to the sql module include: \n")
+      resultWriter.write(incompatibleApis.mkString("\n"))
+      resultWriter.write("\n")
+      resultWriter.write(
+        "Exceptions can be added to exceptionMethods in " +
+          "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
+    }
   }
 
   private case class IncludeByName(name: String) extends ProblemFilter {
