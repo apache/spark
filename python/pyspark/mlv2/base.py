@@ -186,84 +186,20 @@ class Evaluator(Params, metaclass=ABCMeta):
     """
     Abstract class for Evaluators
     """
-    def _get_input_col_map(self):
-        """
-        Return a dict that maps raw input column name to column name that metric
-        function needed.
-
-        e.g., for metric like `accuracy`, it requires `label` column and `prediction` column as
-        input, supposing user input DataFrame contains 3 columns:
-         abc_features, def_label, xyz_prediction
-        then this function should return a dict of:
-        {"def_label": "label", "xyz_prediction", "prediction"
-        and the `update_status` function returned by `_get_metric_functions` must accept a
-        pandas DataFrame containing columns of "label" and "prediction".
-        """
-        raise NotImplementedError()
-
-    def _get_metric_functions(self):
-        """
-        Returns a tuple of functions: (init_status, update_status, merge_status, status_to_metric),
-        the `init_status` function must have signature like:
-        `def init_status() -> XX_METRIC_EVAL_STATUS`
-
-        the `update_status` function must have signature like:
-        `def update_status(status: XX_METRIC_EVAL_STATUS, input: pd.DataFrame)`
-        `update_status` function is an in-place op
-
-        the `merge_status` function must have signature like:
-        `def merge_status(x: XX_METRIC_EVAL_STATUS, y: XX_METRIC_EVAL_STATUS)
-        `merge_status` function is an in-place op, i.e., status `y` is merged to status `x`.
-        and status must be and pickle-able.
-
-        the `status_to_metric` function must have signature like:
-        `def status_to_metric(status: XX_METRIC_EVAL_STATUS) -> METRIC_VALUE_TYPE`
-        """
-        raise NotImplementedError()
 
     def evaluate(self, dataset: Union[DataFrame, pd.DataFrame]) -> Any:
         """
         Evaluate metric over a spark DataFrame.
-        return metric value.
+
+        The dataset can be either pandas dataframe or spark dataframe,
+        if it is pandas dataframe, evaluates the dataframe locally without creating spark jobs.
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame` or py:class:`pandas.DataFrame`
+            input dataset.
         """
-        if isinstance(dataset, pd.DataFrame):
-            input_col_map = self._get_input_col_map()
-            input_cols = list(input_col_map.keys())
-
-            dataset = dataset[input_cols].rename(input_col_map)
-
-            init_status, update_status, merge_status, status_to_metric = self._get_metric_functions()
-
-            status = init_status()
-            update_status(status, dataset)
-            return status_to_metric(status)
-
-        dataset = dataset.select(
-            **[col(raw_input_col).alias(input_col)
-               for raw_input_col, input_col in self._get_input_col_map()]
-        )
-
-        init_status, update_status, merge_status, status_to_metric = self._get_metric_functions()
-
-        def compute_status(iterator):
-            status = init_status()
-
-            for pdf in iterator:
-                update_status(status, pdf)
-
-            return pd.DataFrame({'status': [pickle.dumps(status)]})
-
-        result_pdf = dataset.mapInPandas(compute_status, schema='status binary').toPandas()
-
-        merged_status = None
-        for s in result_pdf.status:
-            s = pickle.loads(s)
-            if merged_status is None:
-                merged_status = s
-            else:
-                merge_status(merged_status, s)
-
-        return status_to_metric(merged_status)
+        raise NotImplementedError()
 
 
 @inherit_doc
