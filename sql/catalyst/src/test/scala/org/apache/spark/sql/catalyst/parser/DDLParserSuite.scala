@@ -882,6 +882,15 @@ class DDLParserSuite extends AnalysisTest {
           None),
         expectedIfNotExists = false)
     }
+    val options1 = "CREATE TABLE table_name (col INT) USING json OPTIONS ('key' = 1 + 2)"
+    checkError(
+      exception = parseException(options1),
+      errorClass = "INVALID_SQL_SYNTAX",
+      parameters = Map("inputString" -> "1 + 2"),
+      context = ExpectedContext(
+        fragment = options1,
+        start = 0,
+        stop = options1.length))
   }
 
   test("Test CTAS against native tables") {

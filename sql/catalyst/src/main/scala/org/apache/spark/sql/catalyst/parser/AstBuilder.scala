@@ -3189,7 +3189,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       val key = visitPropertyKey(property.key)
      // A property value can be String, Integer, Boolean or Decimal. This function extracts
      // the property value based on whether its a string, integer, boolean or decimal literal.
-     val value = property.value.asScala.map(expression) match {
+     val value = expression(property.value) match {
        case null => null
        case Literal(str: UTF8String, StringType) => str.toString
        case Literal(_, BooleanType) => property.value.getText.toLowerCase(Locale.ROOT)
