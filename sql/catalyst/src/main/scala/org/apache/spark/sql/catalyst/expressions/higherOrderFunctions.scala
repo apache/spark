@@ -895,6 +895,88 @@ case class ArrayAggregate(
 }
 
 /**
+* Applies a binary operator to a start value and all elements in the array.
+  */
+@ExpressionDescription(
+  usage =
+    """
+      _FUNC_(expr, start, merge, finish) - Applies a binary operator to an initial state and all
+      elements in the array, and reduces this to a single state. The final state is converted
+      into the final result by applying a finish function.
+    """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x);
+       6
+      > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x, acc -> acc * 10);
+       60
+  """,
+  since = "2.4.0",
+  group = "lambda_funcs")
+case class ArrayScan(argument: Expression,
+                     zero: Expression,
+                     function: Expression)
+  extends HigherOrderFunction with CodegenFallback with TernaryLike[Expression] {
+
+  override def arguments: Seq[Expression] = argument :: zero :: Nil
+
+  override def argumentTypes: Seq[AbstractDataType] = ArrayType :: AnyDataType :: Nil
+
+  override def functions: Seq[Expression] = function :: Nil
+
+  override def functionTypes: Seq[AbstractDataType] = zero.dataType :: AnyDataType :: Nil
+
+  override def nullable: Boolean = argument.nullable
+
+  override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
+
+  def functionForEval: Expression = functionsForEval.head
+
+  override protected def bindInternal(
+      f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayScan = {
+    // Be very conservative with nullable. We cannot be sure that the accumulator does not
+    // evaluate to null. So we always set nullable to true here.
+    val ArrayType(elementType, containsNull) = argument.dataType
+    val acc = zero.dataType -> true
+    val newFunction = f(function, acc :: (elementType, containsNull) :: Nil)
+    copy(function = newFunction)
+  }
+
+  @transient lazy val LambdaFunction(_,
+  Seq(accForMergeVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) = function
+  override def eval(input: InternalRow): Any = {
+    val arr = argument.eval(input).asInstanceOf[ArrayData]
+
+    if (arr == null) {
+      null
+    } else {
+      val result = new GenericArrayData(new Array[Any](arr.numElements))
+      val f = functionForEval
+      var i = 0
+      accForMergeVar.value.set(zero.eval(input))
+      while (i < arr.numElements()) {
+        elementVar.value.set(arr.get(i, elementVar.dataType))
+        val v = InternalRow.copyValue(f.eval(input))
+        accForMergeVar.value.set(v)
+        result.update(i, v)
+        i += 1
+      }
+      result
+    }
+  }
+
+  override def nodeName: String = "array_scan"
+
+  override def first: Expression = argument
+  override def second: Expression = zero
+  override def third: Expression = function
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+                                                 third: Expression): ArrayScan =
+    copy(argument = first, zero = second, function = third)
+}
+
+/**
  * Transform Keys for every entry of the map by applying the transform_keys function.
  * Returns map with transformed key entries
  */

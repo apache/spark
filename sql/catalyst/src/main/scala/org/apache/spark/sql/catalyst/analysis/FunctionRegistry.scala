@@ -709,6 +709,7 @@ object FunctionRegistry {
     expression[ArrayForAll]("forall"),
     expression[ArrayAggregate]("aggregate"),
     expression[ArrayAggregate]("reduce", setAlias = true, Some("3.4.0")),
+    expression[ArrayScan]("array_scan"),
     expression[TransformValues]("transform_values"),
     expression[TransformKeys]("transform_keys"),
     expression[MapZipWith]("map_zip_with"),
