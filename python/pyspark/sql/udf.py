@@ -30,7 +30,7 @@ from py4j.java_gateway import JavaObject
 from pyspark import SparkContext
 from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -421,8 +421,8 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = self._get_udf_id(jPythonUDF.expr())
+                jPythonUDF = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                id = jPythonUDF.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
@@ -438,23 +438,13 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = self._get_udf_id(jPythonUDF.expr())
+                jPythonUDF = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                id = jPythonUDF.resultId().id()
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
             jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
         return Column(jPythonUDF)
-
-    def _get_udf_id(self, jexpr: JavaObject) -> int:
-        if is_instance_of(
-            sc._gateway,
-            jexpr,
-            "org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression",
-        ):
-            return jexpr.child().resultId().id()  # PythonUDAF
-        else:
-            return jexpr.resultId().id()  # PythonUDF
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and
