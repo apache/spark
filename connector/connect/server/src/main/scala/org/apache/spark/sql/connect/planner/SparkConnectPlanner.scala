@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -2293,7 +2294,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     @volatile var queryId: String = ""
     @volatile var runId: String = ""
-    @volatile var isStateInitialized: Boolean = false
+    val initializationLatch = new CountDownLatch(1)
 
     if (writeOp.getForEachBatch) {
       println("##### write stream has ForEachBatch")
@@ -2301,8 +2302,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       val forEachBatchFunc: (Dataset[_], Long) => Unit = {
         (ds: Dataset[_], batchId: Long) => {
           // wait for state to be initialized
-          while (!isStateInitialized) {
-          }
+          initializationLatch.await()
 
           println(s"##### run foreach batch function for queryId=$queryId runId=$runId")
 
@@ -2339,7 +2339,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       queryId = query.id.toString
       runId = query.runId.toString
       SparkConnectService.foreachBatchStateManager.updateToWaiting(queryId, runId)
-      isStateInitialized = true
+      initializationLatch.countDown()
     }
 
     // Register the new query so that the session and query references are cached.
