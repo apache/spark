@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import scala.jdk.CollectionConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.commons.collections4.MapUtils
 
