@@ -1125,7 +1125,7 @@ class DataStreamWriter:
     @staticmethod
     def _construct_foreach_function(
         f: Union[Callable[[Row], None], "SupportsProcess"]
-    ):  # type: ignore
+    ) -> Callable[[Any, Iterator], Iterator]:
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
