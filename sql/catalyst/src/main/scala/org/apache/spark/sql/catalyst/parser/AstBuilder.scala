@@ -3187,8 +3187,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
       val key = visitPropertyKey(property.key)
-      // A property value can be String, Integer, Boolean or Decimal. This function extracts
-      // the property value based on whether its a string, integer, boolean or decimal literal.
+      // A property value can be String, Integer, Boolean or Decimal. Here we extract the property
+      // value based on whether its a string, integer, boolean or decimal literal.
       val value =
       if (property.value == null) {
         null
