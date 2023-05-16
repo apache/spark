@@ -120,7 +120,7 @@ private[sql] class ProtobufSerializer(
               catalystPath,
               toFieldStr(protoPath),
               data.toString,
-              enumValues.mkString("", ",", ""))
+              enumValues.mkString("", ", ", ""))
           }
           fieldDescriptor.getEnumType.findValueByNumber(data)
       case (StringType, STRING) =>
