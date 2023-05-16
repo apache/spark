@@ -50,18 +50,18 @@ object functions {
   }
 
   /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * specified schema must match actual schema of the read data, otherwise the behavior is
-   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
-   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.The
+   * Protobuf definition is provided through Protobuf `FileDescriptorSet`.
    *
    * @param data
    *   the binary column.
    * @param messageName
-   *   the protobuf message name to look for in descriptorFile.
+   *   the protobuf MessageName to look for in the descriptor set.
    * @param fileDescriptorSetBytes
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
-   * @since 3.4.0
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   *   @param options
+   * @since 3.5.0
    */
   @Experimental
   def from_protobuf(
@@ -84,7 +84,8 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @since 3.4.0
    */
   @Experimental
@@ -94,16 +95,17 @@ object functions {
   }
 
   /**
-   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
-   * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.The
+   * Protobuf definition is provided through Protobuf `FileDescriptorSet`.
    *
    * @param data
    *   the binary column.
    * @param messageName
-   *   the protobuf MessageName to look for in descriptor file.
+   *   the protobuf MessageName to look for in the descriptor set.
    * @param fileDescriptorSetBytes
-   *   the protobuf descriptor in Message GeneratedMessageV3 format.
-   * @since 3.4.0
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @since 3.5.0
    */
   @Experimental
   def from_protobuf(data: Column, messageName: String, fileDescriptorSetBytes: Array[Byte])
@@ -173,9 +175,18 @@ object functions {
   }
 
   /**
-   * Converts a column into binary of protobuf format.
+   * Converts a column into binary of protobuf format.The Protobuf definition is provided
+   * through Protobuf `FileDescriptorSet`.
    *
-   * @since 3.4.0
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param fileDescriptorSetBytes
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   *
+   * @since 3.5.0
    */
   @Experimental
   def to_protobuf(data: Column, messageName: String, fileDescriptorSetBytes: Array[Byte])
@@ -204,6 +215,35 @@ object functions {
     val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
     new Column(
       CatalystDataToProtobuf(data.expr, messageName, Some(fileContent), options.asScala.toMap)
+    )
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.The Protobuf definition is provided
+   * through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param fileDescriptorSetBytes
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @param options
+   * @since 3.5.0
+   */
+  @Experimental
+  def to_protobuf(
+    data: Column,
+    messageName: String,
+    fileDescriptorSetBytes: Array[Byte],
+    options: java.util.Map[String, String]
+  )
+  : Column = {
+    new Column(
+      CatalystDataToProtobuf(
+        data.expr, messageName, Some(fileDescriptorSetBytes), options.asScala.toMap
+      )
     )
   }
 

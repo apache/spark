@@ -36,13 +36,13 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   import ProtoSerdeSuite._
   import ProtoSerdeSuite.MatchType._
 
-  val testFileDescFile = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
-  val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
+  private val testFileDescFile = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
+  private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
 
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
-  val proto2DescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
-  val proto2Desc = ProtobufUtils.readDescriptorFileContent(proto2Desc)
+  private val proto2DescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  private val proto2Desc = ProtobufUtils.readDescriptorFileContent(proto2DescFile)
 
   test("Test basic conversion") {
     withFieldMatchType { fieldMatch =>
@@ -223,8 +223,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     checkError(
       exception = e1,
-      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
-      parameters = Map("descFilePath" -> fileDescFile))
+      errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR")
 
     fileDescFile =
       testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
@@ -237,8 +236,8 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     checkError(
       exception = e2,
-      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
-      parameters = Map("descFilePath" -> testFileDescFile))
+      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
   /**

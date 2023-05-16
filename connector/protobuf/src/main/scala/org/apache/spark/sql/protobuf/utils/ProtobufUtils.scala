@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.protobuf.utils
 
-import java.io.{File, IOException}
+import java.io.File
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -240,21 +240,14 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(bytes)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        throw QueryCompilationErrors.descriptorParseError("Fix XXX", ex)
-      case ex: IOException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError("Fix XXX", ex)
+        throw QueryCompilationErrors.descriptorParseError(ex)
     }
-    try {
-      val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
-      val fileDescriptorList: List[Descriptors.FileDescriptor] =
-        fileDescriptorSet.getFileList.asScala.map( fileDescriptorProto =>
-          buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex)
-        ).toList
-      fileDescriptorList
-    } catch {
-      case e: Exception =>
-        throw QueryCompilationErrors.failedParsingDescriptorError("Fix", e)
-    }
+    val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
+    val fileDescriptorList: List[Descriptors.FileDescriptor] =
+      fileDescriptorSet.getFileList.asScala.map( fileDescriptorProto =>
+        buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex)
+      ).toList
+    fileDescriptorList
   }
 
   /**

@@ -44,7 +44,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
-  val proto2FileDesc = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  val proto2FileDescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  val proto2FileDesc = ProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
   private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
 
   private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
@@ -63,7 +64,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   private def checkWithProto2FileAndClassName(messageName: String)(
-    fn: (String, Option[String]) => Unit): Unit = {
+    fn: (String, Option[Array[Byte]]) => Unit): Unit = {
     withClue("(With descriptor file)") {
       fn(messageName, Some(proto2FileDesc))
     }
@@ -461,9 +462,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val descBytes = ProtobufUtils.readDescriptorFileContent(
-      testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
-    )
+    val catalystTypesFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
+
     val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(descBytes, "newConsumer")
 
@@ -475,17 +476,17 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(oldProducerMessage.toByteArray).toDF("oldProducerData")
     val fromProtoDf = df.select(
       functions
-        .from_protobuf($"oldProducerData", "newConsumer", testFileDescFile)
+        .from_protobuf($"oldProducerData", "newConsumer", catalystTypesFile)
         .as("fromProto"))
 
     val toProtoDf = fromProtoDf.select(
       functions
-        .to_protobuf($"fromProto", "newConsumer", testFileDesc)
+        .to_protobuf($"fromProto", "newConsumer", descBytes)
         .as("toProto"))
 
     val toProtoDfToFromProtoDf = toProtoDf.select(
       functions
-        .from_protobuf($"toProto", "newConsumer", testFileDesc)
+        .from_protobuf($"toProto", "newConsumer", descBytes)
         .as("toProtoToFromProto"))
 
     val actualFieldNames =
@@ -503,9 +504,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val descBytes = ProtobufUtils.readDescriptorFileContent(
-      testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
-    )
+    val catalystTypesFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
+
     val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(descBytes, "oldConsumer")
 
@@ -518,7 +519,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(newProducerMessage.toByteArray).toDF("newProducerData")
     val fromProtoDf = df.select(
       functions
-        .from_protobuf($"newProducerData", "oldConsumer", testFileDesc)
+        .from_protobuf($"newProducerData", "oldConsumer", catalystTypesFile)
         .as("oldConsumerProto"))
 
     val expectedFieldNames = oldConsumer.getFields.asScala.map(f => f.getName)
@@ -696,8 +697,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       exception = e,
-      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
-      parameters = Map("descFilePath" -> testFileDescriptor))
+      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
   test("Verify OneOf field between from_protobuf -> to_protobuf and struct -> from_protobuf") {
@@ -1437,16 +1438,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ).as("proto")
     )
 
-    checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descFilePathOpt) =>
+    checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descBytesOpt) =>
       checkAnswer(
         explicitZero.select(
-          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+          from_protobuf_wrapper($"raw_proto", name, descBytesOpt).as("proto")),
         expected)
       checkAnswer(
         explicitZero.select(from_protobuf_wrapper(
           $"raw_proto",
           name,
-          descFilePathOpt,
+          descBytesOpt,
           Map("emit.default.values" -> "true")).as("proto")),
         expected)
     }

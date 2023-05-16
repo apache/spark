@@ -3371,10 +3371,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("messageName" -> messageName))
   }
 
-  def descriptorParseError(descFilePath: String, cause: Throwable): Throwable = {
+  def descriptorParseError(cause: Throwable): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
-      messageParameters = Map("descFilePath" -> descFilePath),
+      messageParameters = Map.empty,
       cause = Option(cause))
   }
 
@@ -3385,10 +3385,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cause = Option(cause))
   }
 
-  def failedParsingDescriptorError(descFilePath: String, cause: Throwable): Throwable = {
+  def failedParsingDescriptorError(messageName: String, cause: Throwable): Throwable = {
     new AnalysisException(
-      errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
-      messageParameters = Map("descFilePath" -> descFilePath),
+      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      messageParameters = Map("dependencyName" -> "unknown"),
       cause = Option(cause))
   }
 

@@ -63,7 +63,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
   @transient private lazy val deserializer = {
     val typeRegistry = fileDescriptorSetBytesOpt match {
       case Some(descBytes) if protobufOptions.convertAnyFieldsToJson =>
-        ProtobufUtils.buildTypeRegistry(path) // This loads all the messages in the file.
+        ProtobufUtils.buildTypeRegistry(descBytes) // This loads all the messages in the desc set.
       case None if protobufOptions.convertAnyFieldsToJson =>
         ProtobufUtils.buildTypeRegistry(messageDescriptor) // Loads only connected messages.
       case _ => TypeRegistry.getEmptyTypeRegistry // Default. Json conversion is not enabled.
