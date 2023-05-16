@@ -445,11 +445,6 @@ class DataFrame:
                 error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "cols", "arg_type": type(cols).__name__},
             )
-        if len(_cols) == 0:
-            raise PySparkValueError(
-                error_class="CANNOT_BE_EMPTY",
-                message_parameters={"item": "cols"},
-            )
 
         return DataFrame.withPlan(
             plan.Drop(
