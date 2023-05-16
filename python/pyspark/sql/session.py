@@ -276,7 +276,7 @@ class SparkSession(SparkConversionMixin):
                         self._options[k] = v
                 else:
                     value = to_str(value)
-                    check_startup_urls(key, value)  # type: ignore[arg-type]
+                    self._validate_startup_urls()  # type: ignore[arg-type]
                     self._options[cast(str, key)] = value
                 return self
 
