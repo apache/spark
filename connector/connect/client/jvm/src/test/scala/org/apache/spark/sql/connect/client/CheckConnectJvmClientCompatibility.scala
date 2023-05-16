@@ -177,8 +177,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
