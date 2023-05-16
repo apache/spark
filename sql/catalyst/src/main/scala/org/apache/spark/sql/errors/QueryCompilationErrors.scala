@@ -3385,13 +3385,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       cause = Option(cause))
   }
 
-  def failedParsingDescriptorError(messageName: String, cause: Throwable): Throwable = {
-    new AnalysisException(
-      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
-      messageParameters = Map("dependencyName" -> "unknown"),
-      cause = Option(cause))
-  }
-
   def foundRecursionInProtobufSchema(fieldDescriptor: String): Throwable = {
     new AnalysisException(
       errorClass = "RECURSIVE_PROTOBUF_SCHEMA",
