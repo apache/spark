@@ -3184,22 +3184,27 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
   override def visitPropertyList(
-      ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
+    ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
       val key = visitPropertyKey(property.key)
-     // A property value can be String, Integer, Boolean or Decimal. This function extracts
-     // the property value based on whether its a string, integer, boolean or decimal literal.
-     val value = expression(property.value) match {
-       case null => null
-       case Literal(str: UTF8String, StringType) => str.toString
-       case Literal(_, BooleanType) => property.value.getText.toLowerCase(Locale.ROOT)
-       case Literal(_, IntegerType | DecimalType()) => property.value.getText
-       case _ => throw new ParseException(
-         errorClass = "INVALID_SQL_SYNTAX",
-         messageParameters = Map(
-           "inputString" -> s"option or property key $key is invalid; only literals are supported"),
-         ctx)
-     }
+      // A property value can be String, Integer, Boolean or Decimal. This function extracts
+      // the property value based on whether its a string, integer, boolean or decimal literal.
+      val value =
+      if (property.value == null) {
+        null
+      } else {
+        expression(property.value) match {
+          case Literal(str: UTF8String, StringType) => str.toString
+          case Literal(_, BooleanType) => property.value.getText.toLowerCase(Locale.ROOT)
+          case Literal(_, IntegerType | DecimalType()) => property.value.getText
+          case _ => throw new ParseException(
+            errorClass = "INVALID_SQL_SYNTAX",
+            messageParameters = Map(
+              "inputString" ->
+                s"option or property key $key is invalid; only literals are supported"),
+            ctx)
+        }
+      }
       key -> value
     }
     // Check for duplicate property names.

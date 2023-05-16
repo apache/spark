@@ -882,15 +882,25 @@ class DDLParserSuite extends AnalysisTest {
           None),
         expectedIfNotExists = false)
     }
-    val options1 = "CREATE TABLE table_name (col INT) USING json OPTIONS ('key' = 1 + 2)"
-    checkError(
-      exception = parseException(options1),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map("inputString" -> "1 + 2"),
-      context = ExpectedContext(
-        fragment = options1,
-        start = 0,
-        stop = options1.length))
+    // Test some cases where the provided option value is a constant but non-literal expression.
+    val prefix = "CREATE TABLE table_name (col INT) USING json OPTIONS "
+    val errorClass = "INVALID_SQL_SYNTAX"
+    val parameters = Map(
+      "inputString" -> "option or property key optKey is invalid; only literals are supported")
+    Seq(
+      "('optKey' = 1 + 2)",
+      "('optKey' = true or false)",
+      "('optKey' = date'2023-01-02')"
+    ).foreach { options =>
+      checkError(
+        exception = parseException(prefix + options),
+        errorClass = errorClass,
+        parameters = parameters,
+        context = ExpectedContext(
+          fragment = options,
+          start = prefix.length,
+          stop = (prefix + options).length - 1))
+    }
   }
 
   test("Test CTAS against native tables") {
