@@ -40,7 +40,7 @@ import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferLis
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.storage.BlockManagerMessages.IsExecutorAlive
 import org.apache.spark.util.Utils
@@ -51,6 +51,7 @@ import org.apache.spark.util.Utils
 private[spark] class NettyBlockTransferService(
     conf: SparkConf,
     securityManager: SecurityManager,
+    serializerManager: SerializerManager,
     bindAddress: String,
     override val hostName: String,
     _port: Int,
@@ -59,7 +60,7 @@ private[spark] class NettyBlockTransferService(
   extends BlockTransferService {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
-  private val serializer = new JavaSerializer(conf)
+  private val serializer = serializerManager.getSerializer(scala.reflect.classTag[Any], false)
   private val authEnabled = securityManager.isAuthenticationEnabled()
 
   private[this] var transportContext: TransportContext = _
