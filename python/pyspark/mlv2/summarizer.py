@@ -56,7 +56,7 @@ class SummarizerAggStatus:
         return result
 
 
-def summarize(dataframe, column, metrics):
+def summarize_dataframe(dataframe, column, metrics):
     """
     Summarize an array type column over a spark dataframe or a pandas dataframe
 
