@@ -722,10 +722,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query_name: builtins.str
     path: builtins.str
     table_name: builtins.str
-    @property
-    def for_each_batch(
-        self,
-    ) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
+    for_each_batch: builtins.bool
     def __init__(
         self,
         *,
@@ -741,8 +738,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
-        for_each_batch: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
-        | None = ...,
+        for_each_batch: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -751,8 +747,6 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
-            "for_each_batch",
-            b"for_each_batch",
             "input",
             b"input",
             "once",

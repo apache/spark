@@ -2295,7 +2295,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     @volatile var runId: String = ""
     @volatile var isStateInitialized: Boolean = false
 
-    if (writeOp.hasForEachBatch) {
+    if (writeOp.getForEachBatch) {
       println("##### write stream has ForEachBatch")
 
       val forEachBatchFunc: (Dataset[_], Long) => Unit = {
@@ -2335,7 +2335,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case path => writer.start(path)
     }
 
-    if (writeOp.hasForEachBatch) {
+    if (writeOp.getForEachBatch) {
       queryId = query.id.toString
       runId = query.runId.toString
       SparkConnectService.foreachBatchStateManager.updateToWaiting(queryId, runId)

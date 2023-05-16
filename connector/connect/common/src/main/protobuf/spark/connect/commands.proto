@@ -210,7 +210,7 @@ message WriteStreamOperationStart {
     string table_name = 12;
   }
 
-  CommonInlineUserDefinedFunction for_each_batch = 13;
+  bool for_each_batch = 13;
 }
 
 message WriteStreamOperationStartResult {
