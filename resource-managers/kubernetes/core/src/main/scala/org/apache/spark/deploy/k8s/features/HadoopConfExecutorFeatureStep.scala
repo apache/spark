@@ -20,7 +20,6 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, VolumeBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP
 import org.apache.spark.deploy.k8s.Constants._
 
 /**
@@ -29,37 +28,36 @@ import org.apache.spark.deploy.k8s.Constants._
 private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
 
-  override def configurePod(pod: SparkPod): SparkPod = {
-    conf.getOption(HADOOP_CONFIG_MAP_NAME) match {
-      case Some(hadoopConfigMap) if !conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP) =>
-        val confVolume = new VolumeBuilder()
-          .withName(HADOOP_CONF_VOLUME)
-          .withNewConfigMap()
-            .withName(hadoopConfigMap)
-            .endConfigMap()
-          .build()
+  private val hadoopConfigMapName = conf.getOption(HADOOP_CONFIG_MAP_NAME)
 
-        val podWithConf = new PodBuilder(pod.pod)
-          .editSpec()
-            .addNewVolumeLike(confVolume)
-              .endVolume()
-            .endSpec()
-            .build()
+  override def configurePod(original: SparkPod): SparkPod = {
+    original.transform { case pod if hadoopConfigMapName.isDefined =>
+      val confVolume = new VolumeBuilder()
+        .withName(HADOOP_CONF_VOLUME)
+        .withNewConfigMap()
+        .withName(hadoopConfigMapName.get)
+        .endConfigMap()
+        .build()
 
-        val containerWithMount = new ContainerBuilder(pod.container)
-          .addNewVolumeMount()
-            .withName(HADOOP_CONF_VOLUME)
-            .withMountPath(HADOOP_CONF_DIR_PATH)
-            .endVolumeMount()
-          .addNewEnv()
-            .withName(ENV_HADOOP_CONF_DIR)
-            .withValue(HADOOP_CONF_DIR_PATH)
-            .endEnv()
-          .build()
+      val podWithConf = new PodBuilder(pod.pod)
+        .editSpec()
+        .addNewVolumeLike(confVolume)
+        .endVolume()
+        .endSpec()
+        .build()
 
-        SparkPod(podWithConf, containerWithMount)
+      val containerWithMount = new ContainerBuilder(pod.container)
+        .addNewVolumeMount()
+        .withName(HADOOP_CONF_VOLUME)
+        .withMountPath(HADOOP_CONF_DIR_PATH)
+        .endVolumeMount()
+        .addNewEnv()
+        .withName(ENV_HADOOP_CONF_DIR)
+        .withValue(HADOOP_CONF_DIR_PATH)
+        .endEnv()
+        .build()
 
-      case _ => pod
+      SparkPod(podWithConf, containerWithMount)
     }
   }
 }
