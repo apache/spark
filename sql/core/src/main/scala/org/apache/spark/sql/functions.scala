@@ -4441,6 +4441,15 @@ object functions {
   def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
     aggregate(expr, initialValue, merge, c => c)
 
+  def array_scan(expr: Column,
+                 initialValue: Column,
+                  merge: (Column, Column) => Column): Column = withExpr {
+    ArrayScan(
+      expr.expr,
+      initialValue.expr,
+      createLambda(merge))
+  }
+
   /**
    * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
