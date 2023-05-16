@@ -3184,7 +3184,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
   override def visitPropertyList(
-    ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
+      ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
       val key = visitPropertyKey(property.key)
       // A property value can be String, Integer, Boolean or Decimal. This function extracts
