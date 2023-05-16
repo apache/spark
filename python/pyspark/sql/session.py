@@ -276,7 +276,7 @@ class SparkSession(SparkConversionMixin):
                         self._options[k] = v
                 else:
                     value = to_str(value)
-                    self._validate_startup_urls()  # type: ignore[arg-type]
+                    self._validate_startup_urls()
                     self._options[cast(str, key)] = value
                 return self
 
@@ -305,7 +305,7 @@ class SparkSession(SparkConversionMixin):
                 )
 
             if "spark.remote" in self._options:
-                remote = self._options.get("spark.remote")
+                remote = cast(str, self._options.get("spark.remote"))
                 if ("SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != remote) and (
                     "SPARK_LOCAL_REMOTE" in os.environ and not remote.startswith("local")
                 ):
