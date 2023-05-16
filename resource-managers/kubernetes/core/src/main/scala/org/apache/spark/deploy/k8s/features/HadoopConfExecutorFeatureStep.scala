@@ -20,6 +20,7 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, VolumeBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP
 import org.apache.spark.deploy.k8s.Constants._
 
 /**
@@ -30,7 +31,7 @@ private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesConf)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     conf.getOption(HADOOP_CONFIG_MAP_NAME) match {
-      case Some(hadoopConfigMap) =>
+      case Some(hadoopConfigMap) if !conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP) =>
         val confVolume = new VolumeBuilder()
           .withName(HADOOP_CONF_VOLUME)
           .withNewConfigMap()
@@ -58,7 +59,7 @@ private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesConf)
 
         SparkPod(podWithConf, containerWithMount)
 
-      case None => pod
+      case _ => pod
     }
   }
 }
