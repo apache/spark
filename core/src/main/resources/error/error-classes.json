@@ -1051,6 +1051,11 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "DATETIME_UNIT" : {
+        "message" : [
+          "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -3866,11 +3871,6 @@
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2029" : {
-    "message" : [
-      "Not supported rounding mode: <roundMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2030" : {
