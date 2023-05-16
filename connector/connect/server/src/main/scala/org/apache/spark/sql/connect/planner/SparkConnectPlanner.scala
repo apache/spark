@@ -31,9 +31,13 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
+import org.apache.spark.connect.proto.StreamingQueryCommand
+import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
+import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession}
