@@ -65,7 +65,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"
             ),
-            13,
+            14,
             msg,
         )
         self.assertEquals(
@@ -149,6 +149,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(event.runId, uuid.UUID))
         # TODO: Needs a test for exception.
         self.assertEquals(event.exception, None)
+        self.assertEquals(event.errorClassOnException, None)
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""

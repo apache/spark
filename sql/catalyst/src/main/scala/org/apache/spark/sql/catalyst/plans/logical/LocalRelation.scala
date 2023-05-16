@@ -80,7 +80,7 @@ case class LocalRelation(
 
   override def computeStats(): Statistics =
     Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length,
-      rowCount = Some(data.size))
+      rowCount = Some(data.length))
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)

@@ -84,6 +84,11 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_pandas_from_mixed_dataframe(self):
         self.check_to_pandas_from_mixed_dataframe()
 
+    # TODO(SPARK-43502): DataFrame.drop should support empty column
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_drop_empty_column(self):
+        super().test_drop_empty_column()
+
 
 if __name__ == "__main__":
     import unittest
