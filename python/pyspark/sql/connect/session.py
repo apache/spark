@@ -353,9 +353,7 @@ class SparkSession:
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
-            ser = ArrowStreamPandasSerializer(
-                cast(str, timezone), safecheck == "true", assign_cols_by_name=True
-            )
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
 
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]

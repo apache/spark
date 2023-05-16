@@ -533,8 +533,7 @@ class SparkConversionMixin:
         jsparkSession = self._jsparkSession
 
         safecheck = self._jconf.arrowSafeTypeConversion()
-        col_by_name = True  # col by name only applies to StructType columns, can't happen here
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
+        ser = ArrowStreamPandasSerializer(timezone, safecheck)
 
         @no_type_check
         def reader_func(temp_filename):

@@ -514,10 +514,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("err" -> err))
   }
 
-  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2029",
-      messageParameters = Map("roundMode" -> roundMode.toString()))
+  def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): SparkException = {
+    SparkException.internalError(s"Not supported rounding mode: ${roundMode.toString}.")
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {

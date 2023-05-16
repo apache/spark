@@ -669,4 +669,18 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx
     )
   }
+
+  def invalidDatetimeUnitError(
+      ctx: ParserRuleContext,
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> invalidValue),
+      ctx
+    )
+  }
 }
