@@ -22,8 +22,12 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, VolumeBuil
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 
-class HadoopConfExecutorFeatureStep (conf: KubernetesConf)
+/**
+ * Mounts the Hadoop configuration on the executor pod.
+ */
+private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
+
   override def configurePod(pod: SparkPod): SparkPod = {
     conf.getOption(HADOOP_CONFIG_MAP_NAME) match {
       case Some(hadoopConfigMap) =>

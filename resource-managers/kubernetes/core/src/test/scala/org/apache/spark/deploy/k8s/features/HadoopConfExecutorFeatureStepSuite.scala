@@ -31,7 +31,7 @@ import org.apache.spark.util.{SparkConfWithEnv, Utils}
 class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite  {
   import SecretVolumeUtils._
 
-  test("SPARK-43504: mount hadoop config map in executor side") {
+  test("SPARK-43504: mounts the hadoop config map on the executor pod") {
     val confDir = Utils.createTempDir()
     val confFiles = Set("core-site.xml", "hdfs-site.xml")
 
