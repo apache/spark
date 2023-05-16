@@ -421,7 +421,8 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
                 id = jPythonUDF.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
@@ -438,7 +439,8 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
                 id = jPythonUDF.resultId().id()
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
