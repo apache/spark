@@ -303,7 +303,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("Not supported rounding mode: UNNECESSARY") {
+  test("Not supported rounding mode: HALF_DOWN") {
     val d = Decimal(10000L, 100, 80)
     checkError(
       exception = intercept[SparkException] {
