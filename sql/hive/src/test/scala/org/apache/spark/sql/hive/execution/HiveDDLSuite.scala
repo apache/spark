@@ -3100,7 +3100,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-43359: Delete table not allowed") {
-    val tbl = "T1"
+    val tbl = "t1"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl(c1 INT)")
       val e = intercept[AnalysisException] {
@@ -3109,7 +3109,7 @@ class HiveDDLSuite
       checkError(e,
         errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
+          "tableName" -> s"`spark_catalog`.`default`.`$tbl`",
           "operation" -> "DELETE")
       )
     }
