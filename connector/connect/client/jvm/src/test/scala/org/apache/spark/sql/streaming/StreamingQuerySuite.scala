@@ -163,10 +163,12 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     assert(q.runId == q1.runId && q.runId == q2.runId)
     assert(q1.name == null && q2.name == null)
 
+    spark.streams.resetTerminated()
     val start = System.nanoTime
-    val terminated = spark.streams.awaitAnyTermination(500)
+    // Same setting as in test_query_manager_await_termination in test_streaming.py
+    val terminated = spark.streams.awaitAnyTermination(2600)
     val end = System.nanoTime
-    assert((end - start) >= TimeUnit.MILLISECONDS.toNanos(500))
+    assert((end - start) >= TimeUnit.MILLISECONDS.toNanos(2000))
     assert(!terminated)
 
     q.stop()
