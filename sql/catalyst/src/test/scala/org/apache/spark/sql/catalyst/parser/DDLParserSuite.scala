@@ -884,9 +884,6 @@ class DDLParserSuite extends AnalysisTest {
     }
     // Test some cases where the provided option value is a constant but non-literal expression.
     val prefix = "CREATE TABLE table_name (col INT) USING json OPTIONS "
-    val errorClass = "INVALID_SQL_SYNTAX"
-    val parameters = Map(
-      "inputString" -> "option or property key optKey is invalid; only literals are supported")
     Seq(
       "('optKey' = 1 + 2)",
       "('optKey' = true or false)",
@@ -894,8 +891,9 @@ class DDLParserSuite extends AnalysisTest {
     ).foreach { options =>
       checkError(
         exception = parseException(prefix + options),
-        errorClass = errorClass,
-        parameters = parameters,
+        errorClass = "INVALID_SQL_SYNTAX",
+        parameters = Map(
+          "inputString" -> "option or property key optKey is invalid; only literals are supported"),
         context = ExpectedContext(
           fragment = options,
           start = prefix.length,
