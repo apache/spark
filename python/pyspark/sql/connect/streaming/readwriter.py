@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import threading
 
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -29,7 +31,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.types import Row, StructType, StringType
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
@@ -343,6 +345,7 @@ class DataStreamWriter:
         self._session = session
         self._write_stream = WriteStreamOperation(plan)
         self._write_proto = self._write_stream.write_op
+        self._foreach_batch_func = None
 
     def outputMode(self, outputMode: str) -> "DataStreamWriter":
         self._write_proto.output_mode = outputMode
@@ -489,12 +492,20 @@ class DataStreamWriter:
 
     # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "foreachBatch()"},
-        )
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
-    # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=StringType(),
+            evalType=PythonEvalType.SQL_BATCHED_UDF,
+        )
+        udf_proto = udf_obj._build_common_inline_user_defined_function().to_plan_udf(self._session.client)
+        self._write_proto.for_each_batch.CopyFrom(udf_proto)
+        self._foreach_batch_func = func
+
+        return self
+
+    foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
         self,
@@ -526,12 +537,31 @@ class DataStreamWriter:
         start_result = cast(
             pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
         )
-        return StreamingQuery(
+        streamingQuery = StreamingQuery(
             session=self._session,
             queryId=start_result.query_id.id,
             runId=start_result.query_id.run_id,
             name=start_result.name,
         )
+
+        if self._foreach_batch_func:
+            # start a thread to execute func
+            def foreach_batch_callback():
+                # Code to be executed in the new thread
+                print("##### client: start foreach_batch_callback thread")
+                print("##### client: streamingQuery.isActive", streamingQuery.isActive)
+                while streamingQuery.isActive:
+                    print("##### client: while for streamingQuery.isActive")
+                    dfId, batchId = streamingQuery._waitForeachBatchCallback()
+                    print("##### client: start running foreachBatch", dfId, batchId)
+                    df = self._session._createCachedDataFrame(dfId)
+                    self._foreach_batch_func(df, batchId)
+                    streamingQuery._finishForeachBatchCallback()
+
+            thread = threading.Thread(target=foreach_batch_callback)
+            thread.start()
+
+        return streamingQuery
 
     def start(
         self,

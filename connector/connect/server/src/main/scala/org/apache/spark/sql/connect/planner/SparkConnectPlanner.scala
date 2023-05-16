@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
@@ -1949,7 +1951,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           sessionId,
           responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
-        handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+        handleStreamingQueryCommand(command.getStreamingQueryCommand, userId, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND =>
         handleStreamingQueryManagerCommand(
           command.getStreamingQueryManagerCommand,
@@ -2289,6 +2291,41 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
+    val forEachBatchFunc: (Dataset[_], Long) => Unit = {
+      (ds: Dataset[_], batchId: Long) => {
+        // Cache the dataframe so that it can be retrieved when calling from spark connect
+        val dfRefId = UUID.randomUUID.toString
+        SparkConnectService.cachedDataFrameManager.put(userId, sessionId, dfRefId, ds.toDF())
+        println(s"##### cached df with id = $dfRefId")
+
+        // Update state to be processing to trigger foreachBatch call back on client side
+        // TODO: the id should be (queryId, runId)
+        SparkConnectService.foreachBatchStateMap
+          .put((userId, sessionId), ("PROCESSING", dfRefId, batchId))
+
+        println(s"##### waiting client side processing id = $dfRefId batchId = $batchId")
+
+        val res = SparkConnectService.foreachBatchStateMap.get((userId, sessionId))
+        println(s"##### verify put into map success userId=$userId sessionId=$sessionId state=${res._1}")
+
+        // Waiting for foreachBatch user function finished on client side
+        while (SparkConnectService.foreachBatchStateMap.get((userId, sessionId))._1 != "FINISHED") {
+          Thread.sleep(1000)
+        }
+
+        println(s"##### finished client side processing id = $dfRefId batchId = $batchId")
+        SparkConnectService.foreachBatchStateMap.put((userId, sessionId), ("WAITING", "", -1L))
+      }
+    }
+
+    if (writeOp.hasForEachBatch) {
+      println("##### write stream has ForEachBatch")
+      SparkConnectService.foreachBatchStateMap.put((userId, sessionId), ("WAITING", "", -1L))
+
+      val func = forEachBatchFunc(_, _)
+      writer.foreachBatch(func)
+    }
+
     val query = writeOp.getPath match {
       case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
       case "" => writer.start()
@@ -2321,6 +2358,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def handleStreamingQueryCommand(
       command: StreamingQueryCommand,
+      userId: String,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
@@ -2421,6 +2459,32 @@ class SparkConnectPlanner(val session: SparkSession) {
           respBuilder.getAwaitTerminationBuilder
             .setTerminated(true)
         }
+
+      case StreamingQueryCommand.CommandCase.WAIT_FOREACH_BATCH_CALLBACK =>
+        println(s"##### WAIT_FOREACH_BATCH_CALLBACK is called userId=${userId} sessionId=${sessionId}")
+        while (!SparkConnectService.foreachBatchStateMap.containsKey((userId, sessionId)) ||
+          SparkConnectService.foreachBatchStateMap.get((userId, sessionId))._1 != "PROCESSING"
+        ) {
+          // println(s"##### WAIT_FOREACH_BATCH_CALLBACK size=${SparkConnectService.foreachBatchStateMap.size()} userId=${userId} sessionId=${sessionId}")
+          // println(s"##### WAIT_FOREACH_BATCH_CALLBACK contains=${SparkConnectService.foreachBatchStateMap.containsKey((userId, sessionId))} userId=${userId} sessionId=${sessionId}")
+          // if (SparkConnectService.foreachBatchStateMap.containsKey((userId, sessionId))) {
+          //   println(s"##### WAIT_FOREACH_BATCH_CALLBACK status=${SparkConnectService.foreachBatchStateMap.get((userId, sessionId))._1}")
+          // }
+          Thread.sleep(3000)
+        }
+
+        val (_, dfId, batchId) = SparkConnectService.foreachBatchStateMap.get((userId, sessionId))
+        println(s"##### Trigger client to run foreachBatch " +
+          s"user function dfId=$dfId batchId=$batchId")
+
+        respBuilder.getWaitForeachBatchCallbackBuilder
+          .setCachedDataframeId(dfId).setBatchId(batchId.toInt)
+
+      case StreamingQueryCommand.CommandCase.FINISH_FOREACH_BATCH_CALLBACK =>
+        println("##### FINISH_FOREACH_BATCH_CALLBACK is called")
+        SparkConnectService.foreachBatchStateMap.put((userId, sessionId), ("FINISHED", "", -1))
+        respBuilder.getFinishForeachBatchCallbackBuilder.setFinished(true)
+        println("##### FINISH_FOREACH_BATCH_CALLBACK is done")
 
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")

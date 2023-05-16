@@ -1611,8 +1611,11 @@ class CachedDataFrame(google.protobuf.message.Message):
     SESSIONID_FIELD_NUMBER: builtins.int
     KEY_FIELD_NUMBER: builtins.int
     userId: builtins.str
+    """(Required) An identifier of the user which cached the dataframe"""
     sessionId: builtins.str
+    """(Required) An identifier of the Spark session in which the dataframe is cached"""
     key: builtins.str
+    """(Required) A key represents the id of the cached dataframe"""
     def __init__(
         self,
         *,

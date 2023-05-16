@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
 import com.google.protobuf.{Any => ProtoAny}
-import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
+import com.google.rpc.{ErrorInfo, Code => RPCCode, Status => RPCStatus}
 import io.grpc.{Server, Status}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.StatusProto
@@ -36,8 +36,8 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
-
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
+
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
@@ -299,6 +299,11 @@ object SparkConnectService {
     })
 
   private[connect] val cachedDataFrameManager = new SparkConnectCachedDataFrameManager()
+
+  // TODO: move this to a class. The value should be enum.
+  println("##### foreachBatchStateMap is created")
+  @volatile private[connect] var foreachBatchStateMap =
+    new ConcurrentHashMap[(String, String), (String, String, Long)]()
 
   private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
     override def onRemoval(

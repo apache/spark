@@ -209,6 +209,8 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  CommonInlineUserDefinedFunction for_each_batch = 13;
 }
 
 message WriteStreamOperationStartResult {
@@ -263,6 +265,8 @@ message StreamingQueryCommand {
     bool exception = 8;
     // awaitTermination() API. Waits for the termination of the query.
     AwaitTerminationCommand await_termination = 9;
+    bool wait_foreach_batch_callback = 10;
+    bool finish_foreach_batch_callback = 11;
   }
 
   message ExplainCommand {
@@ -287,6 +291,8 @@ message StreamingQueryCommandResult {
     ExplainResult explain = 4;
     ExceptionResult exception = 5;
     AwaitTerminationResult await_termination = 6;
+    WaitForeachBatchCallbackResult wait_foreach_batch_callback = 7;
+    FinishForeachBatchCallbackResult finish_foreach_batch_callback = 8;
   }
 
   message StatusResult {
@@ -319,6 +325,15 @@ message StreamingQueryCommandResult {
 
   message AwaitTerminationResult {
     bool terminated = 1;
+  }
+
+  message WaitForeachBatchCallbackResult {
+    string cached_dataframe_id = 1;
+    int64 batch_id = 2;
+  }
+
+  message FinishForeachBatchCallbackResult {
+    bool finished = 1;
   }
 }
 

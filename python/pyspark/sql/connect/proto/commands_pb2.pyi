@@ -698,6 +698,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
+    FOR_EACH_BATCH_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -721,6 +722,10 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query_name: builtins.str
     path: builtins.str
     table_name: builtins.str
+    @property
+    def for_each_batch(
+        self,
+    ) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
     def __init__(
         self,
         *,
@@ -736,6 +741,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
+        for_each_batch: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -744,6 +751,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "for_each_batch",
+            b"for_each_batch",
             "input",
             b"input",
             "once",
@@ -767,6 +776,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "for_each_batch",
+            b"for_each_batch",
             "format",
             b"format",
             "input",
@@ -920,6 +931,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     EXPLAIN_FIELD_NUMBER: builtins.int
     EXCEPTION_FIELD_NUMBER: builtins.int
     AWAIT_TERMINATION_FIELD_NUMBER: builtins.int
+    WAIT_FOREACH_BATCH_CALLBACK_FIELD_NUMBER: builtins.int
+    FINISH_FOREACH_BATCH_CALLBACK_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance. See `StreamingQueryInstanceId`."""
@@ -941,6 +954,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     @property
     def await_termination(self) -> global___StreamingQueryCommand.AwaitTerminationCommand:
         """awaitTermination() API. Waits for the termination of the query."""
+    wait_foreach_batch_callback: builtins.bool
+    finish_foreach_batch_callback: builtins.bool
     def __init__(
         self,
         *,
@@ -953,6 +968,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
         explain: global___StreamingQueryCommand.ExplainCommand | None = ...,
         exception: builtins.bool = ...,
         await_termination: global___StreamingQueryCommand.AwaitTerminationCommand | None = ...,
+        wait_foreach_batch_callback: builtins.bool = ...,
+        finish_foreach_batch_callback: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -965,6 +982,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             b"exception",
             "explain",
             b"explain",
+            "finish_foreach_batch_callback",
+            b"finish_foreach_batch_callback",
             "last_progress",
             b"last_progress",
             "process_all_available",
@@ -977,6 +996,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             b"status",
             "stop",
             b"stop",
+            "wait_foreach_batch_callback",
+            b"wait_foreach_batch_callback",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -990,6 +1011,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             b"exception",
             "explain",
             b"explain",
+            "finish_foreach_batch_callback",
+            b"finish_foreach_batch_callback",
             "last_progress",
             b"last_progress",
             "process_all_available",
@@ -1002,6 +1025,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             b"status",
             "stop",
             b"stop",
+            "wait_foreach_batch_callback",
+            b"wait_foreach_batch_callback",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -1015,6 +1040,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
         "explain",
         "exception",
         "await_termination",
+        "wait_foreach_batch_callback",
+        "finish_foreach_batch_callback",
     ] | None: ...
 
 global___StreamingQueryCommand = StreamingQueryCommand
@@ -1175,12 +1202,48 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["terminated", b"terminated"]
         ) -> None: ...
 
+    class WaitForeachBatchCallbackResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        CACHED_DATAFRAME_ID_FIELD_NUMBER: builtins.int
+        BATCH_ID_FIELD_NUMBER: builtins.int
+        cached_dataframe_id: builtins.str
+        batch_id: builtins.int
+        def __init__(
+            self,
+            *,
+            cached_dataframe_id: builtins.str = ...,
+            batch_id: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "batch_id", b"batch_id", "cached_dataframe_id", b"cached_dataframe_id"
+            ],
+        ) -> None: ...
+
+    class FinishForeachBatchCallbackResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        FINISHED_FIELD_NUMBER: builtins.int
+        finished: builtins.bool
+        def __init__(
+            self,
+            *,
+            finished: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["finished", b"finished"]
+        ) -> None: ...
+
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     RECENT_PROGRESS_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
     EXCEPTION_FIELD_NUMBER: builtins.int
     AWAIT_TERMINATION_FIELD_NUMBER: builtins.int
+    WAIT_FOREACH_BATCH_CALLBACK_FIELD_NUMBER: builtins.int
+    FINISH_FOREACH_BATCH_CALLBACK_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance id. See `StreamingQueryInstanceId`."""
@@ -1194,6 +1257,14 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     def exception(self) -> global___StreamingQueryCommandResult.ExceptionResult: ...
     @property
     def await_termination(self) -> global___StreamingQueryCommandResult.AwaitTerminationResult: ...
+    @property
+    def wait_foreach_batch_callback(
+        self,
+    ) -> global___StreamingQueryCommandResult.WaitForeachBatchCallbackResult: ...
+    @property
+    def finish_foreach_batch_callback(
+        self,
+    ) -> global___StreamingQueryCommandResult.FinishForeachBatchCallbackResult: ...
     def __init__(
         self,
         *,
@@ -1203,6 +1274,10 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         explain: global___StreamingQueryCommandResult.ExplainResult | None = ...,
         exception: global___StreamingQueryCommandResult.ExceptionResult | None = ...,
         await_termination: global___StreamingQueryCommandResult.AwaitTerminationResult | None = ...,
+        wait_foreach_batch_callback: global___StreamingQueryCommandResult.WaitForeachBatchCallbackResult
+        | None = ...,
+        finish_foreach_batch_callback: global___StreamingQueryCommandResult.FinishForeachBatchCallbackResult
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1213,6 +1288,8 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             b"exception",
             "explain",
             b"explain",
+            "finish_foreach_batch_callback",
+            b"finish_foreach_batch_callback",
             "query_id",
             b"query_id",
             "recent_progress",
@@ -1221,6 +1298,8 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             b"result_type",
             "status",
             b"status",
+            "wait_foreach_batch_callback",
+            b"wait_foreach_batch_callback",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1232,6 +1311,8 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             b"exception",
             "explain",
             b"explain",
+            "finish_foreach_batch_callback",
+            b"finish_foreach_batch_callback",
             "query_id",
             b"query_id",
             "recent_progress",
@@ -1240,12 +1321,20 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             b"result_type",
             "status",
             b"status",
+            "wait_foreach_batch_callback",
+            b"wait_foreach_batch_callback",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
     ) -> typing_extensions.Literal[
-        "status", "recent_progress", "explain", "exception", "await_termination"
+        "status",
+        "recent_progress",
+        "explain",
+        "exception",
+        "await_termination",
+        "wait_foreach_batch_callback",
+        "finish_foreach_batch_callback",
     ] | None: ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
