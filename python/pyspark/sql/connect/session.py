@@ -541,7 +541,7 @@ class SparkSession:
                 active_session.stop()
             with SparkContext._lock:
                 del os.environ["SPARK_LOCAL_REMOTE"]
-                del os.environ["SPARK_ENABLE_CONNECT_MODE"]
+                del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
 

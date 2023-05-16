@@ -3274,10 +3274,12 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
     def test_can_create_multiple_sessions_to_different_remotes(self):
         self.assertIsNotNone(self.spark._client)
+        # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
         self.assertNotEquals(self.spark, other)
 
-        same = PySparkSession.builder.remote("sc://other.remote:114/").getOrCreate()
+        # Reuses an active session that was previously created.
+        same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
         self.assertEquals(self.spark, same)
         same.stop()
 
