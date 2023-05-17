@@ -389,7 +389,7 @@ case class InMemoryRelation(
 
   @volatile var statsOfPlanToCache: Statistics = null
 
-  override val innerChildren: Seq[SparkPlan] = Seq(cachedPlan.clone())
+  override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),
@@ -398,7 +398,7 @@ case class InMemoryRelation(
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
+  def cachedPlan: SparkPlan = cacheBuilder.cachedPlan.clone()
 
   private[sql] def updateStats(
       rowCount: Long,
