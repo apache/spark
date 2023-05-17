@@ -27,7 +27,7 @@ import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENG
 import org.apache.spark.deploy.k8s.Constants._
 
 private[spark] class ReconstructEnvFeatureStep(conf: KubernetesConf)
-  extends KubernetesFeatureConfigStep {
+    extends KubernetesFeatureConfigStep {
   import ReconstructEnvFeatureStep._
 
   private val additionalResources = ArrayBuffer.empty[HasMetadata]
@@ -38,8 +38,9 @@ private[spark] class ReconstructEnvFeatureStep(conf: KubernetesConf)
     s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
   }
 
-  private def generateProfileContent(envWithDeps: Seq[EnvVar],
-                                     mappings: Map[String, Set[String]]): String = {
+  private def generateProfileContent(
+      envWithDeps: Seq[EnvVar],
+      mappings: Map[String, Set[String]]): String = {
     // preprocess, build a map of env name to EnvVar
     val envWithDepsMap = envWithDeps.map { env =>
       env.getName -> env
@@ -67,35 +68,40 @@ private[spark] class ReconstructEnvFeatureStep(conf: KubernetesConf)
     // try to reorder all the env variables
     envWithDeps.foreach(dfsVisit)
     // returns k=v pairs
-    reorderedEnvWithDeps.map { env =>
-      val quotedValue = if (env.getValue.startsWith("\"")) {
-        // assumes env value is already quoted
-        env.getValue
-      } else {
-        "\"" + env.getValue + "\""
+    reorderedEnvWithDeps
+      .map { env =>
+        val quotedValue = if (env.getValue.startsWith("\"")) {
+          // assumes env value is already quoted
+          env.getValue
+        } else {
+          "\"" + env.getValue + "\""
+        }
+        s"${env.getName}=$quotedValue"
       }
-      s"${env.getName}=$quotedValue"
-    }.mkString("\n")
+      .mkString("\n")
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     // extract all the environment variables from the pod that relies on some variables including
     // itself, such as PATH=$PATH:/usr/bin, or LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$JAVA_HOME/lib
-    val envWithDepsMappings = pod.container.getEnv.asScala
-      .flatMap { env =>
-        // get all variables in the value of the environment variable
-        val variables = Option(env.getValue).map { envValue =>
-          ENV_VARIABLE_NAME_REGEX.findAllIn(envValue)
-            .map(_.stripPrefix("$").stripPrefix("{").stripSuffix("}")).toSet
-        }.getOrElse(Set.empty)
-        if (variables.nonEmpty) {
-          // this environment variable relies on some other variables
-          Some(env.getName -> variables)
-        } else {
-          // this is a simple environment variable, which could be set directly by K8S.
-          None
+    val envWithDepsMappings = pod.container.getEnv.asScala.flatMap { env =>
+      // get all variables in the value of the environment variable
+      val variables = Option(env.getValue)
+        .map { envValue =>
+          ENV_VARIABLE_NAME_REGEX
+            .findAllIn(envValue)
+            .map(_.stripPrefix("$").stripPrefix("{").stripSuffix("}"))
+            .toSet
         }
-      }.toMap
+        .getOrElse(Set.empty)
+      if (variables.nonEmpty) {
+        // this environment variable relies on some other variables
+        Some(env.getName -> variables)
+      } else {
+        // this is a simple environment variable, which could be set directly by K8S.
+        None
+      }
+    }.toMap
 
     if (envWithDepsMappings.nonEmpty) {
       val (envWithDeps, envWithoutDeps) = pod.container.getEnv.asScala
@@ -103,8 +109,8 @@ private[spark] class ReconstructEnvFeatureStep(conf: KubernetesConf)
       val containerWithNewEnvAndVolumes = new ContainerBuilder(pod.container)
         .withEnv(envWithoutDeps.asJava)
         .addNewVolumeMount()
-          .withName(POD_SHELL_PROFILE_VOLUME)
-          .withMountPath(POD_SHELL_PROFILE_MOUNTPATH)
+        .withName(POD_SHELL_PROFILE_VOLUME)
+        .withMountPath(POD_SHELL_PROFILE_MOUNTPATH)
         .endVolumeMount()
         .build()
       val podWithVolume = new PodBuilder(pod.pod)

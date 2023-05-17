@@ -44,8 +44,7 @@ class ReconstructEnvFeatureStepSuite extends SparkFunSuite {
         "PATH" -> "\"/usr/bin:${JAVA_HOME}/bin:$PATH\"",
         "LD_LIBRARY_PATH" -> "$JAVA_HOME/lib/amd64/server:$HADOOP_HOME/native/lib:$LD_LIBRARY_PATH",
         "JAVA_HOME" -> "/usr/lib/jvm/java-8-openjdk-amd64",
-        "HADOOP_HOME" -> "${SPARK_HOME}/../hadoop"
-      )
+        "HADOOP_HOME" -> "${SPARK_HOME}/../hadoop")
       val envVarList = env.map { case (k, v) =>
         new EnvVarBuilder().withName(k).withValue(v).build()
       }.toSeq
@@ -60,9 +59,7 @@ class ReconstructEnvFeatureStepSuite extends SparkFunSuite {
       // after this step, JAVA_HOME has no dependency, and would be kept as it is
       // PATH, HADOOP_HOME, LD_LIBRARY_PATH variables should be expanded, and would be
       // mounted as a .profile file in config map.
-      val expectedContainerEnv = Map(
-        "JAVA_HOME" -> "/usr/lib/jvm/java-8-openjdk-amd64"
-      )
+      val expectedContainerEnv = Map("JAVA_HOME" -> "/usr/lib/jvm/java-8-openjdk-amd64")
       val got = configuredPod.container.getEnv.asScala.map { envVar =>
         envVar.getName -> envVar.getValue
       }.toMap
