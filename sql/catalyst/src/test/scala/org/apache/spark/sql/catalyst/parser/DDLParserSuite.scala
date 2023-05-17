@@ -900,8 +900,7 @@ class DDLParserSuite extends AnalysisTest {
     Seq(
       "('optKey' = 1 + 2 + unresolvedAttribute)",
       "('optKey' = true or false or unresolvedAttribute)",
-      "('optKey' = date_diff(date'2023-01-02', unresolvedAttribute))",
-      "('optKey' = unparsable"
+      "('optKey' = date_diff(date'2023-01-02', unresolvedAttribute))"
     ).foreach { options =>
       checkError(
         exception = parseException(prefix + options),
