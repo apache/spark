@@ -806,3 +806,33 @@ Project [k#x, k#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
                      +- LocalRelation [k#x, v2#x]
+
+
+-- !query
+WITH
+  aws_dbr_a AS (select key from values ('a') t(key)),
+  gcp_pro_b AS (select key from values ('a') t(key))
+SELECT aws_dbr_a.key
+FROM aws_dbr_a FULL OUTER JOIN gcp_pro_b USING (key)
+WHERE aws_dbr_a.key NOT LIKE 'bb.%'
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias aws_dbr_a
+:     +- Project [key#x]
+:        +- SubqueryAlias t
+:           +- LocalRelation [key#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias gcp_pro_b
+:     +- Project [key#x]
+:        +- SubqueryAlias t
+:           +- LocalRelation [key#x]
++- Project [key#x]
+   +- Project [key#x, key#x]
+      +- Filter NOT key#x LIKE bb.%
+         +- Project [coalesce(key#x, key#x) AS key#x, key#x]
+            +- Join FullOuter, (key#x = key#x)
+               :- SubqueryAlias aws_dbr_a
+               :  +- CTERelationRef xxxx, true, [key#x]
+               +- SubqueryAlias gcp_pro_b
+                  +- CTERelationRef xxxx, true, [key#x]

@@ -1765,7 +1765,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           // Add missing attributes and then project them away.
           val newFilter = Filter(finalCond, newChild)
-          Project(child.output, newFilter)
+          Project(newChild.output, newFilter)
         }
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty => ResolveReferencesInSort(s)

@@ -86,3 +86,10 @@ SELECT nt2.k AS key FROM nt1 inner join nt2 using (k) ORDER BY key;
 SELECT k, nt1.k FROM nt1 inner join nt2 using (k);
 
 SELECT k, nt2.k FROM nt1 inner join nt2 using (k);
+
+WITH
+  aws_dbr_a AS (select key from values ('a') t(key)),
+  gcp_pro_b AS (select key from values ('a') t(key))
+SELECT aws_dbr_a.key
+FROM aws_dbr_a FULL OUTER JOIN gcp_pro_b USING (key)
+WHERE aws_dbr_a.key NOT LIKE 'bb.%';

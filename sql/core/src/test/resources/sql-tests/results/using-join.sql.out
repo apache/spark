@@ -432,3 +432,16 @@ struct<k:string,k:string>
 one	one
 one	one
 two	two
+
+
+-- !query
+WITH
+  aws_dbr_a AS (select key from values ('a') t(key)),
+  gcp_pro_b AS (select key from values ('a') t(key))
+SELECT aws_dbr_a.key
+FROM aws_dbr_a FULL OUTER JOIN gcp_pro_b USING (key)
+WHERE aws_dbr_a.key NOT LIKE 'bb.%'
+-- !query schema
+struct<key:string>
+-- !query output
+a
