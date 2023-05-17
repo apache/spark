@@ -37,7 +37,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.execute_command(command)
 
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
-        self.assertEqual(mock.req.client_type, "bar")
+        self.assertRegex(mock.req.client_type, r"^bar spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
 
     def test_user_agent_default(self):
         client = SparkConnectClient("sc://foo/")
@@ -48,7 +48,9 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.execute_command(command)
 
         self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
-        self.assertEqual(mock.req.client_type, "_SPARK_CONNECT_PYTHON")
+        self.assertRegex(
+            mock.req.client_type, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
 
     def test_properties(self):
         client = SparkConnectClient("sc://foo/;token=bar")
