@@ -140,10 +140,88 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       assert(!terminated)
 
       q.stop()
-      // TODO (SPARK-43032): uncomment below
-      // eventually(timeout(1.minute)) {
-      // q.awaitTermination()
-      // }
+      eventually(timeout(1.minute)) {
+        q.awaitTermination()
+      }
+    }
+  }
+
+  test("foreach Row") {
+    withTempPath { f =>
+      val path = f.getCanonicalPath + "/output"
+      val writer = new ForeachWriter[Row] {
+        var fileWriter: FileWriter = _
+
+        def open(partitionId: Long, version: Long): Boolean = {
+          fileWriter = new FileWriter(path, true)
+          true
+        }
+
+        def process(row: Row): Unit = {
+          fileWriter.write(row.mkString(", "))
+          fileWriter.write("\n")
+        }
+
+        def close(errorOrNull: Throwable): Unit = {
+          fileWriter.close()
+        }
+      }
+
+      val df = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .load()
+
+      val query = df.writeStream
+        .foreach(writer)
+        .outputMode("update")
+        .start()
+
+      assert(query.isActive)
+      assert(query.exception.isEmpty)
+
+      query.stop()
+    }
+  }
+
+  test("foreach Int") {
+    withTempPath { f =>
+      val path = f.getCanonicalPath + "/output"
+      val writer = new ForeachWriter[Int] {
+        var fileWriter: FileWriter = _
+
+        def open(partitionId: Long, version: Long): Boolean = {
+          fileWriter = new FileWriter(filePath, true) // true to append
+          true
+        }
+
+        def process(value: Int): Unit = {
+          fileWriter.write(value.toString)
+          fileWriter.write("\n") // newline for each value
+        }
+
+        def close(errorOrNull: Throwable): Unit = {
+          fileWriter.close()
+        }
+      }
+
+      val df = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .load()
+
+      val query = df
+        .selectExpr("CAST(value AS INT)")
+        .as[Int]
+        .writeStream
+        .foreach(writer)
+        .outputMode("update")
+        .start()
+
+      assert(query.isActive)
+      assert(query.exception.isEmpty)
+
+      query.stop()
     }
   }
 
