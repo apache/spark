@@ -110,7 +110,7 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
-    from pyspark.sql._typing import AtomicValue, RowLike, SQLBatchedUDFType
+    from pyspark.sql._typing import AtomicValue, RowLike, SQLArrowBatchedUDFType, SQLBatchedUDFType
 
     from py4j.java_gateway import JavaObject
     from py4j.java_collections import JavaArray
@@ -140,6 +140,7 @@ class PythonEvalType:
     NON_UDF: "NonUDFType" = 0
 
     SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
+    SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201

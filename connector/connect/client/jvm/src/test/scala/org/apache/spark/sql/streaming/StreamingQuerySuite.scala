@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.concurrent.TimeUnit
+
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -63,7 +65,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         // Verify some of the API.
         assert(query.isActive)
 
-        eventually(timeout(10.seconds)) {
+        eventually(timeout(30.seconds)) {
           assert(query.status.isDataAvailable)
           assert(query.recentProgress.nonEmpty) // Query made progress.
         }
@@ -107,7 +109,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         try {
           q1.processAllAvailable()
           q2.processAllAvailable()
-          eventually(timeout(10.seconds)) {
+          eventually(timeout(30.seconds)) {
             assert(spark.table("my_sink").count() > 0)
           }
         } finally {
@@ -143,5 +145,33 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       // q.awaitTermination()
       // }
     }
+  }
+
+  test("streaming query manager") {
+    assert(spark.streams.active.isEmpty)
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    assert(q.name == null)
+    val q1 = spark.streams.get(q.id)
+    val q2 = spark.streams.active(0)
+    assert(q.id == q1.id && q.id == q2.id)
+    assert(q.runId == q1.runId && q.runId == q2.runId)
+    assert(q1.name == null && q2.name == null)
+
+    spark.streams.resetTerminated()
+    val start = System.nanoTime
+    // Same setting as in test_query_manager_await_termination in test_streaming.py
+    val terminated = spark.streams.awaitAnyTermination(2600)
+    val end = System.nanoTime
+    assert((end - start) >= TimeUnit.MILLISECONDS.toNanos(2000))
+    assert(!terminated)
+
+    q.stop()
+    assert(!q1.isActive)
   }
 }

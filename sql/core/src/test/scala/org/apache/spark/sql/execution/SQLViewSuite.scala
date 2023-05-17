@@ -944,7 +944,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v1",
@@ -975,7 +975,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v4",

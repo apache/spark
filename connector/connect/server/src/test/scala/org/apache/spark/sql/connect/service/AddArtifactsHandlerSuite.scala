@@ -19,12 +19,13 @@ package org.apache.spark.sql.connect.service
 import java.io.InputStream
 import java.nio.file.{Files, Path}
 
-import collection.JavaConverters._
-import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+
+import com.google.protobuf.ByteString
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
