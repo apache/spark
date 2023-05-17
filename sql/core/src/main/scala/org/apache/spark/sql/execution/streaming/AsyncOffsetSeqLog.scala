@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.streaming
 import java.io.OutputStream
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{Clock, SystemClock}
