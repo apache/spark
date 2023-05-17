@@ -698,6 +698,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
+    FOREACH_WRITER_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -721,6 +722,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query_name: builtins.str
     path: builtins.str
     table_name: builtins.str
+    @property
+    def foreach_writer(self) -> global___StreamingForeachWriter: ...
     def __init__(
         self,
         *,
@@ -736,6 +739,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
+        foreach_writer: global___StreamingForeachWriter | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -744,6 +748,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_writer",
+            b"foreach_writer",
             "input",
             b"input",
             "once",
@@ -767,6 +773,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_writer",
+            b"foreach_writer",
             "format",
             b"format",
             "input",
@@ -805,6 +813,35 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     ] | None: ...
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
+
+class StreamingForeachWriter(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PYTHON_WRITER_FIELD_NUMBER: builtins.int
+    @property
+    def python_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
+    def __init__(
+        self,
+        *,
+        python_writer: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["writer", b"writer"]
+    ) -> typing_extensions.Literal["python_writer"] | None: ...
+
+global___StreamingForeachWriter = StreamingForeachWriter
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

@@ -15,17 +15,17 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
+from pyspark.sql.tests.streaming.test_streaming_foreach import StreamingTestsForeachMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
+class StreamingForeachParityTests(StreamingTestsForeachMixin, ReusedConnectTestCase):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.streaming.test_parity_streaming import *  # noqa: F401
+    from pyspark.sql.tests.connect.streaming.test_parity_foreach import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
