@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -296,5 +297,21 @@ object RemoteStreamingQuery {
       runId = UUID.fromString(result.getQueryId.getRunId),
       name = if (result.getName.isEmpty) null else result.getName,
       sparkSession = sparkSession)
+  }
+
+  def fromStreamingQueryInstanceResponse(
+      sparkSession: SparkSession,
+      q: StreamingQueryInstance): RemoteStreamingQuery = {
+
+    val name = if (q.hasName) {
+      q.getName
+    } else {
+      null
+    }
+    new RemoteStreamingQuery(
+      UUID.fromString(q.getId.getId),
+      UUID.fromString(q.getId.getRunId),
+      name,
+      sparkSession)
   }
 }

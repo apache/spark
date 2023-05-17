@@ -21,7 +21,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type, _create_converter_from_pandas
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
 
 
@@ -202,27 +202,23 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pyarrow.Array
         """
         import pyarrow as pa
-        from pyspark.sql.pandas.types import (
-            _check_series_convert_timestamps_internal,
-            _convert_dict_to_map_items,
-        )
         from pandas.api.types import is_categorical_dtype
+
+        if is_categorical_dtype(series.dtype):
+            series = series.astype(series.dtypes.categories.dtype)
+
+        if arrow_type is not None:
+            spark_type = from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
+
+            conv = _create_converter_from_pandas(
+                spark_type, timezone=self._timezone, error_on_duplicated_field_names=False
+            )
+            series = conv(series)
 
         if hasattr(series.array, "__arrow_array__"):
             mask = None
         else:
             mask = series.isnull()
-        # Ensure timestamp series are in expected form for Spark internal representation
-        if (
-            arrow_type is not None
-            and pa.types.is_timestamp(arrow_type)
-            and arrow_type.tz is not None
-        ):
-            series = _check_series_convert_timestamps_internal(series, self._timezone)
-        elif arrow_type is not None and pa.types.is_map(arrow_type):
-            series = _convert_dict_to_map_items(series)
-        elif arrow_type is None and is_categorical_dtype(series.dtype):
-            series = series.astype(series.dtypes.categories.dtype)
         try:
             return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=self._safecheck)
         except TypeError as e:
@@ -320,6 +316,66 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         else:
             s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
         return s
+
+    # To keep the current UDF behavior.
+    def _create_array(self, series, arrow_type):
+        """
+        Create an Arrow Array from the given pandas.Series and optional type.
+
+        Parameters
+        ----------
+        series : pandas.Series
+            A single series
+        arrow_type : pyarrow.DataType, optional
+            If None, pyarrow's inferred type will be used
+
+        Returns
+        -------
+        pyarrow.Array
+        """
+        import pyarrow as pa
+        from pyspark.sql.pandas.types import (
+            _check_series_convert_timestamps_internal,
+            _convert_dict_to_map_items,
+        )
+        from pandas.api.types import is_categorical_dtype
+
+        if hasattr(series.array, "__arrow_array__"):
+            mask = None
+        else:
+            mask = series.isnull()
+        # Ensure timestamp series are in expected form for Spark internal representation
+        if (
+            arrow_type is not None
+            and pa.types.is_timestamp(arrow_type)
+            and arrow_type.tz is not None
+        ):
+            series = _check_series_convert_timestamps_internal(series, self._timezone)
+        elif arrow_type is not None and pa.types.is_map(arrow_type):
+            series = _convert_dict_to_map_items(series)
+        elif arrow_type is None and is_categorical_dtype(series.dtype):
+            series = series.astype(series.dtypes.categories.dtype)
+        try:
+            return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=self._safecheck)
+        except TypeError as e:
+            error_msg = (
+                "Exception thrown when converting pandas.Series (%s) "
+                "with name '%s' to Arrow Array (%s)."
+            )
+            raise PySparkTypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
+        except ValueError as e:
+            error_msg = (
+                "Exception thrown when converting pandas.Series (%s) "
+                "with name '%s' to Arrow Array (%s)."
+            )
+            if self._safecheck:
+                error_msg = error_msg + (
+                    " It can be caused by overflows or other "
+                    "unsafe conversions warned by Arrow. Arrow safe type check "
+                    "can be disabled by using SQL config "
+                    "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                )
+            raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
 
     def _create_batch(self, series):
         """

@@ -419,7 +419,9 @@ class SparkConversionMixin:
                     )
 
         # Convert pandas.DataFrame to list of numpy records
-        np_records = pdf.to_records(index=False)
+        np_records = pdf.set_axis(
+            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"  # type: ignore[arg-type]
+        ).to_records(index=False)
 
         # Check if any columns need to be fixed for Spark to infer properly
         if len(np_records) > 0:
@@ -477,7 +479,11 @@ class SparkConversionMixin:
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import TimestampType
-        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+        from pyspark.sql.pandas.types import (
+            from_arrow_type,
+            to_arrow_type,
+            _deduplicate_field_names,
+        )
         from pyspark.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
@@ -505,7 +511,9 @@ class SparkConversionMixin:
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
-            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+            arrow_types = [
+                to_arrow_type(_deduplicate_field_names(f.dataType)) for f in schema.fields
+            ]
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
