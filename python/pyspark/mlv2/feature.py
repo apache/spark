@@ -21,6 +21,7 @@ import pandas as pd
 from pyspark.sql.functions import col, pandas_udf
 
 from pyspark.mlv2.base import Estimator, Model, Transformer
+from pyspark.mlv2.util import transform_dataframe_column
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
 from pyspark.ml.functions import array_to_vector
@@ -66,10 +67,10 @@ class MaxAbsScalerModel(Transformer, HasInputCol, HasOutputCol):
 
             return series.apply(map_value)
 
-        if isinstance(dataset, pd.DataFrame):
-            result_series = transform_pandas_series(dataset[input_col])
-            return pd.DataFrame({output_col: result_series})
-
-        transform_pandas_series_udf = pandas_udf(transform_pandas_series, returnType="array<double>")
-
-        return dataset.withColumn(output_col, transform_pandas_series_udf(col(input_col)))
+        return transform_dataframe_column(
+            dataset,
+            input_col_name=input_col,
+            transform_fn=transform_pandas_series,
+            result_col_name=output_col,
+            result_col_spark_type='double'
+        )

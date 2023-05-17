@@ -18,6 +18,8 @@
 import pandas as pd
 import cloudpickle
 
+from pyspark.sql.functions import col, pandas_udf
+
 
 def aggregate_dataframe(
         dataframe,
@@ -87,3 +89,53 @@ def aggregate_dataframe(
             merged_status = merge_agg_status(merged_status, status)
 
     return agg_status_to_result(merged_status)
+
+
+def transform_dataframe_column(
+        dataframe,
+        input_col_name,
+        transform_fn,
+        result_col_name,
+        result_col_spark_type,
+):
+    """
+    Transform specified column of the input spark dataframe or pandas dataframe,
+    returns a new dataframe
+
+    Parameters
+    ----------
+    dataframe :
+        A spark dataframe or a pandas dataframe
+
+    input_col_name :
+        The name of columns to be transformed
+
+    transform_fn:
+        A transforming function with one arguments of `pandas.Series` type,
+        return transformed result as a `pandas.Series` object, the result object must
+        have the same index with the input series.
+
+    result_col_name:
+        the transformed result column name
+
+    result_col_spark_type:
+        the transformed result column type
+
+    Returns
+    -------
+    If the input dataframe is a spark dataframe, return a new spark dataframe
+    with the transformed result column appended.
+    If the input dataframe is a pandas dataframe, return a new pandas dataframe
+    with only one column of the the transformed result, but the result
+    pandas dataframe has the same index with the input dataframe.
+    """
+
+    if isinstance(dataframe, pd.DataFrame):
+        result_col_data = transform_fn(dataframe[input_col_name])
+        return pd.DataFrame({"result_col_name": result_col_data})
+
+    @pandas_udf(returnType=result_col_type)
+    def transform_fn_pandas_udf(s: pd.Series) -> pd.Series:
+        return transform_fn(s)
+
+    return dataframe.withColumn(result_col_name, transform_fn_pandas_udf(col(input_col_name)))
