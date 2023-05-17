@@ -25,6 +25,7 @@ check_dependencies(__name__)
 
 import logging
 import os
+import platform
 import random
 import time
 import urllib.parse
@@ -57,6 +58,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
@@ -299,7 +301,14 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return user_agent
+        return " ".join(
+            [
+                user_agent,
+                f"spark/{__version__}",
+                f"os/{platform.uname().system.lower()}",
+                f"python/{platform.python_version()}",
+            ]
+        )
 
     def get(self, key: str) -> Any:
         """
