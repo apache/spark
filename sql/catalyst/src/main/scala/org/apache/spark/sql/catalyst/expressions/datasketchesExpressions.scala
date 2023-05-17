@@ -20,9 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
 
@@ -76,7 +73,7 @@ case class HllSketchEstimate(child: Expression)
 case class HllUnion(first: Expression, second: Expression, third: Expression)
   extends TernaryExpression
     with CodegenFallback
-    with ExpectsInputTypes
+    with ExpectsInputTypesAndFoldable
     with NullIntolerant {
 
   // The default target type (register size) to use.
@@ -94,27 +91,11 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     newFirst: Expression, newSecond: Expression, newThird: Expression):
   HllUnion = copy(first = newFirst, second = newSecond, third = newThird)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else if (!third.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "allowDifferentLgConfigK",
-          "inputType" -> toSQLType(third.dataType),
-          "inputExpr" -> toSQLExpr(third)
-        )
-      )
-    } else {
-      TypeCheckSuccess
-    }
-  }
-
   override def prettyName: String = "hll_union"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, BooleanType)
+
+  override def inputIsFoldable: Seq[Option[Boolean]] = Seq(None, None, Some(true))
 
   override def dataType: DataType = BinaryType
 

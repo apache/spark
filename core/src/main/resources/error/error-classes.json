@@ -476,6 +476,11 @@
           "Parameter <paramIndex> requires the <requiredType> type, however <inputSql> has the type <inputType>."
         ]
       },
+      "UNEXPECTED_INPUT_FOLDABLE_VALUE" : {
+        "message" : [
+          "Parameter <paramIndex> requires a foldable value of <requiredFoldable>, however <inputSql> has a foldable value of <inputFoldable>."
+        ]
+      },
       "UNEXPECTED_NULL" : {
         "message" : [
           "The <exprName> must not be null."

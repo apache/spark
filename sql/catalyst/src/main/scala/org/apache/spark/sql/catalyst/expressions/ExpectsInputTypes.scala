@@ -74,3 +74,44 @@ object ExpectsInputTypes extends QueryErrorsBase {
 trait ImplicitCastInputTypes extends ExpectsInputTypes {
   // No other methods
 }
+
+/**
+ * An extension of the ExpectsInputTypes trait that also checks each
+ * input expression's foldable attribute against inputIsFoldable;
+ * inputInputFoldable is a Seq of type Option[Boolean], specifying
+ * a value of None bypasses the check for the given column
+ */
+trait ExpectsInputTypesAndFoldable extends ExpectsInputTypes {
+  def inputIsFoldable: Seq[Option[Boolean]]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+      super.checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckSuccess =>
+          ExpectsInputTypesAndFoldable.checkInputIsFoldable(children, inputIsFoldable)
+        case failure => failure
+      }
+    }
+}
+
+object ExpectsInputTypesAndFoldable extends QueryErrorsBase {
+
+  def checkInputIsFoldable(
+      inputs: Seq[Expression],
+      inputIsFoldable: Seq[Option[Boolean]]): TypeCheckResult = {
+    val mismatch = inputs.zip(inputIsFoldable).zipWithIndex.filter {
+      case ((_, Some(_)), _) => true
+      case _ => false
+    }.collectFirst {
+        case ((input, expected), idx) if input.foldable != expected.get =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_FOLDABLE_VALUE",
+            messageParameters = Map(
+              "paramIndex" -> (idx + 1).toString,
+              "inputSql" -> toSQLExpr(input),
+              "inputFoldable" -> input.foldable.toString,
+              "requiredFoldable" -> expected.get.toString))
+    }
+
+    mismatch.getOrElse(TypeCheckResult.TypeCheckSuccess)
+  }
+}

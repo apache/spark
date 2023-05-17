@@ -1890,7 +1890,7 @@ class DataFrameAggregateSuite extends QueryTest
       )
       checkAnswer(res, Nil)
     }
-    assert(error8.toString contains "NON_FOLDABLE_INPUT")
+    assert(error8.toString contains "UNEXPECTED_INPUT_FOLDABLE_VALUE")
 
     val error9 = intercept[AnalysisException] {
       val res = sql(
@@ -1904,7 +1904,7 @@ class DataFrameAggregateSuite extends QueryTest
       )
       checkAnswer(res, Nil)
     }
-    assert(error9.toString contains "NON_FOLDABLE_INPUT")
+    assert(error9.toString contains "UNEXPECTED_INPUT_FOLDABLE_VALUE")
 
     val error10 = intercept[AnalysisException] {
       val res = sql(
@@ -1918,7 +1918,7 @@ class DataFrameAggregateSuite extends QueryTest
       )
       checkAnswer(res, Nil)
     }
-    assert(error10.toString contains "NON_FOLDABLE_INPUT")
+    assert(error10.toString contains "UNEXPECTED_INPUT_FOLDABLE_VALUE")
   }
 }
 

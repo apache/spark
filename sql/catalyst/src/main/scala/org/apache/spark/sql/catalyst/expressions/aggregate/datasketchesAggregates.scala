@@ -22,10 +22,7 @@ import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypesAndFoldable, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -60,7 +57,9 @@ case class HllSketchAgg(
     right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[HllSketch] with BinaryLike[Expression] with ExpectsInputTypes {
+  extends TypedImperativeAggregate[HllSketch]
+    with BinaryLike[Expression]
+    with ExpectsInputTypesAndFoldable {
 
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
@@ -99,32 +98,16 @@ case class HllSketchAgg(
                                                  newRight: Expression): HllSketchAgg =
     copy(left = newLeft, right = newRight)
 
-  // Overrides for ExpectsInputTypes
+  // Overrides for ExpectsInputTypesAndFoldable
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else if (!right.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "lgConfigK",
-          "inputType" -> toSQLType(right.dataType),
-          "inputExpr" -> toSQLExpr(right)
-        )
-      )
-    } else {
-      TypeCheckSuccess
-    }
-  }
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType, StringType, BinaryType), IntegerType)
+
+  override def inputIsFoldable: Seq[Option[Boolean]] = Seq(None, Some(true))
 
   // Overrides for TypedImperativeAggregate
 
   override def prettyName: String = "hll_sketch_agg"
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(IntegerType, LongType, StringType, BinaryType), IntegerType)
 
   override def dataType: DataType = BinaryType
 
@@ -252,7 +235,7 @@ case class HllUnionAgg(
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[Option[Union]]
     with BinaryLike[Expression]
-    with ExpectsInputTypes {
+    with ExpectsInputTypesAndFoldable {
 
   // Union config - mark as lazy so that they're not evaluated during tree transformation.
 
@@ -290,29 +273,13 @@ case class HllUnionAgg(
 
   // Overrides for ExpectsInputTypes
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else if (!right.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "allowDifferentLgConfigK",
-          "inputType" -> toSQLType(right.dataType),
-          "inputExpr" -> toSQLExpr(right)
-        )
-      )
-    } else {
-      TypeCheckSuccess
-    }
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BooleanType)
+
+  override def inputIsFoldable: Seq[Option[Boolean]] = Seq(None, Some(true))
 
   // Overrides for TypedImperativeAggregate
 
   override def prettyName: String = "hll_union_agg"
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BooleanType)
 
   override def dataType: DataType = BinaryType
 
