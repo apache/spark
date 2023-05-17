@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesTestConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{Constants, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.containerHasEnvVar
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
@@ -39,26 +39,44 @@ class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite  {
       Files.write("some data", new File(confDir, f), UTF_8)
     }
 
-    val driverSparkConf = new SparkConfWithEnv(
-      Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
-    val executorSparkConf = new SparkConf(false)
+    Seq(
+      Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()),
+      Map.empty[String, String]).foreach { env =>
+      val hasHadoopConf = env.contains(ENV_HADOOP_CONF_DIR)
 
-    val driverConf = KubernetesTestConf.createDriverConf(sparkConf = driverSparkConf)
-    val driverStep = new HadoopConfDriverFeatureStep(driverConf)
-    driverStep.getAdditionalPodSystemProperties().foreach { case (key, value) =>
-      executorSparkConf.set(key, value)
+      val driverSparkConf = new SparkConfWithEnv(env)
+      val executorSparkConf = new SparkConf(false)
+
+      val driverConf = KubernetesTestConf.createDriverConf(sparkConf = driverSparkConf)
+      val driverStep = new HadoopConfDriverFeatureStep(driverConf)
+
+      val additionalPodSystemProperties = driverStep.getAdditionalPodSystemProperties()
+      if (hasHadoopConf) {
+        assert(additionalPodSystemProperties.contains(Constants.HADOOP_CONFIG_MAP_NAME))
+        additionalPodSystemProperties.foreach { case (key, value) =>
+          executorSparkConf.set(key, value)
+        }
+      } else {
+        assert(additionalPodSystemProperties.isEmpty)
+      }
+
+      val executorConf = KubernetesTestConf.createExecutorConf(sparkConf = executorSparkConf)
+      val executorStep = new HadoopConfExecutorFeatureStep(executorConf)
+      val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+      checkPod(executorPod, hasHadoopConf)
     }
-
-    val executorConf = KubernetesTestConf.createExecutorConf(sparkConf = executorSparkConf)
-    val executorStep = new HadoopConfExecutorFeatureStep(executorConf)
-    val executorPod = executorStep.configurePod(SparkPod.initialPod())
-
-    checkPod(executorPod)
   }
 
-  private def checkPod(pod: SparkPod): Unit = {
-    assert(podHasVolume(pod.pod, HADOOP_CONF_VOLUME))
-    assert(containerHasVolume(pod.container, HADOOP_CONF_VOLUME, HADOOP_CONF_DIR_PATH))
-    assert(containerHasEnvVar(pod.container, ENV_HADOOP_CONF_DIR))
+  private def checkPod(pod: SparkPod, hasHadoopConf: Boolean): Unit = {
+    if (hasHadoopConf) {
+      assert(podHasVolume(pod.pod, HADOOP_CONF_VOLUME))
+      assert(containerHasVolume(pod.container, HADOOP_CONF_VOLUME, HADOOP_CONF_DIR_PATH))
+      assert(containerHasEnvVar(pod.container, ENV_HADOOP_CONF_DIR))
+    } else {
+      assert(!podHasVolume(pod.pod, HADOOP_CONF_VOLUME))
+      assert(!containerHasVolume(pod.container, HADOOP_CONF_VOLUME, HADOOP_CONF_DIR_PATH))
+      assert(!containerHasEnvVar(pod.container, ENV_HADOOP_CONF_DIR))
+    }
   }
 }
