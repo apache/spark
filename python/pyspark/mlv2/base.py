@@ -184,22 +184,64 @@ class Transformer(Params, HasInputCols, HasOutputCols, metaclass=ABCMeta):
 @inherit_doc
 class Evaluator(Params, metaclass=ABCMeta):
     """
-    Abstract class for Evaluators
+    Base class for evaluators that compute metrics from predictions.
+
+    .. versionadded:: 3.5.0
     """
 
-    def evaluate(self, dataset: Union[DataFrame, pd.DataFrame]) -> Any:
+    @abstractmethod
+    def _evaluate(self, dataset: DataFrame) -> float:
         """
-        Evaluate metric over a spark DataFrame.
-
-        The dataset can be either pandas dataframe or spark dataframe,
-        if it is pandas dataframe, evaluates the dataframe locally without creating spark jobs.
+        Evaluates the output.
 
         Parameters
         ----------
-        dataset : :py:class:`pyspark.sql.DataFrame` or py:class:`pandas.DataFrame`
-            input dataset.
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a dataset that contains labels/observations and predictions
+
+        Returns
+        -------
+        float
+            metric
         """
         raise NotImplementedError()
+
+    def evaluate(self, dataset: DataFrame, params: Optional["ParamMap"] = None) -> float:
+        """
+        Evaluates the output with optional parameters.
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a dataset that contains labels/observations and predictions
+        params : dict, optional
+            an optional param map that overrides embedded params
+
+        Returns
+        -------
+        float
+            metric
+        """
+        if params is None:
+            params = dict()
+        if isinstance(params, dict):
+            if params:
+                return self.copy(params)._evaluate(dataset)
+            else:
+                return self._evaluate(dataset)
+        else:
+            raise TypeError("Params must be a param map but got %s." % type(params))
+
+    @since("1.5.0")
+    def isLargerBetter(self) -> bool:
+        """
+        Indicates whether the metric returned by :py:meth:`evaluate` should be maximized
+        (True, default) or minimized (False).
+        A given evaluator may support multiple metrics which may be maximized or minimized.
+        """
+        return True
 
 
 @inherit_doc
