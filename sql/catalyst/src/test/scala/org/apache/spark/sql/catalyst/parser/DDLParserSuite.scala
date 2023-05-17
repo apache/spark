@@ -896,6 +896,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(s"$prefix ('k' = 0d + 0d)"), createTable(Map("k" -> "0.0")))
     comparePlans(parsePlan(s"$prefix ('k' = date_diff(current_date(), current_date()))"),
       createTable(Map("k" -> "0")))
+    comparePlans(parsePlan(s"$prefix ('k' = true or false)"), createTable(Map("k" -> "true")))
     // Test some cases where the provided option value is a non-constant expression.
     Seq(
       "('optKey' = 1 + 2 + unresolvedAttribute)",

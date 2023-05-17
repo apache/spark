@@ -3210,7 +3210,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           analyzer.checkAnalysis(analyzed)
           ConstantFolding(analyzed)
         } catch {
-          case _: AnalysisException => throw error
+          case _: AnalysisException =>
+            throw error
         }
         val result: Expression = plan.collectFirst {
           case Project(Seq(a: Alias), OneRowRelation()) => a.child
@@ -3218,7 +3219,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         result match {
           case expr if expr.foldable =>
             Cast(expr, StringType, evalMode = EvalMode.TRY).eval().toString
-          case _ => throw error
+          case _ =>
+            throw error
         }
       }
       key -> value
