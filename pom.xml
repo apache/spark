@@ -814,7 +814,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.39</version>
+        <version>0.9.44</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1181,7 +1181,7 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.0.32</version>
+        <version>8.0.33</version>
         <scope>test</scope>
       </dependency>
       <dependency>

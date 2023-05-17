@@ -111,6 +111,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_toPandas_duplicate_field_names(self):
         self.check_toPandas_duplicate_field_names(True)
 
+    def test_createDataFrame_duplicate_field_names(self):
+        self.check_createDataFrame_duplicate_field_names(True)
+
     @unittest.skipIf(
         LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
         "TODO(SPARK-43506): Enable ArrowTests.test_toPandas_empty_columns for pandas 2.0.0.",
