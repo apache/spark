@@ -746,7 +746,6 @@
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-slf4j2-impl</artifactId>
         <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
@@ -763,7 +762,6 @@
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-1.2-api</artifactId>
         <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
 
       <!-- end -->
