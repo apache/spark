@@ -3217,7 +3217,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           case Project(Seq(a: Alias), OneRowRelation()) => a.child
         }.get
         result match {
-          case expr if expr.foldable =>
+          case expr if expr.isInstanceOf[Literal] =>
             // Note: we use 'toString' here instead of using a Cast expression to support some types
             // of literals where casting to string is not supported.
             expr.toString
