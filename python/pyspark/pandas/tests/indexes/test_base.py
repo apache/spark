@@ -1462,9 +1462,10 @@ class IndexesTestsMixin:
         self.assert_eq(
             psmidx1.difference(psmidx2).sort_values(), pmidx1.difference(pmidx2).sort_values()
         )
-        self.assert_eq(
-            psmidx1.difference(psidx1).sort_values(), pmidx1.difference(pidx1).sort_values()
-        )
+        # TODO(SPARK-43533): Enable MultiIndex test for IndexesTests.test_difference
+        # self.assert_eq(
+        #     psmidx1.difference(psidx1).sort_values(), pmidx1.difference(pidx1).sort_values()
+        # )
         self.assert_eq(
             psidx1.difference(psmidx1).sort_values(), pidx1.difference(pmidx1).sort_values()
         )

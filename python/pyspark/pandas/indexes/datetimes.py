@@ -228,7 +228,6 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> import pyspark.pandas as ps
         >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')
         >>> idx.dayofweek
         Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')

@@ -51,7 +51,6 @@ from pyspark.sql.column import Column
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DayTimeIntervalType,
-    FractionalType,
     IntegralType,
     TimestampType,
     TimestampNTZType,
