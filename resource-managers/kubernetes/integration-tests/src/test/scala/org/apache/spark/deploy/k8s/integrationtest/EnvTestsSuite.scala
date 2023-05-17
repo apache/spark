@@ -59,7 +59,7 @@ trait EnvTestsSuite { k8sSuite: KubernetesSuite =>
     implicit val components: KubernetesTestComponents = kubernetesTestComponents
     val env = Eventually.eventually(TIMEOUT, INTERVAL) {
       logDebug(s"Checking env of ${pod.getMetadata().getName()} with entrypoint")
-      val env = Utils.executeCommand("/opt/spark/entrypoint.sh", "env")
+      val env = Utils.executeCommand("/opt/entrypoint.sh", "env")
       assert(!env.isEmpty)
       env
     }
