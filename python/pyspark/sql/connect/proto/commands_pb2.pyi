@@ -1385,12 +1385,19 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             self,
             *,
             id: global___StreamingQueryInstanceId | None = ...,
-            name: builtins.str = ...,
+            name: builtins.str | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing_extensions.Literal["id", b"id"]) -> builtins.bool: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["id", b"id", "name", b"name"]
+            self,
+            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_name", b"_name"]
+        ) -> typing_extensions.Literal["name"] | None: ...
 
     class AwaitAnyTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

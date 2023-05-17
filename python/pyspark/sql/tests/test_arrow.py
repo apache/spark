@@ -654,6 +654,32 @@ class ArrowTestsMixin:
                             i, m = row
                             self.assertEqual(m, map_data[i])
 
+    def test_createDataFrame_with_struct_type(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_with_struct_type(arrow_enabled)
+
+    def check_createDataFrame_with_struct_type(self, arrow_enabled):
+        pdf = pd.DataFrame(
+            {"a": [Row(1, "a"), Row(2, "b")], "b": [{"s": 3, "t": "x"}, {"s": 4, "t": "y"}]}
+        )
+        for schema in (
+            "a struct<x int, y string>, b struct<s int, t string>",
+            StructType()
+            .add("a", StructType().add("x", LongType()).add("y", StringType()))
+            .add("b", StructType().add("s", LongType()).add("t", StringType())),
+        ):
+            with self.subTest(schema=schema):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                    df = self.spark.createDataFrame(pdf, schema)
+                result = df.collect()
+                expected = [(rec[0], Row(**rec[1])) for rec in pdf.to_records(index=False)]
+                for r in range(len(expected)):
+                    for e in range(len(expected[r])):
+                        self.assertTrue(
+                            expected[r][e] == result[r][e], f"{expected[r][e]} == {result[r][e]}"
+                        )
+
     def test_createDataFrame_with_string_dtype(self):
         # SPARK-34521: spark.createDataFrame does not support Pandas StringDtype extension type
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
@@ -947,6 +973,34 @@ class ArrowTestsMixin:
                         else:
                             expected = pd.DataFrame.from_records(data, columns=schema.names)
                         assert_frame_equal(df.toPandas(), expected)
+
+    def test_createDataFrame_duplicate_field_names(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_duplicate_field_names(arrow_enabled)
+
+    def check_createDataFrame_duplicate_field_names(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+
+        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        pdf = pd.DataFrame.from_records(data, columns=schema.names)
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            df = self.spark.createDataFrame(pdf, schema)
+
+        self.assertEqual(df.collect(), data)
 
     def test_toPandas_empty_columns(self):
         for arrow_enabled in [True, False]:
