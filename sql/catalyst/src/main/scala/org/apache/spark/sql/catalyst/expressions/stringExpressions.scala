@@ -2133,10 +2133,10 @@ case class OctetLength(child: Expression)
 /**
  * A function that return the Levenshtein distance between the two given strings.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.
-      If threshold is set and distance more than it, return -1.""",
+    _FUNC_(str1, str2[, threshold]) - Returns the Levenshtein distance between the two given strings. If threshold is set and distance more than it, return -1.""",
   examples = """
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
@@ -2146,6 +2146,7 @@ case class OctetLength(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
+// scalastyle:on line.size.limit
 case class Levenshtein(
     left: Expression,
     right: Expression,
