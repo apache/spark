@@ -368,7 +368,7 @@ message StreamingQueryManagerCommandResult {
     // (Required) The id and runId of this query.
     StreamingQueryInstanceId id = 1;
     // (Optional) The name of this query.
-    string name = 2;
+    optional string name = 2;
   }
 
   message AwaitAnyTerminationResult {
