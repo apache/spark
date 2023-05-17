@@ -423,7 +423,7 @@ class UserDefinedFunction:
                 judf = self._create_judf(func)
                 jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
                 jPythonUDF = judf.fromUDFExpr(jUDFExpr)
-                id = jPythonUDF.resultId().id()
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
@@ -441,7 +441,7 @@ class UserDefinedFunction:
                 judf = self._create_judf(func)
                 jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
                 jPythonUDF = judf.fromUDFExpr(jUDFExpr)
-                id = jPythonUDF.resultId().id()
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
