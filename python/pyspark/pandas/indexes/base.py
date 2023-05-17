@@ -112,8 +112,6 @@ class Index(IndexOpsMixin):
     --------
     MultiIndex : A multi-level, or hierarchical, Index.
     DatetimeIndex : Index of datetime64 data.
-    Int64Index : A special case of :class:`Index` with purely integer labels.
-    Float64Index : A special case of :class:`Index` with purely float labels.
 
     Examples
     --------
@@ -198,7 +196,6 @@ class Index(IndexOpsMixin):
         from pyspark.pandas.indexes.category import CategoricalIndex
         from pyspark.pandas.indexes.datetimes import DatetimeIndex
         from pyspark.pandas.indexes.multi import MultiIndex
-        from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
         from pyspark.pandas.indexes.timedelta import TimedeltaIndex
 
         instance: Index
@@ -206,14 +203,6 @@ class Index(IndexOpsMixin):
             instance = object.__new__(MultiIndex)
         elif isinstance(anchor._internal.index_fields[0].dtype, CategoricalDtype):
             instance = object.__new__(CategoricalIndex)
-        elif isinstance(
-            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]), IntegralType
-        ):
-            instance = object.__new__(Int64Index)
-        elif isinstance(
-            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]), FractionalType
-        ):
-            instance = object.__new__(Float64Index)
         elif isinstance(
             anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]),
             (TimestampType, TimestampNTZType),

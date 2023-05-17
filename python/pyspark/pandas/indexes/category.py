@@ -141,7 +141,7 @@ class CategoricalIndex(Index):
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
 
         >>> idx.codes
-        Int64Index([0, 1, 1, 2, 2, 2], dtype='int64')
+        Index([0, 1, 1, 2, 2, 2], dtype='int64')
         """
         return self._with_new_scol(
             self.spark.column,

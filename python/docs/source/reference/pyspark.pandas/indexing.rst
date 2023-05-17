@@ -166,16 +166,6 @@ Selecting
    Index.asof
    Index.isin
 
-.. _api.numeric:
-
-Numeric Index
--------------
-.. autosummary::
-   :toctree: api/
-
-   Int64Index
-   Float64Index
-
 .. _api.categorical:
 
 CategoricalIndex

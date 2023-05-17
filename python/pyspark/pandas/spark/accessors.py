@@ -106,7 +106,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         Name: a, dtype: float64
 
         >>> df.index.spark.transform(lambda c: c + 10)
-        Int64Index([10, 11, 12], dtype='int64')
+        Index([10, 11, 12], dtype='int64')
 
         >>> df.a.spark.transform(lambda c: c + df.b.spark.column)
         0    5
@@ -293,12 +293,12 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
         --------
         >>> idx = ps.Index([1, 2, 3])
         >>> idx
-        Int64Index([1, 2, 3], dtype='int64')
+        Index([1, 2, 3], dtype='int64')
 
         The analyzed one should return the same value.
 
         >>> idx.spark.analyzed
-        Int64Index([1, 2, 3], dtype='int64')
+        Index([1, 2, 3], dtype='int64')
 
         However, it won't work with the same anchor Index.
 
@@ -309,7 +309,7 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
 
         >>> with ps.option_context('compute.ops_on_diff_frames', True):
         ...     (idx + idx.spark.analyzed).sort_values()
-        Int64Index([2, 4, 6], dtype='int64')
+        Index([2, 4, 6], dtype='int64')
         """
         from pyspark.pandas.frame import DataFrame
 
