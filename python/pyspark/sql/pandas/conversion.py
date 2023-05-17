@@ -85,8 +85,6 @@ class PandasConversionMixin:
         import pandas as pd
 
         jconf = self.sparkSession._jconf
-        timezone = jconf.sessionLocalTimeZone()
-        struct_in_pandas = jconf.pandasStructHandlingMode()
 
         if jconf.arrowPySparkEnabled():
             use_arrow = True
@@ -159,24 +157,30 @@ class PandasConversionMixin:
                     else:
                         pdf = pd.DataFrame(columns=self.columns)
 
-                    error_on_duplicated_field_names = False
-                    if struct_in_pandas == "legacy":
-                        error_on_duplicated_field_names = True
-                        struct_in_pandas = "dict"
+                    if len(pdf.columns) > 0:
+                        timezone = jconf.sessionLocalTimeZone()
+                        struct_in_pandas = jconf.pandasStructHandlingMode()
 
-                    return pd.concat(
-                        [
-                            _create_converter_to_pandas(
-                                field.dataType,
-                                field.nullable,
-                                timezone=timezone,
-                                struct_in_pandas=struct_in_pandas,
-                                error_on_duplicated_field_names=error_on_duplicated_field_names,
-                            )(pser)
-                            for (_, pser), field in zip(pdf.items(), self.schema.fields)
-                        ],
-                        axis="columns",
-                    )
+                        error_on_duplicated_field_names = False
+                        if struct_in_pandas == "legacy":
+                            error_on_duplicated_field_names = True
+                            struct_in_pandas = "dict"
+
+                        return pd.concat(
+                            [
+                                _create_converter_to_pandas(
+                                    field.dataType,
+                                    field.nullable,
+                                    timezone=timezone,
+                                    struct_in_pandas=struct_in_pandas,
+                                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                                )(pser)
+                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                            ],
+                            axis="columns",
+                        )
+                    else:
+                        return pdf
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
@@ -192,21 +196,35 @@ class PandasConversionMixin:
                     raise
 
         # Below is toPandas without Arrow optimization.
-        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        rows = self.collect()
+        if len(rows) > 0:
+            pdf = pd.DataFrame.from_records(
+                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
+            )
+        else:
+            pdf = pd.DataFrame(columns=self.columns)
 
-        return pd.concat(
-            [
-                _create_converter_to_pandas(
-                    field.dataType,
-                    field.nullable,
-                    timezone=timezone,
-                    struct_in_pandas=("row" if struct_in_pandas == "legacy" else struct_in_pandas),
-                    error_on_duplicated_field_names=False,
-                )(pser)
-                for (_, pser), field in zip(pdf.items(), self.schema.fields)
-            ],
-            axis="columns",
-        )
+        if len(pdf.columns) > 0:
+            timezone = jconf.sessionLocalTimeZone()
+            struct_in_pandas = jconf.pandasStructHandlingMode()
+
+            return pd.concat(
+                [
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=(
+                            "row" if struct_in_pandas == "legacy" else struct_in_pandas
+                        ),
+                        error_on_duplicated_field_names=False,
+                    )(pser)
+                    for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                ],
+                axis="columns",
+            )
+        else:
+            return pdf
 
     def _collect_as_arrow(self, split_batches: bool = False) -> List["pa.RecordBatch"]:
         """
@@ -401,7 +419,9 @@ class SparkConversionMixin:
                     )
 
         # Convert pandas.DataFrame to list of numpy records
-        np_records = pdf.to_records(index=False)
+        np_records = pdf.set_axis(
+            [f"col_{i}" for i in range(len(pdf.columns))], axis="columns"  # type: ignore[arg-type]
+        ).to_records(index=False)
 
         # Check if any columns need to be fixed for Spark to infer properly
         if len(np_records) > 0:
@@ -459,7 +479,11 @@ class SparkConversionMixin:
 
         from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
         from pyspark.sql.types import TimestampType
-        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+        from pyspark.sql.pandas.types import (
+            from_arrow_type,
+            to_arrow_type,
+            _deduplicate_field_names,
+        )
         from pyspark.sql.pandas.utils import (
             require_minimum_pandas_version,
             require_minimum_pyarrow_version,
@@ -487,7 +511,9 @@ class SparkConversionMixin:
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
-            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+            arrow_types = [
+                to_arrow_type(_deduplicate_field_names(f.dataType)) for f in schema.fields
+            ]
         elif isinstance(schema, DataType):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
@@ -515,8 +541,7 @@ class SparkConversionMixin:
         jsparkSession = self._jsparkSession
 
         safecheck = self._jconf.arrowSafeTypeConversion()
-        col_by_name = True  # col by name only applies to StructType columns, can't happen here
-        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
+        ser = ArrowStreamPandasSerializer(timezone, safecheck)
 
         @no_type_check
         def reader_func(temp_filename):

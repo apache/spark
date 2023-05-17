@@ -742,7 +742,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
+      Map("objectName" -> "`y`", "proposal" -> "`x`"),
       Array(ExpectedContext("y", 46, 46))
     )
   }

@@ -2121,8 +2121,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`c3`",
-          "proposal" ->
-            "`__auto_generated_subquery_name`.`c1`, `__auto_generated_subquery_name`.`c2`"),
+          "proposal" -> "`c1`, `c2`"),
         context = ExpectedContext(
           fragment = "c3",
           start = insert.length + 26,

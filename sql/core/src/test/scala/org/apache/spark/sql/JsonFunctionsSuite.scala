@@ -21,7 +21,8 @@ import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
+
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
