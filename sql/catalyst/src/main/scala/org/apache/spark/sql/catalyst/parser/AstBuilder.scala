@@ -3216,7 +3216,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           case Project(Seq(a: Alias), OneRowRelation()) => a.child
         }.get
         result match {
-          case expr if expr.foldable => expr.eval().toString
+          case expr if expr.foldable =>
+            Cast(expr, StringType, evalMode = EvalMode.TRY).eval().toString
           case _ => throw error
         }
       }
