@@ -162,11 +162,7 @@ class SparkSession:
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
             )
 
-        def getOrCreate(self) -> "SparkSession":
-            global _active_spark_session
-            if _active_spark_session is not None:
-                return _active_spark_session
-
+        def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
             has_spark_remote = "spark.remote" in self._options
 
@@ -183,11 +179,17 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                _active_spark_session = SparkSession(connection=self._channel_builder)
+                return SparkSession(connection=self._channel_builder)
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                _active_spark_session = SparkSession(connection=spark_remote)
+                return SparkSession(connection=spark_remote)
+
+        def getOrCreate(self) -> "SparkSession":
+            global _active_spark_session
+            if _active_spark_session is not None:
+                return _active_spark_session
+            _active_spark_session = self.create()
             return _active_spark_session
 
     _client: SparkConnectClient
@@ -539,7 +541,9 @@ class SparkSession:
                 active_session.stop()
             with SparkContext._lock:
                 del os.environ["SPARK_LOCAL_REMOTE"]
-                del os.environ["SPARK_REMOTE"]
+                del os.environ["SPARK_CONNECT_MODE_ENABLED"]
+                if "SPARK_REMOTE" in os.environ:
+                    del os.environ["SPARK_REMOTE"]
 
     stop.__doc__ = PySparkSession.stop.__doc__
 
