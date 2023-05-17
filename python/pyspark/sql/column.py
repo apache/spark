@@ -1366,13 +1366,19 @@ class Column:
         Examples
         --------
         >>> from pyspark.sql import Window
-        >>> window = Window.partitionBy("name").orderBy("age") \
-                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        >>> window = (
+        ...     Window.partitionBy("name")
+        ...     .orderBy("age")
+        ...     .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        ... )
         >>> from pyspark.sql.functions import rank, min, desc
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
-        >>> df.withColumn("rank", rank().over(window)) \
-                .withColumn("min", min('age').over(window)).sort(desc("age")).show()
+        >>> df.withColumn(
+        ...      "rank", rank().over(window)
+        ... ).withColumn(
+        ...      "min", min('age').over(window)
+        ... ).sort(desc("age")).show()
         +---+-----+----+---+
         |age| name|rank|min|
         +---+-----+----+---+
