@@ -79,7 +79,7 @@ class StatsdSinkSuite extends SparkFunSuite {
       socket.receive(p)
 
       val result = new String(p.getData, 0, p.getLength, UTF_8)
-      assert(result === "spark.counter:12|c", "Counter metric received should match data sent")
+      assert(result === "spark.counter:12|g", "Counter metric received should match data sent")
     }
   }
 

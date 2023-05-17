@@ -74,7 +74,7 @@ private[spark] class StatsdReporter(
         val localPort = socket.getLocalPort
         Try {
           gauges.entrySet.asScala.foreach(e => reportGauge(e.getKey, e.getValue))
-          counters.entrySet.asScala.foreach(e => reportCounter(e.getKey, e.getValue))
+          counters.entrySet.asScala.foreach(e => reportCounterAsGauge(e.getKey, e.getValue))
           histograms.entrySet.asScala.foreach(e => reportHistogram(e.getKey, e.getValue))
           meters.entrySet.asScala.foreach(e => reportMetered(e.getKey, e.getValue))
           timers.entrySet.asScala.foreach(e => reportTimer(e.getKey, e.getValue))
@@ -97,6 +97,11 @@ private[spark] class StatsdReporter(
 
   private def reportCounter(name: String, counter: Counter)(implicit socket: DatagramSocket): Unit =
     send(fullName(name), format(counter.getCount), COUNTER)
+
+  private def reportCounterAsGauge(name: String, counter: Counter)
+                                  (implicit socket: DatagramSocket): Unit = {
+    send(fullName(name), format(counter.getCount), GAUGE)
+  }
 
   private def reportHistogram(name: String, histogram: Histogram)
       (implicit socket: DatagramSocket): Unit = {
