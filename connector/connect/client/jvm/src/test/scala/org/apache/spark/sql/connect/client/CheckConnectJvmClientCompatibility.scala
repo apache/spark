@@ -230,11 +230,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
       ),
 
-      // StreamingQuery
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
-      ),
-
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
