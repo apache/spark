@@ -2134,11 +2134,15 @@ case class OctetLength(child: Expression)
  * A function that return the Levenshtein distance between the two given strings.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.",
+  usage = """
+    _FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.
+      If threshold is set and distance more than it, return -1.""",
   examples = """
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
        3
+      > SELECT _FUNC_('kitten', 'sitting', 2);
+       -1
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -2164,26 +2168,26 @@ case class Levenshtein(
     }
   }
 
-  override def inputTypes: Seq[AbstractDataType] = if (threshold.isDefined) {
-    Seq(StringType, StringType, IntegerType)
-  } else {
-    Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = threshold match {
+    case Some(_) => Seq(StringType, StringType, IntegerType)
+    case _ => Seq(StringType, StringType)
   }
 
-  override def children: Seq[Expression] = if (threshold.isDefined) {
-    Seq(left, right, threshold.get)
-  } else {
-    Seq(left, right)
+  override def children: Seq[Expression] = threshold match {
+    case Some(value) => Seq(left, right, value)
+    case _ => Seq(left, right)
   }
 
   override def dataType: DataType = IntegerType
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    if (threshold.isDefined) {
-      copy(left = newChildren(0), right = newChildren(1), threshold = Some(newChildren(2)))
-    } else {
-      copy(left = newChildren(0), right = newChildren(1))
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    threshold match {
+      case Some(_) => copy(left = newChildren(0), right = newChildren(1),
+        threshold = Some(newChildren(2)))
+      case _ => copy(left = newChildren(0), right = newChildren(1))
     }
+  }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
@@ -2194,61 +2198,76 @@ case class Levenshtein(
     if (leftEval == null) return null
     val rightEval = right.eval(input)
     if (rightEval == null) return null
-
     val thresholdEval = threshold.map(_.eval(input))
-    if (thresholdEval.isDefined) {
-      leftEval.asInstanceOf[UTF8String].levenshteinDistance(
-        rightEval.asInstanceOf[UTF8String], thresholdEval.get.asInstanceOf[Int])
-    } else {
-      leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
+    thresholdEval match {
+      case Some(v) =>
+        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
+          v.asInstanceOf[Int])
+      case _ =>
+        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    threshold match {
+      case Some(_) => genCodeWithThreshold(ctx, ev, children(2))
+      case _ => genCodeWithoutThreshold(ctx, ev)
+    }
+  }
+
+  private def genCodeWithThreshold(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      thresholdExpr: Expression): ExprCode = {
     val leftGen = children.head.genCode(ctx)
     val rightGen = children(1).genCode(ctx)
-    val thresholdGen = if (threshold.isDefined) children(2).genCode(ctx) else null
-    val resultCode = if (threshold.isDefined) {
-      s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value}, " +
-        s"${thresholdGen.value});"
-    } else {
-      s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
-    }
+    val thresholdGen = thresholdExpr.genCode(ctx)
+    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
+      s"${rightGen.value}, ${thresholdGen.value});"
     if (nullable) {
-      val nullSafeEval = if (threshold.isDefined) {
-        leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-          rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
-            thresholdGen.code + ctx.nullSafeExec(children(2).nullable, thresholdGen.isNull) {
-              s"""
-                ${ev.isNull} = false;
-                $resultCode
-              """
-            }
-          }
-        }
-      } else {
-        leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
-          rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+          thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
             s"""
               ${ev.isNull} = false;
               $resultCode
-            """
+             """
           }
         }
       }
-      ev.copy(code =
-        code"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
-      val eval = if (threshold.isDefined) {
-        leftGen.code + rightGen.code + thresholdGen.code
-      } else {
-        leftGen.code + rightGen.code
+      val eval = leftGen.code + rightGen.code + thresholdGen.code
+      ev.copy(code = code"""
+        $eval
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+
+  private def genCodeWithoutThreshold(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = children.head.genCode(ctx)
+    val rightGen = children(1).genCode(ctx)
+    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
+    if (nullable) {
+      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+          s"""
+            ${ev.isNull} = false;
+            $resultCode
+           """
+        }
       }
-      ev.copy(code =
-        code"""
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      val eval = leftGen.code + rightGen.code
+      ev.copy(code = code"""
         $eval
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)

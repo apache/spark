@@ -54,7 +54,7 @@ from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
+from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -330,7 +330,7 @@ class SparkSession:
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
             if isinstance(schema, StructType):
-                arrow_schema = to_arrow_schema(schema)
+                arrow_schema = to_arrow_schema(cast(StructType, _deduplicate_field_names(schema)))
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
@@ -353,9 +353,7 @@ class SparkSession:
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
-            ser = ArrowStreamPandasSerializer(
-                cast(str, timezone), safecheck == "true", assign_cols_by_name=True
-            )
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
 
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
@@ -363,7 +361,9 @@ class SparkSession:
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
-                _table = _table.rename_columns(schema.names).cast(arrow_schema)
+                _table = _table.rename_columns(
+                    cast(StructType, _deduplicate_field_names(schema)).names
+                ).cast(arrow_schema)
 
         elif isinstance(data, np.ndarray):
             if _cols is None:
