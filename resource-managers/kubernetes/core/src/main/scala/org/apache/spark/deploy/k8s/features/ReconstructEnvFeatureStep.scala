@@ -122,7 +122,7 @@ private[spark] class ReconstructEnvFeatureStep(conf: KubernetesConf)
         .endSpec()
         .build()
       // add the config map as additional resource
-      val content = generateProfileContent(envWithDeps, envWithDepsMappings)
+      val content = generateProfileContent(envWithDeps.toSeq, envWithDepsMappings)
       additionalResources += new ConfigMapBuilder()
         .withNewMetadata()
           .withName(configMapName)
@@ -138,7 +138,7 @@ private[spark] class ReconstructEnvFeatureStep(conf: KubernetesConf)
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    additionalResources
+    additionalResources.toSeq
   }
 }
 
