@@ -883,17 +883,32 @@ class DDLParserSuite extends AnalysisTest {
         expectedIfNotExists = false)
     }
     // Test some cases where the provided option value is a constant but non-literal expression.
-    val prefix = "CREATE TABLE table_name (col INT) USING json OPTIONS "
+    val prefix = "create table t (col int) using json options "
+    val schema = new StructType().add("col", IntegerType)
+    def createTable(options: Map[String, String]): LogicalPlan = {
+      CreateTable(UnresolvedIdentifier(Seq("t")), schema, Seq.empty[Transform],
+        LogicalTableSpec(
+          Map.empty[String, String], Some("json"), options, None, None, None, false),
+        false)
+    }
+    comparePlans(parsePlan(s"$prefix ('k' = 1 + 2)"), createTable(Map("k" -> "3")))
+    comparePlans(parsePlan(s"$prefix ('k' = 'a' || 'b')"), createTable(Map("k" -> "ab")))
+    comparePlans(parsePlan(s"$prefix ('k' = 0d + 0d)"), createTable(Map("k" -> "0.0")))
+    comparePlans(parsePlan(s"$prefix ('k' = date_diff(current_date(), current_date()))"),
+      createTable(Map("k" -> "0")))
+    // Test some cases where the provided option value is a non-constant expression.
     Seq(
-      "('optKey' = 1 + 2)",
-      "('optKey' = true or false)",
-      "('optKey' = date'2023-01-02')"
+      "('optKey' = 1 + 2 + unresolvedAttribute)",
+      "('optKey' = true or false or unresolvedAttribute)",
+      "('optKey' = date_diff(date'2023-01-02', unresolvedAttribute))",
+      "('optKey' = unparsable"
     ).foreach { options =>
       checkError(
         exception = parseException(prefix + options),
         errorClass = "INVALID_SQL_SYNTAX",
         parameters = Map(
-          "inputString" -> "option or property key optKey is invalid; only literals are supported"),
+          "inputString" ->
+            "option or property key optKey is invalid; only constant expressions are supported"),
         context = ExpectedContext(
           fragment = options,
           start = prefix.length,
