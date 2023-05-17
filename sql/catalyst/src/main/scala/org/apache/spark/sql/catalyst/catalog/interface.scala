@@ -497,21 +497,20 @@ object CatalogTable {
 
   def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
     props.get(key).orElse {
-      if (props.filterKeys(_.startsWith(key)).isEmpty) {
-        None
-      } else {
-        val numParts = props.get(s"$key.numParts")
-        if (numParts.isEmpty) {
-          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
-        } else {
-          val parts = (0 until numParts.get.toInt).map { index =>
-            props.getOrElse(s"$key.part.$index", {
-              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
-                key, s"Missing part $index, $numParts parts are expected.")
-            })
-          }
-          Some(parts.mkString)
+      if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
+        props.get(s"$key.numParts") match {
+          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
+          case Some(numParts) =>
+            val parts = (0 until numParts.toInt).map { index =>
+              val keyPart = s"$key.part.$index"
+              props.getOrElse(keyPart, {
+                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
+              })
+            }
+            Some(parts.mkString)
         }
+      } else {
+        None
       }
     }
   }

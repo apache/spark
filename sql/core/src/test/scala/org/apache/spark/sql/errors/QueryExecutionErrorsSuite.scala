@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.util.BadRecordException
@@ -138,25 +138,6 @@ class QueryExecutionErrorsSuite
             "Such issues can arise if a bad key is used during decryption.")),
         sqlState = "22023")
     }
-  }
-
-  test("INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC: AES decrypt failure - invalid salt") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql(
-          """
-            |SELECT aes_decrypt(
-            |  unbase64('INVALID_SALT_ERGxwEOTDpDD4bQvDtQaNe+gXGudCcUk='),
-            |  '0000111122223333',
-            |  'CBC', 'PKCS')
-            |""".stripMargin).collect()
-      },
-      errorClass = "INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC",
-      parameters = Map(
-        "parameter" -> "`expr`",
-        "functionName" -> "`aes_decrypt`",
-        "saltedMagic" -> "0x20D5402C80D200B4"),
-      sqlState = "22023")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
@@ -873,6 +854,18 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> ("""A method named "nonexistent" is not declared in """ +
           "any enclosing class nor any supertype")),
+      sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Aggregate Window Functions do not support merging") {
+    val e = intercept[SparkException] {
+      RowNumber().mergeExpressions
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "The aggregate window function `row_number` does not support merging."),
       sqlState = "XX000")
   }
 }

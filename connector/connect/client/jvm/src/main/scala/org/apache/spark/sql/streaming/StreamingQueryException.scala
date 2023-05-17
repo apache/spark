@@ -27,12 +27,20 @@ import org.apache.spark.annotation.Evolving
  *   Maps to return value of original StreamingQueryException's toString method
  * @param errorClass
  *   Error class of this exception
+ * @param stackTrace
+ *   Stack trace of this exception
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryException private[sql] (message: String, errorClass: String)
+class StreamingQueryException private[sql] (
+    message: String,
+    errorClass: String,
+    stackTrace: String)
     extends SparkThrowable {
 
-  // TODO(SPARK-43206): Add stack trace
   override def getErrorClass: String = errorClass
+
+  override def toString: String = s"""$message
+    |JVM stacktrace: $stackTrace
+    |""".stripMargin
 }

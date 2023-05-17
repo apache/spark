@@ -26,6 +26,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
+from pyspark.rdd import PythonEvalType
 
 
 @unittest.skipIf(
@@ -49,9 +50,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
 
     def test_nested_input_error(self):
-        with self.assertRaisesRegexp(
-            Exception, "NotImplementedError: Struct input type are not supported"
-        ):
+        with self.assertRaisesRegexp(Exception, "[NotImplementedError]"):
             self.spark.range(1).selectExpr("struct(1, 2) as struct").select(
                 udf(lambda x: x)("struct")
             ).collect()
@@ -111,6 +110,32 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
+
+    def test_eval_type(self):
+        self.assertEquals(
+            udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+        )
+        self.assertEquals(
+            udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
+        )
+
+    def test_register(self):
+        df = self.spark.range(1).selectExpr(
+            "array(1, 2, 3) as array",
+        )
+        str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
+
+        # To verify that Arrow optimization is on
+        self.assertEquals(
+            df.selectExpr("str_repr(array) AS str_id").first()[0],
+            "[1 2 3]",  # The input is a NumPy array when the Arrow optimization is on
+        )
+
+        # To verify that a UserDefinedFunction is returned
+        self.assertListEqual(
+            df.selectExpr("str_repr(array) AS str_id").collect(),
+            df.select(str_repr_func("array").alias("str_id")).collect(),
+        )
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):

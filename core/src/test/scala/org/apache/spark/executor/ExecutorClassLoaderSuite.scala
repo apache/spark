@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.repl
+package org.apache.spark.executor
 
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException

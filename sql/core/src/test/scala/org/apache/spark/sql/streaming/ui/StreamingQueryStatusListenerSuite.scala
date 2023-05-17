@@ -104,7 +104,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     }
 
     // handle terminate event
-    val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None)
+    val terminateEvent = new StreamingQueryListener.QueryTerminatedEvent(id, runId, None, None)
     listener.onQueryTerminated(terminateEvent)
 
     assert(!queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.isActive)
@@ -126,7 +126,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryStarted(startEvent0)
 
     // handle terminate event
-    val terminateEvent0 = new StreamingQueryListener.QueryTerminatedEvent(id, runId0, None)
+    val terminateEvent0 = new StreamingQueryListener.QueryTerminatedEvent(id, runId0, None, None)
     listener.onQueryTerminated(terminateEvent0)
 
     // handle second time start
@@ -178,19 +178,19 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val (id3, runId3) = addNewQuery()
     assert(queryStore.allQueryUIData.count(!_.summary.isActive) == 0)
 
-    val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None)
+    val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None, None)
     listener.onQueryTerminated(terminateEvent1)
     checkInactiveQueryStatus(1, Seq(id1))
     // SPARK-41972: having a short sleep here to make sure the end time of query 2 is larger than
     // query 1.
     Thread.sleep(20)
-    val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(id2, runId2, None)
+    val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(id2, runId2, None, None)
     listener.onQueryTerminated(terminateEvent2)
     checkInactiveQueryStatus(2, Seq(id1, id2))
     // SPARK-41972: having a short sleep here to make sure the end time of query 3 is larger than
     // query 2.
     Thread.sleep(20)
-    val terminateEvent3 = new StreamingQueryListener.QueryTerminatedEvent(id3, runId3, None)
+    val terminateEvent3 = new StreamingQueryListener.QueryTerminatedEvent(id3, runId3, None, None)
     listener.onQueryTerminated(terminateEvent3)
     checkInactiveQueryStatus(2, Seq(id2, id3))
   }
