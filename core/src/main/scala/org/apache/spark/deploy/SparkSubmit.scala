@@ -414,6 +414,9 @@ private[spark] class SparkSubmit extends Logging {
         // directory too.
         // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
         // working directory
+        // SPARK-43540: add current working directory into classpath
+        val workingDirectory = "."
+        childClasspath += workingDirectory
         def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
         String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
@@ -425,7 +428,7 @@ private[spark] class SparkSubmit extends Logging {
             case (localResources, resolvedUri) =>
               val source = new File(localResources.getPath)
               val dest = new File(
-                ".",
+                workingDirectory,
                 if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
               logInfo(
                 s"Files  $resolvedUri " +
