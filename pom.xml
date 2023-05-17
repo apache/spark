@@ -117,6 +117,7 @@
     <maven.version>3.8.8</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
+    <asm.version>9.4</asm.version>
     <slf4j.version>2.0.7</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -3130,12 +3131,12 @@
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>9.4</version>
+              <version>${asm.version}</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>9.4</version>
+              <version>${asm.version}</version>
             </dependency>
           </dependencies>
         </plugin>
