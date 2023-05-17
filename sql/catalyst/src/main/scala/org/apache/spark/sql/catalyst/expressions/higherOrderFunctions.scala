@@ -942,7 +942,7 @@ case class ArrayScan(argument: Expression,
     copy(function = newFunction)
   }
 
-  @transient lazy val LambdaFunction(_,
+  @transient private lazy val LambdaFunction(_,
   Seq(accForMergeVar: NamedLambdaVariable, elementVar: NamedLambdaVariable), _) = function
   override def eval(input: InternalRow): Any = {
     val arr = argument.eval(input).asInstanceOf[ArrayData]
@@ -950,16 +950,18 @@ case class ArrayScan(argument: Expression,
     if (arr == null) {
       null
     } else {
-      val result = new GenericArrayData(new Array[Any](arr.numElements))
+      val result = new GenericArrayData(new Array[Any](arr.numElements() + 1))
       val f = functionForEval
       var i = 0
-      accForMergeVar.value.set(zero.eval(input))
+      val zeroVal = zero.eval(input)
+      accForMergeVar.value.set(zeroVal)
+      result.update(i, zeroVal)
       while (i < arr.numElements()) {
         elementVar.value.set(arr.get(i, elementVar.dataType))
         val v = InternalRow.copyValue(f.eval(input))
         accForMergeVar.value.set(v)
-        result.update(i, v)
         i += 1
+        result.update(i, v)
       }
       result
     }
