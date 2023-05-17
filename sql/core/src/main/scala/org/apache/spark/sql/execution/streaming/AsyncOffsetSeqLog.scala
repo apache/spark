@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.streaming
 import java.io.OutputStream
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{Clock, SystemClock}
 
 /**
@@ -90,9 +89,7 @@ class AsyncOffsetSeqLog(
         if (ret) {
           batchId
         } else {
-          throw new IllegalStateException(
-            s"Concurrent update to the log. Multiple streaming jobs detected for $batchId"
-          )
+          throw QueryExecutionErrors.concurrentStreamLogUpdate(batchId)
         }
       })
       pendingOffsetWrites.put(batchId, future)
