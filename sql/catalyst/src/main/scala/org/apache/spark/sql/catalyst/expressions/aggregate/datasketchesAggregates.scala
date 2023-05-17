@@ -22,7 +22,10 @@ import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -95,6 +98,26 @@ case class HllSketchAgg(
   override protected def withNewChildrenInternal(newLeft: Expression,
                                                  newRight: Expression): HllSketchAgg =
     copy(left = newLeft, right = newRight)
+
+  // Overrides for ExpectsInputTypes
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!right.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "lgConfigK",
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
 
   // Overrides for TypedImperativeAggregate
 
@@ -264,6 +287,26 @@ case class HllUnionAgg(
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression):
   HllUnionAgg = copy(left = newLeft, right = newRight)
+
+  // Overrides for ExpectsInputTypes
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!right.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "allowDifferentLgConfigK",
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
 
   // Overrides for TypedImperativeAggregate
 

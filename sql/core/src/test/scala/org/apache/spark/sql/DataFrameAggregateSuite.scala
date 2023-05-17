@@ -1876,6 +1876,49 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(res, Nil)
     }
     assert(error7.toString contains "UnsupportedOperationException")
+
+    // validate specific args require foldable = true
+    val error8 = intercept[AnalysisException] {
+      val res = sql(
+        """with cte as (
+          |select * from values
+          | (1, 12)
+          | as tab(col, logk)
+          |)
+          |select hll_sketch_agg(col, logk) from cte
+          |""".stripMargin
+      )
+      checkAnswer(res, Nil)
+    }
+    assert(error8.toString contains "NON_FOLDABLE_INPUT")
+
+    val error9 = intercept[AnalysisException] {
+      val res = sql(
+        """with cte as (
+          |select * from values
+          | (binary(1), true)
+          | as tab(col, allow_different_lgconfigk)
+          |)
+          |select hll_union_agg(col, allow_different_lgconfigk) from cte
+          |""".stripMargin
+      )
+      checkAnswer(res, Nil)
+    }
+    assert(error9.toString contains "NON_FOLDABLE_INPUT")
+
+    val error10 = intercept[AnalysisException] {
+      val res = sql(
+        """with cte as (
+          |select * from values
+          | (binary(1), binary(1), true)
+          | as tab(col1, col2, allow_different_lgconfigk)
+          |)
+          |select hll_union(col1, col2, allow_different_lgconfigk) from cte
+          |""".stripMargin
+      )
+      checkAnswer(res, Nil)
+    }
+    assert(error10.toString contains "NON_FOLDABLE_INPUT")
   }
 }
 
