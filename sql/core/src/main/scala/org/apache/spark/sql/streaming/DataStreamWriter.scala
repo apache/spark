@@ -460,7 +460,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       throw new IllegalArgumentException("foreach writer cannot be null")
     }
     if (encoder != null) {
-      this.foreachWriterEncoder = ds.sparkSession.sparkContext.clean(encoder)
+      this.foreachWriterEncoder = encoder
     }
     this
   }

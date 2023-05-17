@@ -22,7 +22,7 @@ import java.io.{InputStream, ObjectInputStream, ObjectOutputStream, OutputStream
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 
 /**
- * A wrapper class around the UDF and it's Input/Output [[AgnosticEncoder]](s).
+ * A wrapper class around the foreachWriter and it's Input/Output [[AgnosticEncoder]](s).
  *
  * This class is shared between the client and the server to allow for serialization and
  * deserialization of the JVM object.
