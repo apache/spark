@@ -398,7 +398,7 @@ case class InMemoryRelation(
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  def cachedPlan: SparkPlan = cacheBuilder.cachedPlan.clone()
+  lazy val cachedPlan: SparkPlan = cacheBuilder.cachedPlan.clone()
 
   private[sql] def updateStats(
       rowCount: Long,
