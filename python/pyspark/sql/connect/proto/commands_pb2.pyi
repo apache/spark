@@ -635,27 +635,55 @@ class WriteStreamOperationStart(google___protobuf___message___Message):
     path: typing___Text = ...
     table_name: typing___Text = ...
 
+    INPUT_FIELD_NUMBER: builtins.int
+    FORMAT_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
+    PARTITIONING_COLUMN_NAMES_FIELD_NUMBER: builtins.int
+    PROCESSING_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+    AVAILABLE_NOW_FIELD_NUMBER: builtins.int
+    ONCE_FIELD_NUMBER: builtins.int
+    CONTINUOUS_CHECKPOINT_INTERVAL_FIELD_NUMBER: builtins.int
+    OUTPUT_MODE_FIELD_NUMBER: builtins.int
+    QUERY_NAME_FIELD_NUMBER: builtins.int
+    PATH_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    FOREACH_WRITER_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> spark___connect___relations_pb2___Relation: ...
     @property
     def options(
         self,
-    ) -> google___protobuf___internal___containers___ScalarMap[typing___Text, typing___Text]: ...
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
+    @property
+    def partitioning_column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    processing_time_interval: builtins.str
+    available_now: builtins.bool
+    once: builtins.bool
+    continuous_checkpoint_interval: builtins.str
+    output_mode: builtins.str
+    query_name: builtins.str
+    path: builtins.str
+    table_name: builtins.str
+    @property
+    def foreach_writer(self) -> global___StreamingForeachWriter: ...
     def __init__(
         self,
         *,
-        input: typing___Optional[spark___connect___relations_pb2___Relation] = None,
-        format: typing___Optional[typing___Text] = None,
-        options: typing___Optional[typing___Mapping[typing___Text, typing___Text]] = None,
-        partitioning_column_names: typing___Optional[typing___Iterable[typing___Text]] = None,
-        processing_time_interval: typing___Optional[typing___Text] = None,
-        available_now: typing___Optional[builtin___bool] = None,
-        once: typing___Optional[builtin___bool] = None,
-        continuous_checkpoint_interval: typing___Optional[typing___Text] = None,
-        output_mode: typing___Optional[typing___Text] = None,
-        query_name: typing___Optional[typing___Text] = None,
-        path: typing___Optional[typing___Text] = None,
-        table_name: typing___Optional[typing___Text] = None,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        format: builtins.str = ...,
+        options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        partitioning_column_names: collections.abc.Iterable[builtins.str] | None = ...,
+        processing_time_interval: builtins.str = ...,
+        available_now: builtins.bool = ...,
+        once: builtins.bool = ...,
+        continuous_checkpoint_interval: builtins.str = ...,
+        output_mode: builtins.str = ...,
+        query_name: builtins.str = ...,
+        path: builtins.str = ...,
+        table_name: builtins.str = ...,
+        foreach_writer: global___StreamingForeachWriter | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -664,6 +692,8 @@ class WriteStreamOperationStart(google___protobuf___message___Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_writer",
+            b"foreach_writer",
             "input",
             b"input",
             "once",
@@ -687,6 +717,8 @@ class WriteStreamOperationStart(google___protobuf___message___Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_writer",
+            b"foreach_writer",
             "format",
             b"format",
             "input",
@@ -726,9 +758,37 @@ class WriteStreamOperationStart(google___protobuf___message___Message):
 
 type___WriteStreamOperationStart = WriteStreamOperationStart
 
-class WriteStreamOperationStartResult(google___protobuf___message___Message):
-    DESCRIPTOR: google___protobuf___descriptor___Descriptor = ...
-    name: typing___Text = ...
+class StreamingForeachWriter(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PYTHON_WRITER_FIELD_NUMBER: builtins.int
+    @property
+    def python_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
+    def __init__(
+        self,
+        *,
+        python_writer: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["writer", b"writer"]
+    ) -> typing_extensions.Literal["python_writer"] | None: ...
+
+global___StreamingForeachWriter = StreamingForeachWriter
+
+class WriteStreamOperationStartResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     @property
     def query_id(self) -> type___StreamingQueryInstanceId: ...
@@ -1232,16 +1292,20 @@ class StreamingQueryManagerCommandResult(google___protobuf___message___Message):
         def __init__(
             self,
             *,
-            id: typing___Optional[type___StreamingQueryInstanceId] = None,
-            name: typing___Optional[typing___Text] = None,
+            id: global___StreamingQueryInstanceId | None = ...,
+            name: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions___Literal["id", b"id"]
-        ) -> builtin___bool: ...
+            self,
+            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions___Literal["id", b"id", "name", b"name"]
+            self,
+            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
         ) -> None: ...
-    type___StreamingQueryInstance = StreamingQueryInstance
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_name", b"_name"]
+        ) -> typing_extensions.Literal["name"] | None: ...
 
     class AwaitAnyTerminationResult(google___protobuf___message___Message):
         DESCRIPTOR: google___protobuf___descriptor___Descriptor = ...

@@ -210,6 +210,14 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  StreamingForeachWriter foreach_writer = 13;
+}
+
+message StreamingForeachWriter {
+  oneof writer {
+    PythonUDF python_writer = 1;
+  }
 }
 
 message WriteStreamOperationStartResult {
@@ -361,7 +369,7 @@ message StreamingQueryManagerCommandResult {
     // (Required) The id and runId of this query.
     StreamingQueryInstanceId id = 1;
     // (Optional) The name of this query.
-    string name = 2;
+    optional string name = 2;
   }
 
   message AwaitAnyTerminationResult {
