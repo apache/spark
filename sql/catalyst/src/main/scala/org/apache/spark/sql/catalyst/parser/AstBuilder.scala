@@ -3218,7 +3218,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         }.get
         result match {
           case expr if expr.foldable =>
-            Cast(expr, StringType, evalMode = EvalMode.TRY).eval().toString
+            // Note: we use 'toString' here instead of using a Cast expression to support some types
+            // of literals where casting to string is not supported.
+            expr.toString
           case _ =>
             throw error
         }
