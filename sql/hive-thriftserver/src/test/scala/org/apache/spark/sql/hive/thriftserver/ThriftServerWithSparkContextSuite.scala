@@ -222,7 +222,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     withTable("t") {
       sql("CREATE TABLE t (c char(10), v varchar(11)) using parquet")
 
-      withJdbcStatement { stmt =>
+      withJdbcStatement() { stmt =>
         val rs = stmt.executeQuery("SELECT * FROM t")
         val metaData = rs.getMetaData
         assert(metaData.getColumnDisplaySize(1) === 10)
