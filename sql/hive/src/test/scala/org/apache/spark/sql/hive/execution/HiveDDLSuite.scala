@@ -563,7 +563,7 @@ class HiveDDLSuite
   test("create partitioned table without specifying data type for the partition columns") {
     assertAnalysisError(
       "CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet",
-      "partition column b is not defined in table")
+      "partition column `b` is not defined in table")
   }
 
   test("add/drop partition with location - managed table") {
