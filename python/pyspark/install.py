@@ -179,6 +179,7 @@ def get_preferred_mirrors():
             pass
 
     default_sites = [
+        "https://dlcdn.apache.org/",
         "https://archive.apache.org/dist",
         "https://dist.apache.org/repos/dist/release",
     ]
