@@ -179,7 +179,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
         s = arrow_column.to_pandas(date_as_object=True)
 
-        # TODO: cache the converter for reuse
+        # TODO(SPARK-43579): cache the converter for reuse
         converter = _create_converter_to_pandas(
             data_type=from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
             nullable=True,
@@ -212,7 +212,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         if arrow_type is not None:
             spark_type = from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-
+            # TODO(SPARK-43579): cache the converter for reuse
             conv = _create_converter_from_pandas(
                 spark_type, timezone=self._timezone, error_on_duplicated_field_names=False
             )
