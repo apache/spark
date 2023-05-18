@@ -2245,11 +2245,6 @@
       "Operation not allowed: <message>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0036" : {
-    "message" : [
-      "Expected `NOSCAN` instead of `<ctx>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0037" : {
     "message" : [
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
