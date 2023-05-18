@@ -26,16 +26,19 @@ class SummarizerAggStatus:
         self.max_values = input_array.copy()
         self.count = 1
         self.sum_values = np.array(input_array.copy())
+        self.square_sum_values = np.square(input_array)
 
     def update(self, input_array):
         self.count += 1
         self.sum_values += input_array
+        self.square_sum_values += np.square(input_array)
         self.min_values = np.minimum(self.min_values, input_array)
         self.max_values = np.maximum(self.max_values, input_array)
 
     def merge(self, status):
         self.count += status.count
         self.sum_values += status.sum_values
+        self.square_sum_values += status.square_sum_values
         self.min_values = np.minimum(self.min_values, status.min_values)
         self.max_values = np.maximum(self.max_values, status.max_values)
         return self
@@ -52,6 +55,10 @@ class SummarizerAggStatus:
                 result["sum"] = self.sum_values.copy()
             if metric == "mean":
                 result["mean"] = self.sum_values / self.count
+            if metric == "std":
+                result["std"] = np.sqrt(
+                    (self.square_sum_values / self.count) - np.square(self.sum_values / self.count)
+                ) * (self.count / (self.count - 1))
 
         return result
 

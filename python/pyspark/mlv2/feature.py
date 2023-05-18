@@ -74,3 +74,50 @@ class MaxAbsScalerModel(Transformer, HasInputCol, HasOutputCol):
             result_col_name=output_col,
             result_col_spark_type='double'
         )
+
+
+class StandardScaler(Estimator, HasInputCol, HasOutputCol):
+    """
+    Standardizes features by removing the mean and scaling to unit variance using column summary
+    statistics on the samples in the training set.
+    """
+
+    def _fit(self, dataset):
+        input_col = self.getInputCol()
+
+        dataset = dataset.withColumn(input_col, array_to_vector(col(input_col)))
+
+        min_max_res = summarize_dataframe(dataset, input_col, ["mean", "std"])
+        mean_values = min_max_res["mean"]
+        std_values = min_max_res["std"]
+
+        return self._copyValues(MaxAbsScalerModel(mean_values, std_values))
+
+
+class StandardScalerModel(Transformer, HasInputCol, HasOutputCol):
+
+    def __init__(self, mean_values, std_values):
+        self.mean_values = mean_values
+        self.std_values = std_values
+
+    def transform(self, dataset):
+
+        input_col = self.getInputCol()
+        output_col = self.getOutputCol()
+
+        mean_values = self.mean_values
+        std_values = self.std_values
+
+        def transform_pandas_series(series):
+            def map_value(x):
+                return (x - mean_values) / std_values
+
+            return series.apply(map_value)
+
+        return transform_dataframe_column(
+            dataset,
+            input_col_name=input_col,
+            transform_fn=transform_pandas_series,
+            result_col_name=output_col,
+            result_col_spark_type='double'
+        )
