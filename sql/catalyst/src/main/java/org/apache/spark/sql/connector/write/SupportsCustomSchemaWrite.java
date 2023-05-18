@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.Table;
  * Trait for tables that support custom schemas for write operations including INSERT INTO commands
  * whose target table columns have explicit or implicit default values.
  *
- * @since 3.4.1
+ * @since 3.5.0
  */
 @Evolving
 public interface SupportsCustomSchemaWrite extends Table {
