@@ -664,7 +664,8 @@ class Drop(LogicalPlan):
         columns: List[Union[Column, str]],
     ) -> None:
         super().__init__(child)
-        assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
+        if len(columns) > 0:
+            assert all(isinstance(c, (Column, str)) for c in columns)
         self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:

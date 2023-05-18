@@ -1,0 +1,12 @@
+
+ü
+common.protospark.connect"°
+StorageLevel
+use_disk (RuseDisk
+
+use_memory (R	useMemory 
+use_off_heap (R
+useOffHeap"
+deserialized (Rdeserialized 
+replication (RreplicationB"
+org.apache.spark.connect.protoPbproto3

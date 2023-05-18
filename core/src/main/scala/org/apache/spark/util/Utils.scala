@@ -91,7 +91,7 @@ private[spark] object CallSite {
 /**
  * Various utility methods used by Spark.
  */
-private[spark] object Utils extends Logging {
+private[spark] object Utils extends Logging with SparkClassUtils {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
@@ -194,36 +194,9 @@ private[spark] object Utils extends Logging {
     weakStringInterner.intern(s)
   }
 
-  /**
-   * Get the ClassLoader which loaded Spark.
-   */
-  def getSparkClassLoader: ClassLoader = SparkClassUtils.getSparkClassLoader
-
-  /**
-   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
-   * loaded Spark.
-   *
-   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
-   * active loader when setting up ClassLoader delegation chains.
-   */
-  def getContextOrSparkClassLoader: ClassLoader = SparkClassUtils.getContextOrSparkClassLoader
-
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
     Try { classForName(clazz, initialize = false) }.isSuccess
-  }
-
-  // scalastyle:off classforname
-  /**
-   * Preferred alternative to Class.forName(className), as well as
-   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
-   */
-  def classForName[C](
-      className: String,
-      initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[C] = {
-    SparkClassUtils.classForName(className, initialize, noSparkClassLoader);
-    // scalastyle:on classforname
   }
 
   /**

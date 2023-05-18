@@ -30,7 +30,7 @@ from py4j.java_gateway import JavaObject
 from pyspark import SparkContext
 from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -419,8 +419,9 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = jPythonUDF.expr().resultId().id()
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
@@ -436,8 +437,9 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = jPythonUDF.expr().resultId().id()
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
@@ -623,6 +625,7 @@ class UDFRegistration:
             f = cast("UserDefinedFunctionLike", f)
             if f.evalType not in [
                 PythonEvalType.SQL_BATCHED_UDF,
+                PythonEvalType.SQL_ARROW_BATCHED_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -630,25 +633,30 @@ class UDFRegistration:
                 raise PySparkTypeError(
                     error_class="INVALID_UDF_EVAL_TYPE",
                     message_parameters={
-                        "eval_type": "SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                        "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
+                        "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or "
+                        "SQL_GROUPED_AGG_PANDAS_UDF"
                     },
                 )
-            register_udf = _create_udf(
+            source_udf = _create_udf(
                 f.func,
                 returnType=f.returnType,
                 name=name,
                 evalType=f.evalType,
                 deterministic=f.deterministic,
-            )._unwrapped  # type: ignore[attr-defined]
-            return_udf = f
+            )
+            if f.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+                register_udf = _create_arrow_py_udf(source_udf)._unwrapped
+            else:
+                register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
+            return_udf = register_udf
         else:
             if returnType is None:
                 returnType = StringType()
             return_udf = _create_udf(
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
-            register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
+            register_udf = return_udf._unwrapped
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 

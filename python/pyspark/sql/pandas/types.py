@@ -683,6 +683,105 @@ def _create_converter_to_pandas(
         return lambda pser: pser
 
 
+def _create_converter_from_pandas(
+    data_type: DataType,
+    *,
+    timezone: Optional[str],
+    error_on_duplicated_field_names: bool = True,
+) -> Callable[["pd.Series"], "pd.Series"]:
+    """
+    Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
+
+    Parameters
+    ----------
+    data_type : :class:`DataType`
+        The data type corresponding to the pandas Series to be converted.
+    timezone : str, optional
+        The timezone to convert from. If there is a timestamp type, it's required.
+    error_on_duplicated_field_names : bool, optional
+        Whether raise an exception when there are duplicated field names.
+        (default ``True``)
+
+    Returns
+    -------
+    The converter of `pandas.Series`
+    """
+    import numpy as np
+    import pandas as pd
+
+    if isinstance(data_type, TimestampType):
+        assert timezone is not None
+
+        def correct_timestamp(pser: pd.Series) -> pd.Series:
+            return _check_series_convert_timestamps_internal(pser, cast(str, timezone))
+
+        return correct_timestamp
+
+    def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
+
+        if isinstance(dt, ArrayType):
+            _element_conv = _converter(dt.elementType)
+            if _element_conv is None:
+                return None
+
+            def convert_array(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
+
+            return convert_array
+
+        elif isinstance(dt, MapType):
+            _key_conv = _converter(dt.keyType) or (lambda x: x)
+            _value_conv = _converter(dt.valueType) or (lambda x: x)
+
+            def convert_map(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, dict)
+                    return [(_key_conv(k), _value_conv(v)) for k, v in value.items()]
+
+            return convert_map
+
+        elif isinstance(dt, StructType):
+
+            field_names = dt.names
+
+            if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
+                raise UnsupportedOperationException(
+                    error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                    message_parameters={"field_names": str(field_names)},
+                )
+
+            dedup_field_names = _dedup_names(field_names)
+
+            field_convs = [_converter(f.dataType) or (lambda x: x) for f in dt.fields]
+
+            def convert_struct(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif isinstance(value, dict):
+                    return {
+                        dedup_field_names[i]: field_convs[i](value.get(key, None))
+                        for i, key in enumerate(field_names)
+                    }
+                else:
+                    assert isinstance(value, Row)
+                    return {dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)}
+
+            return convert_struct
+
+        return None
+
+    conv = _converter(data_type)
+    if conv is not None:
+        return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+    else:
+        return lambda pser: pser
+
+
 def _dedup_names(names: List[str]) -> List[str]:
     if len(set(names)) == len(names):
         return names
@@ -700,3 +799,29 @@ def _dedup_names(names: List[str]) -> List[str]:
             for name, group in itertools.groupby(sorted(names))
         }
         return [gen_new_name[name]() for name in names]
+
+
+def _deduplicate_field_names(dt: DataType) -> DataType:
+    if isinstance(dt, StructType):
+        dedup_field_names = _dedup_names(dt.names)
+
+        return StructType(
+            [
+                StructField(
+                    dedup_field_names[i],
+                    _deduplicate_field_names(field.dataType),
+                    nullable=field.nullable,
+                )
+                for i, field in enumerate(dt.fields)
+            ]
+        )
+    elif isinstance(dt, ArrayType):
+        return ArrayType(_deduplicate_field_names(dt.elementType), containsNull=dt.containsNull)
+    elif isinstance(dt, MapType):
+        return MapType(
+            _deduplicate_field_names(dt.keyType),
+            _deduplicate_field_names(dt.valueType),
+            valueContainsNull=dt.valueContainsNull,
+        )
+    else:
+        return dt
