@@ -29,6 +29,7 @@ from pyspark.errors import (
     PySparkException,
     PySparkValueError,
 )
+from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -551,20 +552,26 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.assertEqual(sdf.schema, cdf.schema)
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 5 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "5", "actual_length": "4"},
+        )
 
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
         # test 1 dim ndarray
         data = np.array([1.0, 2.0, np.nan, 3.0, 4.0, float("NaN"), 5.0])
@@ -598,11 +605,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(sdf.schema, cdf.schema)
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 5 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, ["a", "b", "c", "d", "e"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "5", "actual_length": "4"},
+        )
 
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
@@ -764,11 +774,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assert_eq(cdf.toPandas(), sdf.toPandas())
 
         # check error
-        with self.assertRaisesRegex(
-            ValueError,
-            "can not infer schema from empty dataset",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data=[])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_INFER_EMPTY_SCHEMA",
+            message_parameters={},
+        )
 
     def test_create_dataframe_from_arrays(self):
         # SPARK-42021: createDataFrame support array.array
@@ -1796,6 +1809,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
         )
 
+    def test_different_spark_session_join_or_union(self):
+        df = self.connect.range(10).limit(3)
+
+        spark2 = RemoteSparkSession(connection="sc://localhost")
+        df2 = spark2.range(10).limit(3)
+
+        with self.assertRaises(SessionNotSameException):
+            df.union(df2).collect()
+
+        with self.assertRaises(SessionNotSameException):
+            df.unionByName(df2).collect()
+
+        with self.assertRaises(SessionNotSameException):
+            df.join(df2).collect()
+
     def test_extended_hint_types(self):
         cdf = self.connect.range(100).toDF("id")
 
@@ -2073,9 +2101,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue("Optimized Logical Plan" in plan_str)
         self.assertTrue("Physical Plan" in plan_str)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
-        self.assertTrue("unknown" in str(context.exception))
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNKNOWN_EXPLAIN_MODE",
+            message_parameters={"explain_mode": "unknown"},
+        )
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
@@ -2968,7 +3000,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         for f in (
             "newSession",
             "sparkContext",
-            "streams",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
@@ -3241,6 +3272,23 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         )
         spark.stop()
 
+    def test_can_create_multiple_sessions_to_different_remotes(self):
+        self.assertIsNotNone(self.spark._client)
+        # Creates a new remote session.
+        other = PySparkSession.builder.remote("sc://other.remote:114/").create()
+        self.assertNotEquals(self.spark, other)
+
+        # Reuses an active session that was previously created.
+        same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
+        self.assertEquals(self.spark, same)
+        same.stop()
+
+        # Make sure the environment is clean.
+        self.spark.stop()
+        with self.assertRaises(RuntimeError) as e:
+            PySparkSession.builder.create()
+            self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
@@ -3365,7 +3413,7 @@ class ChannelBuilderTests(unittest.TestCase):
             "sc://host/;parm1;param2",
         ]
         for i in invalid:
-            self.assertRaises(AttributeError, ChannelBuilder, i)
+            self.assertRaises(PySparkValueError, ChannelBuilder, i)
 
     def test_sensible_defaults(self):
         chan = ChannelBuilder("sc://host")
@@ -3373,13 +3421,15 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = ChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
-        self.assertEqual(chan.userAgent, "_SPARK_CONNECT_PYTHON")
+        self.assertRegex(
+            chan.userAgent, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_user_agent(self):
         chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
-        self.assertEqual("Agent123 /3.4", chan.userAgent)
+        self.assertIn("Agent123 /3.4", chan.userAgent)
 
     def test_user_agent_len(self):
         user_agent = "x" * 2049
@@ -3391,7 +3441,7 @@ class ChannelBuilderTests(unittest.TestCase):
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
-        self.assertEqual(expected, chan.userAgent)
+        self.assertIn(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
@@ -3407,7 +3457,7 @@ class ChannelBuilderTests(unittest.TestCase):
     def test_channel_properties(self):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
         self.assertEqual("host:15002", chan.endpoint)
-        self.assertEqual("foo", chan.userAgent)
+        self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 

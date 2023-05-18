@@ -24,7 +24,9 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -173,6 +175,21 @@ class StreamingQueryProgress private[spark](
     ("sink" -> sink.jsonValue) ~
     ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
+}
+
+private[spark] object StreamingQueryProgress {
+  private[this] val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.registerModule(DefaultScalaModule)
+    ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    ret
+  }
+
+  private[spark] def jsonString(progress: StreamingQueryProgress): String =
+    mapper.writeValueAsString(progress)
+
+  private[spark] def fromJson(json: String): StreamingQueryProgress =
+    mapper.readValue[StreamingQueryProgress](json)
 }
 
 /**

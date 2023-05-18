@@ -30,7 +30,7 @@ from py4j.java_gateway import JavaObject
 from pyspark import SparkContext
 from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -43,7 +43,7 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
@@ -87,7 +87,6 @@ def _create_udf(
 def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
-    evalType: int,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     """Create a regular/Arrow-optimized Python UDF."""
@@ -129,8 +128,7 @@ def _create_py_udf(
             if useArrow is None
             else useArrow
         )
-
-    regular_udf = _create_udf(f, returnType, evalType)
+    regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
     return_type = regular_udf.returnType
     try:
         is_func_with_args = len(getfullargspec(f).args) > 0
@@ -178,10 +176,9 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
 
     def vectorized_udf(*args: pd.Series) -> pd.Series:
         if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
-            raise NotImplementedError(
-                "Struct input type are not supported with Arrow optimization "
-                "enabled in Python UDFs. Disable "
-                "'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_WITH_ARROW_OPTIMIZATION",
+                message_parameters={"feature": "Struct input type"},
             )
         return pd.Series(result_func(f(*a)) for a in zip(*args))
 
@@ -189,11 +186,10 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
     vectorized_udf.__name__ = f.__name__ if hasattr(f, "__name__") else f.__class__.__name__
     vectorized_udf.__module__ = f.__module__ if hasattr(f, "__module__") else f.__class__.__module__
     vectorized_udf.__doc__ = f.__doc__
-    pudf = _create_pandas_udf(vectorized_udf, return_type, None)
+    pudf = _create_pandas_udf(vectorized_udf, return_type, PythonEvalType.SQL_ARROW_BATCHED_UDF)
     # Keep the attributes as if this is a regular Python UDF.
     pudf.func = f
     pudf.returnType = return_type
-    pudf.evalType = regular_udf.evalType
     return pudf
 
 
@@ -254,6 +250,7 @@ class UserDefinedFunction:
     def returnType(self) -> DataType:
         # This makes sure this is called after SparkContext is initialized.
         # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
+        # TODO: PythonEvalType.SQL_BATCHED_UDF
         if self._returnType_placeholder is None:
             if isinstance(self._returnType, DataType):
                 self._returnType_placeholder = self._returnType
@@ -267,9 +264,12 @@ class UserDefinedFunction:
             try:
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
-                raise NotImplementedError(
-                    "Invalid return type with scalar Pandas UDFs: %s is "
-                    "not supported" % str(self._returnType_placeholder)
+                raise PySparkNotImplementedError(
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={
+                        "feature": f"Invalid return type with scalar Pandas UDFs: "
+                        f"{self._returnType_placeholder}"
+                    },
                 )
         elif (
             self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
@@ -279,10 +279,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type with grouped map Pandas UDFs or "
-                        "at groupby.applyInPandas(WithState): %s is not supported"
-                        % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type with grouped map Pandas UDFs or "
+                            f"at groupby.applyInPandas(WithState): {self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise PySparkTypeError(
@@ -301,9 +303,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type in mapInPandas: "
-                        "%s is not supported" % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type in mapInPandas: "
+                            f"{self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise PySparkTypeError(
@@ -318,9 +323,12 @@ class UserDefinedFunction:
                 try:
                     to_arrow_type(self._returnType_placeholder)
                 except TypeError:
-                    raise NotImplementedError(
-                        "Invalid return type in cogroup.applyInPandas: "
-                        "%s is not supported" % str(self._returnType_placeholder)
+                    raise PySparkNotImplementedError(
+                        error_class="NOT_IMPLEMENTED",
+                        message_parameters={
+                            "feature": f"Invalid return type in cogroup.applyInPandas: "
+                            f"{self._returnType_placeholder}"
+                        },
                     )
             else:
                 raise PySparkTypeError(
@@ -337,9 +345,12 @@ class UserDefinedFunction:
                     raise TypeError
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
-                raise NotImplementedError(
-                    "Invalid  return type with grouped aggregate Pandas UDFs: "
-                    "%s is not supported" % str(self._returnType_placeholder)
+                raise PySparkNotImplementedError(
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={
+                        "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
+                        f"{self._returnType_placeholder}"
+                    },
                 )
 
         return self._returnType_placeholder
@@ -408,8 +419,9 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = jPythonUDF.expr().resultId().id()
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
@@ -425,8 +437,9 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = jPythonUDF.expr().resultId().id()
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf
@@ -612,6 +625,7 @@ class UDFRegistration:
             f = cast("UserDefinedFunctionLike", f)
             if f.evalType not in [
                 PythonEvalType.SQL_BATCHED_UDF,
+                PythonEvalType.SQL_ARROW_BATCHED_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -619,25 +633,30 @@ class UDFRegistration:
                 raise PySparkTypeError(
                     error_class="INVALID_UDF_EVAL_TYPE",
                     message_parameters={
-                        "eval_type": "SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                        "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
+                        "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or "
+                        "SQL_GROUPED_AGG_PANDAS_UDF"
                     },
                 )
-            register_udf = _create_udf(
+            source_udf = _create_udf(
                 f.func,
                 returnType=f.returnType,
                 name=name,
                 evalType=f.evalType,
                 deterministic=f.deterministic,
-            )._unwrapped  # type: ignore[attr-defined]
-            return_udf = f
+            )
+            if f.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+                register_udf = _create_arrow_py_udf(source_udf)._unwrapped
+            else:
+                register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
+            return_udf = register_udf
         else:
             if returnType is None:
                 returnType = StringType()
             return_udf = _create_udf(
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
-            register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
+            register_udf = return_udf._unwrapped
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 

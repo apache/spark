@@ -138,7 +138,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass: String): Nothing = {
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    val orderedCandidates =
+      StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)
     throw QueryCompilationErrors.unresolvedAttributeError(
       errorClass, missingCol, orderedCandidates, a.origin)
   }
@@ -330,7 +331,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   messageParameters = Map("aggFunc" -> agg.aggregateFunction.prettyName))
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
                   errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
@@ -403,14 +403,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if AggregateExpression.isAggregate(expr) =>
-                val aggFunction = expr match {
-                  case agg: AggregateExpression => agg.aggregateFunction
-                  case udf: PythonUDF => udf
-                }
+              case expr: AggregateExpression =>
+                val aggFunction = expr.aggregateFunction
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
+                    case expr: AggregateExpression =>
                       expr.failAnalysis(
                         errorClass = "NESTED_AGGREGATE_FUNCTION",
                         messageParameters = Map.empty)

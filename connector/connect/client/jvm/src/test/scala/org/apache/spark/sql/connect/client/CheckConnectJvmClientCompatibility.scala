@@ -62,27 +62,25 @@ object CheckConnectJvmClientCompatibility {
           "spark-connect-client-jvm-assembly",
           "spark-connect-client-jvm")
       val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
-      val problems = checkMiMaCompatibility(clientJar, sqlJar)
-      if (problems.nonEmpty) {
-        resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
-        resultWriter.write(s"problems: \n")
-        resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
-        resultWriter.write("\n")
-        resultWriter.write(
-          "Exceptions to binary compatibility can be added in " +
-            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibility'\n")
-      }
+      val problemsWithSqlModule = checkMiMaCompatibilityWithSqlModule(clientJar, sqlJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithSqlModule,
+        clientJar,
+        sqlJar,
+        "Sql")
+
+      val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
+      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, sqlJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithAvroModule,
+        clientJar,
+        avroJar,
+        "Avro")
+
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
-      if (incompatibleApis.nonEmpty) {
-        resultWriter.write(
-          "ERROR: The Dataset apis only exist in the connect client " +
-            "module and not belong to the sql module include: \n")
-        resultWriter.write(incompatibleApis.mkString("\n"))
-        resultWriter.write("\n")
-        resultWriter.write(
-          "Exceptions can be added to exceptionMethods in " +
-            "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
-      }
+      appendIncompatibleDatasetApisErrorMessageIfNeeded(resultWriter, incompatibleApis)
     } catch {
       case e: Throwable =>
         println(e.getMessage)
@@ -94,16 +92,17 @@ object CheckConnectJvmClientCompatibility {
     }
   }
 
-  /**
-   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
-   * incompatibilities found in the new jar. The incompatibility result is then filtered using
-   * include and exclude rules. Include rules are first applied to find all client classes that
-   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
-   * the client classes.
-   */
-  private def checkMiMaCompatibility(clientJar: File, sqlJar: File): List[Problem] = {
-    val mima = new MiMaLib(Seq(clientJar, sqlJar))
-    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
+  private def checkMiMaCompatibilityWithAvroModule(
+      clientJar: File,
+      avroJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithSqlModule(
+      clientJar: File,
+      sqlJar: File): List[Problem] = {
     val includedRules = Seq(
       IncludeByName("org.apache.spark.sql.catalog.Catalog.*"),
       IncludeByName("org.apache.spark.sql.catalog.CatalogMetadata.*"),
@@ -131,6 +130,10 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.streaming.DataStreamReader.*"),
       IncludeByName("org.apache.spark.sql.streaming.DataStreamWriter.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQuery.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryManager.active"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryManager.get"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryManager.awaitAnyTermination"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryManager.resetTerminated"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQueryProgress.*"))
     val excludeRules = Seq(
@@ -165,7 +168,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
@@ -178,8 +180,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
@@ -190,17 +190,10 @@ object CheckConnectJvmClientCompatibility {
       ), // streaming
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.reduceGroups"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.agg"),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.KeyValueGroupedDataset.aggUntyped"
-      ), // protected internal
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.count"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.this"),
 
       // RelationalGroupedDataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.as"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
 
       // SparkSession
@@ -226,12 +219,6 @@ object CheckConnectJvmClientCompatibility {
 
       // TypedColumn
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
-
-      // DataStreamReader
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.DataStreamReader.table" // TODO( SPARK-43144)
-      ),
-
       // DataStreamWriter
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.foreach" // TODO(SPARK-43133)
@@ -243,18 +230,27 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
       ),
 
-      // StreamingQuery
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.StreamingQuery.awaitTermination" // TODO(SPARK-43143)
-      ),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
-      ),
-
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+    checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
+  }
+
+  /**
+   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
+   * incompatibilities found in the new jar. The incompatibility result is then filtered using
+   * include and exclude rules. Include rules are first applied to find all client classes that
+   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
+   * the client classes.
+   */
+  private def checkMiMaCompatibility(
+      clientJar: File,
+      sqlJar: File,
+      includedRules: Seq[IncludeByName],
+      excludeRules: Seq[ProblemFilter]): List[Problem] = {
+    val mima = new MiMaLib(Seq(clientJar, sqlJar))
+    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
@@ -292,6 +288,39 @@ object CheckConnectJvmClientCompatibility {
 
     // Find new public functions that are not in sql module `Dataset`.
     clientMethods.diff(sqlMethods).diff(exceptionMethods)
+  }
+
+  private def appendMimaCheckErrorMessageIfNeeded(
+      resultWriter: Writer,
+      problems: List[Problem],
+      clientModule: File,
+      targetModule: File,
+      targetName: String): Unit = {
+    if (problems.nonEmpty) {
+      resultWriter.write(
+        s"ERROR: Comparing Client jar: $clientModule and $targetName jar: $targetModule \n")
+      resultWriter.write(s"problems with $targetName module: \n")
+      resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
+      resultWriter.write("\n")
+      resultWriter.write(
+        "Exceptions to binary compatibility can be added in " +
+          s"'CheckConnectJvmClientCompatibility#checkMiMaCompatibilityWith${targetName}Module'\n")
+    }
+  }
+
+  private def appendIncompatibleDatasetApisErrorMessageIfNeeded(
+      resultWriter: Writer,
+      incompatibleApis: Seq[String]): Unit = {
+    if (incompatibleApis.nonEmpty) {
+      resultWriter.write(
+        "ERROR: The Dataset apis only exist in the connect client " +
+          "module and not belong to the sql module include: \n")
+      resultWriter.write(incompatibleApis.mkString("\n"))
+      resultWriter.write("\n")
+      resultWriter.write(
+        "Exceptions can be added to exceptionMethods in " +
+          "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
+    }
   }
 
   private case class IncludeByName(name: String) extends ProblemFilter {

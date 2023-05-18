@@ -30,6 +30,7 @@ import io.grpc.inprocess.InProcessChannelBuilder
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.StorageLevel
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
@@ -39,6 +40,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -97,9 +99,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = SparkConnectClient(
-      proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null"))
+    val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
@@ -2106,6 +2106,55 @@ class PlanGenerationTestSuite
       fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
   }
 
+  test("function typedLit") {
+    simple.select(
+      fn.typedLit(fn.col("id")),
+      fn.typedLit('id),
+      fn.typedLit(1),
+      fn.typedLit[String](null),
+      fn.typedLit(true),
+      fn.typedLit(68.toByte),
+      fn.typedLit(9872.toShort),
+      fn.typedLit(-8726532),
+      fn.typedLit(7834609328726532L),
+      fn.typedLit(Math.E),
+      fn.typedLit(-0.8f),
+      fn.typedLit(BigDecimal(8997620, 5)),
+      fn.typedLit(BigDecimal(898897667231L, 7).bigDecimal),
+      fn.typedLit("connect!"),
+      fn.typedLit('T'),
+      fn.typedLit(Array.tabulate(10)(i => ('A' + i).toChar)),
+      fn.typedLit(Array.tabulate(23)(i => (i + 120).toByte)),
+      fn.typedLit(mutable.WrappedArray.make(Array[Byte](8.toByte, 6.toByte))),
+      fn.typedLit(null),
+      fn.typedLit(java.time.LocalDate.of(2020, 10, 10)),
+      fn.typedLit(Decimal.apply(BigDecimal(8997620, 6))),
+      fn.typedLit(java.time.Instant.ofEpochMilli(1677155519808L)),
+      fn.typedLit(new java.sql.Timestamp(12345L)),
+      fn.typedLit(java.time.LocalDateTime.of(2023, 2, 23, 20, 36)),
+      fn.typedLit(java.sql.Date.valueOf("2023-02-23")),
+      fn.typedLit(java.time.Duration.ofSeconds(200L)),
+      fn.typedLit(java.time.Period.ofDays(100)),
+      fn.typedLit(new CalendarInterval(2, 20, 100L)),
+
+      // Handle parameterized scala types e.g.: List, Seq and Map.
+      fn.typedLit(Some(1)),
+      fn.typedLit(Array(1, 2, 3)),
+      fn.typedLit(Seq(1, 2, 3)),
+      fn.typedLit(Map("a" -> 1, "b" -> 2)),
+      fn.typedLit(("a", 2, 1.0)),
+      fn.typedLit[Option[Int]](None),
+      fn.typedLit[Array[Option[Int]]](Array(Some(1))),
+      fn.typedlit[Map[Int, Option[Int]]](Map(1 -> None)),
+      fn.typedlit[mutable.Map[Int, Option[Int]]](mutable.Map(1 -> None)),
+      fn.typedlit[collection.immutable.Map[Int, Option[Int]]](
+        collection.immutable.Map(1 -> None)),
+      fn.typedLit(Seq(Seq(1, 2, 3), Seq(4, 5, 6), Seq(7, 8, 9))),
+      fn.typedLit(Seq(Map("a" -> 1, "b" -> 2), Map("a" -> 3, "b" -> 4), Map("a" -> 5, "b" -> 6))),
+      fn.typedLit(Map(1 -> Map("a" -> 1, "b" -> 2), 2 -> Map("a" -> 3, "b" -> 4))),
+      fn.typedLit((Seq(1, 2, 3), Map("a" -> 1, "b" -> 2), ("a", Map(1 -> "a", 2 -> "b")))))
+  }
+
   /* Window API */
   test("window") {
     simple.select(
@@ -2194,5 +2243,66 @@ class PlanGenerationTestSuite
 
   test("to_avro without schema") {
     simple.select(avroFn.to_avro(fn.col("id")))
+  }
+
+  /* Protobuf functions */
+  // scalastyle:off line.size.limit
+  // If `common.desc` needs to be updated, execute the following command to regenerate it:
+  //  1. cd connector/connect/common/src/main/protobuf/spark/connect
+  //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
+  // scalastyle:on line.size.limit
+  private val testDescFilePath: String = java.nio.file.Paths
+    .get("../", "common", "src", "test", "resources", "protobuf-tests")
+    .resolve("common.desc")
+    .toString
+
+  test("from_protobuf messageClassName") {
+    binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+  }
+
+  test("from_protobuf messageClassName options") {
+    binary.select(
+      pbFn.from_protobuf(
+        fn.col("bytes"),
+        classOf[StorageLevel].getName,
+        Map("recursive.fields.max.depth" -> "2").asJava))
+  }
+
+  test("from_protobuf messageClassName descFilePath options") {
+    binary.select(
+      pbFn.from_protobuf(
+        fn.col("bytes"),
+        "StorageLevel",
+        testDescFilePath,
+        Map("recursive.fields.max.depth" -> "2").asJava))
+  }
+
+  test("from_protobuf messageClassName descFilePath") {
+    binary.select(pbFn.from_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath))
+  }
+
+  test("to_protobuf messageClassName") {
+    binary.select(pbFn.to_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+  }
+
+  test("to_protobuf messageClassName options") {
+    binary.select(
+      pbFn.to_protobuf(
+        fn.col("bytes"),
+        classOf[StorageLevel].getName,
+        Map("recursive.fields.max.depth" -> "2").asJava))
+  }
+
+  test("to_protobuf messageClassName descFilePath options") {
+    binary.select(
+      pbFn.to_protobuf(
+        fn.col("bytes"),
+        "StorageLevel",
+        testDescFilePath,
+        Map("recursive.fields.max.depth" -> "2").asJava))
+  }
+
+  test("to_protobuf messageClassName descFilePath") {
+    binary.select(pbFn.to_protobuf(fn.col("bytes"), "StorageLevel", testDescFilePath))
   }
 }

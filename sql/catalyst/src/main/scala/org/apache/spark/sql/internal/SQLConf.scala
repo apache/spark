@@ -1383,7 +1383,7 @@ object SQLConf {
         "When false, all running tasks will remain until finished.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
@@ -2835,6 +2835,23 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
+  val PANDAS_STRUCT_HANDLING_MODE =
+    buildConf("spark.sql.execution.pandas.structHandlingMode")
+      .doc(
+        "The conversion mode of struct type when creating pandas DataFrame. " +
+        "When \"legacy\"," +
+        "1. when Arrow optimization is disabled, convert to Row object, " +
+        "2. when Arrow optimization is enabled, convert to dict or raise an Exception " +
+        "if there are duplicated nested field names. " +
+        "When \"row\", convert to Row object regardless of Arrow optimization. " +
+        "When \"dict\", convert to dict and use suffixed key names, e.g., a_0, a_1, " +
+        "if there are duplicated nested field names, regardless of Arrow optimization."
+      )
+      .version("3.5.0")
+      .stringConf
+      .checkValues(Set("legacy", "row", "dict"))
+      .createWithDefaultString("legacy")
+
   val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
@@ -4182,6 +4199,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_IN_SUBQUERY_NULLABILITY =
+    buildConf("spark.sql.legacy.inSubqueryNullability")
+      .internal()
+      .doc(s"When set to false, IN subquery nullability is correctly calculated based on " +
+        s"both the left and right sides of the IN. When set to true, restores the legacy " +
+        "behavior that does not check the right side's nullability.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
       "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
@@ -4211,6 +4238,15 @@ object SQLConf {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  val LOCAL_RELATION_CACHE_THRESHOLD =
+    buildConf("spark.sql.session.localRelationCacheThreshold")
+      .doc("The threshold for the size in bytes of local relations to be cached at " +
+        "the driver side after serialization.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
+      .createWithDefault(64 * 1024 * 1024)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4845,6 +4881,8 @@ class SQLConf extends Serializable with Logging {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
+
+  def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 

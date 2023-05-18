@@ -180,7 +180,7 @@ class SparkContext:
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
-        if "SPARK_REMOTE" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
+        if "SPARK_CONNECT_MODE_ENABLED" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
             raise PySparkRuntimeError(
                 error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
                 message_parameters={},
@@ -318,11 +318,6 @@ class SparkContext:
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
         self.pythonVer = "%d.%d" % sys.version_info[:2]
-
-        if sys.version_info[:2] < (3, 8):
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn("Python 3.7 support is deprecated in Spark 3.4.", FutureWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have

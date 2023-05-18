@@ -363,8 +363,8 @@ object SparkEnv extends Logging {
       isDriver)
 
     val blockTransferService =
-      new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
-        blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
+      new NettyBlockTransferService(conf, securityManager, serializerManager, bindAddress,
+        advertiseAddress, blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(

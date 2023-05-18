@@ -7,7 +7,7 @@ pyarrow
 pandas
 scipy
 plotly
-mlflow>=1.0
+mlflow>=2.3.1
 scikit-learn
 matplotlib<3.3.0
 memory-profiler==0.60.0

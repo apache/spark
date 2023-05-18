@@ -67,8 +67,16 @@ class SparkException(
 
 object SparkException {
   def internalError(msg: String, context: Array[QueryContext], summary: String): SparkException = {
+    internalError(msg = msg, context = context, summary = summary, category = None)
+  }
+
+  def internalError(
+      msg: String,
+      context: Array[QueryContext],
+      summary: String,
+      category: Option[String]): SparkException = {
     new SparkException(
-      errorClass = "INTERNAL_ERROR",
+      errorClass = "INTERNAL_ERROR" + category.map("_" + _).getOrElse(""),
       messageParameters = Map("message" -> msg),
       cause = null,
       context,
@@ -76,7 +84,11 @@ object SparkException {
   }
 
   def internalError(msg: String): SparkException = {
-    internalError(msg, context = Array.empty[QueryContext], summary = "")
+    internalError(msg, context = Array.empty[QueryContext], summary = "", category = None)
+  }
+
+  def internalError(msg: String, category: String): SparkException = {
+    internalError(msg, context = Array.empty[QueryContext], summary = "", category = Some(category))
   }
 
   def internalError(msg: String, cause: Throwable): SparkException = {
@@ -106,7 +118,8 @@ private[spark] case class SparkUserAppException(exitCode: Int)
  * Exception thrown when the relative executor to access is dead.
  */
 private[spark] case class ExecutorDeadException(message: String)
-  extends SparkException(message)
+  extends SparkException(errorClass = "INTERNAL_ERROR_NETWORK",
+    messageParameters = Map("message" -> message), cause = null)
 
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.

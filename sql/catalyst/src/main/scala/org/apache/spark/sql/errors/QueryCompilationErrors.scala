@@ -1033,10 +1033,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("colName" -> colName, "dataType" -> dataType.toString))
   }
 
-  def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
+  def insufficientTablePropertyError(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1091",
-      messageParameters = Map("key" -> key, "details" -> details))
+      errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
+      messageParameters = Map("key" -> toSQLConf(key)))
+  }
+
+  def insufficientTablePropertyPartError(
+      key: String, totalAmountOfParts: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
+      messageParameters = Map(
+        "key" -> toSQLConf(key),
+        "totalAmountOfParts" -> totalAmountOfParts))
   }
 
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
@@ -1269,8 +1278,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1119",
-      messageParameters = Map("cmd" -> cmd))
+      errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
+      messageParameters = Map("cmd" -> toSQLStmt(cmd)))
+  }
+
+  private def notSupportedInJDBCCatalog(cmd: String, property: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+      messageParameters = Map(
+        "cmd" -> toSQLStmt(cmd),
+        "property" -> toSQLConf(property)))
   }
 
   def cannotCreateJDBCTableUsingProviderError(): Throwable = {
@@ -1285,16 +1302,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     notSupportedInJDBCCatalog("CREATE NAMESPACE ... LOCATION ...")
   }
 
-  def cannotCreateJDBCNamespaceWithPropertyError(k: String): Throwable = {
-    notSupportedInJDBCCatalog(s"CREATE NAMESPACE with property $k")
+  def cannotCreateJDBCNamespaceWithPropertyError(property: String): Throwable = {
+    notSupportedInJDBCCatalog(s"CREATE NAMESPACE", property)
   }
 
-  def cannotSetJDBCNamespaceWithPropertyError(k: String): Throwable = {
-    notSupportedInJDBCCatalog(s"SET NAMESPACE with property $k")
+  def cannotSetJDBCNamespaceWithPropertyError(property: String): Throwable = {
+    notSupportedInJDBCCatalog("SET NAMESPACE", property)
   }
 
-  def cannotUnsetJDBCNamespaceWithPropertyError(k: String): Throwable = {
-    notSupportedInJDBCCatalog(s"Remove NAMESPACE property $k")
+  def cannotUnsetJDBCNamespaceWithPropertyError(property: String): Throwable = {
+    notSupportedInJDBCCatalog("UNSET NAMESPACE", property)
   }
 
   def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
@@ -1349,8 +1366,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1124",
-      messageParameters = Map("cmd" -> cmd))
+      errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+      messageParameters = Map("cmd" -> toSQLStmt(cmd)))
   }
 
   def analyzeTableNotSupportedForV2TablesError(): Throwable = {
@@ -1717,7 +1734,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def mismatchedInsertedDataColumnNumberError(
       tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
       messageParameters = Map(
         "tableName" -> tableName,
         "targetColumns" -> insert.table.output.size.toString,
@@ -2402,12 +2419,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
   }
 
-  def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
+  def unsetNonExistentPropertiesError(
+      properties: Seq[String], table: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1244",
+      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
       messageParameters = Map(
-        "property" -> property,
-        "table" -> table.toString))
+        "properties" -> properties.map(toSQLId).mkString(", "),
+        "table" -> toSQLId(table.nameParts))
+    )
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(
@@ -3232,12 +3251,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnPath" -> toSQLId(path)))
   }
 
-  def notNullConstraintViolationStructFieldError(path: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.STRUCT_FIELD",
-      messageParameters = Map("columnPath" -> toSQLId(path)))
-  }
-
   def invalidColumnOrFieldDataTypeError(
       name: Seq[String],
       dt: DataType,
@@ -3285,20 +3298,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "protobufColumn" -> protobufColumn,
         "sqlType" -> toSQLType(sqlType),
         "protobufType" -> protobufType))
-  }
-
-  def cannotConvertCatalystTypeToProtobufEnumTypeError(
-      sqlColumn: Seq[String],
-      protobufColumn: String,
-      data: String,
-      enumString: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE",
-      messageParameters = Map(
-        "sqlColumn" -> toSQLId(sqlColumn),
-        "protobufColumn" -> protobufColumn,
-        "data" -> data,
-        "enumString" -> enumString))
   }
 
   def cannotConvertProtobufTypeToCatalystTypeError(
