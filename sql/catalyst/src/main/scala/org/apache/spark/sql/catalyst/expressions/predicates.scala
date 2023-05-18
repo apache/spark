@@ -517,9 +517,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
            |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
            |}
          """.stripMargin
-      val codeElseIf = {
+      val codeElseIf =
         // When x.isNull is a variable name or false, the else if branch needs to keep,
-        // and only when isNull is set to true the branch just no need to generate.
+        // and only when isNull is true the branch just no need to generate.
         if (!java.lang.Boolean.parseBoolean(x.isNull.toString)) {
           s"""
              | else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
@@ -528,7 +528,6 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
              |}
            """.stripMargin
         } else ""
-      }
       codeIf + codeElseIf
     }
 
