@@ -426,10 +426,11 @@ private[spark] class SparkSubmit extends Logging {
             targetDir, sparkConf, hadoopConf)
           Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(resolvedUris).map {
             case (localResources, resolvedUri) =>
-              val source = new File(localResources.getPath)
+              val source = new File(localResources.getPath).getCanonicalFile
               val dest = new File(
                 workingDirectory,
                 if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
+                .getCanonicalFile
               logInfo(s"Files $resolvedUri from $source to $dest")
               Utils.deleteRecursively(dest)
               if (isArchive) {
