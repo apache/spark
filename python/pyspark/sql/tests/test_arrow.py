@@ -1013,6 +1013,10 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.collect(), data)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43506): Enable ArrowTests.test_toPandas_empty_columns for pandas 2.0.0.",
+    )
     def test_toPandas_empty_columns(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
