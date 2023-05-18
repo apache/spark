@@ -128,8 +128,6 @@ class HadoopRDD[K, V](
 
   protected val jobConfCacheKey: String = "rdd_%d_job_conf".format(id)
 
-  protected val inputFormatCacheKey: String = "rdd_%d_input_format".format(id)
-
   // used to build JobTracker ID
   private val createTime = new Date()
 
@@ -403,9 +401,6 @@ private[spark] object HadoopRDD extends Logging {
    * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
    */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
-
-  /** Update the input bytes read metric each time this number of records has been read */
-  val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
