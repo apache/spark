@@ -350,7 +350,7 @@ Dataset<Row> df2 = spark.read().parquet("/path/to/table.parquet.encrypted");
 
 #### KMS Client
 
-The InMemoryKMS class is provided only for illustration and simple demonstration of Parquet encryption functionality. **It should not be used in a real deployment**. The master encryption keys must be kept and managed in a production-grade KMS system, deployed in user's organization. Rollout of Spark with Parquet encryption requires implementation of a client class for the KMS server. Parquet provides a plug-in [interface](https://github.com/apache/parquet-mr/blob/1.13.1/parquet-hadoop/src/main/java/org/apache/parquet/crypto/keytools/KmsClient.java) for development of such classes,
+The InMemoryKMS class is provided only for illustration and simple demonstration of Parquet encryption functionality. **It should not be used in a real deployment**. The master encryption keys must be kept and managed in a production-grade KMS system, deployed in user's organization. Rollout of Spark with Parquet encryption requires implementation of a client class for the KMS server. Parquet provides a plug-in [interface](https://github.com/apache/parquet-mr/blob/apache-parquet-1.13.1/parquet-hadoop/src/main/java/org/apache/parquet/crypto/keytools/KmsClient.java) for development of such classes,
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
