@@ -796,8 +796,7 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  // visible for testing
-  private[yarn] def updateInternalState(rpId: Int, executorId: String,
+  private def updateInternalState(rpId: Int, executorId: String,
     container: Container): Unit = synchronized {
     val containerId = container.getId
     if (!completedContainerIds.contains(containerId)) {

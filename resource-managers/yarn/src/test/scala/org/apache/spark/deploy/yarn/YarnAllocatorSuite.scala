@@ -33,6 +33,7 @@ import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -60,7 +61,7 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
 }
 
-class YarnAllocatorSuite extends SparkFunSuite with Matchers {
+class YarnAllocatorSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
   val conf = new YarnConfiguration()
   val sparkConf = new SparkConf()
   sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")
@@ -848,7 +849,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     val status = ContainerStatus.newInstance(
       container.getId, ContainerState.COMPLETE, "Finished", 0)
     handler.processCompletedContainers(Seq(status))
-    handler.updateInternalState(0, "1", container)
+    val updateInternalState = PrivateMethod[Unit](Symbol("updateInternalState"))
+    handler.invokePrivate(updateInternalState(0, "1", container))
     handler.getNumExecutorsRunning should be(0)
   }
 }
