@@ -23,7 +23,7 @@ from pyspark.sql.functions import col, pandas_udf
 
 def aggregate_dataframe(
         dataframe,
-        cols,
+        input_col_names,
         local_agg_fn,
         merge_agg_status,
         agg_status_to_result
@@ -37,7 +37,7 @@ def aggregate_dataframe(
     dataframe :
         A spark dataframe or a pandas dataframe
 
-    cols :
+    input_col_names :
         The name of columns that are used in aggregation
 
     local_agg_fn :
@@ -60,28 +60,48 @@ def aggregate_dataframe(
     """
 
     if isinstance(dataframe, pd.DataFrame):
-        dataframe = dataframe[list(cols)]
+        dataframe = dataframe[list(input_col_names)]
         agg_status = local_agg_fn(dataframe)
         return agg_status_to_result(agg_status)
 
-    dataframe = dataframe.select(*cols)
+    col_types = dict(dataframe.dtypes)
+
+    input_cols = []
+    for col_name in input_col_names:
+        input_col = col(col_name)
+        col_type = col_types[col_name]
+        if col_type == "vector":
+            from pyspark.ml.functions import vector_to_array
+            # pandas UDF does not support vector type for now,
+            # we convert it into vector type
+            input_col = vector_to_array(input_col).alias(col_name)
+        input_cols.append(input_col)
+
+    dataframe = dataframe.select(*input_cols)
 
     def compute_status(iterator):
         status = None
 
         for batch_pandas_df in iterator:
+            # print(f"DBG compute status batch_pandas_df len: {len(batch_pandas_df)}\n")
             new_batch_status = local_agg_fn(batch_pandas_df)
             if status is None:
                 status = new_batch_status
             else:
                 status = merge_agg_status(status, new_batch_status)
 
-        return pd.DataFrame({'status': [cloudpickle.dumps(status)]})
+        if status is None:
+            pickled_status = None
+        else:
+            pickled_status = cloudpickle.dumps(status)
+        yield pd.DataFrame({'status': [pickled_status]})
 
     result_pdf = dataframe.mapInPandas(compute_status, schema='status binary').toPandas()
 
     merged_status = None
     for status in result_pdf.status:
+        if status is None:
+            continue
         status = cloudpickle.loads(status)
         if merged_status is None:
             merged_status = status
@@ -159,7 +179,7 @@ def transform_dataframe_column(
         from pyspark.ml.functions import vector_to_array
         # pandas UDF does not support vector type for now,
         # we convert it into vector type
-        input_col = vector_to_array(input_col)
+        input_col = vector_to_array(input_col).alias(input_col_name)
 
     result_spark_df = dataframe.withColumn(
         output_col_name, transform_fn_pandas_udf(input_col)

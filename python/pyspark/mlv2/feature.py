@@ -24,7 +24,7 @@ from pyspark.mlv2.base import Estimator, Model, Transformer
 from pyspark.mlv2.util import transform_dataframe_column
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
-from pyspark.ml.functions import array_to_vector
+from pyspark.ml.functions import vector_to_array
 
 
 class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
@@ -34,10 +34,13 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
     any sparsity.
     """
 
+    def __init__(self, inputCol, outputCol):
+        super().__init__()
+        self.set(self.inputCol, inputCol)
+        self.set(self.outputCol, outputCol)
+
     def _fit(self, dataset):
         input_col = self.getInputCol()
-
-        dataset = dataset.withColumn(input_col, array_to_vector(col(input_col)))
 
         min_max_res = summarize_dataframe(dataset, input_col, ["min", "max"])
         min_values = min_max_res["min"]
@@ -45,16 +48,22 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
 
         max_abs_values = np.maximum(np.abs(min_values), np.abs(max_values))
 
-        return self._copyValues(MaxAbsScalerModel(max_abs_values))
+        model = MaxAbsScalerModel(max_abs_values)
+        model._resetUid(self.uid)
+        return self._copyValues(model)
 
 
 class MaxAbsScalerModel(Transformer, HasInputCol, HasOutputCol):
 
     def __init__(self, max_abs_values):
+        super().__init__()
         self.max_abs_values = max_abs_values
 
+    def _input_column_name(self):
+        return self.getInputCol()
+
     def _output_columns(self):
-        return [self.getOutputCol(), "array<double>"]
+        return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self):
         max_abs_values = self.max_abs_values
@@ -62,7 +71,7 @@ class MaxAbsScalerModel(Transformer, HasInputCol, HasOutputCol):
 
         def transform_fn(series):
             def map_value(x):
-                return max_abs_values.where(max_abs_values_zero_cond, 0.0, x / max_abs_values)
+                return np.where(max_abs_values_zero_cond, 0.0, x / max_abs_values)
 
             return series.apply(map_value)
 
@@ -78,13 +87,13 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
     def _fit(self, dataset):
         input_col = self.getInputCol()
 
-        dataset = dataset.withColumn(input_col, array_to_vector(col(input_col)))
-
         min_max_res = summarize_dataframe(dataset, input_col, ["mean", "std"])
         mean_values = min_max_res["mean"]
         std_values = min_max_res["std"]
 
-        return self._copyValues(MaxAbsScalerModel(mean_values, std_values))
+        model = MaxAbsScalerModel(mean_values, std_values)
+        model._resetUid(self.uid)
+        return self._copyValues(model)
 
 
 class StandardScalerModel(Transformer, HasInputCol, HasOutputCol):
@@ -97,7 +106,7 @@ class StandardScalerModel(Transformer, HasInputCol, HasOutputCol):
         return self.getInputCol()
 
     def _output_columns(self):
-        return [self.getOutputCol(), "array<double>"]
+        return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self):
         mean_values = self.mean_values

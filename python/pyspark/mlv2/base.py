@@ -130,7 +130,7 @@ _SPARKML_TRANSFORMER_TMP_OUTPUT_COLNAME = "_sparkML_transformer_tmp_output"
 
 
 @inherit_doc
-class Transformer(Params, HasInputCols, HasOutputCols, metaclass=ABCMeta):
+class Transformer(Params, metaclass=ABCMeta):
     """
     Abstract class for transformers that transform one dataset into another.
     """
