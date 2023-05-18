@@ -135,7 +135,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
 
-    def test_pandas_udf_nested_maps_input(self):
+    def test_pandas_udf_nested_maps(self):
         schema = StructType(
             [
                 StructField("id", StringType(), True),
@@ -154,6 +154,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(
             df.select(f(df.attributes).alias("res")).first(),
             Row(res="{'personal': {'name': 'John', 'city': 'New York'}}"),
+        )
+
+        @pandas_udf(StringType())
+        def extract_name(s: pd.Series) -> pd.Series:
+            return s.apply(lambda x: x["personal"]["name"])
+
+        self.assertEquals(
+            df.select(extract_name(df.attributes).alias("res")).first(),
+            Row(res="John"),
         )
 
     @unittest.skipIf(
