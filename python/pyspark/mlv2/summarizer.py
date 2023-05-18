@@ -57,8 +57,9 @@ class SummarizerAggStatus:
                 result["mean"] = self.sum_values / self.count
             if metric == "std":
                 result["std"] = np.sqrt(
-                    (self.square_sum_values / self.count) - np.square(self.sum_values / self.count)
-                ) * (self.count / (self.count - 1))
+                    ((self.square_sum_values / self.count) - np.square(self.sum_values / self.count))
+                    * (self.count / (self.count - 1))
+                )
 
         return result
 
