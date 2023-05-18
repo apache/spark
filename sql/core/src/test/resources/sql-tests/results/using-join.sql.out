@@ -436,11 +436,11 @@ two	two
 
 -- !query
 WITH
-  aws_dbr_a AS (select key from values ('a') t(key)),
-  gcp_pro_b AS (select key from values ('a') t(key))
-SELECT aws_dbr_a.key
-FROM aws_dbr_a FULL OUTER JOIN gcp_pro_b USING (key)
-WHERE aws_dbr_a.key NOT LIKE 'bb.%'
+  t1 AS (select key from values ('a') t(key)),
+  t2 AS (select key from values ('a') t(key))
+SELECT t1.key
+FROM t1 FULL OUTER JOIN t2 USING (key)
+WHERE t1.key NOT LIKE 'bb.%'
 -- !query schema
 struct<key:string>
 -- !query output
