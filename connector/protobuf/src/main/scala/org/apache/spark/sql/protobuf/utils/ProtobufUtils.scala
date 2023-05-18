@@ -147,9 +147,9 @@ private[sql] object ProtobufUtils extends Logging {
    *  the `messageName` is treated as Java class name.
    * @return
    */
-  def buildDescriptor(messageName: String, fileDescriptorSetBytesOpt: Option[Array[Byte]])
+  def buildDescriptor(messageName: String, binaryFileDescriptorSet: Option[Array[Byte]])
   : Descriptor = {
-    fileDescriptorSetBytesOpt match {
+    binaryFileDescriptorSet match {
       case Some(bytes) => buildDescriptor(bytes, messageName)
       case None => buildDescriptorFromJavaClass(messageName)
     }
@@ -211,9 +211,9 @@ private[sql] object ProtobufUtils extends Logging {
       .asInstanceOf[Descriptor]
   }
 
-  def buildDescriptor(fileDescriptorSetBytes: Array[Byte], messageName: String): Descriptor = {
+  def buildDescriptor(binaryFileDescriptorSet: Array[Byte], messageName: String): Descriptor = {
     // Find the first message descriptor that matches the name.
-    val descriptorOpt = parseFileDescriptorSet(fileDescriptorSetBytes)
+    val descriptorOpt = parseFileDescriptorSet(binaryFileDescriptorSet)
       .flatMap { fileDesc =>
         fileDesc.getMessageTypes.asScala.find { desc =>
           desc.getName == messageName || desc.getFullName == messageName

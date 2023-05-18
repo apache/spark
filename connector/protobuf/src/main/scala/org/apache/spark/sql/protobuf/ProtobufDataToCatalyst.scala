@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Struc
 private[protobuf] case class ProtobufDataToCatalyst(
     child: Expression,
     messageName: String,
-    fileDescriptorSetBytesOpt: Option[Array[Byte]] = None,
+    binaryFileDescriptorSet: Option[Array[Byte]] = None,
     options: Map[String, String] = Map.empty)
     extends UnaryExpression
     with ExpectsInputTypes {
@@ -55,13 +55,13 @@ private[protobuf] case class ProtobufDataToCatalyst(
   private lazy val protobufOptions = ProtobufOptions(options)
 
   @transient private lazy val messageDescriptor =
-    ProtobufUtils.buildDescriptor(messageName, fileDescriptorSetBytesOpt)
+    ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
   @transient private lazy val fieldsNumbers =
     messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
 
   @transient private lazy val deserializer = {
-    val typeRegistry = fileDescriptorSetBytesOpt match {
+    val typeRegistry = binaryFileDescriptorSet match {
       case Some(descBytes) if protobufOptions.convertAnyFieldsToJson =>
         ProtobufUtils.buildTypeRegistry(descBytes) // This loads all the messages in the desc set.
       case None if protobufOptions.convertAnyFieldsToJson =>

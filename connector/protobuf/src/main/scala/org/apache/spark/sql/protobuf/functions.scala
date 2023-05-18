@@ -45,8 +45,8 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
-    from_protobuf(data, messageName, fileContent, options)
+    val descriptorFileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    from_protobuf(data, messageName, descriptorFileContent, options)
   }
 
   /**
@@ -57,7 +57,7 @@ object functions {
    *   the binary column.
    * @param messageName
    *   the protobuf MessageName to look for in the descriptor set.
-   * @param fileDescriptorSetBytes
+   * @param binaryFileDescriptorSet
    *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
    *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
    *   @param options
@@ -67,11 +67,11 @@ object functions {
   def from_protobuf(
     data: Column,
     messageName: String,
-    fileDescriptorSetBytes: Array[Byte],
+    binaryFileDescriptorSet: Array[Byte],
     options: java.util.Map[String, String]): Column = {
     new Column(
       ProtobufDataToCatalyst(
-        data.expr, messageName, Some(fileDescriptorSetBytes), options.asScala.toMap
+        data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap
       )
     )
   }
@@ -102,15 +102,15 @@ object functions {
    *   the binary column.
    * @param messageName
    *   the protobuf MessageName to look for in the descriptor set.
-   * @param fileDescriptorSetBytes
+   * @param binaryFileDescriptorSet
    *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
    *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
    * @since 3.5.0
    */
   @Experimental
-  def from_protobuf(data: Column, messageName: String, fileDescriptorSetBytes: Array[Byte])
+  def from_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(fileDescriptorSetBytes)))
+    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(binaryFileDescriptorSet)))
   }
 
   /**
@@ -182,16 +182,16 @@ object functions {
    *   the binary column.
    * @param messageName
    *   the protobuf MessageName to look for in the descriptor set.
-   * @param fileDescriptorSetBytes
+   * @param binaryFileDescriptorSet
    *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
    *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
    *
    * @since 3.5.0
    */
   @Experimental
-  def to_protobuf(data: Column, messageName: String, fileDescriptorSetBytes: Array[Byte])
+  def to_protobuf(data: Column, messageName: String, binaryFileDescriptorSet: Array[Byte])
   : Column = {
-    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(fileDescriptorSetBytes)))
+    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(binaryFileDescriptorSet)))
   }
   /**
    * Converts a column into binary of protobuf format. The Protobuf definition is provided
@@ -226,7 +226,7 @@ object functions {
    *   the binary column.
    * @param messageName
    *   the protobuf MessageName to look for in the descriptor set.
-   * @param fileDescriptorSetBytes
+   * @param binaryFileDescriptorSet
    *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
    *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
    * @param options
@@ -236,13 +236,13 @@ object functions {
   def to_protobuf(
     data: Column,
     messageName: String,
-    fileDescriptorSetBytes: Array[Byte],
+    binaryFileDescriptorSet: Array[Byte],
     options: java.util.Map[String, String]
   )
   : Column = {
     new Column(
       CatalystDataToProtobuf(
-        data.expr, messageName, Some(fileDescriptorSetBytes), options.asScala.toMap
+        data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap
       )
     )
   }
