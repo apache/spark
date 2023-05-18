@@ -54,6 +54,8 @@ from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.sql.functions import col, pandas_udf, struct
 import pickle
 
+from pyspark.mlv2.util import transform_dataframe_column
+
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
@@ -132,15 +134,24 @@ class Transformer(Params, HasInputCols, HasOutputCols, metaclass=ABCMeta):
     """
     Abstract class for transformers that transform one dataset into another.
     """
-    def _get_transform_func_and_output_schema(self):
+
+    def _input_column_name(self):
         """
-        Returns a function defined like:
-        `transform_func(input: pd.DataFrame) -> pd.DataFrame`
-        the transforming function accepts a pandas DataFrame input,
-        the input columns must be consistent with "inputCols" param,
-        and generate a new pandas DataFrame as transformation results,
-        output columns must be consistent with "outputCols" param.
-        and returns an output pyspark schema for the output columns.
+        Return the name of the input column that is transformed.
+        """
+        raise NotImplementedError()
+
+    def _output_columns(self):
+        """
+        Return a list of output transformed columns, each elements in the list
+        is a tuple of (column_name, column_spark_type)
+        """
+        raise NotImplementedError()
+
+    def _get_transform_fn(self):
+        """
+        Return a transformation function that accepts an instance of `pd.Series` as input and returns
+        transformed result as an instance of `pd.Series` or `pd.DataFrame`
         """
         raise NotImplementedError()
 
@@ -161,24 +172,16 @@ class Transformer(Params, HasInputCols, HasOutputCols, metaclass=ABCMeta):
             transformed dataset, the type of output dataframe is consistent with
             input dataframe.
         """
-        transform_func, output_spark_schema = self._get_transform_func_and_output_schema()
+        input_col_name = self._input_column_name()
+        transform_fn = self._get_transform_fn()
+        output_cols = self._output_columns()
 
-        if isinstance(dataset, pd.DataFrame):
-            input_cols = self.getInputCols()
-            selected_dataset = dataset[input_cols]
-            return transform_func(selected_dataset)
-
-        @pandas_udf(returnType=output_spark_schema)
-        def pyspark_transform_udf(s: pd.DataFrame) -> pd.DataFrame:
-            return transform_func(s)
-
-        return dataset.withColumn(
-            _SPARKML_TRANSFORMER_TMP_OUTPUT_COLNAME,
-            pyspark_transform_udf(struct(*self.getInputCols()))
-        ).withColumn(
-            [f"{_SPARKML_TRANSFORMER_TMP_OUTPUT_COLNAME}.{output_col}"]
-            for output_col in self.getOutputCols()
-        ).drop(_SPARKML_TRANSFORMER_TMP_OUTPUT_COLNAME)
+        return transform_dataframe_column(
+            dataset,
+            input_col_name=input_col_name,
+            transform_fn=transform_fn,
+            output_cols=output_cols
+        )
 
 
 @inherit_doc

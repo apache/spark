@@ -95,8 +95,7 @@ def transform_dataframe_column(
         dataframe,
         input_col_name,
         transform_fn,
-        result_col_name,
-        result_col_spark_type,
+        output_cols,
 ):
     """
     Transform specified column of the input spark dataframe or pandas dataframe,
@@ -112,14 +111,16 @@ def transform_dataframe_column(
 
     transform_fn:
         A transforming function with one arguments of `pandas.Series` type,
-        return transformed result as a `pandas.Series` object, the result object must
-        have the same index with the input series.
+        if the transform function output is only one column data,
+        return transformed result as a `pandas.Series` object,
+        otherwise return transformed result as a `pandas.DataFrame` object
+        with corresponding column names defined in `output_cols` argument.
+        The output pandas Series/DataFrame object must have the same index
+        with the input series.
 
-    result_col_name:
-        the transformed result column name
-
-    result_col_spark_type:
-        the transformed result column type
+    output_cols:
+        a list of output transformed columns, each elements in the list
+        is a tuple of (column_name, column_spark_type)
 
     Returns
     -------
@@ -130,12 +131,43 @@ def transform_dataframe_column(
     pandas dataframe has the same index with the input dataframe.
     """
 
-    if isinstance(dataframe, pd.DataFrame):
-        result_col_data = transform_fn(dataframe[input_col_name])
-        return pd.DataFrame({"result_col_name": result_col_data})
+    if len(output_cols) > 1:
+        output_col_name = "__spark_ml_transformer_output_tmp__"
+        spark_udf_return_type = (
+            ",".join([f"{col_name} {col_type}" for col_name, col_type in output_cols])
+        )
+    else:
+        output_col_name, spark_udf_return_type = output_cols[0]
 
-    @pandas_udf(returnType=result_col_type)
+    if isinstance(dataframe, pd.DataFrame):
+        result_data = transform_fn(dataframe[input_col_name])
+        if isinstance(result_data, pd.Series):
+            assert len(output_cols) == 1
+            return pd.DataFrame({output_col_name: result_data})
+        else:
+            assert set(result_data.columns) == set(col_name for col_name, _ in output_cols)
+            return result_data
+
+    @pandas_udf(returnType=spark_udf_return_type)
     def transform_fn_pandas_udf(s: pd.Series) -> pd.Series:
         return transform_fn(s)
 
-    return dataframe.withColumn(result_col_name, transform_fn_pandas_udf(col(input_col_name)))
+    input_col = col(input_col_name)
+    input_col_type = dict(dataframe.dtypes)[input_col_name]
+
+    if input_col_type == "vector":
+        from pyspark.ml.functions import vector_to_array
+        # pandas UDF does not support vector type for now,
+        # we convert it into vector type
+        input_col = vector_to_array(input_col)
+
+    result_spark_df = dataframe.withColumn(
+        output_col_name, transform_fn_pandas_udf(input_col)
+    )
+
+    if len(output_cols) > 1:
+        return result_spark_df.select(
+            *[f"{output_col_name}.{col_name}" for col_name, _ in output_cols]
+        ).drop(output_col_name)
+    else:
+        return result_spark_df

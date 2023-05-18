@@ -53,27 +53,20 @@ class MaxAbsScalerModel(Transformer, HasInputCol, HasOutputCol):
     def __init__(self, max_abs_values):
         self.max_abs_values = max_abs_values
 
-    def transform(self, dataset):
+    def _output_columns(self):
+        return [self.getOutputCol(), "array<double>"]
 
-        input_col = self.getInputCol()
-        output_col = self.getOutputCol()
-
+    def _get_transform_fn(self):
         max_abs_values = self.max_abs_values
         max_abs_values_zero_cond = (max_abs_values == 0.0)
 
-        def transform_pandas_series(series):
+        def transform_fn(series):
             def map_value(x):
                 return max_abs_values.where(max_abs_values_zero_cond, 0.0, x / max_abs_values)
 
             return series.apply(map_value)
 
-        return transform_dataframe_column(
-            dataset,
-            input_col_name=input_col,
-            transform_fn=transform_pandas_series,
-            result_col_name=output_col,
-            result_col_spark_type='double'
-        )
+        return transform_fn
 
 
 class StandardScaler(Estimator, HasInputCol, HasOutputCol):
@@ -100,24 +93,20 @@ class StandardScalerModel(Transformer, HasInputCol, HasOutputCol):
         self.mean_values = mean_values
         self.std_values = std_values
 
-    def transform(self, dataset):
+    def _input_column_name(self):
+        return self.getInputCol()
 
-        input_col = self.getInputCol()
-        output_col = self.getOutputCol()
+    def _output_columns(self):
+        return [self.getOutputCol(), "array<double>"]
 
+    def _get_transform_fn(self):
         mean_values = self.mean_values
         std_values = self.std_values
 
-        def transform_pandas_series(series):
+        def transform_fn(series):
             def map_value(x):
                 return (x - mean_values) / std_values
 
             return series.apply(map_value)
 
-        return transform_dataframe_column(
-            dataset,
-            input_col_name=input_col,
-            transform_fn=transform_pandas_series,
-            result_col_name=output_col,
-            result_col_spark_type='double'
-        )
+        return transform_fn
