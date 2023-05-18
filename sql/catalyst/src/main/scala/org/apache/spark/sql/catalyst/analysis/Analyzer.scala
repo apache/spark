@@ -1765,7 +1765,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           // Add missing attributes and then project them away.
           val newFilter = Filter(finalCond, newChild)
-          Project(newChild.output, newFilter)
+          Project(child.output, newFilter)
         }
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty => ResolveReferencesInSort(s)
@@ -3521,17 +3521,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     /**
      * For each top-level Tuple field, we use [[GetColumnByOrdinal]] to get its corresponding column
-     * by position, and check that it exists in the `input` attributes.
+     * by position.  However, the actual number of columns may be different from the number of Tuple
+     * fields.  This method is used to check the number of columns and fields, and throw an
+     * exception if they do not match.
      */
     private def validateTopLevelTupleFields(
         deserializer: Expression, inputs: Seq[Attribute]): Unit = {
       val ordinals = deserializer.collect {
         case GetColumnByOrdinal(ordinal, _) => ordinal
-      }
-      if (ordinals.nonEmpty) {
-        if (!ordinals.toSet.subsetOf(inputs.indices.toSet)) {
-          fail(inputs.toStructType, ordinals.last)
-        }
+      }.distinct.sorted
+
+      if (ordinals.nonEmpty && ordinals != inputs.indices) {
+        fail(inputs.toStructType, ordinals.last)
       }
     }
 

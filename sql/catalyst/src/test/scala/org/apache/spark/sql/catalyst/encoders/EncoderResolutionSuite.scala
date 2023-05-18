@@ -178,6 +178,15 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[(String, Long)]
 
     {
+      val attrs = Seq($"a".string, $"b".long, $"c".int)
+      checkError(
+        exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),
+        errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+        parameters = Map("schema" -> "\"STRUCT<a: STRING, b: BIGINT, c: INT>\"",
+          "ordinal" -> "2"))
+    }
+
+    {
       val attrs = Seq($"a".string)
       checkError(
         exception = intercept[AnalysisException](encoder.resolveAndBind(attrs)),

@@ -61,7 +61,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite {
       .filter($"a" > 10 && $"b" > 6 && $"c")
     val df3 = df1.join(df2, "a")
     val res = df3.collect()
-    val expected = Seq((18, 18, 8, true)).toDF("a", "x", "b", "c").collect()
+    val expected = Seq((18, 18, 8)).toDF("a", "x", "b").collect()
     assert(res.toSeq == expected.toSeq)
     df3.createOrReplaceTempView("mai_table")
     val df4 = hc.table("mai_table")

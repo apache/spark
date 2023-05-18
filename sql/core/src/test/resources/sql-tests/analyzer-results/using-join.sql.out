@@ -828,9 +828,9 @@ WithCTE
 :        +- SubqueryAlias t
 :           +- LocalRelation [key#x]
 +- Project [key#x]
-   +- Project [key#x, key#x]
+   +- Project [key#x, key#x, key#x]
       +- Filter NOT key#x LIKE bb.%
-         +- Project [coalesce(key#x, key#x) AS key#x, key#x]
+         +- Project [coalesce(key#x, key#x) AS key#x, key#x, key#x, key#x]
             +- Join FullOuter, (key#x = key#x)
                :- SubqueryAlias aws_dbr_a
                :  +- CTERelationRef xxxx, true, [key#x]
