@@ -926,4 +926,67 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-43450: Filter on full _metadata column struct") {
+    withTempPath { dir =>
+      val numRows = 10
+      spark.range(end = numRows)
+        .toDF()
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // Get the metadata of a random row. The metadata is unique per row because of row_index.
+      val metadataColumnRow = spark.read.load(dir.getAbsolutePath)
+        .select("_metadata")
+        .collect()
+        .head
+        .getStruct(0)
+
+      // Transform the result into a literal that can be used in an expression.
+      val metadataColumnFields = metadataColumnRow.schema.fields
+        .map(field => lit(metadataColumnRow.getAs[Any](field.name)).as(field.name))
+      val metadataColumnStruct = struct(metadataColumnFields: _*)
+
+      val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
+        .where(col("_metadata").equalTo(lit(metadataColumnStruct)))
+
+      assert(selectSingleRowDf.count() === 1)
+    }
+  }
+
+  test("SPARK-43450: Is not null filter on _metadata column") {
+    withTempPath { dir =>
+      val numRows = 10
+      spark.range(start = 0, end = numRows, step = 1, numPartitions = 1)
+        .toDF()
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // There is only one file, so we will select all rows.
+      val selectAllDf = spark.read.load(dir.getAbsolutePath)
+        .where(not(isnull(col("_metadata"))))
+
+      assert(selectAllDf.count() === numRows)
+    }
+  }
+
+  test("SPARK-43450: Filter on aliased _metadata.row_index") {
+    withTempPath { dir =>
+      val numRows = 10
+      spark.range(start = 0, end = numRows, step = 1, numPartitions = 1)
+        .toDF()
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // There is only one file, so row_index is unique.
+      val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
+        .select(col("_metadata"), col("_metadata.row_index").as("renamed_row_index"))
+        .where(col("renamed_row_index").equalTo(lit(0)))
+
+      assert(selectSingleRowDf.count() === 1)
+    }
+  }
 }
