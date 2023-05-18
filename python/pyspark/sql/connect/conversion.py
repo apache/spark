@@ -44,7 +44,7 @@ from pyspark.sql.types import (
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.connect.types import to_arrow_schema
 import pyspark.sql.connect.proto as pb2
-from pyspark.sql.pandas.types import _dedup_names
+from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names
 
 from typing import (
     Any,
@@ -481,29 +481,3 @@ def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
         deserialized=storage_level.deserialized,
         replication=storage_level.replication,
     )
-
-
-def _deduplicate_field_names(dt: DataType) -> DataType:
-    if isinstance(dt, StructType):
-        dedup_field_names = _dedup_names(dt.names)
-
-        return StructType(
-            [
-                StructField(
-                    dedup_field_names[i],
-                    _deduplicate_field_names(field.dataType),
-                    nullable=field.nullable,
-                )
-                for i, field in enumerate(dt.fields)
-            ]
-        )
-    elif isinstance(dt, ArrayType):
-        return ArrayType(_deduplicate_field_names(dt.elementType), containsNull=dt.containsNull)
-    elif isinstance(dt, MapType):
-        return MapType(
-            _deduplicate_field_names(dt.keyType),
-            _deduplicate_field_names(dt.valueType),
-            valueContainsNull=dt.valueContainsNull,
-        )
-    else:
-        return dt

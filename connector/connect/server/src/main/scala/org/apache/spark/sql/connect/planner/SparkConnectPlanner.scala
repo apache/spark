@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -64,12 +64,13 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
@@ -1448,6 +1449,51 @@ class SparkConnectPlanner(val session: SparkSession) {
    */
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
+    def extractArgsOfProtobufFunction(
+        functionName: String,
+        argumentsCount: Int,
+        children: Seq[Expression]): (String, Option[String], Map[String, String]) = {
+      val messageClassName = children(1) match {
+        case Literal(s, StringType) if s != null => s.toString
+        case other =>
+          throw InvalidPlanInput(
+            s"MessageClassName in $functionName should be a literal string, but got $other")
+      }
+      val (descFilePathOpt, options) = if (argumentsCount == 2) {
+        (None, Map.empty[String, String])
+      } else if (argumentsCount == 3) {
+        children(2) match {
+          case Literal(s, StringType) if s != null =>
+            (Some(s.toString), Map.empty[String, String])
+          case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+            (None, ExprUtils.convertToMapData(CreateMap(arguments)))
+          case other =>
+            throw InvalidPlanInput(
+              s"The valid type for the 3rd arg in $functionName is string or map, but got $other")
+        }
+      } else if (argumentsCount == 4) {
+        val filePathOpt = children(2) match {
+          case Literal(s, StringType) if s != null =>
+            Some(s.toString)
+          case other =>
+            throw InvalidPlanInput(
+              s"DescFilePath in $functionName should be a literal string, but got $other")
+        }
+        val map = children(3) match {
+          case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+            ExprUtils.convertToMapData(CreateMap(arguments))
+          case other =>
+            throw InvalidPlanInput(
+              s"Options in $functionName should be created by map, but got $other")
+        }
+        (filePathOpt, map)
+      } else {
+        throw InvalidPlanInput(
+          s"$functionName requires 2 ~ 4 arguments, but got $argumentsCount ones!")
+      }
+      (messageClassName, descFilePathOpt, options)
+    }
+
     fun.getFunctionName match {
       case "product" if fun.getArgumentsCount == 1 =>
         Some(
@@ -1599,6 +1645,19 @@ class SparkConnectPlanner(val session: SparkSession) {
       case "array_to_vector" if fun.getArgumentsCount == 1 =>
         val expr = transformExpression(fun.getArguments(0))
         Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
+
+      // Protobuf-specific functions
+      case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val (messageClassName, descFilePathOpt, options) =
+          extractArgsOfProtobufFunction("from_protobuf", fun.getArgumentsCount, children)
+        Some(ProtobufDataToCatalyst(children.head, messageClassName, descFilePathOpt, options))
+
+      case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val (messageClassName, descFilePathOpt, options) =
+          extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
+        Some(CatalystDataToProtobuf(children.head, messageClassName, descFilePathOpt, options))
 
       case _ => None
     }
@@ -2385,6 +2444,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
+    if (writeOp.hasForeachWriter) {
+      val foreach = writeOp.getForeachWriter.getPythonWriter
+      val pythonFcn = transformPythonFunction(foreach)
+      writer.foreachImplementation(
+        new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]])
+    }
+
     val query = writeOp.getPath match {
       case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
       case "" => writer.start()
@@ -2467,7 +2533,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         respBuilder.setRecentProgress(
           StreamingQueryCommandResult.RecentProgressResult
             .newBuilder()
-            .addAllRecentProgressJson(progressReports.map(_.json).asJava)
+            .addAllRecentProgressJson(
+              progressReports.map(StreamingQueryProgress.jsonString).asJava)
             .build())
 
       case StreamingQueryCommand.CommandCase.STOP =>
@@ -2530,6 +2597,21 @@ class SparkConnectPlanner(val session: SparkSession) {
         .build())
   }
 
+  private def buildStreamingQueryInstance(query: StreamingQuery): StreamingQueryInstance = {
+    val builder = StreamingQueryInstance
+      .newBuilder()
+      .setId(
+        StreamingQueryInstanceId
+          .newBuilder()
+          .setId(query.id.toString)
+          .setRunId(query.runId.toString)
+          .build())
+    if (query.name != null) {
+      builder.setName(query.name)
+    }
+    builder.build()
+  }
+
   def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       sessionId: String,
@@ -2542,32 +2624,13 @@ class SparkConnectPlanner(val session: SparkSession) {
         val active_queries = session.streams.active
         respBuilder.getActiveBuilder.addAllActiveQueries(
           active_queries
-            .map(query =>
-              StreamingQueryInstance
-                .newBuilder()
-                .setId(
-                  StreamingQueryInstanceId
-                    .newBuilder()
-                    .setId(query.id.toString)
-                    .setRunId(query.runId.toString)
-                    .build())
-                .setName(SparkConnectService.convertNullString(query.name))
-                .build())
+            .map(query => buildStreamingQueryInstance(query))
             .toIterable
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
         val query = session.streams.get(command.getGetQuery)
-        if (query != null) {
-          respBuilder.getQueryBuilder
-            .setId(
-              StreamingQueryInstanceId
-                .newBuilder()
-                .setId(query.id.toString)
-                .setRunId(query.runId.toString)
-                .build())
-            .setName(SparkConnectService.convertNullString(query.name))
-        }
+        respBuilder.setQuery(buildStreamingQueryInstance(query))
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {

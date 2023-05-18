@@ -825,6 +825,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_NETWORK" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -3866,11 +3872,6 @@
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2029" : {
-    "message" : [
-      "Not supported rounding mode: <roundMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2030" : {

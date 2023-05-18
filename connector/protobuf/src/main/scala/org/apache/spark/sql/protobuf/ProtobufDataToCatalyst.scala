@@ -29,7 +29,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
-private[protobuf] case class ProtobufDataToCatalyst(
+private[sql] case class ProtobufDataToCatalyst(
     child: Expression,
     messageName: String,
     binaryFileDescriptorSet: Option[Array[Byte]] = None,
