@@ -18,11 +18,12 @@ package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
+
 import io.grpc.{Server, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
-import scala.collection.mutable
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}

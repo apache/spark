@@ -176,6 +176,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
+    <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
@@ -666,7 +667,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>8.0.0</version>
+        <version>8.1.1.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1188,31 +1189,31 @@
       <dependency>
         <groupId>org.mariadb.jdbc</groupId>
         <artifactId>mariadb-java-client</artifactId>
-        <version>2.7.4</version>
+        <version>2.7.9</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.5.1</version>
+        <version>42.6.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
-        <version>11.5.6.0</version>
+        <version>11.5.8.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.microsoft.sqlserver</groupId>
         <artifactId>mssql-jdbc</artifactId>
-        <version>9.4.0.jre8</version>
+        <version>9.4.1.jre8</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
         <artifactId>ojdbc8</artifactId>
-        <version>21.3.0.0</version>
+        <version>23.2.0.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2852,6 +2853,7 @@
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
+            <skip>${maven.scaladoc.skip}</skip>
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>

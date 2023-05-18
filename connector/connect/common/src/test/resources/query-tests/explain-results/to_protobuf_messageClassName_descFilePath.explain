@@ -1,0 +1,2 @@
+Project [to_protobuf(bytes#0, StorageLevel, Some(../common/src/test/resources/protobuf-tests/common.desc)) AS to_protobuf(bytes)#0]
++- LocalRelation <empty>, [id#0L, bytes#0]
