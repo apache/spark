@@ -183,7 +183,7 @@ def get_preferred_mirrors():
         "https://archive.apache.org/dist",
         "https://dist.apache.org/repos/dist/release",
     ]
-    return list(set(mirror_urls)) + default_sites
+    return list(set(mirror_urls)) + [x for x in default_sites if x not in mirror_urls]
 
 
 def download_to_file(response, path, chunk_size=1024 * 1024):
