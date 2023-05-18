@@ -98,18 +98,15 @@ object ExpectsInputTypesAndFoldable extends QueryErrorsBase {
   def checkInputIsFoldable(
       inputs: Seq[Expression],
       inputIsFoldable: Seq[Option[Boolean]]): TypeCheckResult = {
-    val mismatch = inputs.zip(inputIsFoldable).zipWithIndex.filter {
-      case ((_, Some(_)), _) => true
-      case _ => false
-    }.collectFirst {
-        case ((input, expected), idx) if input.foldable != expected.get =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_INPUT_FOLDABLE_VALUE",
-            messageParameters = Map(
-              "paramIndex" -> (idx + 1).toString,
-              "inputSql" -> toSQLExpr(input),
-              "inputFoldable" -> input.foldable.toString,
-              "requiredFoldable" -> expected.get.toString))
+   val mismatch = inputs.zip(inputIsFoldable).zipWithIndex.collectFirst {
+      case ((input, Some(expected)), idx) if input.foldable != expected =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_FOLDABLE_VALUE",
+          messageParameters = Map(
+            "paramIndex" -> (idx + 1).toString,
+            "inputSql" -> toSQLExpr(input),
+            "inputFoldable" -> input.foldable.toString,
+            "requiredFoldable" -> expected.toString))
     }
 
     mismatch.getOrElse(TypeCheckResult.TypeCheckSuccess)
