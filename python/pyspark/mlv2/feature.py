@@ -84,6 +84,11 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
     statistics on the samples in the training set.
     """
 
+    def __init__(self, inputCol, outputCol):
+        super().__init__()
+        self.set(self.inputCol, inputCol)
+        self.set(self.outputCol, outputCol)
+
     def _fit(self, dataset):
         input_col = self.getInputCol()
 
@@ -91,7 +96,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
         mean_values = min_max_res["mean"]
         std_values = min_max_res["std"]
 
-        model = MaxAbsScalerModel(mean_values, std_values)
+        model = StandardScalerModel(mean_values, std_values)
         model._resetUid(self.uid)
         return self._copyValues(model)
 
@@ -99,6 +104,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
 class StandardScalerModel(Transformer, HasInputCol, HasOutputCol):
 
     def __init__(self, mean_values, std_values):
+        super().__init__()
         self.mean_values = mean_values
         self.std_values = std_values
 
