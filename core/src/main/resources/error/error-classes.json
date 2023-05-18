@@ -204,9 +204,10 @@
   },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
-      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>"
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>. ",
+      "Please make sure only one streaming job runs on a particular batchId at a time."
     ],
-    "sqlState" : "56088"
+    "sqlState" : "40000"
   },
   "CONNECT" : {
     "message" : [
