@@ -200,8 +200,10 @@ class RocksDB(
     this
   }
 
+  /**
+   * Replay change log from the loaded version to the target version.
+   */
   private def replayChangelog(endVersion: Long): Unit = {
-    // Replay change log from the loaded version to the target version.
     // This will be noop if changelog checkpointing is disabled.
     for (v <- loadedVersion + 1 to endVersion) {
       var changelogReader: StateStoreChangelogReader = null
@@ -365,6 +367,9 @@ class RocksDB(
           // Make sure the directory does not exist. Native RocksDB fails if the directory to
           // checkpoint exists.
           Utils.deleteRecursively(checkpointDir)
+          // We no longer pause background operation before creating a RocksDB checkpoint because
+          // it is unnecessary. The captured snapshot will still be consistent with ongoing
+          // background operations.
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
           synchronized {
@@ -433,7 +438,8 @@ class RocksDB(
             fileManager.saveCheckpointToDfs(localDir, version, numKeys)
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
-          logInfo(s"Upload snapshot of version $version, time taken: $uploadTime ms")
+          logInfo(s"$loggingId: Upload snapshot of version $version," +
+            s" time taken: $uploadTime ms")
         } finally {
           localCheckpoint.foreach(_.close())
         }
