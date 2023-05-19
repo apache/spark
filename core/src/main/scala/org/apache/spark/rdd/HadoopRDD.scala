@@ -128,6 +128,8 @@ class HadoopRDD[K, V](
 
   protected val jobConfCacheKey: String = "rdd_%d_job_conf".format(id)
 
+  protected val inputFormatCacheKey: String = "rdd_%d_input_format".format(id)
+
   // used to build JobTracker ID
   private val createTime = new Date()
 
