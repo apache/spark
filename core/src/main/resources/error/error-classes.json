@@ -1872,6 +1872,11 @@
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
         ]
       },
+      "LATERAL_WITH_PIVOT" : {
+        "message" : [
+          "LATERAL cannot be used together with PIVOT in FROM clause."
+        ]
+      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
@@ -2168,11 +2173,6 @@
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0013" : {
-    "message" : [
-      "LATERAL cannot be used together with PIVOT in FROM clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_0014" : {

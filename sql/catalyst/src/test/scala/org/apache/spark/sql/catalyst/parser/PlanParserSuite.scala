@@ -584,7 +584,7 @@ class PlanParserSuite extends AnalysisTest {
         |)""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0013",
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_WITH_PIVOT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = fragment,

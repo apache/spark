@@ -106,7 +106,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.LATERAL_WITH_PIVOT", ctx)
   }
 
   def lateralWithUnpivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
