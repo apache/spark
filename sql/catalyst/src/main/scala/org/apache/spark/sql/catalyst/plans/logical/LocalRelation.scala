@@ -81,7 +81,7 @@ case class LocalRelation(
 
   override def computeStats(): Statistics = {
     val rowCount: Option[BigInt] = if (Utils.isTesting &&
-      conf.getConfString("spark.sql.test.localRelationRowCount") != "true") {
+      conf.getConfString("spark.sql.test.localRelationRowCount", "false") != "true") {
       // LocalRelation is heavily used in tests and we should not report row count by default in
       // tests to keep the test coverage, in case the plan is overly optimized.
       None
