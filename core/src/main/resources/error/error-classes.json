@@ -62,14 +62,14 @@
       "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
     ]
   },
-  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>."
-    ]
-  },
   "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
     "message" : [
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> is not in defined values for enum: <enumString>."
     ]
   },
   "CANNOT_DECODE_URL" : {
@@ -185,6 +185,11 @@
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
+  },
+  "COLUMN_NOT_DEFINED_IN_TABLE" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
@@ -555,6 +560,11 @@
       "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
     ],
     "sqlState" : "23505"
+  },
+  "DUPLICATE_CLAUSES" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>. Please, remove one of them."
+    ]
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -2265,11 +2275,6 @@
       "Unsupported SQL statement."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0041" : {
-    "message" : [
-      "Found duplicate clauses: <clauseName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0043" : {
     "message" : [
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
@@ -3196,11 +3201,6 @@
   "_LEGACY_ERROR_TEMP_1205" : {
     "message" : [
       "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1206" : {
-    "message" : [
-      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1207" : {
@@ -4877,7 +4877,7 @@
   },
   "_LEGACY_ERROR_TEMP_2249" : {
     "message" : [
-      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB."
+      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>: <dataSize>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2250" : {

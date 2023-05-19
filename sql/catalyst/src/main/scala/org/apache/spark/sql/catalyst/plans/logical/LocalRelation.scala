@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TreePattern}
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.Utils
 
 object LocalRelation {
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
@@ -78,9 +79,18 @@ case class LocalRelation(
     }
   }
 
-  override def computeStats(): Statistics =
-    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length,
-      rowCount = Some(data.length))
+  override def computeStats(): Statistics = {
+    val rowCount: Option[BigInt] = if (Utils.isTesting &&
+      conf.getConfString("spark.sql.test.localRelationRowCount", "false") != "true") {
+      // LocalRelation is heavily used in tests and we should not report row count by default in
+      // tests to keep the test coverage, in case the plan is overly optimized.
+      None
+    } else {
+      Some(data.length)
+    }
+    Statistics(
+      sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length, rowCount = rowCount)
+  }
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)

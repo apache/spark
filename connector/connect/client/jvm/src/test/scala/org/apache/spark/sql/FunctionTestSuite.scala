@@ -18,9 +18,12 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -233,6 +236,14 @@ class FunctionTestSuite extends ConnectFunSuite {
       a,
       """{"type": "int", "name": "id"}""",
       Collections.emptyMap[String, String]))
+  testEquals(
+    "from_protobuf",
+    pbFn.from_protobuf(a, "FakeMessage", "fakePath", Map.empty[String, String].asJava),
+    pbFn.from_protobuf(a, "FakeMessage", "fakePath"))
+  testEquals(
+    "to_protobuf",
+    pbFn.to_protobuf(a, "FakeMessage", "fakePath", Map.empty[String, String].asJava),
+    pbFn.to_protobuf(a, "FakeMessage", "fakePath"))
 
   test("assert_true no message") {
     val e = assert_true(a).expr

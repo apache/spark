@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.connect.service
 
-import com.google.common.io.CountingOutputStream
-import io.grpc.stub.StreamObserver
 import java.nio.file.{Files, Path, Paths}
 import java.util.zip.{CheckedOutputStream, CRC32}
+
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
+import com.google.common.io.CountingOutputStream
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
