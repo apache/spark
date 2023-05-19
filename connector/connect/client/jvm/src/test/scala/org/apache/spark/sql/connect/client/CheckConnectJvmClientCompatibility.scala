@@ -246,11 +246,11 @@ object CheckConnectJvmClientCompatibility {
    */
   private def checkMiMaCompatibility(
       clientJar: File,
-      sqlJar: File,
+      targetJar: File,
       includedRules: Seq[IncludeByName],
       excludeRules: Seq[ProblemFilter]): List[Problem] = {
-    val mima = new MiMaLib(Seq(clientJar, sqlJar))
-    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
+    val mima = new MiMaLib(Seq(clientJar, targetJar))
+    val allProblems = mima.collectProblems(targetJar, clientJar, List.empty)
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
