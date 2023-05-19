@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.SQLException
+import java.sql.{ResultSet, SQLException}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hive.service.cli.{GetInfoType, HiveSQLException, OperationHandle}
@@ -35,20 +35,20 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
     val globalTempDB = spark.sharedState.globalTempViewManager.database
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       statement.execute("CACHE TABLE tempTbl AS SELECT 1")
     }
     // the cached data of local temporary view should be uncached
     assert(cacheManager.isEmpty)
     try {
-      withJdbcStatement { statement =>
+      withJdbcStatement() { statement =>
         statement.execute("CREATE GLOBAL TEMP VIEW globalTempTbl AS SELECT 1, 2")
         statement.execute(s"CACHE TABLE $globalTempDB.globalTempTbl")
       }
       // the cached data of global temporary view shouldn't be uncached
       assert(!cacheManager.isEmpty)
     } finally {
-      withJdbcStatement { statement =>
+      withJdbcStatement() { statement =>
         statement.execute(s"UNCACHE TABLE IF EXISTS $globalTempDB.globalTempTbl")
       }
       assert(cacheManager.isEmpty)
@@ -72,7 +72,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
     }
 
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery(sql)
       }
@@ -83,7 +83,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
   }
 
   test("SPARK-33526: Add config to control if cancel invoke interrupt task on thriftserver") {
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val forceCancel = new AtomicBoolean(false)
       val listener = new SparkListener {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
@@ -222,12 +222,36 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     withTable("t") {
       sql("CREATE TABLE t (c char(10), v varchar(11)) using parquet")
 
-      withJdbcStatement { stmt =>
+      withJdbcStatement() { stmt =>
         val rs = stmt.executeQuery("SELECT * FROM t")
         val metaData = rs.getMetaData
         assert(metaData.getColumnDisplaySize(1) === 10)
         assert(metaData.getColumnDisplaySize(2) === 11)
       }
+    }
+  }
+
+
+  test("SPARK-43572: ResultSet supports TYPE_SCROLL_INSENSITIVE") {
+    withJdbcStatement(ResultSet.TYPE_SCROLL_INSENSITIVE) { stmt =>
+      val rs = stmt.executeQuery("SELECT * FROM RANGE(5)")
+      (0 until 5).foreach { i =>
+        rs.next()
+        assert(rs.getInt(1) === i)
+      }
+      assert(!rs.next(), "the result set shall be exhausted")
+      // Moves the cursor to the front of `rs`
+      rs.beforeFirst()
+      (0 until 5).foreach { i =>
+        rs.next()
+        assert(rs.getInt(1) === i)
+      }
+
+      val rs1 = stmt.getConnection.getMetaData.getSchemas
+      rs1.next()
+      assert(rs1.getString(1) === "default")
+      assert(rs1.getType === ResultSet.TYPE_FORWARD_ONLY)
+      assertThrows[SQLException](rs1.beforeFirst())
     }
   }
 }
