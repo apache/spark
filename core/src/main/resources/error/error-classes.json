@@ -180,6 +180,11 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Columns aliases are not allowed in <op>."
+    ]
+  },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
@@ -2143,11 +2148,6 @@
   "_LEGACY_ERROR_TEMP_0002" : {
     "message" : [
       "INSERT OVERWRITE DIRECTORY is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0003" : {
-    "message" : [
-      "Columns aliases are not allowed in <op>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0004" : {
