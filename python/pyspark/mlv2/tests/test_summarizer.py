@@ -19,16 +19,21 @@
 import unittest
 import numpy as np
 
-from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
-from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
-from pyspark.testing.mlutils import check_params, SparkSessionTestCase
-
+from pyspark.ml.linalg import Vectors
 from pyspark.mlv2.summarizer import summarize_dataframe
-from pyspark.ml.stat import Summarizer
+from pyspark.sql import SparkSession
 
 
-class SummarizerTests(SparkSessionTestCase):
+class SummarizerTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+                .getOrCreate()
+        )
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
     def test_summarize_dataframe(self):
         df1 = self.spark.createDataFrame([

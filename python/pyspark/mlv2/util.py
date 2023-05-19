@@ -66,18 +66,15 @@ def aggregate_dataframe(
 
     col_types = dict(dataframe.dtypes)
 
-    input_cols = []
     for col_name in input_col_names:
-        input_col = col(col_name)
         col_type = col_types[col_name]
         if col_type == "vector":
             from pyspark.ml.functions import vector_to_array
             # pandas UDF does not support vector type for now,
             # we convert it into vector type
-            input_col = vector_to_array(input_col).alias(col_name)
-        input_cols.append(input_col)
+            dataframe = dataframe.withColumn(col_name, vector_to_array(col_name))
 
-    dataframe = dataframe.select(*input_cols)
+    dataframe = dataframe.select(*input_col_names)
 
     def compute_state(iterator):
         state = None
@@ -179,7 +176,7 @@ def transform_dataframe_column(
         from pyspark.ml.functions import vector_to_array
         # pandas UDF does not support vector type for now,
         # we convert it into vector type
-        input_col = vector_to_array(input_col).alias(input_col_name)
+        input_col = vector_to_array(input_col)
 
     result_spark_df = dataframe.withColumn(
         output_col_name, transform_fn_pandas_udf(input_col)

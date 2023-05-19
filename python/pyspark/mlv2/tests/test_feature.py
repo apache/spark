@@ -19,24 +19,21 @@
 import unittest
 import numpy as np
 
-from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
-from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
-from pyspark.testing.mlutils import check_params, SparkSessionTestCase
-
+from pyspark.ml.linalg import Vectors
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
+from pyspark.sql import SparkSession
 
 
-class FeatureTests(SparkSessionTestCase):
+class FeatureTests(unittest.TestCase):
 
-    @classmethod
-    def conf(cls):
-        """
-        Override this in subclasses to supply a more specific conf
-        """
-        base_conf = super().conf()
-        base_conf.set("spark.task.maxFailures", "1")
-        return base_conf
+    def setUp(self) -> None:
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+                .getOrCreate()
+        )
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame([

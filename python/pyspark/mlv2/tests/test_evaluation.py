@@ -18,15 +18,20 @@
 import unittest
 import numpy as np
 
-from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
-from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
-from pyspark.testing.mlutils import check_params, SparkSessionTestCase
-
 from pyspark.mlv2.evaluation import RegressionEvaluator
+from pyspark.sql import SparkSession
 
 
-class EvaluationTests(SparkSessionTestCase):
+class EvaluationTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+                .getOrCreate()
+        )
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
     def test_regressor_evaluator(self):
         df1 = self.spark.createDataFrame([
