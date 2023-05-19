@@ -421,7 +421,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   val step: Long = range.step
   val numElements: BigInt = range.numElements
   val numSlices: Int =
-    math.min(range.numSlices.getOrElse(session.leafNodeDefaultParallelism), numElements.longValue())
+    math.min(range.numSlices.getOrElse(session.leafNodeDefaultParallelism), numElements.longValue)
       .intValue()
   val isEmptyRange: Boolean = start == end || (start < end ^ 0 < step)
 
