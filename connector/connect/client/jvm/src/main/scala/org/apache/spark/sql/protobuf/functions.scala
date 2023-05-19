@@ -229,7 +229,7 @@ object functions {
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
     val binaryFileDescriptorSet = readDescriptorFileContent(descFilePath)
-    to_protobuf(data, messageName, binaryFileDescriptorSet, emptyOptions)
+    to_protobuf(data, messageName, binaryFileDescriptorSet, options)
   }
 
   /**
