@@ -630,7 +630,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = createViewStatement("COMMENT 'BLABLA'")
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -640,7 +640,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql2,

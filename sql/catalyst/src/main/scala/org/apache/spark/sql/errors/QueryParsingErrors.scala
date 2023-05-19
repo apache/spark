@@ -460,7 +460,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def duplicateClausesError(clauseName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       messageParameters = Map("clauseName" -> clauseName),
       ctx)
   }

@@ -1531,6 +1531,48 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("raise enum serialization error") {
+    // Confirm that attempting to serialize an invalid enum value will raise the correct exception.
+    val df = spark.range(1).select(
+      struct(
+        lit("INVALID_VALUE").as("basic_enum")
+      ).as("proto")
+    )
+
+    val dfWithInt = spark.range(1).select(
+      struct(
+        lit(9999).as("basic_enum")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("SimpleMessageEnum") { case (name, descFilePathOpt) =>
+      var parseError = intercept[AnalysisException] {
+        df.select(to_protobuf_wrapper($"proto", name, descFilePathOpt)).collect()
+      }
+      checkError(
+        exception = parseError,
+        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        parameters = Map(
+          "sqlColumn" -> "`basic_enum`",
+          "protobufColumn" -> "field 'basic_enum'",
+          "data" -> "INVALID_VALUE",
+          "enumString" -> "\"NOTHING\", \"FIRST\", \"SECOND\""))
+
+      parseError = intercept[AnalysisException] {
+        dfWithInt.select(to_protobuf_wrapper($"proto", name, descFilePathOpt)).collect()
+      }
+      checkError(
+        exception = parseError,
+        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        parameters = Map(
+          "sqlColumn" -> "`basic_enum`",
+          "protobufColumn" -> "field 'basic_enum'",
+          "data" -> "9999",
+          "enumString" -> "0, 1, 2"))
+    }
+  }
+
+
   def testFromProtobufWithOptions(
     df: DataFrame,
     expectedDf: DataFrame,
