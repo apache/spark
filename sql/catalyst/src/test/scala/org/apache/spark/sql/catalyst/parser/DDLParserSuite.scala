@@ -1688,7 +1688,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql),
       errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
-      parameters = Map("op" -> "DELETE"),
+      parameters = Map("op" -> "`DELETE`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
@@ -1730,7 +1730,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql),
       errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
-      parameters = Map("op" -> "UPDATE"),
+      parameters = Map("op" -> "`UPDATE`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
@@ -1930,7 +1930,7 @@ class DDLParserSuite extends AnalysisTest {
         checkError(
           exception = parseException(sql),
           errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
-          parameters = Map("op" -> "MERGE"),
+          parameters = Map("op" -> "`MERGE`"),
           context = ExpectedContext(
             fragment = sql,
             start = 0,
