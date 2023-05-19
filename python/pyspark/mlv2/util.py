@@ -25,8 +25,8 @@ def aggregate_dataframe(
         dataframe,
         input_col_names,
         local_agg_fn,
-        merge_agg_status,
-        agg_status_to_result
+        merge_agg_state,
+        agg_state_to_result,
 ):
     """
     The function can be used to run arbitrary aggregation logic on a spark dataframe
@@ -42,16 +42,16 @@ def aggregate_dataframe(
 
     local_agg_fn :
         A user-defined function that converts a pandas dataframe to an object holding
-        aggregation status. The aggregation status object must be pickle-able by
+        aggregation state. The aggregation state object must be pickle-able by
         `cloudpickle`.
 
-    merge_agg_status :
-        A user-defined function that merges 2 aggregation status objects into one and
-        return the merged status. Either in-place modifying the first input status object
-        and returning it or creating a new status object are acceptable.
+    merge_agg_state :
+        A user-defined function that merges 2 aggregation state objects into one and
+        return the merged state. Either in-place modifying the first input state object
+        and returning it or creating a new state object are acceptable.
 
-    agg_status_to_result :
-        A user-defined function that converts aggregation status object to final aggregation
+    agg_state_to_result :
+        A user-defined function that converts aggregation state object to final aggregation
         result.
 
     Returns
@@ -61,8 +61,8 @@ def aggregate_dataframe(
 
     if isinstance(dataframe, pd.DataFrame):
         dataframe = dataframe[list(input_col_names)]
-        agg_status = local_agg_fn(dataframe)
-        return agg_status_to_result(agg_status)
+        agg_state = local_agg_fn(dataframe)
+        return agg_state_to_result(agg_state)
 
     col_types = dict(dataframe.dtypes)
 
@@ -79,36 +79,36 @@ def aggregate_dataframe(
 
     dataframe = dataframe.select(*input_cols)
 
-    def compute_status(iterator):
-        status = None
+    def compute_state(iterator):
+        state = None
 
         for batch_pandas_df in iterator:
-            # print(f"DBG compute status batch_pandas_df len: {len(batch_pandas_df)}\n")
-            new_batch_status = local_agg_fn(batch_pandas_df)
-            if status is None:
-                status = new_batch_status
+            # print(f"DBG compute state batch_pandas_df len: {len(batch_pandas_df)}\n")
+            new_batch_state = local_agg_fn(batch_pandas_df)
+            if state is None:
+                state = new_batch_state
             else:
-                status = merge_agg_status(status, new_batch_status)
+                state = merge_agg_state(state, new_batch_state)
 
-        if status is None:
-            pickled_status = None
+        if state is None:
+            pickled_state = None
         else:
-            pickled_status = cloudpickle.dumps(status)
-        yield pd.DataFrame({'status': [pickled_status]})
+            pickled_state = cloudpickle.dumps(state)
+        yield pd.DataFrame({'state': [pickled_state]})
 
-    result_pdf = dataframe.mapInPandas(compute_status, schema='status binary').toPandas()
+    result_pdf = dataframe.mapInPandas(compute_state, schema='state binary').toPandas()
 
-    merged_status = None
-    for status in result_pdf.status:
-        if status is None:
+    merged_state = None
+    for state in result_pdf.state:
+        if state is None:
             continue
-        status = cloudpickle.loads(status)
-        if merged_status is None:
-            merged_status = status
+        state = cloudpickle.loads(state)
+        if merged_state is None:
+            merged_state = state
         else:
-            merged_status = merge_agg_status(merged_status, status)
+            merged_state = merge_agg_state(merged_state, state)
 
-    return agg_status_to_result(merged_status)
+    return agg_state_to_result(merged_state)
 
 
 def transform_dataframe_column(

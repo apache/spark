@@ -19,7 +19,7 @@ import numpy as np
 from pyspark.mlv2.util import aggregate_dataframe
 
 
-class SummarizerAggStatus:
+class SummarizerAggState:
 
     def __init__(self, input_array):
         self.min_values = input_array.copy()
@@ -35,12 +35,12 @@ class SummarizerAggStatus:
         self.min_values = np.minimum(self.min_values, input_array)
         self.max_values = np.maximum(self.max_values, input_array)
 
-    def merge(self, status):
-        self.count += status.count
-        self.sum_values += status.sum_values
-        self.square_sum_values += status.square_sum_values
-        self.min_values = np.minimum(self.min_values, status.min_values)
-        self.max_values = np.maximum(self.max_values, status.max_values)
+    def merge(self, state):
+        self.count += state.count
+        self.sum_values += state.sum_values
+        self.square_sum_values += state.square_sum_values
+        self.min_values = np.minimum(self.min_values, state.min_values)
+        self.max_values = np.maximum(self.max_values, state.max_values)
         return self
 
     def to_result(self, metrics):
@@ -88,21 +88,21 @@ def summarize_dataframe(dataframe, column, metrics):
     """
 
     def local_agg_fn(pandas_df):
-        status = None
+        state = None
         for value_array in pandas_df[column].values:
-            if status is None:
-                status = SummarizerAggStatus(value_array)
+            if state is None:
+                state = SummarizerAggState(value_array)
             else:
-                status.update(value_array)
+                state.update(value_array)
 
-        return status
+        return state
 
-    def merge_agg_status(status1, status2):
-        return status1.merge(status2)
+    def merge_agg_state(state1, state2):
+        return state1.merge(state2)
 
-    def agg_status_to_result(status):
-        return status.to_result(metrics)
+    def agg_state_to_result(state):
+        return state.to_result(metrics)
 
     return aggregate_dataframe(
-        dataframe, [column], local_agg_fn, merge_agg_status, agg_status_to_result
+        dataframe, [column], local_agg_fn, merge_agg_state, agg_state_to_result
     )

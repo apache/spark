@@ -63,12 +63,12 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
                 torch_metric.update(preds_tensor, labels_tensor)
                 return torch_metric
 
-        def merge_agg_status(state1, state2):
+        def merge_agg_state(state1, state2):
             with torch.inference_mode():
                 state1.merge_state([state2])
                 return state1
 
-        def agg_status_to_result(state):
+        def agg_state_to_result(state):
             with torch.inference_mode():
                 return state.compute().item()
 
@@ -76,6 +76,6 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
             dataset,
             [prediction_col, label_col],
             local_agg_fn,
-            merge_agg_status,
-            agg_status_to_result,
+            merge_agg_state,
+            agg_state_to_result,
         )
