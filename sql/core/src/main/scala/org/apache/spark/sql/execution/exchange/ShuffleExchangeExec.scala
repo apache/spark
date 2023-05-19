@@ -28,7 +28,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BoundReference, Rand, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.MutablePair
+import org.apache.spark.util.{MutablePair, Utils}
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -271,6 +271,7 @@ object ShuffleExchangeExec {
       serializer: Serializer,
       writeMetrics: Map[String, SQLMetric])
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
+    var rangeSortingExprs: Option[Seq[SortOrder]] = None
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
@@ -278,31 +279,49 @@ object ShuffleExchangeExec {
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
       case RangePartitioning(sortingExpressions, numPartitions) =>
-        // Extract only fields used for sorting to avoid collecting large fields that does not
-        // affect sorting result when deciding partition bounds in RangePartitioner
-        val rddForSampling = rdd.mapPartitionsInternal { iter =>
-          val projection =
-            UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
-          val mutablePair = new MutablePair[InternalRow, Null]()
-          // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
-          // partition bounds. To get accurate samples, we need to copy the mutable keys.
-          iter.map(row => mutablePair.update(projection(row).copy(), null))
+        def prepareRangePartitioner(orderingExpressions: Seq[SortOrder]):
+        RangePartitioner[InternalRow, Null] = {
+          // Extract only fields used for sorting to avoid collecting large fields that does not
+          // affect sorting result when deciding partition bounds in RangePartitioner
+          val rddForSampling = rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+            val projection =
+              UnsafeProjection.create(orderingExpressions.map(_.child), outputAttributes)
+            projection.initialize(index)
+            val mutablePair = new MutablePair[InternalRow, Null]()
+            // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
+            // partition bounds. To get accurate samples, we need to copy the mutable keys.
+            iter.map(row => mutablePair.update(projection(row).copy(), null))
+          }
+          // Construct ordering on extracted sort key.
+          val orderingAttributes = orderingExpressions.zipWithIndex.map { case (ord, i) =>
+            ord.copy(child = BoundReference(i, ord.dataType, ord.nullable))
+          }
+          implicit val ordering = new LazilyGeneratedOrdering(orderingAttributes)
+          new RangePartitioner(
+            numPartitions,
+            rddForSampling,
+            ascending = true,
+            samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
         }
-        // Construct ordering on extracted sort key.
-        val orderingAttributes = sortingExpressions.zipWithIndex.map { case (ord, i) =>
-          ord.copy(child = BoundReference(i, ord.dataType, ord.nullable))
+
+        // If the partitioner sorted by sortingExpressions has very few partitions,
+        // replace it with a new partitioner sorted by sortingExpressions + rand()
+        rangeSortingExprs = Some(sortingExpressions)
+        val partitioner = prepareRangePartitioner(sortingExpressions)
+        val minPartitionNum = SQLConf.get.rangePartitionMinPartitionNum
+        if (minPartitionNum > 0 && partitioner.numPartitions < minPartitionNum) {
+          rangeSortingExprs =
+            Some(sortingExpressions :+ SortOrder(Rand(Utils.random.nextLong), Ascending))
+          prepareRangePartitioner(rangeSortingExprs.get)
+        } else {
+          partitioner
         }
-        implicit val ordering = new LazilyGeneratedOrdering(orderingAttributes)
-        new RangePartitioner(
-          numPartitions,
-          rddForSampling,
-          ascending = true,
-          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
+
       case SinglePartition => new ConstantPartitioner
       case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
-    def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
+    def getPartitionKeyExtractor(index: Int): InternalRow => Any = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) =>
         // Distributes elements evenly across output partitions, starting from a random partition.
         // nextInt(numPartitions) implementation has a special case when bound is a power of 2,
@@ -321,8 +340,10 @@ object ShuffleExchangeExec {
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
-      case RangePartitioning(sortingExpressions, _) =>
-        val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
+      case RangePartitioning(_, _) =>
+        val projection =
+          UnsafeProjection.create(rangeSortingExprs.get.map(_.child), outputAttributes)
+        projection.initialize(index)
         row => projection(row)
       case SinglePartition => identity
       case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
@@ -381,13 +402,13 @@ object ShuffleExchangeExec {
       // round-robin function is order sensitive if we don't sort the input.
       val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
-        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
-          val getPartitionKey = getPartitionKeyExtractor()
+        newRdd.mapPartitionsWithIndexInternal((index, iter) => {
+          val getPartitionKey = getPartitionKeyExtractor(index)
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
         }, isOrderSensitive = isOrderSensitive)
       } else {
-        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
-          val getPartitionKey = getPartitionKeyExtractor()
+        newRdd.mapPartitionsWithIndexInternal((index, iter) => {
+          val getPartitionKey = getPartitionKeyExtractor(index)
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
         }, isOrderSensitive = isOrderSensitive)

@@ -2841,6 +2841,22 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-43593: Support the minimum number of range shuffle partitions") {
+    withSQLConf(
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+      SQLConf.RANGE_PARTITIONING_MIN_PARTITION_NUM.key -> "4") {
+      // The number of RangePartitioner changed from 3 to 5
+      val df = sql(
+        s"""SELECT * FROM (
+           |  SELECT case when id < 500 then 500 else 1000 end as key, id as value
+           |  FROM RANGE(1000) t
+           |) tt
+           |ORDER BY key
+           |""".stripMargin)
+      assert(df.rdd.partitions.length == 5)
+    }
+  }
 }
 
 /**

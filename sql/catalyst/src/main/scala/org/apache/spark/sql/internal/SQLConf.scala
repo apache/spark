@@ -3312,6 +3312,14 @@ object SQLConf {
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
+  val RANGE_PARTITIONING_MIN_PARTITION_NUM =
+    buildConf("spark.sql.adaptive.rangePartitioning.minPartitionNum")
+      .doc(s"Support the minimum number of range shuffle partitions when this value is greater " +
+        s"than 0")
+      .version("3.4.1")
+      .intConf
+      .createWithDefault(-1)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -4618,6 +4626,8 @@ class SQLConf extends Serializable with Logging {
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
+
+  def rangePartitionMinPartitionNum: Int = getConf(RANGE_PARTITIONING_MIN_PARTITION_NUM)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
