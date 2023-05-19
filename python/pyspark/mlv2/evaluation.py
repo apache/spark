@@ -28,10 +28,14 @@ import torcheval.metrics as torchmetrics
 
 class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
 
+    def __init__(self, metricName, labelCol, predictionCol):
+        super().__init__()
+        self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
+
     metricName: Param[str] = Param(
         Params._dummy(),
         "metricName",
-        "metric name for the regression evaluator.",
+        "metric name for the regression evaluator, valid values are 'mse' and 'r2'",
         typeConverter=TypeConverters.toString,
     )
 
