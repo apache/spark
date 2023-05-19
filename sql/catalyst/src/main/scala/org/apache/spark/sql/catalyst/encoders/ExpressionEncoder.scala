@@ -54,7 +54,8 @@ object ExpressionEncoder {
     new ExpressionEncoder[T](
       ScalaReflection.serializerFor(enc),
       ScalaReflection.deserializerFor(enc),
-      enc.clsTag)
+      enc.clsTag,
+      ScalaReflection.defaultValueFor(enc).asInstanceOf[T])
   }
 
   // TODO: improve error message for java bean encoder.
@@ -223,7 +224,8 @@ object ExpressionEncoder {
 case class ExpressionEncoder[T](
     objSerializer: Expression,
     objDeserializer: Expression,
-    clsTag: ClassTag[T])
+    clsTag: ClassTag[T],
+    defaultValue: T = null.asInstanceOf[T])
   extends Encoder[T] {
 
   /**

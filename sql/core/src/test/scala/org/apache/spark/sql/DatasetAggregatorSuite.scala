@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 
@@ -431,5 +434,19 @@ class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
 
     val agg = df.select(mode(col("a"))).as[String]
     checkDataset(agg, "3")
+  }
+
+  test("Reduce aggregator scala input types") {
+    val plan = spark.range(0, 5, 1, 10).logicalPlan
+    val f: (Long, Long) => Long = _ + _
+    val enc = encoderFor(Encoders.scalaLong)
+    val reduce = ReduceAggregator(f)(enc).toColumn.expr
+    val aliasedAgg = UnresolvedAlias(TypedAggUtils.withInputType(reduce, enc, plan.output))
+    val agg = logical.Aggregate(
+      groupingExpressions = Seq.empty,
+      aggregateExpressions = Seq(aliasedAgg),
+      child = plan
+    )
+    checkDataset(Dataset.apply(spark, agg)(enc), 10L)
   }
 }

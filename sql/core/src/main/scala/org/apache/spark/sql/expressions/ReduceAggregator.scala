@@ -32,7 +32,10 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
 
   @transient private val encoder = implicitly[Encoder[T]]
 
-  override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
+  private val _zero: (Boolean, T) =
+    (false, encoder.asInstanceOf[ExpressionEncoder[T]].defaultValue)
+
+  override def zero: (Boolean, T) = _zero
 
   override def bufferEncoder: Encoder[(Boolean, T)] =
     ExpressionEncoder.tuple(

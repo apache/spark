@@ -201,7 +201,13 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   test("Dataset reduce") {
     val session: SparkSession = spark
     import session.implicits._
-    assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(0, 10, 1, 16).map(_ + 1).reduce(_ + _) == 55)
+  }
+
+  test("Dataset reduce java to scala long type") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(spark.range(0, 5, 1, 10).as[Long].reduce(_ + _) == 10)
   }
 
   test("Dataset reduce - java") {
@@ -209,7 +215,7 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     import session.implicits._
     assert(
       spark
-        .range(10)
+        .range(0, 10, 1, 16)
         .map(_ + 1)
         .reduce(new ReduceFunction[Long] {
           override def call(v1: Long, v2: Long): Long = v1 + v2
