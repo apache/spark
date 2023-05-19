@@ -71,7 +71,7 @@ object CheckConnectJvmClientCompatibility {
         "Sql")
 
       val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
-      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, sqlJar)
+      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, avroJar)
       appendMimaCheckErrorMessageIfNeeded(
         resultWriter,
         problemsWithAvroModule,
