@@ -1877,14 +1877,14 @@
           "JOIN USING with LATERAL correlation."
         ]
       },
-      "LITERAL_TYPE" : {
-        "message" : [
-          "Literal for '<value>' of <type>."
-        ]
-      },
       "LATERAL_WITH_PIVOT" : {
         "message" : [
           "LATERAL cannot be used together with PIVOT in FROM clause."
+        ]
+      },
+      "LITERAL_TYPE" : {
+        "message" : [
+          "Literal for '<value>' of <type>."
         ]
       },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
