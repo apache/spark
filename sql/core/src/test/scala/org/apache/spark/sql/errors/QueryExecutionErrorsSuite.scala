@@ -311,4 +311,11 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getMessage.matches("Invalid bucket file: .+"))
     }
   }
+
+  test("SPARK-43589: Use bytesToString instead of shift operation") {
+    val m = QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+      maxBroadcastTableBytes = 1024 * 1024 * 1024,
+      dataSize = 2 * 1024 * 1024 * 1024 - 1).getMessage
+    assert(m === "Cannot broadcast the table that is larger than 1024.0 MiB: 2048.0 MiB")
+  }
 }
