@@ -19,22 +19,13 @@
 import unittest
 import numpy as np
 
+from pyspark.ml.functions import vector_to_array
 from pyspark.ml.linalg import Vectors
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
 from pyspark.sql import SparkSession
 
 
-class FeatureTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.master("local[2]")
-                .getOrCreate()
-        )
-
-    def tearDown(self) -> None:
-        self.spark.stop()
-
+class FeatureTestsMixin:
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame([
             (Vectors.dense([2.0, 3.5, 1.5]),),
@@ -52,7 +43,7 @@ class FeatureTests(unittest.TestCase):
 
         np.testing.assert_allclose(list(result.scaled_features), expected_result)
 
-        local_df1 = df1.toPandas()
+        local_df1 = df1.withColumn("features", vector_to_array("features")).toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
 
@@ -79,13 +70,25 @@ class FeatureTests(unittest.TestCase):
 
         np.testing.assert_allclose(list(result.scaled_features), expected_result)
 
-        local_df1 = df1.toPandas()
+        local_df1 = df1.withColumn("features", vector_to_array("features")).toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
 
         np.testing.assert_allclose(
             list(local_transform_result.scaled_features), expected_result
         )
+
+
+class FeatureTests(FeatureTestsMixin, unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+                .getOrCreate()
+        )
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
 
 if __name__ == "__main__":

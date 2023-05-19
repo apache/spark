@@ -22,16 +22,7 @@ from pyspark.mlv2.evaluation import RegressionEvaluator
 from pyspark.sql import SparkSession
 
 
-class EvaluationTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.master("local[2]")
-                .getOrCreate()
-        )
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class EvaluationTestsMixin:
 
     def test_regressor_evaluator(self):
         df1 = self.spark.createDataFrame([
@@ -65,6 +56,18 @@ class EvaluationTests(unittest.TestCase):
         r2_local = r2_evaluator.evaluate(local_df1)
         np.testing.assert_almost_equal(r2, expected_r2)
         np.testing.assert_almost_equal(r2_local, expected_r2)
+
+
+class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+                .getOrCreate()
+        )
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
 
 if __name__ == "__main__":

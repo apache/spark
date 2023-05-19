@@ -26,7 +26,7 @@ class SummarizerAggState:
         self.max_values = input_array.copy()
         self.count = 1
         self.sum_values = np.array(input_array.copy())
-        self.square_sum_values = np.square(input_array)
+        self.square_sum_values = np.square(input_array.copy())
 
     def update(self, input_array):
         self.count += 1
@@ -89,7 +89,7 @@ def summarize_dataframe(dataframe, column, metrics):
 
     def local_agg_fn(pandas_df):
         state = None
-        for value_array in pandas_df[column].values:
+        for _, value_array in pandas_df[column].iteritems():
             if state is None:
                 state = SummarizerAggState(value_array)
             else:

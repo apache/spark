@@ -15,20 +15,25 @@
 # limitations under the License.
 #
 
+import unittest
 from pyspark.sql import SparkSession
-from pyspark.mlv2.tests.test_evaluation import EvaluationTests
+from pyspark.mlv2.tests.test_evaluation import EvaluationTestsMixin
 
 
-class EvaluationTestsOnConnect(EvaluationTests):
+class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
+
     def setUp(self) -> None:
         self.spark = (
             SparkSession.builder.remote("local[2]")
                 .getOrCreate()
         )
 
+    def tearDown(self) -> None:
+        self.spark.stop()
+
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_evaluation import *  # noqa: F401,F403
+    from pyspark.mlv2.tests.connect.test_parity_evaluation import *  # noqa: F401,F403
 
     try:
         import xmlrunner

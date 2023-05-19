@@ -20,21 +20,12 @@ import unittest
 import numpy as np
 
 from pyspark.ml.linalg import Vectors
+from pyspark.ml.functions import vector_to_array
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.sql import SparkSession
 
 
-class SummarizerTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.master("local[2]")
-                .getOrCreate()
-        )
-
-    def tearDown(self) -> None:
-        self.spark.stop()
-
+class SummarizerTestsMixin:
     def test_summarize_dataframe(self):
         df1 = self.spark.createDataFrame([
             (Vectors.dense([2.0, -1.5]),),
@@ -42,7 +33,7 @@ class SummarizerTests(unittest.TestCase):
             (Vectors.dense([1.0, 3.5]),),
         ], schema=["features"])
 
-        df1_local = df1.toPandas()
+        df1_local = df1.withColumn("features", vector_to_array("features")).toPandas()
 
         result = summarize_dataframe(df1, "features", ["min", "max", "sum", "mean", "std"])
         result_local = summarize_dataframe(
@@ -64,6 +55,18 @@ class SummarizerTests(unittest.TestCase):
 
         assert_dict_allclose(result, expected_result)
         assert_dict_allclose(result_local, expected_result)
+
+
+class SummarizerTests(SummarizerTestsMixin, unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+                .getOrCreate()
+        )
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
 
 if __name__ == "__main__":
