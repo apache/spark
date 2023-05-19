@@ -1651,13 +1651,15 @@ class SparkConnectPlanner(val session: SparkSession) {
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         val (messageClassName, binaryFileDescSetOpt, options) =
           extractArgsOfProtobufFunction("from_protobuf", fun.getArgumentsCount, children)
-        Some(ProtobufDataToCatalyst(children.head, messageClassName, binaryFileDescSetOpt, options))
+        Some(
+          ProtobufDataToCatalyst(children.head, messageClassName, binaryFileDescSetOpt, options))
 
       case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         val (messageClassName, binaryFileDescSetOpt, options) =
           extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
-        Some(CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
+        Some(
+          CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
 
       case _ => None
     }
