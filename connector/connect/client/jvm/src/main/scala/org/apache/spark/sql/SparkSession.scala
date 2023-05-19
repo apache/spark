@@ -121,7 +121,10 @@ class SparkSession private[sql] (
    */
   def emptyDataset[T: Encoder]: Dataset[T] = createDataset[T](Nil)
 
-  private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
+  private def createDataset[T](
+      encoder: AgnosticEncoder[T],
+      data: Iterator[T],
+      rowCount: Long): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
@@ -131,9 +134,9 @@ class SparkSession private[sql] (
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
-            .setRowCount(data.size)
+            .setRowCount(rowCount)
         } else {
-          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json, data.size)
+          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json, rowCount)
           builder.getCachedLocalRelationBuilder
             .setUserId(client.userId)
             .setSessionId(client.sessionId)
@@ -152,7 +155,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
-    createDataset(ScalaReflection.encoderFor[A], data.iterator).toDF()
+    createDataset(ScalaReflection.encoderFor[A], data.iterator, data.size).toDF()
   }
 
   /**
@@ -163,7 +166,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    createDataset(RowEncoder.encoderFor(schema), rows.iterator().asScala).toDF()
+    createDataset(RowEncoder.encoderFor(schema), rows.iterator().asScala, rows.size()).toDF()
   }
 
   /**
@@ -175,7 +178,7 @@ class SparkSession private[sql] (
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
     val encoder = JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
-    createDataset(encoder, data.iterator().asScala).toDF()
+    createDataset(encoder, data.iterator().asScala, data.size()).toDF()
   }
 
   /**
@@ -206,7 +209,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
-    createDataset(encoderFor[T], data.iterator)
+    createDataset(encoderFor[T], data.iterator, data.size)
   }
 
   /**

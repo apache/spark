@@ -82,7 +82,7 @@ private[sql] class SparkResult[T](
             val rowCount = root.getRowCount
             assert(
               response.getArrowBatch.getData.isEmpty ||
-                root.getRowCount == response.getArrowBatch.getRowCount
+                rowCount == response.getArrowBatch.getRowCount
             ) // HUH!
             if (rowCount > 0) {
               val vectors = root.getFieldVectors.asScala
