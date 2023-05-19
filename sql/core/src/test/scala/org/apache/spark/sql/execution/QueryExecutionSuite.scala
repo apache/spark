@@ -41,22 +41,22 @@ case class QueryExecutionTestRecord(
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
-  def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
+  def checkDumpedPlans(path: String, end: Int, finalSplits: Int = 2): Unit = Utils.tryWithResource(
     Source.fromFile(path)) { source =>
     assert(source.getLines.toList
       .takeWhile(_ != "== Whole Stage Codegen ==") == List(
       "== Parsed Logical Plan ==",
-      s"Range (0, $expected, step=1, splits=Some(2))",
+      s"Range (0, $end, step=1, splits=Some(2))",
       "",
       "== Analyzed Logical Plan ==",
       "id: bigint",
-      s"Range (0, $expected, step=1, splits=Some(2))",
+      s"Range (0, $end, step=1, splits=Some(2))",
       "",
       "== Optimized Logical Plan ==",
-      s"Range (0, $expected, step=1, splits=Some(2))",
+      s"Range (0, $end, step=1, splits=Some(2))",
       "",
       "== Physical Plan ==",
-      s"*(1) Range (0, $expected, step=1, splits=2)",
+      s"*(1) Range (0, $end, step=1, splits=$finalSplits)",
       ""))
   }
 
@@ -66,7 +66,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path)
 
-      checkDumpedPlans(path, expected = 10)
+      checkDumpedPlans(path, end = 10)
     }
   }
 
@@ -78,7 +78,7 @@ class QueryExecutionSuite extends SharedSparkSession {
 
       val df2 = spark.range(0, 1)
       df2.queryExecution.debug.toFile(path)
-      checkDumpedPlans(path, expected = 1)
+      checkDumpedPlans(path, end = 1, finalSplits = 1)
     }
   }
 
@@ -87,7 +87,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/newfolder/plans.txt"
       val df = spark.range(0, 100)
       df.queryExecution.debug.toFile(path)
-      checkDumpedPlans(path, expected = 100)
+      checkDumpedPlans(path, end = 100)
     }
   }
 
