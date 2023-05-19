@@ -20,7 +20,6 @@ from pyspark.mlv2.base import Evaluator
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol
 from pyspark.mlv2.util import aggregate_dataframe
-from pyspark.sql.functions import col
 
 import torch
 import torcheval.metrics as torchmetrics

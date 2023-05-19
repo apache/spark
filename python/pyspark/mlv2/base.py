@@ -17,42 +17,21 @@
 
 from abc import ABCMeta, abstractmethod
 
-import copy
-import threading
 import pandas as pd
 
 from typing import (
-    Any,
-    Callable,
     Generic,
-    Iterator,
     List,
     Optional,
-    Sequence,
-    Tuple,
     TypeVar,
     Union,
-    cast,
-    overload,
     TYPE_CHECKING,
 )
 
 from pyspark import since
-from pyspark.ml.param import P
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.param.shared import (
-    HasInputCols,
-    HasOutputCols,
-    HasLabelCol,
-    HasFeaturesCol,
-    HasPredictionCol,
-)
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import udf
-from pyspark.sql.types import DataType, StructField, StructType
-from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.sql.functions import col, pandas_udf, struct
-import pickle
+from pyspark.ml.param import Params
 
 from pyspark.mlv2.util import transform_dataframe_column
 
@@ -68,7 +47,7 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
     """
     Abstract class for estimators that fit models to data.
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 3.5.0
     """
 
     @abstractmethod
@@ -97,7 +76,7 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         """
         Fits a model to the input dataset with optional parameters.
 
-        .. versionadded:: 1.3.0
+        .. versionadded:: 3.5.0
 
         Parameters
         ----------
@@ -213,7 +192,7 @@ class Evaluator(Params, metaclass=ABCMeta):
         """
         Evaluates the output with optional parameters.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.5.0
 
         Parameters
         ----------
@@ -252,7 +231,7 @@ class Model(Transformer, metaclass=ABCMeta):
     """
     Abstract class for models that are fitted by estimators.
 
-    .. versionadded:: 1.4.0
+    .. versionadded:: 3.5.0
     """
 
     pass

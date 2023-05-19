@@ -16,15 +16,10 @@
 #
 
 import numpy as np
-import pandas as pd
 
-from pyspark.sql.functions import col, pandas_udf
-
-from pyspark.mlv2.base import Estimator, Model, Transformer
-from pyspark.mlv2.util import transform_dataframe_column
+from pyspark.mlv2.base import Estimator, Model
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
-from pyspark.ml.functions import vector_to_array
 
 
 class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
@@ -53,7 +48,7 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
         return self._copyValues(model)
 
 
-class MaxAbsScalerModel(Transformer, HasInputCol, HasOutputCol):
+class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
 
     def __init__(self, max_abs_values):
         super().__init__()
@@ -101,7 +96,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
         return self._copyValues(model)
 
 
-class StandardScalerModel(Transformer, HasInputCol, HasOutputCol):
+class StandardScalerModel(Model, HasInputCol, HasOutputCol):
 
     def __init__(self, mean_values, std_values):
         super().__init__()
