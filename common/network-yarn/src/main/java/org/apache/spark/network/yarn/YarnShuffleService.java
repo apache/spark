@@ -300,7 +300,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
       int port = _conf.getInt(
         SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-      transportContext = new TransportContext(transportConf, blockHandler, true);
+      transportContext = new TransportContext(transportConf, blockHandler);
       shuffleServer = transportContext.createServer(port, bootstraps);
       // the port should normally be fixed, but for tests its useful to find an open port
       port = shuffleServer.getPort();

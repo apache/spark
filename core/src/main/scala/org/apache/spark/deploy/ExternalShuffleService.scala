@@ -109,7 +109,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       } else {
         Nil
       }
-    transportContext = new TransportContext(transportConf, blockHandler, true)
+    transportContext = new TransportContext(transportConf, blockHandler,
+      transportConf.closeIdleConnections())
     server = transportContext.createServer(port, bootstraps.asJava)
 
     shuffleServiceSource.registerMetricSet(server.getAllMetrics)

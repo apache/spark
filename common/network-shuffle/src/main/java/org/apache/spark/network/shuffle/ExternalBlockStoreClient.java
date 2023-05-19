@@ -79,7 +79,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   public void init(String appId) {
     this.appId = appId;
     TransportContext context = new TransportContext(
-      transportConf, new NoOpRpcHandler(), true, true);
+      transportConf, new NoOpRpcHandler(), transportConf.closeIdleConnections(), true);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
       bootstraps.add(new AuthClientBootstrap(transportConf, appId, secretKeyHolder));

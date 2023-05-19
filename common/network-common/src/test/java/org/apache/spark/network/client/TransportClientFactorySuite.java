@@ -206,7 +206,7 @@ public class TransportClientFactorySuite {
         throw new UnsupportedOperationException();
       }
     });
-    try (TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
+    try (TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), conf.closeIdleConnections());
          TransportClientFactory factory = context.createClientFactory()) {
       TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
       assertTrue(c1.isActive());

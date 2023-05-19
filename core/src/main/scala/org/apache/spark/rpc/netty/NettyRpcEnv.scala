@@ -392,7 +392,8 @@ private[netty] class NettyRpcEnv(
 
         val ioThreads = clone.getInt("spark.files.io.threads", 1)
         val downloadConf = SparkTransportConf.fromSparkConf(clone, module, ioThreads)
-        val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
+        val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(),
+          transportConf.closeIdleConnections())
         fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }
     }

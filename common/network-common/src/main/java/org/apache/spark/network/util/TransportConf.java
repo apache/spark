@@ -46,6 +46,8 @@ public class TransportConf {
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
 
+  private final String SPARK_NETWORK_CLOSE_IDLE_CONNECTION_KEY;
+
   private final ConfigProvider conf;
 
   private final String module;
@@ -69,6 +71,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
+    SPARK_NETWORK_CLOSE_IDLE_CONNECTION_KEY = getConfKey("io.closeIdleConnection");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -401,5 +404,11 @@ public class TransportConf {
   public long mergedShuffleCleanerShutdownTimeout() {
     return JavaUtils.timeStringAsSec(
       conf.get("spark.shuffle.push.server.mergedShuffleCleaner.shutdown.timeout", "60s"));
+  }
+
+  /** Whether to close idle connections. Default true. */
+  public boolean closeIdleConnections() {
+    boolean defaultCloseIdleConnection = conf.getBoolean("spark.network.closeIdleConnection", true);
+    return conf.getBoolean(SPARK_NETWORK_CLOSE_IDLE_CONNECTION_KEY, defaultCloseIdleConnection);
   }
 }

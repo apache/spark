@@ -38,6 +38,22 @@ class SparkTransportConfSuite extends SparkFunSuite with MockitoSugar {
     assert(cliActual == expected.toString)
   }
 
+  test("SPARK-43828: close idle connection should return correct value when set") {
+    val numUsableCores = 4
+    val closeIdleConnection = false
+    val conf = new SparkConf()
+      .set(s"spark.$module.io.closeIdleConnections", false.toString)
+    val sparkTransportConf = SparkTransportConf.fromSparkConf(conf, module, numUsableCores, None)
+    assert(sparkTransportConf.closeIdleConnections() == closeIdleConnection)
+  }
+
+  test("SPARK-43828: close idle connection should return true as default") {
+    val numUsableCores = 4
+    val conf = new SparkConf()
+    val sparkTransportConf = SparkTransportConf.fromSparkConf(conf, module, numUsableCores, None)
+    assert(sparkTransportConf.closeIdleConnections())
+  }
+
   test("module value is get when role is not set") {
     val numUsableCores = 3
     val serExpected = "7"
