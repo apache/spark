@@ -31,7 +31,7 @@ import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import sbtpomreader.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
@@ -1123,7 +1123,7 @@ object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"))
     .settings(oldDepsSettings)
-    .disablePlugins(com.typesafe.sbt.pom.PomReaderPlugin)
+    .disablePlugins(sbtpomreader.PomReaderPlugin)
 
   lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Set[ModuleID]]] {
     SparkBuild.mimaProjects
