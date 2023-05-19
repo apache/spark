@@ -1872,11 +1872,6 @@
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
         ]
       },
-      "LATERAL_WITH_PIVOT" : {
-        "message" : [
-          "LATERAL cannot be used together with PIVOT in FROM clause."
-        ]
-      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
@@ -1885,6 +1880,11 @@
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
+        ]
+      },
+      "LATERAL_WITH_PIVOT" : {
+        "message" : [
+          "LATERAL cannot be used together with PIVOT in FROM clause."
         ]
       },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
