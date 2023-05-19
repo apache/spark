@@ -796,6 +796,17 @@ class QueryExecutionErrorsSuite
       )
     }
   }
+
+  test("SPARK-43589: Use bytesToString instead of shift operation") {
+    checkError(
+      exception = intercept[SparkException] {
+        throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+          maxBroadcastTableBytes = 1024 * 1024 * 1024,
+          dataSize = 2 * 1024 * 1024 * 1024 - 1)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2249",
+      parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
