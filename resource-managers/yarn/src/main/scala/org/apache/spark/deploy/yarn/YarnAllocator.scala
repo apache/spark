@@ -92,7 +92,7 @@ private[yarn] class YarnAllocator(
   private val releasedContainers = collection.mutable.HashSet[ContainerId]()
 
   @GuardedBy("this")
-  private val completedContainerIds = collection.mutable.HashSet[ContainerId]()
+  private val launchingExecutorContainerIds = collection.mutable.HashSet[ContainerId]()
 
   @GuardedBy("this")
   private val runningExecutorsPerResourceProfileId = new HashMap[Int, mutable.Set[String]]()
@@ -753,6 +753,7 @@ private[yarn] class YarnAllocator(
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
       if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
+        launchingExecutorContainerIds.add(containerId)
         if (launchContainers) {
           launcherPool.execute(() => {
             try {
@@ -799,7 +800,7 @@ private[yarn] class YarnAllocator(
   private def updateInternalState(rpId: Int, executorId: String,
     container: Container): Unit = synchronized {
     val containerId = container.getId
-    if (!completedContainerIds.contains(containerId)) {
+    if (launchingExecutorContainerIds.contains(containerId)) {
       getOrUpdateRunningExecutorForRPId(rpId).add(executorId)
       getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
       executorIdToContainer(executorId) = container
@@ -811,6 +812,7 @@ private[yarn] class YarnAllocator(
         new HashSet[ContainerId])
       containerSet += containerId
       allocatedContainerToHostMap.put(containerId, executorHostname)
+      launchingExecutorContainerIds.remove(containerId)
     }
   }
 
@@ -819,7 +821,7 @@ private[yarn] class YarnAllocator(
       completedContainers: Seq[ContainerStatus]): Unit = synchronized {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
-      completedContainerIds.add(containerId)
+      launchingExecutorContainerIds.remove(containerId)
       val (_, rpId) = containerIdToExecutorIdAndResourceProfileId.getOrElse(containerId,
         ("", DEFAULT_RESOURCE_PROFILE_ID))
       val alreadyReleased = releasedContainers.remove(containerId)
