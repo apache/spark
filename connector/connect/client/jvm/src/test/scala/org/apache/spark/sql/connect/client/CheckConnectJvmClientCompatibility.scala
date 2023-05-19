@@ -79,6 +79,17 @@ object CheckConnectJvmClientCompatibility {
         avroJar,
         "Avro")
 
+      val protobufJar: File =
+        findJar("connector/protobuf", "spark-protobuf-assembly", "spark-protobuf")
+      val problemsWithProtobufModule =
+        checkMiMaCompatibilityWithProtobufModule(clientJar, protobufJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithProtobufModule,
+        clientJar,
+        protobufJar,
+        "Protobuf")
+
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
       appendIncompatibleDatasetApisErrorMessageIfNeeded(resultWriter, incompatibleApis)
     } catch {
@@ -98,6 +109,14 @@ object CheckConnectJvmClientCompatibility {
     val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
     val excludeRules = Seq.empty
     checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithProtobufModule(
+      clientJar: File,
+      protobufJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.protobuf.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, protobufJar, includedRules, excludeRules)
   }
 
   private def checkMiMaCompatibilityWithSqlModule(
