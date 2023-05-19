@@ -328,7 +328,9 @@ class RocksDBFileManager(
    * - Find the orphan sst and log files whose zip files are not uploaded successfully
    *   or have been overwritten. To avoid deleting files of ongoing tasks, only delete orphan files
    *   that are older than all tracked files when there are at least 2 versions.
-   * - Delete files in both to-be-deleted versions and orphan files.
+   * - Delete sst and log files in to-be-deleted versions.
+   * - Delete orphan files.
+   * - Delete changelog files of to-be-deleted versions.
    *
    * Note that it only deletes files that it knows are safe to delete.
    * It may not delete the following files.
