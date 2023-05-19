@@ -198,10 +198,18 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     assert(sum.get() == 0) // The value is not 45
   }
 
+  private val end: Long = {
+    val cores = Runtime.getRuntime.availableProcessors()
+    if (cores == 1) 1
+    else cores - 1
+  }
+
+  private val reduceResult: Long = (1 + end) * end / 2
+
   test("Dataset reduce") {
     val session: SparkSession = spark
     import session.implicits._
-    assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(end).map(_ + 1).reduce(_ + _) == reduceResult)
   }
 
   test("Dataset reduce - java") {
@@ -209,7 +217,7 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     import session.implicits._
     assert(
       spark
-        .range(10)
+        .range(end)
         .map(_ + 1)
         .reduce(new ReduceFunction[Long] {
           override def call(v1: Long, v2: Long): Long = v1 + v2
