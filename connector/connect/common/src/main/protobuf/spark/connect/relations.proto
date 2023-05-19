@@ -381,6 +381,9 @@ message LocalRelation {
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
   optional string schema = 2;
+
+  // (Optional) The number of rows of local data.
+  optional int64 row_count = 3;
 }
 
 // A local relation that has been cached already.

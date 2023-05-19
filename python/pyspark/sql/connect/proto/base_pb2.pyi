@@ -1152,24 +1152,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            row_count: builtins.int | None = ...,
+            row_count: builtins.int = ...,
             data: builtins.bytes = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_row_count", b"_row_count", "row_count", b"row_count"
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_row_count", b"_row_count", "data", b"data", "row_count", b"row_count"
-            ],
+            self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_row_count", b"_row_count"]
-        ) -> typing_extensions.Literal["row_count"] | None: ...
 
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

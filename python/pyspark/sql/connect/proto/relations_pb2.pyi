@@ -1523,6 +1523,7 @@ class LocalRelation(google.protobuf.message.Message):
 
     DATA_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
+    ROW_COUNT_FIELD_NUMBER: builtins.int
     data: builtins.bytes
     """(Optional) Local collection data serialized into Arrow IPC streaming format which contains
     the schema of the data.
@@ -1534,28 +1535,57 @@ class LocalRelation(google.protobuf.message.Message):
     The server side will update the column names and data types according to this schema.
     If the 'data' is not provided, then this schema will be required.
     """
+    row_count: builtins.int
+    """(Optional) The number of rows of local data."""
     def __init__(
         self,
         *,
         data: builtins.bytes | None = ...,
         schema: builtins.str | None = ...,
+        row_count: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
+            "_data",
+            b"_data",
+            "_row_count",
+            b"_row_count",
+            "_schema",
+            b"_schema",
+            "data",
+            b"data",
+            "row_count",
+            b"row_count",
+            "schema",
+            b"schema",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_data", b"_data", "_schema", b"_schema", "data", b"data", "schema", b"schema"
+            "_data",
+            b"_data",
+            "_row_count",
+            b"_row_count",
+            "_schema",
+            b"_schema",
+            "data",
+            b"data",
+            "row_count",
+            b"row_count",
+            "schema",
+            b"schema",
         ],
     ) -> None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_data", b"_data"]
     ) -> typing_extensions.Literal["data"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_row_count", b"_row_count"]
+    ) -> typing_extensions.Literal["row_count"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]

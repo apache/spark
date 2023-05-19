@@ -131,8 +131,9 @@ class SparkSession private[sql] (
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
+            .setRowCount(data.size)
         } else {
-          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
+          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json, data.size)
           builder.getCachedLocalRelationBuilder
             .setUserId(client.userId)
             .setSessionId(client.sessionId)
@@ -474,10 +475,14 @@ class SparkSession private[sql] (
       // Short circuit local relation RPCs
       val localRelation = plan.getRoot.getLocalRelation
       val response = proto.ExecutePlanResponse.newBuilder()
-      val batch = proto.ExecutePlanResponse.ArrowBatch
+      val batchBuilder = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
-        .setData(localRelation.getData)
-        .build()
+      if (localRelation.hasData) {
+        assert(localRelation.hasRowCount)
+        batchBuilder.setData(localRelation.getData)
+        batchBuilder.setRowCount(localRelation.getRowCount)
+      }
+      val batch = batchBuilder.build()
       response.setArrowBatch(batch)
       Seq[proto.ExecutePlanResponse](response.build()).iterator.asJava
     } else {

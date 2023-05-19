@@ -347,7 +347,7 @@ message ExecutePlanResponse {
 
   // Batch results of metrics.
   message ArrowBatch {
-    optional int64 row_count = 1;
+    int64 row_count = 1;
     bytes data = 2;
   }
 

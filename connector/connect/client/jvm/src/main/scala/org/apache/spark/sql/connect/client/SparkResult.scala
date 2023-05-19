@@ -81,7 +81,7 @@ private[sql] class SparkResult[T](
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
             assert(
-              !response.getArrowBatch.hasRowCount ||
+              response.getArrowBatch.getData.isEmpty ||
                 root.getRowCount == response.getArrowBatch.getRowCount
             ) // HUH!
             if (rowCount > 0) {
