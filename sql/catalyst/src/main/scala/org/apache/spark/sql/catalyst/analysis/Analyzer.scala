@@ -1975,7 +1975,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             // If some attributes used by expressions are resolvable only on the rewritten child
             // plan, we need to add them into original projection.
             val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
-            (newExprs, Project(p.projectList ++ missingAttrs, newChild))
+            val newProject = Project(p.projectList ++ missingAttrs, newChild)
+            newProject.copyTagsFrom(p)
+            (newExprs, newProject)
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, a))
