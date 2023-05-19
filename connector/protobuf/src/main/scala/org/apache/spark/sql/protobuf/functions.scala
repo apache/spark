@@ -35,7 +35,8 @@ object functions {
    * @param messageName
    *   the protobuf message name to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @param options
    * @since 3.4.0
    */
@@ -75,6 +76,7 @@ object functions {
       )
     )
   }
+
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
    * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
@@ -166,7 +168,8 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @since 3.4.0
    */
   @Experimental
@@ -238,8 +241,7 @@ object functions {
     messageName: String,
     binaryFileDescriptorSet: Array[Byte],
     options: java.util.Map[String, String]
-  )
-  : Column = {
+  ): Column = {
     new Column(
       CatalystDataToProtobuf(
         data.expr, messageName, Some(binaryFileDescriptorSet), options.asScala.toMap

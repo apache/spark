@@ -41,6 +41,7 @@ import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSpa
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.protobuf.{functions => protobuf_functions}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
 
@@ -966,6 +967,30 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(e2.getMessage.contains("cancelled"))
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds) == true)
+  }
+
+  private val commonProtoDescriptorFilePath = s"${IntegrationTestUtils.sparkHome}/connector/" +
+    "connect/common/src/test/resources/protobuf-tests/common.desc"
+
+  test("from_protobuf() and to_protobuf()") {
+    // This checks schemas from the functions to verify they are correctly processed on the server.
+    val schema = DataType.fromDDL("STRUCT<value: binary>").asInstanceOf[StructType]
+    val proto_df = spark
+      .createDataFrame(List[Row]().asJava, schema)
+      .select(
+        protobuf_functions
+          .from_protobuf(col("value"), "ResourceInformation", commonProtoDescriptorFilePath)
+          .as("proto"))
+
+    assert(proto_df.schema.toDDL == "proto STRUCT<name: STRING, addresses: ARRAY<STRING>>")
+
+    val binary_df = proto_df
+      .select(
+        protobuf_functions
+          .to_protobuf(col("proto"), "ResourceInformation", commonProtoDescriptorFilePath)
+          .as("binary_proto"))
+
+    assert(binary_df.schema.toDDL == "STRUCT<binary_proto: BINARY>")
   }
 }
 

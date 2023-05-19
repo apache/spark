@@ -16,10 +16,17 @@
  */
 package org.apache.spark.sql.protobuf
 
+import java.io.File
+import java.util.Collections
+
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
+
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.functions.{fnWithOptions, lit}
 
 // scalastyle:off: object.name
@@ -35,7 +42,8 @@ object functions {
    * @param messageName
    *   the protobuf message name to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @param options
    * @since 3.5.0
    */
@@ -45,12 +53,36 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
+    val binaryFileDescSet = readDescriptorFileContent(descFilePath)
+    from_protobuf(data, messageName, binaryFileDescSet, options)
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.The
+   * Protobuf definition is provided through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @param options
+   * @since 3.5.0
+   */
+  @Experimental
+  def from_protobuf(
+      data: Column,
+      messageName: String,
+      binaryFileDescriptorSet: Array[Byte],
+      options: java.util.Map[String, String]): Column = {
     fnWithOptions(
       "from_protobuf",
       options.asScala.iterator,
       data,
       lit(messageName),
-      lit(descFilePath))
+      lit(binaryFileDescriptorSet))
   }
 
   /**
@@ -62,12 +94,13 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @since 3.5.0
    */
   @Experimental
   def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    Column.fn("from_protobuf", data, lit(messageName), lit(descFilePath))
+    from_protobuf(data, messageName, descFilePath, emptyOptions)
   }
 
   /**
@@ -88,6 +121,27 @@ object functions {
   @Experimental
   def from_protobuf(data: Column, messageClassName: String): Column = {
     Column.fn("from_protobuf", data, lit(messageClassName))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value.The
+   * Protobuf definition is provided through Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @since 3.5.0
+   */
+  @Experimental
+  def from_protobuf(
+      data: Column,
+      messageName: String,
+      binaryFileDescriptorSet: Array[Byte]): Column = {
+    from_protobuf(data, messageName, binaryFileDescriptorSet, emptyOptions)
   }
 
   /**
@@ -123,12 +177,35 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @since 3.5.0
    */
   @Experimental
   def to_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    Column.fn("to_protobuf", data, lit(messageName), lit(descFilePath))
+    to_protobuf(data, messageName, descFilePath, emptyOptions)
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.The Protobuf definition is provided through
+   * Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def to_protobuf(
+      data: Column,
+      messageName: String,
+      binaryFileDescriptorSet: Array[Byte]): Column = {
+    to_protobuf(data, messageName, binaryFileDescriptorSet, emptyOptions)
   }
 
   /**
@@ -140,7 +217,8 @@ object functions {
    * @param messageName
    *   the protobuf MessageName to look for in descriptor file.
    * @param descFilePath
-   *   the protobuf descriptor file.
+   *   The Protobuf descriptor file. This file is usually created using `protoc` with
+   *   `--descriptor_set_out` and `--include_imports` options.
    * @param options
    * @since 3.5.0
    */
@@ -150,12 +228,36 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
+    val binaryFileDescriptorSet = readDescriptorFileContent(descFilePath)
+    to_protobuf(data, messageName, binaryFileDescriptorSet, emptyOptions)
+  }
+
+  /**
+   * Converts a column into binary of protobuf format.The Protobuf definition is provided through
+   * Protobuf `FileDescriptorSet`.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in the descriptor set.
+   * @param binaryFileDescriptorSet
+   *   Serialized Protobuf descriptor (`FileDescriptorSet`). Typically contents of file created
+   *   using `protoc` with `--descriptor_set_out` and `--include_imports` options.
+   * @param options
+   * @since 3.5.0
+   */
+  @Experimental
+  def to_protobuf(
+      data: Column,
+      messageName: String,
+      binaryFileDescriptorSet: Array[Byte],
+      options: java.util.Map[String, String]): Column = {
     fnWithOptions(
       "to_protobuf",
       options.asScala.iterator,
       data,
       lit(messageName),
-      lit(descFilePath))
+      lit(binaryFileDescriptorSet))
   }
 
   /**
@@ -198,5 +300,17 @@ object functions {
       messageClassName: String,
       options: java.util.Map[String, String]): Column = {
     fnWithOptions("to_protobuf", options.asScala.iterator, data, lit(messageClassName))
+  }
+
+  private def emptyOptions: java.util.Map[String, String] = Collections.emptyMap[String, String]()
+
+  private def readDescriptorFileContent(filePath: String): Array[Byte] = {
+    // This method is copied from org.apache.spark.sql.protobuf.util.ProtobufUtils
+    try {
+      FileUtils.readFileToByteArray(new File(filePath))
+    } catch {
+      case NonFatal(ex) =>
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+    }
   }
 }
