@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{File, FileNotFoundException}
+import java.io.File
 import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
@@ -56,13 +56,13 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
 
-  case class RocksDBCheckpoint(checkpointDir: File, version: Long, numKeys: Long) {
+  case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
   }
 
-  @volatile private var latestCheckpoint: Option[RocksDBCheckpoint] = None
+  @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastCheckpointVersion = 0L
 
   RocksDBLoader.loadLibrary()
@@ -147,26 +147,10 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
-        var metadata: RocksDBCheckpointMetadata = null
-        // If changelog checkpointing has never been enabled, should be able to load
-        // any version of snapshot.
-        if (!enableChangelogCheckpointing) {
-          try {
-            metadata = fileManager.loadCheckpointFromDfs(version, workingDir)
-            loadedVersion = version
-          } catch {
-            // It is possible that changelog checkpointing was enabled during the last query run
-            // and this version of snapshot is unavailable, in that case fallback to
-            // loading latest snapshot available and replaying changelog.
-            case _: FileNotFoundException => loadedVersion = -1
-          }
-        }
+        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
+        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        loadedVersion = latestSnapshotVersion
 
-        if (loadedVersion != version) {
-          val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-          metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
-          loadedVersion = latestSnapshotVersion
-        }
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
@@ -195,6 +179,8 @@ class RocksDB(
         throw t
     }
     if (enableChangelogCheckpointing && !readOnly) {
+      // Make sure we don't leak resource.
+      changelogWriter.foreach(_.abort())
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
     }
     this
@@ -204,7 +190,6 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(endVersion: Long): Unit = {
-    // This will be noop if changelog checkpointing is disabled.
     for (v <- loadedVersion + 1 to endVersion) {
       var changelogReader: StateStoreChangelogReader = null
       try {
@@ -373,9 +358,9 @@ class RocksDB(
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
           synchronized {
-            latestCheckpoint.foreach(_.close())
-            latestCheckpoint = Some(
-              RocksDBCheckpoint(checkpointDir, newVersion, numKeysOnWritingVersion))
+            latestSnapshot.foreach(_.close())
+            latestSnapshot = Some(
+              RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
             lastCheckpointVersion = newVersion
           }
         }
@@ -400,6 +385,7 @@ class RocksDB(
       loadedVersion = newVersion
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
+        "compact" -> compactTimeMs,
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
@@ -427,12 +413,12 @@ class RocksDB(
 
   private def uploadSnapshot(): Unit = {
     val localCheckpoint = synchronized {
-      val checkpoint = latestCheckpoint
-      latestCheckpoint = None
+      val checkpoint = latestSnapshot
+      latestSnapshot = None
       checkpoint
     }
     localCheckpoint match {
-      case Some(RocksDBCheckpoint(localDir, version, numKeys)) =>
+      case Some(RocksDBSnapshot(localDir, version, numKeys)) =>
         try {
           val uploadTime = timeTakenMs {
             fileManager.saveCheckpointToDfs(localDir, version, numKeys)
@@ -481,7 +467,7 @@ class RocksDB(
       dbOptions.close()
       dbLogger.close()
       synchronized {
-        latestCheckpoint.foreach(_.close())
+        latestSnapshot.foreach(_.close())
       }
       silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {

@@ -187,7 +187,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     minDeltasForSnapshot: Int,
     numOfVersToRetainInMemory: Int): SQLConf = SQLConf.get
 
-
   override def testQuietly(name: String)(f: => Unit): Unit = {
     test(name) {
       quietly {
@@ -197,17 +196,17 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   override def testWithAllCodec(name: String)(func: => Any): Unit = {
-    codecsInShortName.foreach { codecShortName =>
-      super.test(s"$name - with codec $codecShortName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+    codecsInShortName.foreach { codecName =>
+      super.test(s"$name - with codec $codecName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
           func
         }
       }
     }
 
-    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
-      super.test(s"$name - with codec $codecShortName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecName =>
+      super.test(s"$name - with codec $codecName") {
+        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecName) {
           func
         }
       }

@@ -137,7 +137,7 @@ class RocksDBFileManager(
   private val onlyZipFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
   }
-  private val onlyDeltaFiles = new PathFilter {
+  private val onlyChangelogFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".changelog")
   }
 
@@ -147,16 +147,16 @@ class RocksDBFileManager(
 
   def getChangeLogWriter(version: Long): StateStoreChangelogWriter = {
     val rootDir = new Path(dfsRootDir)
-    val deltaFile = dfsDeltaFile(version)
+    val changelogFile = dfsChangelogFile(version)
     if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-    val changelogWriter = new StateStoreChangelogWriter(fm, deltaFile, codec)
+    val changelogWriter = new StateStoreChangelogWriter(fm, changelogFile, codec)
     changelogWriter
   }
 
-  // Get the delta file at version
+  // Get the changelog file at version
   def getChangelogReader(version: Long): StateStoreChangelogReader = {
-    val deltaFile = dfsDeltaFile(version)
-    new StateStoreChangelogReader(fm, deltaFile, codec)
+    val changelogFile = dfsChangelogFile(version)
+    new StateStoreChangelogReader(fm, changelogFile, codec)
   }
 
   /**
@@ -233,6 +233,10 @@ class RocksDBFileManager(
   def getLatestSnapshotVersion(version: Long): Long = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
+      // If the latest version snapshot exists, we avoid listing.
+      if (fm.exists(dfsBatchZipFile(version))) {
+        return version
+      }
       fm.list(path, onlyZipFiles)
         .map(_.getPath.getName.stripSuffix(".zip"))
         .map(_.toLong)
@@ -243,23 +247,25 @@ class RocksDBFileManager(
     }
   }
 
-  // Get latest snapshot version <= version
-  def getLatestDeltaVersion(version: Long): Long = {
-    val path = new Path(dfsRootDir)
-    if (fm.exists(path)) {
-      fm.list(path, onlyDeltaFiles)
-        .map(_.getPath.getName.stripSuffix(".changelog"))
-        .map(_.toLong)
-        .filter(_ <= version)
-        .foldLeft(0L)(math.max)
-    } else {
-      0
-    }
-  }
 
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
   def getLatestVersion(): Long = {
-    getLatestDeltaVersion(Long.MaxValue).max(getLatestSnapshotVersion(Long.MaxValue))
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      val files = fm.list(path)
+      val changelogFileVersions = files.map(_.getPath)
+        .filter(onlyChangelogFiles.accept(_))
+        .map(_.getName.stripSuffix(".changelog"))
+        .map(_.toLong)
+      val snapshotFileVersions = files.map(_.getPath)
+        .filter(onlyZipFiles.accept(_))
+        .map(_.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+      val versions = changelogFileVersions ++ snapshotFileVersions
+      versions.foldLeft(0L)(math.max)
+    } else {
+      0
+    }
   }
 
   /**
@@ -294,18 +300,14 @@ class RocksDBFileManager(
     }
   }
 
-  private def deleteDeltaFiles(minVersionToRetain: Long): Unit = {
-    logInfo(s"deleting delta file before $minVersionToRetain")
-    val deltaVersionsToDelete = fm.list(new Path(dfsRootDir), onlyDeltaFiles)
-      .map(_.getPath.getName.stripSuffix(".changelog"))
-      .map(_.toLong).filter(_ < minVersionToRetain)
-    deltaVersionsToDelete.foreach{ version =>
+  private def deleteChangelogFiles(versionsToDelete: Array[Long]): Unit = {
+    versionsToDelete.foreach { version =>
       try {
-        fm.delete(dfsDeltaFile(version))
-        logInfo(s"Deleted delta file $version")
+        fm.delete(dfsChangelogFile(version))
+        logInfo(s"Deleted changelog file $version")
       } catch {
         case e: Exception =>
-          logWarning(s"Error deleting delta file for version $version", e)
+          logWarning(s"Error deleting changelog file for version $version", e)
       }
     }
   }
@@ -340,9 +342,11 @@ class RocksDBFileManager(
    */
   def deleteOldVersions(numVersionsToRetain: Int): Unit = {
     val path = new Path(dfsRootDir)
-
+    val allFiles = fm.list(path)
+    val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file.getPath))
+    val changelogFiles = allFiles.filter(file => onlyChangelogFiles.accept(file.getPath))
     // All versions present in DFS, sorted
-    val sortedSnapshotVersions = fm.list(path, onlyZipFiles)
+    val sortedSnapshotVersions = snapshotFiles
       .map(_.getPath.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
@@ -352,15 +356,16 @@ class RocksDBFileManager(
 
     // Find the versions to delete
     val maxSnapshotVersionPresent = sortedSnapshotVersions.last
-    val minSnapshotVersionPresent = sortedSnapshotVersions.head
 
     // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
-    // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+    // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
+    // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
+    // no version gets deleted.
     val minVersionToRetain = sortedSnapshotVersions
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
-      .foldLeft(minSnapshotVersionPresent)(math.max)
+      .foldLeft(0L)(math.max)
 
-    // When versionToDelete is non-empty, there are at least 2 versions.
+    // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
     // We only delete orphan files when there are at least 2 versions,
     // which avoid deleting files for running tasks.
     val snapshotVersionsToDelete = sortedSnapshotVersions.filter(_ < minVersionToRetain)
@@ -381,7 +386,8 @@ class RocksDBFileManager(
 
     // Best effort attempt to delete SST files that were last used in to-be-deleted versions
     val filesToDelete = fileToMaxUsedVersion.filter {
-      case (_, v) => snapshotVersionsToDelete.contains(v) }
+      case (_, v) => snapshotVersionsToDelete.contains(v)
+    }
 
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
@@ -425,7 +431,11 @@ class RocksDBFileManager(
     }
     logInfo(s"Deleted ${filesToDelete.size - failedToDelete} files (failed to delete" +
       s"$failedToDelete files) not used in versions >= $minVersionToRetain")
-    deleteDeltaFiles(minVersionToRetain)
+
+    val changelogVersionsToDelete = changelogFiles
+      .map(_.getPath.getName.stripSuffix(".changelog")).map(_.toLong)
+      .filter(_ < minVersionToRetain)
+    deleteChangelogFiles(changelogVersionsToDelete)
   }
 
   /** Save immutable files to DFS directory */
@@ -600,7 +610,7 @@ class RocksDBFileManager(
   private def dfsBatchZipFile(version: Long): Path = new Path(s"$dfsRootDir/$version.zip")
   // We use changelog suffix intentionally so that we can tell the difference from changelog file of
   // HDFSBackedStateStore which is named version.delta.
-  private def dfsDeltaFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
+  private def dfsChangelogFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
 
@@ -784,8 +794,6 @@ object RocksDBImmutableFile {
   def isSstFile(fileName: String): Boolean = fileName.endsWith(".sst")
 
   def isLogFile(fileName: String): Boolean = fileName.endsWith(".log")
-
-  def isDeltaFile(fileName: String): Boolean = fileName.endsWith(".changelog")
 
   private def isArchivedLogFile(file: File): Boolean =
     isLogFile(file.getName) && file.getParentFile.getName == LOG_FILES_LOCAL_SUBDIR
