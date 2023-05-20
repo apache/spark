@@ -63,7 +63,7 @@ class RocksDB(
   }
 
   @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
-  @volatile private var lastCheckpointVersion = 0L
+  @volatile private var lastSnapshotVersion = 0L
 
   RocksDBLoader.loadLibrary()
 
@@ -358,10 +358,14 @@ class RocksDB(
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
           synchronized {
+            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+            // inside the uploadSnapshot() called below.
+            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+            // during state store maintenance.
             latestSnapshot.foreach(_.close())
             latestSnapshot = Some(
               RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
-            lastCheckpointVersion = newVersion
+            lastSnapshotVersion = newVersion
           }
         }
       }
@@ -406,7 +410,7 @@ class RocksDB(
     if (enableChangelogCheckpointing) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
-      newVersion - lastCheckpointVersion >= conf.minDeltasForSnapshot ||
+      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot ||
         changelogWriter.get.size > 10000
     } else true
   }

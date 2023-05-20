@@ -2394,6 +2394,12 @@ If you want to cap RocksDB memory usage in your Spark Structured Streaming deplo
 You can also determine the max allowed memory for RocksDB instances by setting the `spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB` value to a static number or as a fraction of the physical memory available on the node.
 Limits for individual RocksDB instances can also be configured by setting `spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB` and `spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber` to the required values. By default, RocksDB internal defaults are used for these settings.
 
+##### RocksDB State Store Changelog Checkpointing
+Changelog checkpointing reduces latency of the stateful streaming query. This checkpointing mechanism avoids cost of capturing and uploading snapshots of RocksDB instances in the commit phase of RocksDB state store.
+You can enable RocksDB State Store changelog checkpointing by setting `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled` config to `true`.
+Changelog checkpointing is backward compatible. In a version of spark that supports changelog checkpointing, you can turn on changelog checkpointing for a streaming query without discarding the existing checkpoint. 
+Vice versa, if a query has already run with changelog checkpointing enabled, you can turn off changelog checkpointing safely.
+
 ##### Performance-aspect considerations
 
 1. You may want to disable the track of total number of rows to aim the better performance on RocksDB state store.
