@@ -31,13 +31,11 @@ import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last, PercentileCont, PercentileDisc}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -3189,40 +3187,31 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
       val key = visitPropertyKey(property.key)
-      // If the expression provided for the option value is a literal, use the string
-      // representation of the contents of the literal value provided here. Otherwise, if this
-      // expression is constant but non-literal, evaluate the expression and use its value instead.
+      // If the expression provided for the option value is a literal, use the string representation
+      // of the contents of the literal value provided here. Otherwise, if this expression is
+      // non-literal but foldable, evaluate the expression and use its value instead.
       val value = if (property.value == null) {
         null
       } else {
         val parsed = expression(property.value)
-        def error: Throwable = {
+        def error(): Throwable = {
           new ParseException(
             errorClass = "INVALID_SQL_SYNTAX",
             messageParameters = Map(
               "inputString" ->
-                s"option or property key $key is invalid; only constant expressions are supported"),
+                s"option or property key $key is invalid; only literal expressions are supported"),
             ctx)
         }
-        val plan = try {
-          val analyzer: Analyzer = ResolveDefaultColumns.DefaultColumnAnalyzer
-          val analyzed = analyzer.execute(Project(Seq(Alias(parsed, "col")()), OneRowRelation()))
-          analyzer.checkAnalysis(analyzed)
-          ConstantFolding(analyzed)
-        } catch {
-          case _: AnalysisException =>
-            throw error
+        if (!parsed.foldable) {
+          throw error()
         }
-        val result: Expression = plan.collectFirst {
-          case Project(Seq(a: Alias), OneRowRelation()) => a.child
-        }.get
-        result match {
-          case expr if expr.isInstanceOf[Literal] =>
-            // Note: we use 'toString' here instead of using a Cast expression to support some types
-            // of literals where casting to string is not supported.
-            expr.toString
-          case _ =>
-            throw error
+        try {
+          // Note: we use 'toString' here instead of using a Cast expression to support some types
+          // of literals where casting to string is not supported.
+          Literal(parsed.eval()).toString
+        } catch {
+          case _: Exception =>
+            throw error()
         }
       }
       key -> value
