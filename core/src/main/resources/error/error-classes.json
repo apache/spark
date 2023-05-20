@@ -904,6 +904,11 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_ESC" : {
+    "message" : [
+      "Invalid escape string. Escape string must contain only one character."
+    ]
+  },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
       "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
@@ -2188,11 +2193,6 @@
   "_LEGACY_ERROR_TEMP_0016" : {
     "message" : [
       "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0017" : {
-    "message" : [
-      "Invalid escape string. Escape string must contain only one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_0018" : {

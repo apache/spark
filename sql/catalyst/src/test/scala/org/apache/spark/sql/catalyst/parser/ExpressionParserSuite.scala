@@ -199,7 +199,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      errorClass = "INVALID_ESC",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
@@ -208,7 +208,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      errorClass = "INVALID_ESC",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
@@ -220,7 +220,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      errorClass = "INVALID_ESC",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
@@ -229,7 +229,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
+      errorClass = "INVALID_ESC",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
