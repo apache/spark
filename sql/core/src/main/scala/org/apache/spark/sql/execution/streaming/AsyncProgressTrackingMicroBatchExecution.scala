@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
 
@@ -194,9 +195,7 @@ class AsyncProgressTrackingMicroBatchExecution(
       } else {
         if (!commitLog.addInMemory(
           currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))) {
-          throw new IllegalStateException(
-            s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId"
-          )
+          throw QueryExecutionErrors.concurrentStreamLogUpdate(currentBatchId)
         }
       }
       offsetLog.removeAsyncOffsetWrite(currentBatchId)

@@ -180,6 +180,11 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Columns aliases are not allowed in <op>."
+    ]
+  },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
@@ -206,6 +211,13 @@
     "message" : [
       "Another instance of this query was just started by a concurrent session."
     ]
+  },
+  "CONCURRENT_STREAM_LOG_UPDATE" : {
+    "message" : [
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
+      "Please make sure only one streaming job runs on a specific checkpoint location at a time."
+    ],
+    "sqlState" : "40000"
   },
   "CONNECT" : {
     "message" : [
@@ -2143,11 +2155,6 @@
   "_LEGACY_ERROR_TEMP_0002" : {
     "message" : [
       "INSERT OVERWRITE DIRECTORY is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0003" : {
-    "message" : [
-      "Columns aliases are not allowed in <op>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0004" : {

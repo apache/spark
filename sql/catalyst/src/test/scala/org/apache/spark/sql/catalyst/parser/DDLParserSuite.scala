@@ -1687,7 +1687,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "DELETE FROM testcat.ns1.ns2.tbl AS t(a,b,c,d) WHERE d = 2"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0003",
+      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
       parameters = Map("op" -> "DELETE"),
       context = ExpectedContext(
         fragment = sql,
@@ -1729,7 +1729,7 @@ class DDLParserSuite extends AnalysisTest {
         |WHERE d=2""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0003",
+      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
       parameters = Map("op" -> "UPDATE"),
       context = ExpectedContext(
         fragment = sql,
@@ -1929,7 +1929,7 @@ class DDLParserSuite extends AnalysisTest {
           .stripMargin
         checkError(
           exception = parseException(sql),
-          errorClass = "_LEGACY_ERROR_TEMP_0003",
+          errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
           parameters = Map("op" -> "MERGE"),
           context = ExpectedContext(
             fragment = sql,
