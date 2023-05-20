@@ -1013,6 +1013,125 @@ class ArrowTestsMixin:
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
             assert_frame_equal(df.toPandas(), pd.DataFrame(index=range(2)))
 
+    def test_createDataFrame_nested_timestamp(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_nested_timestamp(arrow_enabled)
+
+    def check_createDataFrame_nested_timestamp(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add(
+                "struct", StructType().add("ts", TimestampType()).add("ts_ntz", TimestampNTZType())
+            )
+            .add("array", ArrayType(TimestampType()))
+            .add("array_ntz", ArrayType(TimestampNTZType()))
+            .add("map", MapType(StringType(), TimestampType()))
+            .add("map_ntz", MapType(StringType(), TimestampNTZType()))
+        )
+        data = [
+            Row(
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                Row(
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                ),
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                dict(ts=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+                dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+            )
+        ]
+        pdf = pd.DataFrame.from_records(data, columns=schema.names)
+
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            df = self.spark.createDataFrame(pdf, schema)
+
+        expected = Row(
+            ts=datetime.datetime(2022, 12, 31, 21, 0, 0),
+            ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0),
+            struct=Row(
+                ts=datetime.datetime(2022, 12, 31, 21, 0, 0),
+                ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0),
+            ),
+            array=[datetime.datetime(2022, 12, 31, 21, 0, 0)],
+            array_ntz=[datetime.datetime(2023, 1, 1, 0, 0, 0)],
+            map=dict(ts=datetime.datetime(2022, 12, 31, 21, 0, 0)),
+            map_ntz=dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+        )
+
+        self.assertEqual(df.first(), expected)
+
+    def test_toPandas_nested_timestamp(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_nested_timestamp(arrow_enabled)
+
+    def check_toPandas_nested_timestamp(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add(
+                "struct", StructType().add("ts", TimestampType()).add("ts_ntz", TimestampNTZType())
+            )
+            .add("array", ArrayType(TimestampType()))
+            .add("array_ntz", ArrayType(TimestampNTZType()))
+            .add("map", MapType(StringType(), TimestampType()))
+            .add("map_ntz", MapType(StringType(), TimestampNTZType()))
+        )
+        data = [
+            Row(
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                Row(
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                ),
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                dict(ts=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+                dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+            )
+        ]
+        df = self.spark.createDataFrame(data, schema)
+
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+                "spark.sql.execution.pandas.structHandlingMode": "row",
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame(
+            {
+                "ts": [datetime.datetime(2023, 1, 1, 3, 0, 0)],
+                "ts_ntz": [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                "struct": [
+                    Row(
+                        datetime.datetime(2023, 1, 1, 3, 0, 0),
+                        datetime.datetime(2023, 1, 1, 0, 0, 0),
+                    )
+                ],
+                "array": [[datetime.datetime(2023, 1, 1, 3, 0, 0)]],
+                "array_ntz": [[datetime.datetime(2023, 1, 1, 0, 0, 0)]],
+                "map": [dict(ts=datetime.datetime(2023, 1, 1, 3, 0, 0))],
+                "map_ntz": [dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0))],
+            }
+        )
+
+        assert_frame_equal(pdf, expected)
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
