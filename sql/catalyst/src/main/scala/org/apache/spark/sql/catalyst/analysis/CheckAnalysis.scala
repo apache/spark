@@ -85,7 +85,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2400",
+        errorClass = "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
         messageParameters = Map(
           "name" -> name,
           "limitExpr" -> limitExpr.sql))

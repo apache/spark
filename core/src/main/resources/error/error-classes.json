@@ -1201,6 +1201,11 @@
       }
     }
   },
+  "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE" : {
+    "message" : [
+      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
+    ]
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -5207,11 +5212,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2400" : {
-    "message" : [
-      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2401" : {
