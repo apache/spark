@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -713,5 +714,38 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("mask(a,'Q','q','d','o')"),
       Row("QqQQdddoooo") :: Row(null) :: Nil
     )
+  }
+
+  test("trim") {
+    checkAnswer(
+      sql("SELECT trim('    SparkSQL   ')"),
+      Row("SparkSQL") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim('SL', 'SSparkSQLS')"),
+      Row("parkSQ") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim(BOTH 'SL' FROM 'SSparkSQLS')"),
+      Row("parkSQ") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim('SL' FROM 'SSparkSQLS')"),
+      Row("parkSQ") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim(LEADING 'SL' FROM 'SSparkSQLS')"),
+      Row("parkSQLS") :: Nil
+    )
+    checkError(
+      exception = intercept[ParseException] {
+        sql("SELECT trim(LEADINGX 'SL' FROM 'SSparkSQLS')").collect()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_0018",
+      parameters = Map("trimOption" -> "LEADINGX"),
+      context = ExpectedContext(
+        fragment = "trim(LEADINGX 'SL' FROM 'SSparkSQLS')",
+        start = 7,
+        stop = 43))
   }
 }

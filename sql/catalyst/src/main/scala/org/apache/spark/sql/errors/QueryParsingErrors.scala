@@ -192,10 +192,10 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0017", ctx)
   }
 
-  def trimOptionUnsupportedError(trimOption: Int, ctx: TrimContext): Throwable = {
+  def trimOptionUnsupportedError(trimMode: String, ctx: TrimContext): Throwable = {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0018",
-      messageParameters = Map("trimOption" -> trimOption.toString),
+      messageParameters = Map("trimOption" -> toSQLStmt(trimMode)),
       ctx)
   }
 

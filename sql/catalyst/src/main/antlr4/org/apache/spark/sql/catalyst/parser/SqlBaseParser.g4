@@ -919,13 +919,20 @@ primaryExpression
     | EXTRACT LEFT_PAREN field=identifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
-    | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
+    | TRIM LEFT_PAREN (trimOption=trimMode)? (trimStr=valueExpression)?
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
     | name=(PERCENTILE_CONT | PERCENTILE_DISC) LEFT_PAREN percentage=valueExpression RIGHT_PAREN
         WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN
         (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
+    ;
+
+trimMode
+    : BOTH
+    | LEADING
+    | TRAILING
+    | unsupportedMode=identifier
     ;
 
 literalType

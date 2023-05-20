@@ -2085,15 +2085,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitTrim(ctx: TrimContext): Expression = withOrigin(ctx) {
     val srcStr = expression(ctx.srcStr)
     val trimStr = Option(ctx.trimStr).map(expression)
-    Option(ctx.trimOption).map(_.getType).getOrElse(SqlBaseParser.BOTH) match {
-      case SqlBaseParser.BOTH =>
-        StringTrim(srcStr, trimStr)
-      case SqlBaseParser.LEADING =>
-        StringTrimLeft(srcStr, trimStr)
-      case SqlBaseParser.TRAILING =>
-        StringTrimRight(srcStr, trimStr)
-      case other =>
-        throw QueryParsingErrors.trimOptionUnsupportedError(other, ctx)
+
+    Option(ctx.trimOption).map(_.start.getType).getOrElse(SqlBaseParser.BOTH) match {
+      case SqlBaseParser.BOTH => StringTrim(srcStr, trimStr)
+      case SqlBaseParser.LEADING => StringTrimLeft(srcStr, trimStr)
+      case SqlBaseParser.TRAILING => StringTrimRight(srcStr, trimStr)
+      case _ => throw QueryParsingErrors.trimOptionUnsupportedError(
+        ctx.trimOption.unsupportedMode.getText, ctx)
     }
   }
 
