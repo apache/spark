@@ -722,6 +722,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("SparkSQL") :: Nil
     )
     checkAnswer(
+      sql("SELECT trim(BOTH FROM '    SparkSQL   ')"),
+      Row("SparkSQL") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim(LEADING FROM '    SparkSQL   ')"),
+      Row("SparkSQL   ") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim(TRAILING FROM '    SparkSQL   ')"),
+      Row("    SparkSQL") :: Nil
+    )
+    checkAnswer(
       sql("SELECT trim('SL', 'SSparkSQLS')"),
       Row("parkSQ") :: Nil
     )
@@ -730,12 +742,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("parkSQ") :: Nil
     )
     checkAnswer(
-      sql("SELECT trim('SL' FROM 'SSparkSQLS')"),
-      Row("parkSQ") :: Nil
-    )
-    checkAnswer(
       sql("SELECT trim(LEADING 'SL' FROM 'SSparkSQLS')"),
       Row("parkSQLS") :: Nil
+    )
+    checkAnswer(
+      sql("SELECT trim(TRAILING 'SL' FROM 'SSparkSQLS')"),
+      Row("SSparkSQ") :: Nil
     )
     checkError(
       exception = intercept[ParseException] {
