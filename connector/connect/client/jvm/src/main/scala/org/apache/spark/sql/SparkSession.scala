@@ -481,8 +481,9 @@ class SparkSession private[sql] (
       val batchBuilder = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
       if (localRelation.hasData) {
-        assert(localRelation.hasRowCount)
         batchBuilder.setData(localRelation.getData)
+      }
+      if (localRelation.hasRowCount) {
         batchBuilder.setRowCount(localRelation.getRowCount)
       }
       val batch = batchBuilder.build()
