@@ -212,6 +212,13 @@
       "Another instance of this query was just started by a concurrent session."
     ]
   },
+  "CONCURRENT_STREAM_LOG_UPDATE" : {
+    "message" : [
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
+      "Please make sure only one streaming job runs on a specific checkpoint location at a time."
+    ],
+    "sqlState" : "40000"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
