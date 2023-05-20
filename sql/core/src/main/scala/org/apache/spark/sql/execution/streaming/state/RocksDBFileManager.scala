@@ -252,12 +252,12 @@ class RocksDBFileManager(
   def getLatestVersion(): Long = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
-      val files = fm.list(path)
-      val changelogFileVersions = files.map(_.getPath)
+      val files = fm.list(path).map(_.getPath)
+      val changelogFileVersions = files
         .filter(onlyChangelogFiles.accept(_))
         .map(_.getName.stripSuffix(".changelog"))
         .map(_.toLong)
-      val snapshotFileVersions = files.map(_.getPath)
+      val snapshotFileVersions = files
         .filter(onlyZipFiles.accept(_))
         .map(_.getName.stripSuffix(".zip"))
         .map(_.toLong)
@@ -342,12 +342,12 @@ class RocksDBFileManager(
    */
   def deleteOldVersions(numVersionsToRetain: Int): Unit = {
     val path = new Path(dfsRootDir)
-    val allFiles = fm.list(path)
-    val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file.getPath))
-    val changelogFiles = allFiles.filter(file => onlyChangelogFiles.accept(file.getPath))
+    val allFiles = fm.list(path).map(_.getPath)
+    val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file))
+    val changelogFiles = allFiles.filter(file => onlyChangelogFiles.accept(file))
     // All versions present in DFS, sorted
     val sortedSnapshotVersions = snapshotFiles
-      .map(_.getPath.getName.stripSuffix(".zip"))
+      .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
 
@@ -433,7 +433,7 @@ class RocksDBFileManager(
       s"$failedToDelete files) not used in versions >= $minVersionToRetain")
 
     val changelogVersionsToDelete = changelogFiles
-      .map(_.getPath.getName.stripSuffix(".changelog")).map(_.toLong)
+      .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
       .filter(_ < minVersionToRetain)
     deleteChangelogFiles(changelogVersionsToDelete)
   }
