@@ -3313,7 +3313,7 @@ object SQLConf {
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val RANGE_PARTITIONING_MIN_PARTITION_NUM =
-    buildConf("spark.sql.adaptive.rangePartitioning.minPartitionNum")
+    buildConf("spark.sql.rangePartitioning.minPartitionNum")
       .doc(s"Support the minimum number of range shuffle partitions when this value is greater " +
         s"than 0")
       .version("3.4.1")
