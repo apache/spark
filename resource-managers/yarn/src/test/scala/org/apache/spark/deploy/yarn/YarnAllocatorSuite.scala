@@ -19,10 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.util
 import java.util.Collections
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
@@ -36,7 +34,6 @@ import org.mockito.stubbing.Answer
 import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
@@ -49,6 +46,8 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
 import org.apache.spark.util.ManualClock
+
+import java.util.concurrent.atomic.AtomicInteger
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -848,9 +847,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with PrivateMethodT
 
     val status = ContainerStatus.newInstance(
       container.getId, ContainerState.COMPLETE, "Finished", 0)
+    val getOrUpdateNumExecutorsStartingForRPId = PrivateMethod[AtomicInteger](
+      Symbol("getOrUpdateNumExecutorsStartingForRPId"))
+    handler.invokePrivate(getOrUpdateNumExecutorsStartingForRPId(0)).incrementAndGet()
     handler.processCompletedContainers(Seq(status))
     val updateInternalState = PrivateMethod[Unit](Symbol("updateInternalState"))
     handler.invokePrivate(updateInternalState(0, "1", container))
     handler.getNumExecutorsRunning should be(0)
+    handler.getNumExecutorsStarting should be(0)
   }
 }

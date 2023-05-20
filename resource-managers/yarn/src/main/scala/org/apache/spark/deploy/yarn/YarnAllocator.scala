@@ -775,6 +775,7 @@ private[yarn] class YarnAllocator(
             } catch {
               case e: Throwable =>
                 getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
+                launchingExecutorContainerIds.remove(containerId)
                 if (NonFatal(e)) {
                   logError(s"Failed to launch executor $executorId on container $containerId", e)
                   // Assigned container should be released immediately
@@ -798,11 +799,10 @@ private[yarn] class YarnAllocator(
   }
 
   private def updateInternalState(rpId: Int, executorId: String,
-    container: Container): Unit = synchronized {
+      container: Container): Unit = synchronized {
     val containerId = container.getId
     if (launchingExecutorContainerIds.contains(containerId)) {
       getOrUpdateRunningExecutorForRPId(rpId).add(executorId)
-      getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
       executorIdToContainer(executorId) = container
       containerIdToExecutorIdAndResourceProfileId(containerId) = (executorId, rpId)
 
@@ -814,6 +814,7 @@ private[yarn] class YarnAllocator(
       allocatedContainerToHostMap.put(containerId, executorHostname)
       launchingExecutorContainerIds.remove(containerId)
     }
+    getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
   }
 
   // Visible for testing.
