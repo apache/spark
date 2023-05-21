@@ -906,7 +906,7 @@
   },
   "INVALID_ESC" : {
     "message" : [
-      "Invalid escape string. Escape string must contain only one character."
+      "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
     ]
   },
   "INVALID_EXECUTOR_MEMORY" : {
