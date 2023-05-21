@@ -625,7 +625,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = parseException("select * from test where test.t like 'pattern%' escape '##'"),
       errorClass = "INVALID_ESC",
-      parameters = Map.empty,
+      parameters = Map("invalidEscape" -> "\"##\""),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 32,

@@ -188,8 +188,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def invalidEscapeStringError(ctx: PredicateContext): Throwable = {
-    new ParseException(errorClass = "INVALID_ESC", ctx)
+  def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_ESC",
+      messageParameters = Map("invalidEscape" -> toSQLConf(invalidEscape)),
+      ctx)
   }
 
   def trimOptionUnsupportedError(trimOption: Int, ctx: TrimContext): Throwable = {

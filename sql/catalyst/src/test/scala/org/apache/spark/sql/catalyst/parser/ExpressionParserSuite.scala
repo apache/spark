@@ -193,14 +193,13 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
 
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
       errorClass = "INVALID_ESC",
-      parameters = Map.empty,
+      parameters = Map("invalidEscape" -> "\"##\""),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 2,
@@ -209,7 +208,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
       errorClass = "INVALID_ESC",
-      parameters = Map.empty,
+      parameters = Map("invalidEscape" -> "\"\""),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
         start = 2,
@@ -221,7 +220,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
       errorClass = "INVALID_ESC",
-      parameters = Map.empty,
+      parameters = Map("invalidEscape" -> "\"\"/\""),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
         start = 2,
@@ -230,7 +229,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
       errorClass = "INVALID_ESC",
-      parameters = Map.empty,
+      parameters = Map("invalidEscape" -> "\"\""),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
         start = 2,
