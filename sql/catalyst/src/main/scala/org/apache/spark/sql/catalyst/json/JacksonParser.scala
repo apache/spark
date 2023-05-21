@@ -119,9 +119,8 @@ class JacksonParser(
     } else {
       new NoopFilters
     }
-    (parser: JsonParser) =>
-      parseJsonToken[Iterable[InternalRow]](parser, st) {
-        case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
+    (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
+      case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -135,58 +134,56 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-        case START_ARRAY if allowArrayAsStructs =>
-          val array = convertArray(parser, elementConverter, isRoot = true)
-          // Here, as we support reading top level JSON arrays and take every element
-          // in such an array as a row, this case is possible.
-          if (array.numElements() == 0) {
-            Array.empty[InternalRow]
-          } else {
-            array.toArray[InternalRow](schema)
-          }
-        case START_ARRAY =>
-          throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError("")
-      }
+      case START_ARRAY if allowArrayAsStructs =>
+        val array = convertArray(parser, elementConverter, isRoot = true)
+        // Here, as we support reading top level JSON arrays and take every element
+        // in such an array as a row, this case is possible.
+        if (array.numElements() == 0) {
+          Array.empty[InternalRow]
+        } else {
+          array.toArray[InternalRow](schema)
+        }
+      case START_ARRAY =>
+        throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError("")
+    }
   }
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
-    (parser: JsonParser) =>
-      parseJsonToken[Iterable[InternalRow]](parser, mt) {
-        case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
-      }
+    (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
+      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+    }
   }
 
   private def makeArrayRootConverter(at: ArrayType): JsonParser => Iterable[InternalRow] = {
     val elemConverter = makeConverter(at.elementType)
-    (parser: JsonParser) =>
-      parseJsonToken[Iterable[InternalRow]](parser, at) {
-        case START_ARRAY => Some(InternalRow(convertArray(parser, elemConverter)))
-        case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
-          // This handles the case when an input JSON object is a structure but
-          // the specified schema is an array of structures. In that case, the input JSON is
-          // considered as an array of only one element of struct type.
-          // This behavior was introduced by changes for SPARK-19595.
-          //
-          // For example, if the specified schema is
-          // ArrayType(new StructType().add("i", IntegerType))
-          // and JSON input as below:
-          //
-          // [{"i": 1}, {"i": 2}]
-          // [{"i": 3}]
-          // {"i": 4}
-          //
-          // The last row is considered as an array with one element, and result of conversion:
-          //
-          // Seq(Row(1), Row(2))
-          // Seq(Row(3))
-          // Seq(Row(4))
-          //
-          val st = at.elementType.asInstanceOf[StructType]
-          val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-          Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters)
-            .toArray)))
-      }
+    (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, at) {
+      case START_ARRAY => Some(InternalRow(convertArray(parser, elemConverter)))
+      case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
+        // This handles the case when an input JSON object is a structure but
+        // the specified schema is an array of structures. In that case, the input JSON is
+        // considered as an array of only one element of struct type.
+        // This behavior was introduced by changes for SPARK-19595.
+        //
+        // For example, if the specified schema is
+        // ArrayType(new StructType().add("i", IntegerType))
+        // and JSON input as below:
+        //
+        // [{"i": 1}, {"i": 2}]
+        // [{"i": 3}]
+        // {"i": 4}
+        //
+        // The last row is considered as an array with one element, and result of conversion:
+        //
+        // Seq(Row(1), Row(2))
+        // Seq(Row(3))
+        // Seq(Row(4))
+        //
+        val st = at.elementType.asInstanceOf[StructType]
+        val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters)
+          .toArray)))
+    }
   }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
@@ -571,7 +568,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case e@(_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
+      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
