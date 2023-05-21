@@ -3187,33 +3187,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.property.asScala.map { property =>
       val key = visitPropertyKey(property.key)
-      // If the expression provided for the option value is a literal, use the string representation
-      // of the contents of the literal value provided here. Otherwise, if this expression is
-      // non-literal but foldable, evaluate the expression and use its value instead.
-      val value = if (property.value == null) {
-        null
-      } else {
-        val parsed = expression(property.value)
-        def error(): Throwable = {
-          new ParseException(
-            errorClass = "INVALID_SQL_SYNTAX",
-            messageParameters = Map(
-              "inputString" ->
-                s"option or property key $key is invalid; only literal expressions are supported"),
-            ctx)
-        }
-        if (!parsed.foldable) {
-          throw error()
-        }
-        try {
-          // Note: we use 'toString' here instead of using a Cast expression to support some types
-          // of literals where casting to string is not supported.
-          Literal(parsed.eval()).toString
-        } catch {
-          case _: Exception =>
-            throw error()
-        }
-      }
+      val value = visitPropertyValue(property.value)
       key -> value
     }
     // Check for duplicate property names.
@@ -3257,6 +3231,50 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       string(visitStringLit(key.stringLit()))
     } else {
       key.getText
+    }
+  }
+
+  /**
+   * A property value can be String, Integer, Boolean or Decimal. This function extracts
+   * the property value based on whether its a string, integer, boolean or decimal literal.
+   */
+  override def visitPropertyValue(value: PropertyValueContext): String = {
+    if (value == null) {
+      null
+    } else if (value.stringLit() != null) {
+      string(visitStringLit(value.stringLit()))
+    } else if (value.booleanValue != null) {
+      value.getText.toLowerCase(Locale.ROOT)
+    } else {
+      value.getText
+    }
+  }
+
+  /**
+   * Convert a property list into a key-value map.
+   * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
+   */
+  override def visitPropertyList(
+      ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
+    val properties = ctx.property.asScala.map { property =>
+      val key = visitPropertyKey(property.key)
+      val value = visitPropertyValue(property.value)
+      key -> value
+    }
+    // Check for duplicate property names.
+    checkDuplicateKeys(properties.toSeq, ctx)
+    properties.toMap
+  }
+
+  /**
+   * Parse a key-value map from an [[ExpressionPropertyListContext]], assuming all values are
+   * specified.
+   */
+  def visitExpressionPropertyList(ctx: ExpressionPropertyListContext): Map[String, String] = {
+    ctx.expressionProperty.asScala.map { property =>
+      val key = visitPropertyKey(property.key)
+      val value = if (property.value != null) property.value.getText else ""
+      key -> value
     }
   }
 
@@ -3759,7 +3777,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val cleanedProperties = cleanTableProperties(ctx, properties)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = Option(ctx.options).map(visitExpressionPropertyList).getOrElse(Map.empty)
     val location = visitLocationSpecList(ctx.locationSpec())
     val (cleanedOptions, newLocation) = cleanTableOptions(ctx, options, location)
     val comment = visitCommentSpecList(ctx.commentSpec())
@@ -3854,7 +3872,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
     val tableSpec = TableSpec(properties, provider, options, location, comment,
-      serdeInfo, external)
+      serdeInfo, external, optionsResolved = false)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -3924,7 +3942,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
     val tableSpec = TableSpec(properties, provider, options, location, comment,
-      serdeInfo, false)
+      serdeInfo, external = false, optionsResolved = false)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>

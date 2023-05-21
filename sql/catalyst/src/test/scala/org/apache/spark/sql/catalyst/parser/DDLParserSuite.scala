@@ -891,29 +891,42 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty[String, String], Some("json"), options, None, None, None, false),
         false)
     }
-    comparePlans(parsePlan(
-      s"$prefix ('k' = 1 + 2)"),
+    val analyzer = getAnalyzer
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('k' = 1 + 2)")),
       createTable(Map("k" -> "3")))
-    comparePlans(parsePlan(
-      s"$prefix ('k' = 'a' || 'b')"),
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('k' = 'a' || 'b')")),
       createTable(Map("k" -> "ab")))
-    comparePlans(parsePlan(
-      s"$prefix ('k' = 0d + 0d)"),
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('k' = 0d + 0d)")),
       createTable(Map("k" -> "0.0")))
-    comparePlans(parsePlan(
-      s"$prefix ('k' = true or false)"),
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('k' = true or false)")),
       createTable(Map("k" -> "true")))
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('optKey' = date_diff(current_date(), current_date()))")),
+      createTable(Map("k" -> "0")))
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('optKey' = date_sub(date'2022-02-02', 1))")),
+      createTable(Map("k" -> "2022-02-01")))
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('optKey' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00'))")),
+      createTable(Map("k" -> "2022-02-28 00:00:00.000005")))
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('optKey' = round(cast(2.25 as decimal(5, 3)), 1))")),
+      createTable(Map("k" -> "2.3'")))
+    // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
+    // too narrow to contain the result of the cast.
+    comparePlans(analyzer.execute(parsePlan(
+      s"$prefix ('optKey' = round(cast(2.25 as decimal(3, 3)), 1))")),
+      createTable(Map("k" -> "null")))
     // Test some cases where the provided option value is a non-constant or invalid expression.
     Seq(
       "('optKey' = 1 + 2 + unresolvedAttribute)",
       "('optKey' = true or false or unresolvedAttribute)",
       "('optKey' = date_diff(date'2023-01-02', unresolvedAttribute))",
-      "('optKey' = raise_error('failure'))",
-      "('optKey' = date_diff(current_date(), current_date()))",
-      "('optKey' = date_sub(date'2022-02-02', 1))",
-      "('optKey' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00'))",
-      "('optKey' = round(cast(2.25 as decimal(5, 3)), 1))",
-      "('optKey' = round(cast(2.25 as decimal(3, 3)), 1))"
+      "('optKey' = raise_error('failure'))"
     ).foreach { options =>
       checkError(
         exception = parseException(prefix + options),

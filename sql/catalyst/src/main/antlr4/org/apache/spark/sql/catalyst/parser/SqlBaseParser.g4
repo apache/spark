@@ -374,7 +374,7 @@ tableProvider
     ;
 
 createTableClauses
-    :((OPTIONS options=propertyList) |
+    :((OPTIONS options=expressionPropertyList) |
      (PARTITIONED BY partitioning=partitionFieldList) |
      skewSpec |
      bucketSpec |
@@ -390,12 +390,27 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=expression)?
+    : key=propertyKey (EQ? value=propertyValue)?
     ;
 
 propertyKey
     : identifier (DOT identifier)*
     | stringLit
+    ;
+
+propertyValue
+    : INTEGER_VALUE
+    | DECIMAL_VALUE
+    | booleanValue
+    | stringLit
+    ;
+
+expressionPropertyList
+    : LEFT_PAREN expressionProperty (COMMA expressionProperty)* RIGHT_PAREN
+    ;
+
+expressionProperty
+    : key=propertyKey (EQ? value=expression)?
     ;
 
 constantList

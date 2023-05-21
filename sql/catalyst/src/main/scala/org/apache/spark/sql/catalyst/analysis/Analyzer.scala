@@ -282,6 +282,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
+      ResolveTableSpec ::
       ResolveRelations ::
       ResolvePartitionSpec ::
       ResolveFieldNameAndPosition ::

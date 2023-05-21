@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -1389,4 +1391,7 @@ case class TableSpec(
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean)
+    external: Boolean,
+    // If false, the values of the 'options' list comprise parsed but unresolved expressions.
+    // The analyzer will then constant-fold them to literals later and set this field to true.
+    optionsResolved: Boolean = true)
