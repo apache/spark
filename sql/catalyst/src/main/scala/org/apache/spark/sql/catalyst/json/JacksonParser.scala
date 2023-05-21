@@ -165,8 +165,7 @@ class JacksonParser(
         // considered as an array of only one element of struct type.
         // This behavior was introduced by changes for SPARK-19595.
         //
-        // For example, if the specified schema is
-        // ArrayType(new StructType().add("i", IntegerType))
+        // For example, if the specified schema is ArrayType(new StructType().add("i", IntegerType))
         // and JSON input as below:
         //
         // [{"i": 1}, {"i": 2}]
@@ -181,8 +180,7 @@ class JacksonParser(
         //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters)
-          .toArray)))
+        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters).toArray)))
     }
   }
 
