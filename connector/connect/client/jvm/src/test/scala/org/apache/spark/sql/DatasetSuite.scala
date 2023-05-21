@@ -16,12 +16,12 @@
  */
 package org.apache.spark.sql
 
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.Server
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
-import java.util.Properties
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto

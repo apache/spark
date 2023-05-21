@@ -372,7 +372,8 @@ case class ListQuery(
     // ListQuery can't be executed alone so its nullability is not defined.
     // Consider using ListQuery.childOutputs.exists(_.nullable)
     if (!SQLConf.get.getConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY)) {
-      assert(false, "ListQuery nullability is not defined")
+      assert(false, "ListQuery nullability is not defined. To restore the legacy behavior before " +
+        s"Spark 3.5.0, set ${SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY.key}=true")
     }
     false
   }

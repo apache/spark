@@ -209,6 +209,14 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  StreamingForeachWriter foreach_writer = 13;
+}
+
+message StreamingForeachWriter {
+  oneof writer {
+    PythonUDF python_writer = 1;
+  }
 }
 
 message WriteStreamOperationStartResult {
