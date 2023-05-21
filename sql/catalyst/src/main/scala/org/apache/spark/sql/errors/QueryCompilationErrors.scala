@@ -1597,6 +1597,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("field" -> field.dataType.toString))
   }
 
+  def unsupportedFormatForFileFormatError(format: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FORMAT_FOR_FILE_FORMAT",
+      messageParameters = Map("format" -> format))
+  }
+
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
     new AnalysisException(
       errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",

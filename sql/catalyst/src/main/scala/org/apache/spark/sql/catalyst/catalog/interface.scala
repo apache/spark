@@ -209,6 +209,16 @@ case class BucketSpec(
 }
 
 /**
+ * A container for file location and format.
+ *
+ * @param format   file format
+ * @param location file location
+ */
+case class FileFormatLocation(
+    format: String,
+    location: String)
+
+/**
  * A table defined in the catalog.
  *
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the

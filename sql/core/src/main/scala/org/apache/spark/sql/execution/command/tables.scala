@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FileSourceOptions, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
@@ -39,10 +39,11 @@ import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeed
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
@@ -51,6 +52,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.HadoopFSUtils
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -63,11 +65,13 @@ import org.apache.spark.sql.util.SchemaUtils
  * Use "CREATE TABLE t1 LIKE t2 USING file_format" to specify new provider for t1.
  * For Hive compatibility, use "CREATE TABLE t1 LIKE t2 STORED AS hiveFormat"
  * to specify new file storage format (inputFormat, outputFormat, serde) for t1.
+ * Or Use "CREATE TABLE t1 LIKE FILE file_format 'file_path'" to specify t1 schema from existing
+ * file.
  *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name
+ *   LIKE [[other_db_name.]existing_table_name | FILE file_format file_location]
  *   [USING provider |
  *    [
  *     [ROW FORMAT row_format]
@@ -79,48 +83,78 @@ import org.apache.spark.sql.util.SchemaUtils
  * }}}
  */
 case class CreateTableLikeCommand(
-    targetTable: TableIdentifier,
-    sourceTable: TableIdentifier,
-    fileFormat: CatalogStorageFormat,
-    provider: Option[String],
-    properties: Map[String, String] = Map.empty,
-    ifNotExists: Boolean) extends LeafRunnableCommand {
+     targetTable: TableIdentifier,
+     sourceTable: Option[TableIdentifier],
+     likeFileFormatLocation: Option[FileFormatLocation],
+     fileFormat: CatalogStorageFormat,
+     provider: Option[String],
+     properties: Map[String, String] = Map.empty,
+     ifNotExists: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
-    val newProvider = if (provider.isDefined) {
+
+    def getTableType(locationUrl: Option[URI]): CatalogTableType = {
+      if (locationUrl.isEmpty) {
+        CatalogTableType.MANAGED
+      } else {
+        CatalogTableType.EXTERNAL
+      }
+    }
+
+    def checkProvider(provider: Option[String]): Unit = {
       if (!DDLUtils.isHiveTable(provider)) {
         // check the validation of provider input, invalid provider will throw
         // AnalysisException, ClassNotFoundException, or NoClassDefFoundError
         DataSource.lookupDataSource(provider.get, sparkSession.sessionState.conf)
       }
-      provider
-    } else if (fileFormat.inputFormat.isDefined) {
-      Some(DDLUtils.HIVE_PROVIDER)
-    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
-      Some(sparkSession.sessionState.conf.defaultDataSourceName)
-    } else {
-      sourceTableDesc.provider
     }
 
-    val newStorage = if (fileFormat.inputFormat.isDefined) {
-      fileFormat
+    val newTableDesc = if (likeFileFormatLocation.isDefined) {
+      val newTableSchema = getSchemaForFile(sparkSession)
+      // If the location is specified, we create an external table internally.
+      // Otherwise create a managed table.
+      val tblType = getTableType(fileFormat.locationUri)
+      val newProvider = if (provider.isDefined) {
+        checkProvider(provider)
+        provider
+      } else if (fileFormat.inputFormat.isDefined) {
+        Some(DDLUtils.HIVE_PROVIDER)
+      } else {
+        Some(likeFileFormatLocation.get.format)
+      }
+      CatalogTable(
+        identifier = targetTable,
+        tableType = tblType,
+        storage = fileFormat,
+        schema = newTableSchema,
+        provider = newProvider,
+        properties = properties)
     } else {
-      sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
-    }
+      val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable.get)
+      val newProvider = if (provider.isDefined) {
+        checkProvider(provider)
+        provider
+      } else if (fileFormat.inputFormat.isDefined) {
+        Some(DDLUtils.HIVE_PROVIDER)
+      } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+        Some(sparkSession.sessionState.conf.defaultDataSourceName)
+      } else {
+        sourceTableDesc.provider
+      }
 
-    // If the location is specified, we create an external table internally.
-    // Otherwise create a managed table.
-    val tblType = if (newStorage.locationUri.isEmpty) {
-      CatalogTableType.MANAGED
-    } else {
-      CatalogTableType.EXTERNAL
-    }
+      val newStorage = if (fileFormat.inputFormat.isDefined) {
+        fileFormat
+      } else {
+        sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
+      }
 
-    val newTableSchema = CharVarcharUtils.getRawSchema(
-      sourceTableDesc.schema, sparkSession.sessionState.conf)
-    val newTableDesc =
+      // If the location is specified, we create an external table internally.
+      // Otherwise create a managed table.
+      val tblType = getTableType(newStorage.locationUri)
+
+      val newTableSchema = CharVarcharUtils.getRawSchema(
+        sourceTableDesc.schema, sparkSession.sessionState.conf)
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
@@ -131,9 +165,49 @@ case class CreateTableLikeCommand(
         bucketSpec = sourceTableDesc.bucketSpec,
         properties = properties,
         tracksPartitionsInCatalog = sourceTableDesc.tracksPartitionsInCatalog)
+    }
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
+  }
+
+  private def getSchemaForFile(sparkSession: SparkSession): StructType = {
+    val likeFileFormat = likeFileFormatLocation.get.format
+    val providerClass = try {
+      DataSource.lookupDataSource(likeFileFormat,
+        sparkSession.sessionState.conf)
+    } catch {
+      case _: ClassNotFoundException =>
+        throw QueryCompilationErrors.unsupportedFormatForFileFormatError(likeFileFormat)
+    }
+    val newProviderClass = providerClass.newInstance() match {
+      case f: FileDataSourceV2 => f.fallbackFileFormat
+      case _ => providerClass
+    }
+    val schemaFromFile = newProviderClass.getConstructor().newInstance() match {
+      case format: FileFormat =>
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
+        val fileStatus = HadoopFSUtils.parallelListLeafFiles(
+          sparkSession.sparkContext,
+          Seq(new Path(likeFileFormatLocation.get.location)),
+          hadoopConf,
+          _ => true,
+          ignoreMissingFiles = new FileSourceOptions(CaseInsensitiveMap(properties))
+            .ignoreMissingFiles,
+          ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
+          parallelismThreshold = sparkSession.sessionState.conf.
+            parallelPartitionDiscoveryThreshold,
+          parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+          .map(_._2).head
+        format.inferSchema(sparkSession, properties, fileStatus)
+      case _ =>
+        throw QueryCompilationErrors.unsupportedFormatForFileFormatError(likeFileFormat)
+    }
+    if (schemaFromFile.isEmpty) {
+      throw QueryCompilationErrors.unsupportedFormatForFileFormatError(likeFileFormat)
+    }
+    CharVarcharUtils.getRawSchema(
+      schemaFromFile.get, sparkSession.sessionState.conf)
   }
 }
 

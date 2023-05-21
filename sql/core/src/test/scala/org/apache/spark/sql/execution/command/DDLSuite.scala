@@ -2236,6 +2236,28 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test("SPARK-43521: Create Table LIKE FILE format") {
+    val catalog = spark.sessionState.catalog
+    withTable("t1", "t2") {
+      val filePath = getWorkspaceFilePath("examples", "src", "main", "resources", "users.parquet")
+        .toFile.getAbsolutePath
+      sql(s"CREATE TABLE t1 LIKE FILE PARQUET '$filePath'")
+      val table3 = catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(table3.schema == StructType(Seq(StructField("name", StringType, nullable = false),
+        StructField("favorite_color", StringType, nullable = true),
+        StructField("favorite_numbers", ArrayType(IntegerType, containsNull = false),
+          nullable = false))))
+      assert(table3.provider == Some("PARQUET"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t2 LIKE FILE TEST '$filePath'")
+        },
+        errorClass = "UNSUPPORTED_FORMAT_FOR_FILE_FORMAT",
+        parameters = Map("format" -> "TEST"))
+    }
+  }
+
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
     // SPARK-43093: Don't use `withTempDir` to clean up temp dir, it will cause test cases in
     // shared session that need to execute `Executor.updateDependencies` test fail.

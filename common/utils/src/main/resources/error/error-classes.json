@@ -2910,6 +2910,11 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_FORMAT_FOR_FILE_FORMAT" : {
+    "message" : [
+      "Unsupported format <format> for like file format."
+    ]
+  },
   "UNSUPPORTED_GENERATOR" : {
     "message" : [
       "The generator is not supported:"

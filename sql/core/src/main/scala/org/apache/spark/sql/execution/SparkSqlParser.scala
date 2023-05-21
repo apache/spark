@@ -705,7 +705,12 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
-    val sourceTable = visitTableIdentifier(ctx.source)
+    val (sourceTable, likeFileFormatLoc) = if (ctx.createFormatLocation() == null) {
+      (Some(visitTableIdentifier(ctx.source)), None)
+    } else {
+      (None, Some(toFileFormatLocation(ctx.createFormatLocation()))
+      )
+    }
     checkDuplicateClauses(ctx.tableProvider, "PROVIDER", ctx)
     checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
@@ -735,7 +740,12 @@ class SparkSqlAstBuilder extends AstBuilder {
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val cleanedProperties = cleanTableProperties(ctx, properties)
     CreateTableLikeCommand(
-      targetTable, sourceTable, storage, provider, cleanedProperties, ctx.EXISTS != null)
+      targetTable, sourceTable, likeFileFormatLoc, storage, provider, cleanedProperties,
+      ifNotExists = ctx.EXISTS != null)
+  }
+
+  private def toFileFormatLocation(ctx: CreateFormatLocationContext): FileFormatLocation = {
+    FileFormatLocation(ctx.multipartIdentifier().getText, string(visitStringLit(ctx.stringLit())))
   }
 
   /**

@@ -756,80 +756,93 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, fileFormat, provider, properties, exists) =
       parser.parsePlan(v1).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, None, f, p, pr, e) => (t, s, f, p, pr, e)
       }.head
     assert(exists == false)
     assert(target.database.isEmpty)
     assert(target.table == "table1")
-    assert(source.database.isEmpty)
-    assert(source.table == "table2")
+    assert(source.get.database.isEmpty)
+    assert(source.get.table == "table2")
     assert(fileFormat.locationUri.isEmpty)
     assert(provider.isEmpty)
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
     val (target2, source2, fileFormat2, provider2, properties2, exists2) =
       parser.parsePlan(v2).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, None, f, p, pr, e) => (t, s, f, p, pr, e)
       }.head
     assert(exists2)
     assert(target2.database.isEmpty)
     assert(target2.table == "table1")
-    assert(source2.database.isEmpty)
-    assert(source2.table == "table2")
+    assert(source2.get.database.isEmpty)
+    assert(source2.get.table == "table2")
     assert(fileFormat2.locationUri.isEmpty)
     assert(provider2.isEmpty)
 
     val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
     val (target3, source3, fileFormat3, provider3, properties3, exists3) =
       parser.parsePlan(v3).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, None, f, p, pr, e) => (t, s, f, p, pr, e)
       }.head
     assert(!exists3)
     assert(target3.database.isEmpty)
     assert(target3.table == "table1")
-    assert(source3.database.isEmpty)
-    assert(source3.table == "table2")
+    assert(source3.get.database.isEmpty)
+    assert(source3.get.table == "table2")
     assert(fileFormat3.locationUri.map(_.toString) == Some("/spark/warehouse"))
     assert(provider3.isEmpty)
 
     val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'"
     val (target4, source4, fileFormat4, provider4, properties4, exists4) =
       parser.parsePlan(v4).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, None, f, p, pr, e) => (t, s, f, p, pr, e)
       }.head
     assert(exists4)
     assert(target4.database.isEmpty)
     assert(target4.table == "table1")
-    assert(source4.database.isEmpty)
-    assert(source4.table == "table2")
+    assert(source4.get.database.isEmpty)
+    assert(source4.get.table == "table2")
     assert(fileFormat4.locationUri.map(_.toString) == Some("/spark/warehouse"))
     assert(provider4.isEmpty)
 
     val v5 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet"
     val (target5, source5, fileFormat5, provider5, properties5, exists5) =
       parser.parsePlan(v5).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, None, f, p, pr, e) => (t, s, f, p, pr, e)
       }.head
     assert(exists5)
     assert(target5.database.isEmpty)
     assert(target5.table == "table1")
-    assert(source5.database.isEmpty)
-    assert(source5.table == "table2")
+    assert(source5.get.database.isEmpty)
+    assert(source5.get.table == "table2")
     assert(fileFormat5.locationUri.isEmpty)
     assert(provider5 == Some("parquet"))
 
     val v6 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC"
     val (target6, source6, fileFormat6, provider6, properties6, exists6) =
       parser.parsePlan(v6).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, None, f, p, pr, e) => (t, s, f, p, pr, e)
       }.head
     assert(exists6)
     assert(target6.database.isEmpty)
     assert(target6.table == "table1")
-    assert(source6.database.isEmpty)
-    assert(source6.table == "table2")
+    assert(source6.get.database.isEmpty)
+    assert(source6.get.table == "table2")
     assert(fileFormat6.locationUri.isEmpty)
     assert(provider6 == Some("ORC"))
+
+    val v7 = "CREATE TABLE table1 LIKE FILE PARQUET 'examples/src/main/resources/users.parquet'"
+    val (target7, likeFile, fileFormat7, provider7, properties7, exists7) =
+      parser.parsePlan(v7).collect {
+        case CreateTableLikeCommand(t, None, l, f, p, pr, e) => (t, l, f, p, pr, e)
+      }.head
+    assert(!exists7)
+    assert(target7.database.isEmpty)
+    assert(target7.table == "table1")
+    assert(likeFile.get.format == "PARQUET")
+    assert(likeFile.get.location == "examples/src/main/resources/users.parquet")
+    assert(fileFormat7.locationUri.isEmpty)
+    assert(provider7.isEmpty)
   }
 
   test("SET CATALOG") {

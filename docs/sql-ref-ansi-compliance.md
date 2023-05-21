@@ -454,6 +454,7 @@ Below is a list of all the keywords in Spark SQL.
 |FETCH|reserved|non-reserved|reserved|
 |FIELDS|non-reserved|non-reserved|non-reserved|
 |FILTER|reserved|non-reserved|reserved|
+|FILE|non-reserved|non-reserved|non-reserved|
 |FILEFORMAT|non-reserved|non-reserved|non-reserved|
 |FIRST|non-reserved|non-reserved|non-reserved|
 |FLOAT|non-reserved|non-reserved|reserved|

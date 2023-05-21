@@ -92,7 +92,7 @@ statement
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier
+        LIKE (source=tableIdentifier | createFormatLocation)
         (tableProvider |
         rowFormat |
         createFileFormat |
@@ -424,6 +424,10 @@ nestedConstantList
 createFileFormat
     : STORED AS fileFormat
     | STORED BY storageHandler
+    ;
+
+createFormatLocation
+    : FILE multipartIdentifier stringLit
     ;
 
 fileFormat
@@ -1348,6 +1352,7 @@ ansiNonReserved
     | EXTERNAL
     | EXTRACT
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -1659,6 +1664,7 @@ nonReserved
     | FETCH
     | FILTER
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT

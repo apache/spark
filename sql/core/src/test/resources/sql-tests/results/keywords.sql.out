@@ -107,6 +107,7 @@ EXTRACT	false
 FALSE	false
 FETCH	false
 FIELDS	false
+FILE	false
 FILEFORMAT	false
 FILTER	false
 FIRST	false
