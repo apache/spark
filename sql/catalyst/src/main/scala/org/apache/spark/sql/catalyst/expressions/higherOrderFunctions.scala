@@ -135,20 +135,7 @@ case class LambdaFunction(
   override def eval(input: InternalRow): Any = function.eval(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val functionCode = function.genCode(ctx)
-
-    if (nullable) {
-      ev.copy(code = code"""
-        |${functionCode.code}
-        |boolean ${ev.isNull} = ${functionCode.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${functionCode.value};
-      """.stripMargin)
-    } else {
-      ev.copy(code = code"""
-        |${functionCode.code}
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${functionCode.value};
-      """.stripMargin, isNull = FalseLiteral)
-    }
+    function.genCode(ctx)
   }
 
   override protected def withNewChildrenInternal(
