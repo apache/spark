@@ -20,50 +20,50 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.DefaultColumnAnalyzer
+import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
  * This rule is responsible for analyzing expressions passed in as values for OPTIONS lists for
  * commands such as CREATE TABLE. These expressions may be constant but non-literal, in which case
  * we perform constant folding here.
  */
-object ResolveTableSpec extends Rule[LogicalPlan] {
+case class ResolveTableSpec(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUpWithPruning(_.containsPattern(COMMAND), ruleId) {
-      case c: CreateTable if !c.tableSpec.optionsResolved =>
-        val newOptions: Map[String, String] =
-          c.tableSpec.options.map { case (key, value) =>
-            (key, resolveOption(key, value)) }
-        c.copy(tableSpec = c.tableSpec.copy(options = newOptions))
+      case c: CreateTable if c.tableSpec.unresolvedOptions.nonEmpty =>
+        val newOptions = c.tableSpec.unresolvedOptions.map(resolveOption)
+        c.copy(tableSpec = c.tableSpec.copy(options = newOptions, unresolvedOptions = Map.empty))
     }
   }
 
-  private def resolveOption(key: String, value: String): String = {
-    val parsed: Expression = CatalystSqlParser.parseExpression(value)
-    val plan = try {
-      val analyzer: Analyzer = DefaultColumnAnalyzer
-      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, "col")()), OneRowRelation()))
-      analyzer.checkAnalysis(analyzed)
-      ConstantFolding(analyzed)
-    } catch {
-      case _: AnalysisException =>
-        throw optionNotConstantError(key)
-    }
-    val result: Expression = plan.collectFirst {
-      case Project(Seq(a: Alias), OneRowRelation()) => a.child
-    }.get
-    result match {
-      case expr if expr.isInstanceOf[Literal] =>
-        // Note: we use 'toString' here instead of using a Cast expression to support some types
-        // of literals where casting to string is not supported.
-        expr.toString
-      case _ =>
-        throw optionNotConstantError(key)
-    }
+  private def resolveOption(kv: (String, Option[Expression])): (String, String) = {
+    val (key, value) = kv
+    value.map { parsed: Expression =>
+      val plan = try {
+        lazy val analyzer = new Analyzer(catalogManager)
+        val analyzed = analyzer.execute(Project(Seq(Alias(parsed, "col")()), OneRowRelation()))
+        analyzer.checkAnalysis(analyzed)
+        ConstantFolding(analyzed)
+      } catch {
+        case _: AnalysisException =>
+          throw optionNotConstantError(key)
+      }
+      val result: Expression = plan.collectFirst {
+        case Project(Seq(a: Alias), OneRowRelation()) => a.child
+      }.get
+      val newValue = result match {
+        case expr if expr.isInstanceOf[Literal] =>
+          // Note: we use 'toString' here instead of using a Cast expression to support some types
+          // of literals where casting to string is not supported.
+          expr.toString
+        case _ =>
+          throw optionNotConstantError(key)
+      }
+      (key, newValue)
+    }.getOrElse((key, ""))
   }
 
   private def optionNotConstantError(key: String): Throwable = {

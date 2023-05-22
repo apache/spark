@@ -20,15 +20,17 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -876,22 +878,30 @@ class DDLParserSuite extends AnalysisTest {
           Seq.empty[Transform],
           Map.empty[String, String],
           Some("json"),
-          Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+          Map.empty,
           None,
           None,
-          None),
+          None,
+          unresolvedOptions = Map(
+            "a" -> Some(Literal(1)),
+            "b" -> Some(Literal(Decimal(0.1))),
+            "c" -> Some(Literal(true)))),
         expectedIfNotExists = false)
     }
     // Test some cases where the provided option value is a constant but non-literal expression.
     val prefix = "create table t (col int) using json options "
     val schema = new StructType().add("col", IntegerType)
+    val analyzer = getAnalyzer
     def createTable(options: Map[String, String]): LogicalPlan = {
-      CreateTable(UnresolvedIdentifier(Seq("t")), schema, Seq.empty[Transform],
+      CreateTable(
+        ResolvedIdentifier(
+          analyzer.currentCatalog,
+          Identifier.of(Array("default"), "t")),
+        schema, Seq.empty[Transform],
         LogicalTableSpec(
           Map.empty[String, String], Some("json"), options, None, None, None, false),
         false)
     }
-    val analyzer = getAnalyzer
     comparePlans(analyzer.execute(parsePlan(
       s"$prefix ('k' = 1 + 2)")),
       createTable(Map("k" -> "3")))
@@ -905,21 +915,21 @@ class DDLParserSuite extends AnalysisTest {
       s"$prefix ('k' = true or false)")),
       createTable(Map("k" -> "true")))
     comparePlans(analyzer.execute(parsePlan(
-      s"$prefix ('optKey' = date_diff(current_date(), current_date()))")),
+      s"$prefix ('k' = date_diff(current_date(), current_date()))")),
       createTable(Map("k" -> "0")))
     comparePlans(analyzer.execute(parsePlan(
-      s"$prefix ('optKey' = date_sub(date'2022-02-02', 1))")),
+      s"$prefix ('k' = date_sub(date'2022-02-02', 1))")),
       createTable(Map("k" -> "2022-02-01")))
     comparePlans(analyzer.execute(parsePlan(
-      s"$prefix ('optKey' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00'))")),
+      s"$prefix ('k' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00'))")),
       createTable(Map("k" -> "2022-02-28 00:00:00.000005")))
     comparePlans(analyzer.execute(parsePlan(
-      s"$prefix ('optKey' = round(cast(2.25 as decimal(5, 3)), 1))")),
-      createTable(Map("k" -> "2.3'")))
+      s"$prefix ('k' = round(cast(2.25 as decimal(5, 3)), 1))")),
+      createTable(Map("k" -> "2.3")))
     // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
     // too narrow to contain the result of the cast.
     comparePlans(analyzer.execute(parsePlan(
-      s"$prefix ('optKey' = round(cast(2.25 as decimal(3, 3)), 1))")),
+      s"$prefix ('k' = round(cast(2.25 as decimal(3, 3)), 1))")),
       createTable(Map("k" -> "null")))
     // Test some cases where the provided option value is a non-constant or invalid expression.
     Seq(
@@ -929,15 +939,11 @@ class DDLParserSuite extends AnalysisTest {
       "('optKey' = raise_error('failure'))"
     ).foreach { options =>
       checkError(
-        exception = parseException(prefix + options),
+        exception = intercept[AnalysisException](analyzer.execute(parsePlan(prefix + options))),
         errorClass = "INVALID_SQL_SYNTAX",
         parameters = Map(
           "inputString" ->
-            "option or property key optKey is invalid; only literal expressions are supported"),
-        context = ExpectedContext(
-          fragment = options,
-          start = prefix.length,
-          stop = (prefix + options).length - 1))
+            "option or property key optKey is invalid; only constant expressions are supported"))
     }
   }
 
@@ -2495,7 +2501,8 @@ class DDLParserSuite extends AnalysisTest {
       location: Option[String],
       comment: Option[String],
       serdeInfo: Option[SerdeInfo],
-      external: Boolean = false)
+      external: Boolean = false,
+      unresolvedOptions: Map[String, Option[Expression]] = Map.empty)
 
   private object TableSpec {
     def apply(plan: LogicalPlan): TableSpec = {
@@ -2511,7 +2518,8 @@ class DDLParserSuite extends AnalysisTest {
             create.tableSpec.location,
             create.tableSpec.comment,
             create.tableSpec.serde,
-            create.tableSpec.external)
+            create.tableSpec.external,
+            unresolvedOptions = create.tableSpec.unresolvedOptions)
         case replace: ReplaceTable =>
           TableSpec(
             replace.name.asInstanceOf[UnresolvedIdentifier].nameParts,
@@ -2522,7 +2530,8 @@ class DDLParserSuite extends AnalysisTest {
             replace.tableSpec.options,
             replace.tableSpec.location,
             replace.tableSpec.comment,
-            replace.tableSpec.serde)
+            replace.tableSpec.serde,
+            unresolvedOptions = replace.tableSpec.unresolvedOptions)
         case ctas: CreateTableAsSelect =>
           TableSpec(
             ctas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
@@ -2534,7 +2543,8 @@ class DDLParserSuite extends AnalysisTest {
             ctas.tableSpec.location,
             ctas.tableSpec.comment,
             ctas.tableSpec.serde,
-            ctas.tableSpec.external)
+            ctas.tableSpec.external,
+            unresolvedOptions = ctas.tableSpec.unresolvedOptions)
         case rtas: ReplaceTableAsSelect =>
           TableSpec(
             rtas.name.asInstanceOf[UnresolvedIdentifier].nameParts,
@@ -2545,7 +2555,8 @@ class DDLParserSuite extends AnalysisTest {
             rtas.tableSpec.options,
             rtas.tableSpec.location,
             rtas.tableSpec.comment,
-            rtas.tableSpec.serde)
+            rtas.tableSpec.serde,
+            unresolvedOptions = rtas.tableSpec.unresolvedOptions)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
             s" from query, got ${other.getClass.getName}.")

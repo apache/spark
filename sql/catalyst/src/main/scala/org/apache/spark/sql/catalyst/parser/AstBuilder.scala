@@ -3251,31 +3251,16 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
-   * Convert a property list into a key-value map.
-   * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
-   */
-  override def visitPropertyList(
-      ctx: PropertyListContext): Map[String, String] = withOrigin(ctx) {
-    val properties = ctx.property.asScala.map { property =>
-      val key = visitPropertyKey(property.key)
-      val value = visitPropertyValue(property.value)
-      key -> value
-    }
-    // Check for duplicate property names.
-    checkDuplicateKeys(properties.toSeq, ctx)
-    properties.toMap
-  }
-
-  /**
    * Parse a key-value map from an [[ExpressionPropertyListContext]], assuming all values are
    * specified.
    */
-  def visitExpressionPropertyList(ctx: ExpressionPropertyListContext): Map[String, String] = {
+  override def visitExpressionPropertyList(
+      ctx: ExpressionPropertyListContext): Map[String, Option[Expression]] = {
     ctx.expressionProperty.asScala.map { property =>
       val key = visitPropertyKey(property.key)
-      val value = if (property.value != null) property.value.getText else ""
+      val value = Option(property.value).map(expression)
       key -> value
-    }
+    }.toMap
   }
 
   override def visitStringLit(ctx: StringLitContext): Token = {
@@ -3312,7 +3297,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   type TableClauses = (
       Seq[Transform], Seq[StructField], Option[BucketSpec], Map[String, String],
-      Map[String, String], Option[String], Option[String], Option[SerdeInfo])
+      Map[String, Option[Expression]], Option[String], Option[String], Option[SerdeInfo])
 
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
@@ -3573,8 +3558,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         ctx.EXTENDED != null)
     }
 
-  def cleanTableProperties(
-      ctx: ParserRuleContext, properties: Map[String, String]): Map[String, String] = {
+  def cleanTableProperties[ValueType](
+      ctx: ParserRuleContext, properties: Map[String, ValueType]): Map[String, ValueType] = {
     import TableCatalog._
     val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
     properties.filter {
@@ -3608,14 +3593,15 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   def cleanTableOptions(
       ctx: ParserRuleContext,
-      options: Map[String, String],
-      location: Option[String]): (Map[String, String], Option[String]) = {
+      options: Map[String, Option[Expression]],
+      location: Option[String]): (Map[String, Option[Expression]], Option[String]) = {
     var path = location
     val filtered = cleanTableProperties(ctx, options).filter {
       case (k, v) if k.equalsIgnoreCase("path") && path.nonEmpty =>
-        throw QueryParsingErrors.duplicatedTablePathsFoundError(path.get, v, ctx)
+        throw QueryParsingErrors.duplicatedTablePathsFoundError(
+          path.get, v.map(_.sql).getOrElse(""), ctx)
       case (k, v) if k.equalsIgnoreCase("path") =>
-        path = Some(v)
+        path = Some(v.map(_.sql).getOrElse(""))
         false
       case _ => true
     }
@@ -3856,8 +3842,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val columns = Option(ctx.createOrReplaceTableColTypeList())
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
-    val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
-      visitCreateTableClauses(ctx.createTableClauses())
+    val (partTransforms, partCols, bucketSpec, properties, unresolvedOptions, location,
+      comment, serdeInfo) = visitCreateTableClauses(ctx.createTableClauses())
 
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
@@ -3871,8 +3857,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
-    val tableSpec = TableSpec(properties, provider, options, location, comment,
-      serdeInfo, external, optionsResolved = false)
+    val tableSpec = TableSpec(properties, provider, options = Map.empty, location, comment,
+      serdeInfo, external, unresolvedOptions = unresolvedOptions)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -3929,8 +3915,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
     val table = visitMultipartIdentifier(ctx.replaceTableHeader.multipartIdentifier())
     val orCreate = ctx.replaceTableHeader().CREATE() != null
-    val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
-      visitCreateTableClauses(ctx.createTableClauses())
+    val (partTransforms, partCols, bucketSpec, properties, unresolvedOptions, location,
+      comment, serdeInfo) = visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.createOrReplaceTableColTypeList())
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
@@ -3941,8 +3927,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
-    val tableSpec = TableSpec(properties, provider, options, location, comment,
-      serdeInfo, external = false, optionsResolved = false)
+    val tableSpec = TableSpec(properties, provider, options = Map.empty, location, comment,
+      serdeInfo, external = false, unresolvedOptions = unresolvedOptions)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
