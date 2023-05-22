@@ -311,7 +311,7 @@ abstract class AvroSuite
 
   test("union stable id") {
     checkUnionStableId(
-      List(Type.INT, Type.NULL,Type.STRING).map(Schema.create(_)),
+      List(Type.INT, Type.NULL, Type.STRING).map(Schema.create(_)),
       "struct<member_int: int, member_string: string>",
       Seq(
         (42, Row(42, null)),
@@ -413,7 +413,8 @@ abstract class AvroSuite
       withSQLConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE.key -> isStableUnionMember.toString) {
         withTempDir { dir =>
           val complexNullUnionType = Schema.createUnion(
-            List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING)).asJava
+            List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING))
+              .asJava
           )
           val fields =
             Seq(new Field("field1", complexNullUnionType, "doc", null.asInstanceOf[AnyVal])).asJava
