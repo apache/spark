@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 /**
  * Helper class for conversions between [[DataType]] and [[proto.DataType]].
  */
-object DataTypeProtoConverter {
+private[sql] object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.NULL => NullType

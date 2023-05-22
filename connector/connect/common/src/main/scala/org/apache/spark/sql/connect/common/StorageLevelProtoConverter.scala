@@ -23,7 +23,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Helper class for conversions between [[StorageLevel]] and [[proto.StorageLevel]].
  */
-object StorageLevelProtoConverter {
+private[sql] object StorageLevelProtoConverter {
   def toStorageLevel(sl: proto.StorageLevel): StorageLevel = {
     StorageLevel(
       useDisk = sl.getUseDisk,

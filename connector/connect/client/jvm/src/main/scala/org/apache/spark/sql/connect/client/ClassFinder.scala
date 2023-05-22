@@ -27,7 +27,7 @@ import ammonite.runtime.SpecialClassLoader
 
 import org.apache.spark.sql.connect.client.Artifact.{InMemory, LocalFile}
 
-trait ClassFinder {
+private[sql] trait ClassFinder {
   def findClasses(): Iterator[Artifact]
 }
 
@@ -35,7 +35,7 @@ trait ClassFinder {
  * A generic [[ClassFinder]] implementation that traverses a specific REPL output directory.
  * @param _rootDir
  */
-class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
+private[sql] class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
   private val rootDir = Paths.get(_rootDir)
   require(rootDir.isAbsolute)
   require(Files.isDirectory(rootDir))
@@ -62,7 +62,7 @@ class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
  * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
  * @param session
  */
-class AmmoniteClassFinder(session: Session) extends ClassFinder {
+private[sql] class AmmoniteClassFinder(session: Session) extends ClassFinder {
 
   override def findClasses(): Iterator[Artifact] = {
     session.frames.iterator.flatMap { frame =>
