@@ -1491,7 +1491,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     dupStreamSideColTest("SHUFFLE_HASH", check)
   }
 
-  test("Using with references to key columns: Full Outer") {
+  test("SPARK-43718: USING with references to key columns: Full Outer") {
     withTempView("t1", "t2") {
       sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
       sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
@@ -1508,7 +1508,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(sql(query), expected)
     }
   }
-  test("Using with references to key columns: Left Outer") {
+
+  test("SPARK-43718: USING with references to key columns: Left Outer") {
     withTempView("t1", "t2") {
       sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
       sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
@@ -1526,7 +1527,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("Using with references to key columns: Right Outer") {
+  test("SPARK-43718: USING with references to key columns: Right Outer") {
     withTempView("t1", "t2") {
       sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
       sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
