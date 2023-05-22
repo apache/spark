@@ -16,6 +16,7 @@
 #
 
 import datetime
+from distutils.version import LooseVersion
 import unittest
 
 from collections import OrderedDict
@@ -49,7 +50,7 @@ from pyspark.sql.types import (
     StructType,
     StructField,
     NullType,
-    TimestampType,
+    MapType,
 )
 from pyspark.errors import PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
@@ -402,6 +403,7 @@ class GroupedApplyInPandasTestsMixin:
         expected = df.toPandas().groupby("id").apply(foo_udf.func).reset_index(drop=True)
         assert_frame_equal(expected, result)
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not happen with pyarrow>=2.0")
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
             self.check_wrong_return_type()
@@ -409,9 +411,9 @@ class GroupedApplyInPandasTestsMixin:
     def check_wrong_return_type(self):
         with self.assertRaisesRegex(
             NotImplementedError,
-            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType",
+            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*StructType",
         ):
-            pandas_udf(lambda pdf: pdf, "id long, v array<timestamp>", PandasUDFType.GROUPED_MAP)
+            pandas_udf(lambda pdf: pdf, "id long, v array<struct<>>", PandasUDFType.GROUPED_MAP)
 
     def test_wrong_args(self):
         with QuietTest(self.sc):
@@ -437,6 +439,7 @@ class GroupedApplyInPandasTestsMixin:
         with self.assertRaisesRegex(ValueError, "Invalid udf.*GROUPED_MAP"):
             df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not happen with pyarrow>=2.0")
     def test_unsupported_types(self):
         with QuietTest(self.sc):
             self.check_unsupported_types()
@@ -444,15 +447,16 @@ class GroupedApplyInPandasTestsMixin:
     def check_unsupported_types(self):
         common_err_msg = "Invalid return type.*grouped map Pandas UDF.*"
         unsupported_types = [
-            StructField("arr_ts", ArrayType(TimestampType())),
-            StructField("struct", StructType([StructField("l", LongType())])),
+            StructField("array_struct", ArrayType(StructType())),
+            StructField("map", MapType(StringType(), LongType())),
         ]
 
         for unsupported_type in unsupported_types:
-            schema = StructType([StructField("id", LongType(), True), unsupported_type])
+            with self.subTest(unsupported_type=unsupported_type.name):
+                schema = StructType([StructField("id", LongType(), True), unsupported_type])
 
-            with self.assertRaisesRegex(NotImplementedError, common_err_msg):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
+                with self.assertRaisesRegex(NotImplementedError, common_err_msg):
+                    pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -731,19 +735,31 @@ class GroupedApplyInPandasTestsMixin:
             (6, 3, "2018-03-21T00:00:00+00:00", [0]),
         ]
 
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
         expected_window = [
             {
-                "start": datetime.datetime(2018, 3, 10, 0, 0),
-                "end": datetime.datetime(2018, 3, 15, 0, 0),
-            },
-            {
-                "start": datetime.datetime(2018, 3, 15, 0, 0),
-                "end": datetime.datetime(2018, 3, 20, 0, 0),
-            },
-            {
-                "start": datetime.datetime(2018, 3, 20, 0, 0),
-                "end": datetime.datetime(2018, 3, 25, 0, 0),
-            },
+                key: (
+                    pd.Timestamp(ts)
+                    .tz_localize(datetime.timezone.utc)
+                    .tz_convert(timezone)
+                    .tz_localize(None)
+                )
+                for key, ts in w.items()
+            }
+            for w in [
+                {
+                    "start": datetime.datetime(2018, 3, 10, 0, 0),
+                    "end": datetime.datetime(2018, 3, 15, 0, 0),
+                },
+                {
+                    "start": datetime.datetime(2018, 3, 15, 0, 0),
+                    "end": datetime.datetime(2018, 3, 20, 0, 0),
+                },
+                {
+                    "start": datetime.datetime(2018, 3, 20, 0, 0),
+                    "end": datetime.datetime(2018, 3, 25, 0, 0),
+                },
+            ]
         ]
 
         expected_key = {

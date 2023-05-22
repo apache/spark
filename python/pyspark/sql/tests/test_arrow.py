@@ -192,11 +192,11 @@ class ArrowTestsMixin:
             + [np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]).astype(t) for t in float_dtypes]
         )
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
     def test_toPandas_fallback_enabled(self):
-        ts = datetime.datetime(2015, 11, 1, 0, 30)
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-            schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
-            df = self.spark.createDataFrame([([ts],)], schema=schema)
+            schema = StructType([StructField("a", ArrayType(StructType()), True)])
+            df = self.spark.createDataFrame([([Row()],)], schema=schema)
             with QuietTest(self.sc):
                 with self.warnings_lock:
                     with warnings.catch_warnings(record=True) as warns:
@@ -209,10 +209,11 @@ class ArrowTestsMixin:
                         ]
                         self.assertTrue(len(user_warns) > 0)
                         self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
-                        assert_frame_equal(pdf, pd.DataFrame({"a": [[ts]]}))
+                        assert_frame_equal(pdf, pd.DataFrame({"a": [[Row()]]}))
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
     def test_toPandas_fallback_disabled(self):
-        schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
+        schema = StructType([StructField("a", ArrayType(StructType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
@@ -221,8 +222,8 @@ class ArrowTestsMixin:
 
                 self.check_error(
                     exception=pe.exception,
-                    error_class="UNSUPPORTED_DATA_TYPE",
-                    message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                    message_parameters={"data_type": "Array of StructType"},
                 )
 
     def test_toPandas_empty_df_arrow_enabled(self):
@@ -767,15 +768,15 @@ class ArrowTestsMixin:
         pdf_col_names = [str(c) for c in pdf.columns]
         self.assertEqual(pdf_col_names, df.columns)
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
     def test_createDataFrame_fallback_enabled(self):
-        ts = datetime.datetime(2015, 11, 1, 0, 30)
         with QuietTest(self.sc):
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
                     # we want the warnings to appear even if this test is run from a subclass
                     warnings.simplefilter("always")
                     df = self.spark.createDataFrame(
-                        pd.DataFrame({"a": [[ts]]}), "a: array<timestamp>"
+                        pd.DataFrame({"a": [[Row()]]}), "a: array<struct<>>"
                     )
                     # Catch and check the last UserWarning.
                     user_warns = [
@@ -783,20 +784,18 @@ class ArrowTestsMixin:
                     ]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
-                    self.assertEqual(df.collect(), [Row(a=[ts])])
+                    self.assertEqual(df.collect(), [Row(a=[Row()])])
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
             with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.createDataFrame(
-                    pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
-                    "a: array<timestamp>",
-                )
+                self.spark.createDataFrame(pd.DataFrame({"a": [[Row()]]}), "a: array<struct<>>")
 
             self.check_error(
                 exception=pe.exception,
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "Array of StructType"},
             )
 
     # Regression test for SPARK-23314

@@ -478,6 +478,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 self.assertListEqual([i, i + 1], f[1])
 
     def test_vectorized_udf_nested_struct(self):
+        df = self.spark.range(2)
+
         nested_type = StructType(
             [
                 StructField("id", IntegerType()),
@@ -488,12 +490,33 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             ]
         )
 
-        for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-            with QuietTest(self.sc):
-                with self.assertRaisesRegex(
-                    Exception, "Invalid return type with scalar Pandas UDFs"
-                ):
-                    pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
+        def func_dict(pser: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"id": pser, "nested": pser.apply(lambda x: {"foo": str(x), "bar": float(x)})}
+            )
+
+        def func_row(pser: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"id": pser, "nested": pser.apply(lambda x: Row(foo=str(x), bar=float(x)))}
+            )
+
+        expected = [
+            Row(udf=Row(id=0, nested=Row(foo="0", bar=0.0))),
+            Row(udf=Row(id=1, nested=Row(foo="1", bar=1.0))),
+        ]
+
+        for f in [func_dict, func_row]:
+            for udf_type, func in [
+                (PandasUDFType.SCALAR, f),
+                (PandasUDFType.SCALAR_ITER, lambda iter: (f(pser) for pser in iter)),
+            ]:
+                with self.subTest(udf_type=udf_type, udf=f.__name__):
+                    result = df.select(
+                        pandas_udf(func, returnType=nested_type, functionType=udf_type)(
+                            col("id")
+                        ).alias("udf")
+                    ).collect()
+                    self.assertEqual(result, expected)
 
     def test_vectorized_udf_map_type(self):
         data = [({},), ({"a": 1},), ({"a": 1, "b": 2},), ({"a": 1, "b": 2, "c": 3},)]
@@ -630,14 +653,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             actual = df.select(g(f(col("id"))).alias("struct")).collect()
             self.assertEqual(expected, actual)
 
+    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not happen with pyarrow>=2.0")
     def test_vectorized_udf_wrong_return_type(self):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegex(
                     NotImplementedError,
-                    "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
+                    "Invalid return type.*scalar Pandas UDF.*ArrayType.*StructType",
                 ):
-                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
+                    pandas_udf(lambda x: x, ArrayType(StructType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         df = self.spark.range(10)
