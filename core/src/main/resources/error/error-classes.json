@@ -3176,14 +3176,14 @@
   "_LEGACY_ERROR_TEMP_1202" : {
     "message" : [
       "Cannot write to '<tableName>', too many data columns:",
-      "Table columns: <tableColumns>.",
+      "Table columns (excluding columns with static partition values): <tableColumns>.",
       "Data columns: <dataColumns>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1203" : {
     "message" : [
       "Cannot write to '<tableName>', not enough data columns:",
-      "Table columns: <tableColumns>.",
+      "Table columns (excluding columns with static partition values): <tableColumns>.",
       "Data columns: <dataColumns>."
     ]
   },

@@ -156,6 +156,54 @@ object ResolveDefaultColumns {
   }
 
   /**
+   * Returns true if the unresolved column is an explicit DEFAULT column reference.
+   */
+  def isExplicitDefaultColumn(col: UnresolvedAttribute): Boolean = {
+    col.name.equalsIgnoreCase(CURRENT_DEFAULT_COLUMN_NAME)
+  }
+
+  /**
+   * Generates the expression of the default value for the given field. If there is no
+   * user-specified default value for this field, returns None.
+   */
+  def getDefaultValueExpr(field: StructField): Option[Expression] = {
+    if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      Some(analyze(field, "INSERT"))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Generates the expression of the default value for the given column. If there is no
+   * user-specified default value for this field, returns None.
+   */
+  def getDefaultValueExpr(attr: Attribute): Option[Expression] = {
+    if (attr.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+      Some(analyze(field, "INSERT"))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Generates the expression of the default value for the given column. If there is no
+   * user-specified default value for this column, returns a null literal.
+   */
+  def getDefaultValueExprOrNullLiteral(attr: Attribute, conf: SQLConf): Option[NamedExpression] = {
+    val defaultExprOpt = if (attr.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+      Some(analyze(field, "INSERT"))
+    } else if (conf.useNullsForMissingDefaultColumnValues) {
+      Some(Literal(null, attr.dataType))
+    } else {
+      None
+    }
+    defaultExprOpt.map(expr => Alias(expr, attr.name)())
+  }
+
+  /**
    * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
    *
    * @param field         represents the DEFAULT column value whose "default" metadata to parse

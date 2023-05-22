@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLiteral
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -36,7 +37,9 @@ object TableOutputResolver {
       expected: Seq[Attribute],
       query: LogicalPlan,
       byName: Boolean,
-      conf: SQLConf): LogicalPlan = {
+      conf: SQLConf,
+      // TODO: Only DS v1 writing will set it to true. We should enable in for DS v2 as well.
+      supportColDefaultValue: Boolean = false): LogicalPlan = {
 
     val actualExpectedCols = expected.map { attr =>
       attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
@@ -49,14 +52,32 @@ object TableOutputResolver {
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
-      reorderColumnsByName(query.output, actualExpectedCols, conf, errors += _)
+      // If a top-level column does not have a corresponding value in the input query, fill with
+      // the column's default value. We need to pass `fillDefaultValue` as true here, if the
+      // `supportColDefaultValue` parameter is also true.
+      reorderColumnsByName(
+        query.output,
+        actualExpectedCols,
+        conf,
+        errors += _,
+        fillDefaultValue = supportColDefaultValue)
     } else {
-      if (actualExpectedCols.size > query.output.size) {
+      // If the target table needs more columns than the input query, fill them with
+      // the columns' default values, if the `supportColDefaultValue` parameter is true.
+      val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
+      val queryOutputCols = if (fillDefaultValue) {
+        query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
+          getDefaultValueExprOrNullLiteral(expectedCol, conf)
+        }
+      } else {
+        query.output
+      }
+      if (actualExpectedCols.size > queryOutputCols.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
           tableName, actualExpectedCols, query)
       }
 
-      resolveColumnsByPosition(query.output, actualExpectedCols, conf, errors += _)
+      resolveColumnsByPosition(queryOutputCols, actualExpectedCols, conf, errors += _)
     }
 
     if (errors.nonEmpty) {
@@ -156,14 +177,22 @@ object TableOutputResolver {
       expectedCols: Seq[Attribute],
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String] = Nil): Seq[NamedExpression] = {
+      colPath: Seq[String] = Nil,
+      fillDefaultValue: Boolean = false): Seq[NamedExpression] = {
     val matchedCols = mutable.HashSet.empty[String]
     val reordered = expectedCols.flatMap { expectedCol =>
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
-        addError(s"Cannot find data for output column '${newColPath.quoted}'")
-        None
+        val defaultExpr = if (fillDefaultValue) {
+          getDefaultValueExprOrNullLiteral(expectedCol, conf)
+        } else {
+          None
+        }
+        if (defaultExpr.isEmpty) {
+          addError(s"Cannot find data for output column '${newColPath.quoted}'")
+        }
+        defaultExpr
       } else if (matched.length > 1) {
         addError(s"Ambiguous column name in the input data: '${newColPath.quoted}'")
         None
