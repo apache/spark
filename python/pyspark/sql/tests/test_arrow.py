@@ -192,7 +192,10 @@ class ArrowTestsMixin:
             + [np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]).astype(t) for t in float_dtypes]
         )
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_toPandas_fallback_enabled(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
             schema = StructType([StructField("a", ArrayType(StructType()), True)])
@@ -211,7 +214,10 @@ class ArrowTestsMixin:
                         self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
                         assert_frame_equal(pdf, pd.DataFrame({"a": [[Row()]]}))
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_toPandas_fallback_disabled(self):
         schema = StructType([StructField("a", ArrayType(StructType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
@@ -768,7 +774,10 @@ class ArrowTestsMixin:
         pdf_col_names = [str(c) for c in pdf.columns]
         self.assertEqual(pdf_col_names, df.columns)
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_createDataFrame_fallback_enabled(self):
         with QuietTest(self.sc):
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
@@ -786,7 +795,10 @@ class ArrowTestsMixin:
                     self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
                     self.assertEqual(df.collect(), [Row(a=[Row()])])
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not fallback with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
             with self.assertRaises(PySparkTypeError) as pe:

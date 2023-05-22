@@ -326,7 +326,10 @@ class CogroupedApplyInPandasTestsMixin:
 
         assert_frame_equal(expected, result)
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not happen with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not happen with pyarrow>=2.0",
+    )
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
             self.check_wrong_return_type()

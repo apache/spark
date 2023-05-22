@@ -403,7 +403,10 @@ class GroupedApplyInPandasTestsMixin:
         expected = df.toPandas().groupby("id").apply(foo_udf.func).reset_index(drop=True)
         assert_frame_equal(expected, result)
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not happen with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not happen with pyarrow>=2.0",
+    )
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
             self.check_wrong_return_type()
@@ -439,7 +442,10 @@ class GroupedApplyInPandasTestsMixin:
         with self.assertRaisesRegex(ValueError, "Invalid udf.*GROUPED_MAP"):
             df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
-    @unittest.skipIf(LooseVersion(pa.__version__) >= "2.0", "will not happen with pyarrow>=2.0")
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not happen with pyarrow>=2.0",
+    )
     def test_unsupported_types(self):
         with QuietTest(self.sc):
             self.check_unsupported_types()
