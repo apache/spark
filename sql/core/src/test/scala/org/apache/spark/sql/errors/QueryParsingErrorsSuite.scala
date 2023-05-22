@@ -620,4 +620,15 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42601",
       parameters = Map("error" -> "'>'", "hint" -> ""))
   }
+
+  test("INVALID_ESC: Escape string must contain only one character") {
+    checkError(
+      exception = parseException("select * from test where test.t like 'pattern%' escape '##'"),
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'##'"),
+      context = ExpectedContext(
+        fragment = "like 'pattern%' escape '##'",
+        start = 32,
+        stop = 58))
+  }
 }
