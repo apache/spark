@@ -473,6 +473,32 @@ object JsonBenchmark extends SqlBasedBenchmark {
         ds.noop()
       }
 
+      def errorTimestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map { i =>
+            s"""{"timestamp":"data${i % 200}"}"""
+          }
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with default format",
+        numIters) { _ =>
+        spark.read.option("inferTimestamp", true).json(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with user-provided format",
+        numIters) { _ =>
+        spark.read.option("inferTimestamp", true).option("timestampFormat",
+          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").json(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with legacy format",
+        numIters) { _ =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+          spark.read.option("inferTimestamp", true).json(errorTimestampStr).noop()
+        }
+      }
+
       readBench.run()
     }
   }

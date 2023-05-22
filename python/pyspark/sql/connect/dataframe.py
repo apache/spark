@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -254,13 +255,17 @@ class DataFrame:
             raise Exception("Cannot cartesian join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot cartesian join when other._plan is empty.")
-
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
 
     crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
+
+    def checkSameSparkSession(self, other: "DataFrame") -> None:
+        if self._session.session_id != other._session.session_id:
+            raise SessionNotSameException("Both Datasets must belong to the same SparkSession")
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
@@ -440,11 +445,6 @@ class DataFrame:
                 error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "cols", "arg_type": type(cols).__name__},
             )
-        if len(_cols) == 0:
-            raise PySparkValueError(
-                error_class="CANNOT_BE_EMPTY",
-                message_parameters={"item": "cols"},
-            )
 
         return DataFrame.withPlan(
             plan.Drop(
@@ -560,7 +560,7 @@ class DataFrame:
             raise Exception("Cannot join when other._plan is empty.")
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
@@ -1005,6 +1005,7 @@ class DataFrame:
                 error_class="MISSING_VALID_PLAN",
                 message_parameters={"operator": "Union"},
             )
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
@@ -1017,6 +1018,7 @@ class DataFrame:
                 error_class="MISSING_VALID_PLAN",
                 message_parameters={"operator": "UnionByName"},
             )
+        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(
                 self._plan,
@@ -2163,6 +2165,9 @@ def _test() -> None:
 
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
     del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
+
+    # TODO(SPARK-43435): should reenable this test
+    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

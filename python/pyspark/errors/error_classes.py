@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` is not supported."
     ]
   },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -228,6 +233,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_TYPE" : {
+    "message" : [
+      "Argument `<arg_name>` should not be a <data_type>."
     ]
   },
   "INVALID_TYPENAME_CALL" : {
@@ -581,6 +591,11 @@ ERROR_CLASSES_JSON = """
       "Cannot start a remote Spark session because there is a regular Spark session already running."
     ]
   },
+  "SESSION_OR_CONTEXT_EXISTS" : {
+    "message" : [
+      "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
   "SHOULD_NOT_DATAFRAME": {
     "message": [
       "Argument `<arg_name>` should not be a DataFrame."
@@ -639,6 +654,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW" : {
+    "message" : [
+      "Single data type <data_type> is not supported with Arrow."
     ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {

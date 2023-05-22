@@ -29,7 +29,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
-private[protobuf] case class ProtobufDataToCatalyst(
+private[sql] case class ProtobufDataToCatalyst(
     child: Expression,
     messageName: String,
     descFilePath: Option[String] = None,
@@ -76,7 +76,8 @@ private[protobuf] case class ProtobufDataToCatalyst(
       messageDescriptor,
       dataType,
       typeRegistry = typeRegistry,
-      emitDefaultValues = protobufOptions.emitDefaultValues
+      emitDefaultValues = protobufOptions.emitDefaultValues,
+      enumsAsInts = protobufOptions.enumsAsInts
     )
   }
 

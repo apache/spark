@@ -62,14 +62,14 @@
       "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
     ]
   },
-  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>."
-    ]
-  },
   "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
     "message" : [
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> is not in defined values for enum: <enumString>."
     ]
   },
   "CANNOT_DECODE_URL" : {
@@ -180,11 +180,21 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Columns aliases are not allowed in <op>."
+    ]
+  },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
+  },
+  "COLUMN_NOT_DEFINED_IN_TABLE" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
@@ -201,6 +211,13 @@
     "message" : [
       "Another instance of this query was just started by a concurrent session."
     ]
+  },
+  "CONCURRENT_STREAM_LOG_UPDATE" : {
+    "message" : [
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
+      "Please make sure only one streaming job runs on a specific checkpoint location at a time."
+    ],
+    "sqlState" : "40000"
   },
   "CONNECT" : {
     "message" : [
@@ -556,6 +573,11 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATE_CLAUSES" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>. Please, remove one of them."
+    ]
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -789,6 +811,23 @@
     ],
     "sqlState" : "21S01"
   },
+  "INSUFFICIENT_TABLE_PROPERTY" : {
+    "message" : [
+      "Can't find table property:"
+    ],
+    "subClass" : {
+      "MISSING_KEY" : {
+        "message" : [
+          "<key>."
+        ]
+      },
+      "MISSING_KEY_PART" : {
+        "message" : [
+          "<key>, <totalAmountOfParts> parts are expected."
+        ]
+      }
+    }
+  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -802,6 +841,18 @@
     "sqlState" : "XX000"
   },
   "INTERNAL_ERROR_EXECUTOR" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_MEMORY" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
     ],
@@ -853,11 +904,23 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_DRIVER_MEMORY" : {
+    "message" : [
+      "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
+    ],
+    "sqlState" : "F0000"
+  },
   "INVALID_EMPTY_LOCATION" : {
     "message" : [
       "The location name cannot be empty string, but `<location>` was given."
     ],
     "sqlState" : "42K05"
+  },
+  "INVALID_EXECUTOR_MEMORY" : {
+    "message" : [
+      "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
+    ],
+    "sqlState" : "F0000"
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
@@ -1016,9 +1079,9 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
-      "AES_SALTED_MAGIC" : {
+      "DATETIME_UNIT" : {
         "message" : [
-          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
+          "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
       "PATTERN" : {
@@ -1248,6 +1311,30 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
+    "message" : [
+      "<cmd> is not supported for v2 tables."
+    ],
+    "sqlState" : "46110"
+  },
+  "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
+    "message" : [
+      "Not supported command in JDBC catalog:"
+    ],
+    "subClass" : {
+      "COMMAND" : {
+        "message" : [
+          "<cmd>"
+        ]
+      },
+      "COMMAND_WITH_PROPERTY" : {
+        "message" : [
+          "<cmd> with property <property>."
+        ]
+      }
+    },
+    "sqlState" : "46110"
   },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
@@ -1675,6 +1762,11 @@
     ],
     "sqlState" : "42703"
   },
+  "UNSET_NONEXISTENT_PROPERTIES" : {
+    "message" : [
+      "Attempted to unset non-existent properties [<properties>] in table <table>."
+    ]
+  },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
       "Unsupported arrow type <typeName>."
@@ -2065,11 +2157,6 @@
       "INSERT OVERWRITE DIRECTORY is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0003" : {
-    "message" : [
-      "Columns aliases are not allowed in <op>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
@@ -2193,11 +2280,6 @@
   "_LEGACY_ERROR_TEMP_0039" : {
     "message" : [
       "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0041" : {
-    "message" : [
-      "Found duplicate clauses: <clauseName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {
@@ -2672,11 +2754,6 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1091" : {
-    "message" : [
-      "Cannot read table property '<key>' as it's corrupted.<details>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1097" : {
     "message" : [
       "The field for corrupt records must be string type and nullable."
@@ -2744,11 +2821,6 @@
       "Sources support continuous: <continuousSources>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1119" : {
-    "message" : [
-      "<cmd> is not supported in JDBC catalog."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1120" : {
     "message" : [
       "Unsupported NamespaceChange <changes> in JDBC catalog."
@@ -2767,11 +2839,6 @@
   "_LEGACY_ERROR_TEMP_1123" : {
     "message" : [
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1124" : {
-    "message" : [
-      "<cmd> is not supported for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1125" : {
@@ -3143,11 +3210,6 @@
       "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1206" : {
-    "message" : [
-      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1207" : {
     "message" : [
       "The duration and time inputs to window must be an integer, long or string literal."
@@ -3264,11 +3326,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1244" : {
-    "message" : [
-      "Attempted to unset non-existent property '<property>' in table '<table>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1245" : {
@@ -3827,11 +3884,6 @@
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2029" : {
-    "message" : [
-      "Not supported rounding mode: <roundMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2030" : {
@@ -4832,7 +4884,7 @@
   },
   "_LEGACY_ERROR_TEMP_2249" : {
     "message" : [
-      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB."
+      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>: <dataSize>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2250" : {

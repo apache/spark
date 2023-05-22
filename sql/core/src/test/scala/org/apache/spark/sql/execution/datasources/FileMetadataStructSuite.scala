@@ -24,6 +24,8 @@ import java.text.SimpleDateFormat
 import org.apache.spark.TestUtils
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1025,6 +1027,95 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         val metadataName = df.select(METADATA_FILE_NAME).as[String].head()
         assert(metadataName == encodedName)
       }
+    }
+  }
+
+  test("SPARK-43422: Keep tags during optimization when adding metadata columns") {
+    withTempPath { path =>
+      spark.range(end = 10).write.format("parquet").save(path.toString)
+
+      // Add the tag to the base Dataframe before selecting a metadata column.
+      val customTag = TreeNodeTag[Boolean]("customTag")
+      val baseDf = spark.read.format("parquet").load(path.toString)
+      val tagsPut = baseDf.queryExecution.analyzed.collect {
+        case rel: LogicalRelation => rel.setTagValue(customTag, true)
+      }
+
+      assert(tagsPut.nonEmpty)
+
+      val dfWithMetadata = baseDf.select("_metadata.row_index")
+
+      // Expect the tag in the analyzed and optimized plan after querying a metadata column.
+      def isTaggedRelation(plan: LogicalPlan): Boolean = plan match {
+        case rel: LogicalRelation => rel.getTagValue(customTag).getOrElse(false)
+        case _ => false
+      }
+
+      assert(dfWithMetadata.queryExecution.analyzed.exists(isTaggedRelation))
+      assert(dfWithMetadata.queryExecution.optimizedPlan.exists(isTaggedRelation))
+    }
+  }
+
+  test("SPARK-43450: Filter on full _metadata column struct") {
+    withTempPath { dir =>
+      val numRows = 10
+      spark.range(end = numRows)
+        .toDF()
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // Get the metadata of a random row. The metadata is unique per row because of row_index.
+      val metadataColumnRow = spark.read.load(dir.getAbsolutePath)
+        .select("_metadata")
+        .collect()
+        .head
+        .getStruct(0)
+
+      // Transform the result into a literal that can be used in an expression.
+      val metadataColumnFields = metadataColumnRow.schema.fields
+        .map(field => lit(metadataColumnRow.getAs[Any](field.name)).as(field.name))
+      val metadataColumnStruct = struct(metadataColumnFields: _*)
+
+      val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
+        .where(col("_metadata").equalTo(lit(metadataColumnStruct)))
+
+      assert(selectSingleRowDf.count() === 1)
+    }
+  }
+
+  test("SPARK-43450: Is not null filter on _metadata column") {
+    withTempPath { dir =>
+      val numRows = 10
+      spark.range(start = 0, end = numRows, step = 1, numPartitions = 1)
+        .toDF()
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // There is only one file, so we will select all rows.
+      val selectAllDf = spark.read.load(dir.getAbsolutePath)
+        .where(not(isnull(col("_metadata"))))
+
+      assert(selectAllDf.count() === numRows)
+    }
+  }
+
+  test("SPARK-43450: Filter on aliased _metadata.row_index") {
+    withTempPath { dir =>
+      val numRows = 10
+      spark.range(start = 0, end = numRows, step = 1, numPartitions = 1)
+        .toDF()
+        .write
+        .format("parquet")
+        .save(dir.getAbsolutePath)
+
+      // There is only one file, so row_index is unique.
+      val selectSingleRowDf = spark.read.load(dir.getAbsolutePath)
+        .select(col("_metadata"), col("_metadata.row_index").as("renamed_row_index"))
+        .where(col("renamed_row_index").equalTo(lit(0)))
+
+      assert(selectSingleRowDf.count() === 1)
     }
   }
 }
