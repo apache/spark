@@ -1289,17 +1289,17 @@
     "subClass" : {
       "LATERAL_WITH_PIVOT" : {
         "message" : [
-          "LATERAL cannot be used together with PIVOT."
+          "LATERAL together with PIVOT."
         ]
       },
       "LATERAL_WITH_UNPIVOT" : {
         "message" : [
-          "LATERAL cannot be used together with UNPIVOT."
+          "LATERAL together with UNPIVOT."
         ]
       },
       "UNPIVOT_WITH_PIVOT" : {
         "message" : [
-          "UNPIVOT cannot be used together with PIVOT."
+          "UNPIVOT together with PIVOT."
         ]
       }
     }
