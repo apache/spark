@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.avro
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
@@ -25,6 +27,7 @@ import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -144,11 +147,28 @@ object SchemaConverters {
           case _ =>
             // Convert complex unions to struct types where field names are member0, member1, etc.
             // This is consistent with the behavior when converting between Avro and Parquet.
+            val use_stable_id = SQLConf.get.getConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE)
+
+            var fieldNameSet : Set[String] = Set()
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
                 val schemaType = toSqlTypeHelper(s, existingRecordNames)
                 // All fields are nullable because only one of them is set at a time
-                StructField(s"member$i", schemaType.dataType, nullable = true)
+
+                val fieldName = if (use_stable_id) {
+                  // Avro's field name may be case sensitive, so field names for two named type
+                  // could be "a" and "A" and we need to distinguish them.
+                  var temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
+                  while (fieldNameSet.contains(temp_name)) {
+                    temp_name = s"${temp_name}_$i"
+                  }
+                  fieldNameSet += temp_name
+                  temp_name
+                } else {
+                  s"member$i"
+                }
+
+                StructField(fieldName, schemaType.dataType, nullable = true)
             }
 
             SchemaType(StructType(fields.toArray), nullable = false)

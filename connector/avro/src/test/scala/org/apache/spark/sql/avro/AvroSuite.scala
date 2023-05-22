@@ -98,6 +98,44 @@ abstract class AvroSuite
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
 
+  def checkUnionStableId(
+    types: List[Schema],
+    expectedSchema: String,
+    fieldsAndRow : Seq[(Any, Row)]): Unit = {
+    withSQLConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE.key -> "true") {
+      withTempDir { dir =>
+        val unionType = Schema.createUnion(
+          types.asJava
+        )
+        val fields =
+          Seq(new Field("field1", unionType, "doc", null.asInstanceOf[AnyVal])).asJava
+        val schema = Schema.createRecord("name", "docs", "namespace", false)
+        schema.setFields(fields)
+        val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+        val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+        dataFileWriter.create(schema, new File(s"$dir.avro"))
+
+        fieldsAndRow.map(_._1).foreach { f =>
+          val avroRec = new GenericData.Record(schema)
+          f match {
+            case a : Array[Byte] =>
+              val fixedSchema = SchemaBuilder.fixed("fixed_name").size(4)
+              avroRec.put("field1", new Fixed(fixedSchema, a));
+            case other =>
+              avroRec.put("field1", other)
+          }
+          dataFileWriter.append(avroRec)
+        }
+        dataFileWriter.flush()
+        dataFileWriter.close()
+
+        val df = spark.read.format("avro").load(s"$dir.avro")
+        assert(df.schema === StructType.fromDDL("field1 " + expectedSchema))
+        assert(df.collect().toSet == fieldsAndRow.map(fr => Row(fr._2)).toSet)
+      }
+    }
+  }
+
   private def getResourceAvroFilePath(name: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
@@ -271,29 +309,138 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-27858 Union type: More than one non-null type") {
-    withTempDir { dir =>
-      val complexNullUnionType = Schema.createUnion(
-        List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING)).asJava)
-      val fields = Seq(
-        new Field("field1", complexNullUnionType, "doc", null.asInstanceOf[AnyVal])).asJava
-      val schema = Schema.createRecord("name", "docs", "namespace", false)
-      schema.setFields(fields)
-      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
-      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-      dataFileWriter.create(schema, new File(s"$dir.avro"))
-      val avroRec = new GenericData.Record(schema)
-      avroRec.put("field1", 42)
-      dataFileWriter.append(avroRec)
-      val avroRec2 = new GenericData.Record(schema)
-      avroRec2.put("field1", "Alice")
-      dataFileWriter.append(avroRec2)
-      dataFileWriter.flush()
-      dataFileWriter.close()
+  test("union stable id") {
+    checkUnionStableId(
+      List(Type.INT, Type.NULL,Type.STRING).map(Schema.create(_)),
+      "struct<member_int: int, member_string: string>",
+      Seq(
+        (42, Row(42, null)),
+        ("Alice", Row(null, "Alice"))))
 
-      val df = spark.read.format("avro").load(s"$dir.avro")
-      assert(df.schema === StructType.fromDDL("field1 struct<member0: int, member1: string>"))
-      assert(df.collect().toSet == Set(Row(Row(42, null)), Row(Row(null, "Alice"))))
+    checkUnionStableId(
+      List( Type.FLOAT, Type.BOOLEAN, Type.BYTES, Type.DOUBLE, Type.LONG).map(Schema.create(_)),
+      "struct<member_float: float, member_boolean: boolean, " +
+        "member_bytes: binary, member_double: double, member_long: long>",
+      Seq(
+        (true, Row(null, true, null, null, null)),
+        (42L, Row(null, null, null, null, 42L)),
+        (42F, Row(42.0, null, null, null, null)),
+       (42D, Row(null, null, null, 42D, null))))
+
+    checkUnionStableId(
+      List(
+        Schema.createArray(Schema.create(Type.FLOAT)),
+        Schema.createMap(Schema.create(Schema.Type.INT))),
+      "struct<member_array: array<float>, member_map: map<string, int>>",
+      Seq())
+
+    checkUnionStableId(
+      List(
+        Schema.createEnum("myenum", "", null, List[String]("e1", "e2").asJava),
+        Schema.createRecord("myrecord", "", null, false,
+          List[Schema.Field](new Schema.Field("field", Schema.createFixed("myfield", "", null, 6)))
+            .asJava),
+        Schema.createRecord("myrecord2", "", null, false,
+          List[Schema.Field](new Schema.Field("field", Schema.create(Type.FLOAT)))
+            .asJava)),
+      "struct<member_myenum: string, member_myrecord: struct<field: binary>, " +
+        "member_myrecord2: struct<field: float>>",
+      Seq())
+
+    // Two array or map is not allowed in union.
+    val e = intercept[Exception] {
+      Schema.createUnion(
+        List(
+          Schema.createArray(Schema.create(Type.FLOAT)),
+          Schema.createArray(Schema.create(Type.STRING))).asJava)
+    }
+    assert(e.getMessage.contains("Duplicate in union"))
+
+    val e2 = intercept[Exception] {
+      Schema.createUnion(
+        List(
+          Schema.createMap(Schema.create(Type.FLOAT)),
+          Schema.createMap(Schema.create(Type.STRING))).asJava)
+    }
+    assert(e2.getMessage.contains("Duplicate in union"))
+
+    // Somehow Avro allows named type "array", but doesn't allow an array type in the same union.
+    val e3 = intercept[Exception] {
+      Schema.createUnion(
+        List(
+          Schema.createArray(Schema.create(Type.FLOAT)),
+          Schema.createFixed("array", "", null, 6)
+        ).asJava
+      )
+    }
+    assert(e3.getMessage.contains("Duplicate in union"))
+
+    val e4 = intercept[Exception] {
+      Schema.createUnion(
+        List(Schema.createFixed("long", "", null, 6)).asJava
+      )
+    }
+    assert(e4.getMessage.contains("Schemas may not be named after primitives"))
+
+    val e5 = intercept[Exception] {
+      Schema.createUnion(
+        List(Schema.createFixed("bytes", "", null, 6)).asJava
+      )
+    }
+    assert(e5.getMessage.contains("Schemas may not be named after primitives"))
+
+    checkUnionStableId(
+      List(
+        Schema.createFixed("MYFIELD2", "", null, 6),
+        Schema.createFixed("myfield1", "", null, 6),
+        Schema.createFixed("myfield2", "", null, 9),
+        Schema.createFixed("myfielD2", "", null, 12)),
+      "struct<member_myfield2: binary, member_myfield1: binary, " +
+        "member_myfield2_2: binary, member_myfield2_3: binary>",
+      Seq())
+
+    checkUnionStableId(
+      List(
+        Schema.createFixed("myfield", "", null, 6),
+        Schema.createFixed("MYFIELD", "", null, 6),
+        Schema.createFixed("myfield_1", "", null, 9)),
+      "struct<member_myfield: binary, member_myfield_1: binary, member_myfield_1_2: binary>",
+      Seq())
+  }
+
+  test("SPARK-27858 Union type: More than one non-null type") {
+    Seq(true, false).foreach { isStableUnionMember =>
+      withSQLConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE.key -> isStableUnionMember.toString) {
+        withTempDir { dir =>
+          val complexNullUnionType = Schema.createUnion(
+            List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING)).asJava
+          )
+          val fields =
+            Seq(new Field("field1", complexNullUnionType, "doc", null.asInstanceOf[AnyVal])).asJava
+          val schema = Schema.createRecord("name", "docs", "namespace", false)
+          schema.setFields(fields)
+          val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+          val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+          dataFileWriter.create(schema, new File(s"$dir.avro"))
+          val avroRec = new GenericData.Record(schema)
+          avroRec.put("field1", 42)
+          dataFileWriter.append(avroRec)
+          val avroRec2 = new GenericData.Record(schema)
+          avroRec2.put("field1", "Alice")
+          dataFileWriter.append(avroRec2)
+          dataFileWriter.flush()
+          dataFileWriter.close()
+
+          val df = spark.read.format("avro").load(s"$dir.avro")
+          if (isStableUnionMember) {
+            assert(df.schema === StructType.fromDDL(
+              "field1 struct<member_int: int, member_string: string>"))
+          } else {
+            assert(df.schema === StructType.fromDDL("field1 struct<member0: int, member1: string>"))
+          }
+          assert(df.collect().toSet == Set(Row(Row(42, null)), Row(Row(null, "Alice"))))
+        }
+      }
     }
   }
 

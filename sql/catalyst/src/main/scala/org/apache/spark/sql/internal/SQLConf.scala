@@ -3413,6 +3413,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val AVRO_STABLE_ID_FOR_UNION_TYPE = buildConf(
+    "spark.sql.avro.enableStableIdentifiersForUnionType")
+    .doc("When Avro is desrialized to SQL schema, the union type is converted to structure in a " +
+      "way that field names of the structure are stable with the type, in most cases.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL =
     buildConf("spark.sql.legacy.parseNullPartitionSpecAsStringLiteral")
       .internal()
