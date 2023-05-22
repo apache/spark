@@ -35,6 +35,9 @@ class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnec
     def check_unsupported_types(self):
         super().check_unsupported_types()
 
+    @unittest.skip("Spark Connect does not support convert UNPARSED to catalyst types.")
+    def test_manual(self):
+        super().test_manual()
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg import *  # noqa: F401
