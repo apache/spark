@@ -265,7 +265,10 @@ class DataFrame:
 
     def checkSameSparkSession(self, other: "DataFrame") -> None:
         if self._session.session_id != other._session.session_id:
-            raise SessionNotSameException("Both Datasets must belong to the same SparkSession")
+            raise SessionNotSameException(
+                error_class="SESSION_NOT_SAME",
+                message_parameters={},
+            )
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
