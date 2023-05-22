@@ -124,9 +124,9 @@ SELECT * FROM testdata LIMIT key > 3
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2400",
+  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "(spark_catalog.default.testdata.key > 3)",
+    "limitExpr" : "\"(key > 3)\"",
     "name" : "limit"
   },
   "queryContext" : [ {
