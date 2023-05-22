@@ -226,3 +226,52 @@ select udf(a), b from values (timestamp('1991-12-06 00:00:00.0'), array(timestam
 struct<udf(a):timestamp,b:array<timestamp>>
 -- !query output
 1991-12-06 00:00:00	[1991-12-06 01:00:00,1991-12-06 12:00:00]
+
+-- !query
+SET spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline	false
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION func_test(input string, arg string)
+RETURNS STRING
+RETURN
+
+WITH null_check AS (
+  SELECT CASE WHEN input IS NULL THEN NULL ELSE INPUT
+         END as new_input),
+  main_cte as (
+  SELECT CASE WHEN arg = 'Y' THEN new_input ELSE new_input END
+   FROM null_check)
+SELECT * FROM main_cte
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT func_test(null, 'Y')
+-- !query schema
+struct<func_test(NULL, Y):string>
+-- !query output
+NULL
+
+
+-- !query
+SET spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline	true
+
+
+-- !query
+DROP TEMPORARY FUNCTION func_test
+-- !query schema
+struct<>
+-- !query output
+
