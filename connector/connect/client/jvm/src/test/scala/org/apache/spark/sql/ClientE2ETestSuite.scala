@@ -924,7 +924,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       case Failure(t) =>
         error = Some("unexpected failure in q1: " + t.toString)
     }
-    q1.onComplete {
+    q2.onComplete {
       case Success(_) =>
         error = Some("q2 shouldn't have finished!")
       case Failure(t) if t.getMessage.contains("cancelled") =>
