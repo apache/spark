@@ -3225,14 +3225,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1348",
-      messageParameters = Map(
-        "name" -> name,
-        "config" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
-  }
-
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3440,6 +3432,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
+  }
+
+  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "config" -> toSQLConf(LEGACY_CTE_PRECEDENCE_POLICY.key),
+        "docroot" -> SPARK_DOC_ROOT))
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {

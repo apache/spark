@@ -5,6 +5,13 @@
     ],
     "sqlState" : "42710"
   },
+  "AMBIGUOUS_ALIAS_IN_NESTED_CTE" : {
+    "message" : [
+      "Name <name> is ambiguous in nested CTE.",
+      "Please set <config> to \"CORRECTED\" so that name defined in inner CTE takes precedence. If set it to \"LEGACY\", outer CTE definitions will take precedence.",
+      "See '<docroot>/sql-migration-guide.html#query-engine'."
+    ]
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -3781,12 +3788,6 @@
   "_LEGACY_ERROR_TEMP_1347" : {
     "message" : [
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1348" : {
-    "message" : [
-      "Name <name> is ambiguous in nested CTE.",
-      "Please set <config> to CORRECTED so that name defined in inner CTE takes precedence. If set it to LEGACY, outer CTE definitions will take precedence. See more details in SPARK-28228."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {
