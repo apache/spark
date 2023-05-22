@@ -90,19 +90,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           "name" -> name,
           "limitExpr" -> toSQLExpr(limitExpr)))
       case e if e.dataType != IntegerType => limitExpr.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2401",
+        errorClass = "INVALID_DATA_TYPE_FOR_LIMIT_LIKE_EXPRESSION",
         messageParameters = Map(
           "name" -> name,
           "dataType" -> e.dataType.catalogString))
       case e =>
         e.eval() match {
           case null => limitExpr.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2402",
+            errorClass = "LIMIT_LIKE_EXPRESSION_IS_NULL",
             messageParameters = Map(
               "name" -> name,
-              "limitExpr" -> limitExpr.sql))
+              "limitExpr" -> toSQLExpr(limitExpr)))
           case v: Int if v < 0 => limitExpr.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2403",
+            errorClass = "LIMIT_LIKE_EXPRESSION_IS_NEGATIVE",
             messageParameters = Map(
               "name" -> name,
               "v" -> v.toString))

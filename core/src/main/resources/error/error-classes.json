@@ -904,6 +904,11 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_DATA_TYPE_FOR_LIMIT_LIKE_EXPRESSION" : {
+    "message" : [
+      "The <name> expression must be integer type, but got <dataType>."
+    ]
+  },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
       "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
@@ -1212,6 +1217,16 @@
         ]
       }
     }
+  },
+  "LIMIT_LIKE_EXPRESSION_IS_NEGATIVE" : {
+    "message" : [
+      "The <name> expression must be equal to or greater than 0, but got <v>."
+    ]
+  },
+  "LIMIT_LIKE_EXPRESSION_IS_NULL" : {
+    "message" : [
+      "The evaluated <name> expression must not be null, but got <limitExpr>."
+    ]
   },
   "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE" : {
     "message" : [
@@ -5219,21 +5234,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2401" : {
-    "message" : [
-      "The <name> expression must be integer type, but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2402" : {
-    "message" : [
-      "The evaluated <name> expression must not be null, but got <limitExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2403" : {
-    "message" : [
-      "The <name> expression must be equal to or greater than 0, but got <v>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2404" : {
