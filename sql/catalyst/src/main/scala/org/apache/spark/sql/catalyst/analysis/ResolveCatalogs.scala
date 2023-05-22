@@ -36,6 +36,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         val CatalogAndIdentifier(catalog, identifier) = nameParts
         ResolvedIdentifier(catalog, identifier)
       }
+    case UnresolvedIdentifierClause(expr, allowTemp) if (expr.resolved) =>
+      UnresolvedIdentifier(IdentifierClauseUtil.evalIdentifierClause(expr), allowTemp)
     case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
       s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
     case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>

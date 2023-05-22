@@ -167,9 +167,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 51,
-    "fragment" : "ALTER TABLE test_change CHANGE invalid_col TYPE INT"
+    "startIndex" : 13,
+    "stopIndex" : 23,
+    "fragment" : "test_change"
   } ]
 }
 

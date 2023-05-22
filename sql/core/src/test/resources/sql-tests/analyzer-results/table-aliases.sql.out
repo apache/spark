@@ -66,8 +66,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 45,
-    "fragment" : "testData AS t(col1, col2, col3)"
+    "stopIndex" : 22,
+    "fragment" : "testData"
   } ]
 }
 
@@ -86,8 +86,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 33,
-    "fragment" : "testData AS t(col1)"
+    "stopIndex" : 22,
+    "fragment" : "testData"
   } ]
 }
 

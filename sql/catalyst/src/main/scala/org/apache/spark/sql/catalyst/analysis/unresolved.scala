@@ -36,6 +36,18 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class UnresolvedException(function: String)
   extends AnalysisException(s"Invalid call to $function on unresolved object")
 
+case class PlanWithUnresolvedIdentifier(identifierExpr: Expression,
+                                   planBuilder: Seq[String] => LogicalPlan)
+  extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+abstract class UnresolvedRelationOrIdentifierClause
+  extends LeafNode with NamedRelation
+
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
@@ -46,7 +58,7 @@ case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false)
-  extends LeafNode with NamedRelation {
+  extends UnresolvedRelationOrIdentifierClause {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
@@ -174,6 +186,33 @@ object UnresolvedTVFAliases {
 }
 
 /**
+ * A table-valued function with output column aliases, e.g.
+ * {{{
+ *   // Assign alias names
+ *   select t.a from identifier('range')(10) t(a);
+ * }}}
+ *
+ * @param identExpr user-specified name of the table-valued function
+ * @param child logical plan of the table-valued function
+ * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
+ *                    to rename the output columns.
+ */
+case class UnresolvedTVFAliasesIdentifierClause(
+    identExpr: Expression,
+    child: LogicalPlan,
+    outputNames: Seq[String]) extends UnaryNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
@@ -274,6 +313,99 @@ object UnresolvedAttribute {
     nameParts += tmp.mkString
     nameParts.toSeq
   }
+}
+
+/**
+ * Holds an identifier clause for an attribute that has yet to be resolved.
+ */
+case class UnresolvedAttributeIdentifierClause(expr: Expression)
+  extends Expression with Unevaluable {
+
+  override def children: Seq[Expression] = Seq(expr)
+
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
+
+  override def prettyName: String = "IDENTIFIER"
+  override def toString: String = {
+    s"'(${children.mkString(", ")})"
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
+  UnresolvedAttributeIdentifierClause = {
+      copy(expr = newChildren.head)
+  }
+}
+
+case class UnresolvedFunctionIdentifierClause(
+    identExpr: Expression,
+    arguments: Seq[Expression],
+    isDistinct: Boolean,
+    filter: Option[Expression] = None,
+    ignoreNulls: Boolean = false)
+  extends Expression with Unevaluable {
+
+  override def children: Seq[Expression] = arguments ++ filter.toSeq
+
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
+
+  override def prettyName: String = identExpr.toString
+  override def toString: String = {
+    val distinct = if (isDistinct) "distinct " else ""
+    s"'${identExpr.toString}($distinct${children.mkString(", ")})"
+  }
+
+  override protected def withNewChildrenInternal
+  (newChildren: IndexedSeq[Expression]): UnresolvedFunctionIdentifierClause = {
+    if (filter.isDefined) {
+      copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+    } else {
+      copy(arguments = newChildren)
+    }
+  }
+}
+
+/**
+ * A table-valued function, e.g.
+ * {{{
+ *   select id from range(10);
+ * }}}
+ *
+ * @param identExpr user-specified expression with teh name of this table-value function
+ * @param functionArgs list of function arguments
+ */
+case class UnresolvedTableValuedFunctionIdentifierClause(
+    identExpr: Expression,
+    functionArgs: Seq[Expression])
+  extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
+}
+
+/**
+ * Holds the name of a relation that has yet to be looked up in a catalog.
+ *
+ * @param expr multipartIdentifier table name
+ */
+case class UnresolvedRelationIdentifierClause(expr: Expression)
+  extends UnresolvedRelationOrIdentifierClause {
+
+  override def name: String = throw new UnresolvedException("name")
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
 }
 
 /**

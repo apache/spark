@@ -1299,7 +1299,7 @@ class PlanResolutionSuite extends AnalysisTest {
                   | |    |-- x: integer (nullable = true)
                   | |    |-- y: integer (nullable = true)
                   |""".stripMargin),
-            context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
+            context = ExpectedContext(fragment = tblName, start = 12, stop = 18))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1383,7 +1383,7 @@ class PlanResolutionSuite extends AnalysisTest {
                   | |    |-- x: integer (nullable = true)
                   | |    |-- y: integer (nullable = true)
                   |""".stripMargin),
-            context = ExpectedContext(fragment = sql, start = 0, stop = 55))
+            context = ExpectedContext(fragment = tblName, start = 12, stop = 18))
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(
@@ -2149,7 +2149,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
       errorClass = "_LEGACY_ERROR_TEMP_2309",
       parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
-      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
+      context = ExpectedContext(fragment = "testcat.tab", start = 11, stop = 21))
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
@@ -2161,7 +2161,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
       errorClass = "_LEGACY_ERROR_TEMP_2309",
       parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
-      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
+      context = ExpectedContext(fragment = "testcat.tab", start = 11, stop = 21))
 
     val sql4 =
       """

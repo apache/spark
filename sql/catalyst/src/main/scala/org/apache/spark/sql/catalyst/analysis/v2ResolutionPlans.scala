@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -117,6 +117,8 @@ case class UnresolvedFieldPosition(position: ColumnPosition) extends FieldPositi
   override lazy val resolved = false
 }
 
+abstract class UnresolvedFunctionNameOrIdentifierClause extends LeafNode
+
 /**
  * Holds the name of a function that has yet to be looked up. It will be resolved to
  * [[ResolvedPersistentFunc]] or [[ResolvedNonPersistentFunc]] during analysis of function-related
@@ -127,22 +129,50 @@ case class UnresolvedFunctionName(
     commandName: String,
     requirePersistent: Boolean,
     funcTypeMismatchHint: Option[String],
-    possibleQualifiedName: Option[Seq[String]] = None) extends LeafNode {
+    possibleQualifiedName: Option[Seq[String]] = None)
+  extends UnresolvedFunctionNameOrIdentifierClause {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
 
 /**
+ * Holds the name of a function in orm of a String that has yet to be looked up.
+ * It will be resolved to [[UnresolvedFunctionName]] during analysis of function-related
+ * commands such as `DESCRIBE FUNCTION name`.
+ */
+case class UnresolvedFunctionNameIdentifierClause(
+                                   expr: Expression,
+                                   commandName: String,
+                                   requirePersistent: Boolean,
+                                   funcTypeMismatchHint: Option[String],
+                                   possibleQualifiedName: Option[Seq[String]] = None)
+  extends UnresolvedFunctionNameOrIdentifierClause {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
+}
+
+abstract class UnresolvedIdentifierOrClause extends LeafNode
+/**
  * Holds the name of a table/view/function identifier that we need to determine the catalog. It will
  * be resolved to [[ResolvedIdentifier]] during analysis.
  */
 case class UnresolvedIdentifier(nameParts: Seq[String], allowTemp: Boolean = false)
-  extends LeafNode {
+  extends UnresolvedIdentifierOrClause {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
 
+/**
+ * Holds the name of a table/view/function identifier that we need to determine the catalog. It will
+ * be resolved to [[UnresolvedIdentifier]] during analysis.
+ */
+case class UnresolvedIdentifierClause(expr: Expression, allowTemp: Boolean = false)
+  extends UnresolvedIdentifierOrClause {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
 
 /**
  * A resolved leaf node whose statistics has no meaning.
