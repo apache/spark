@@ -25,35 +25,51 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class UDTOpsParityTests(
     UDTOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_eq(self):
         super().test_eq()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_from_to_pandas(self):
         super().test_from_to_pandas()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_ge(self):
         super().test_ge()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_gt(self):
         super().test_gt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_isnull(self):
         super().test_isnull()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_le(self):
         super().test_le()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_lt(self):
         super().test_lt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43702): Fix pyspark.sql.pandas.types.to_arrow_type to work with Spark Connect."
+    )
     def test_ne(self):
         super().test_ne()
 
