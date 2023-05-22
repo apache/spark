@@ -33,7 +33,7 @@ import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
-import org.apache.spark.deploy.k8s.Config.WAIT_FOR_APP_COMPLETION
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.submit.Client.submissionId
@@ -223,6 +223,27 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
+  }
+
+  test("SPARK-43657: created config map should contain sparkConfDir config name") {
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    submissionClient.run()
+    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
+    val configMaps = otherCreatedResources.toArray
+      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
+    assert(configMaps.nonEmpty)
+    val configMap = configMaps.head
+    assert(configMap.getMetadata.getName ===
+      KubernetesClientUtils.configMapNameDriver)
+    assert(configMap.getImmutable())
+    assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
+    val expectedKV =
+      s"${SPARK_CONF_DIR_CONFIG_MAP_NAME.key}=${KubernetesClientUtils.configMapNameDriver}"
+    assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(expectedKV))
   }
 
   test("SPARK-37331: The client should create Kubernetes resources with pre resources") {

@@ -58,7 +58,6 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
-  private val disableConfigMap = kubernetesConf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)
   private val memoryOverheadFactor = if (kubernetesConf.contains(EXECUTOR_MEMORY_OVERHEAD_FACTOR)) {
     kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
   } else {
@@ -101,10 +100,13 @@ private[spark] class BasicExecutorFeatureStep(
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
-    val configMapName = KubernetesClientUtils.configMapNameExecutor
-    val confFilesMap = KubernetesClientUtils
-      .buildSparkConfDirFilesMap(configMapName, kubernetesConf.sparkConf, Map.empty)
-    val keyToPaths = KubernetesClientUtils.buildKeyToPathObjects(confFilesMap)
+    val configMapName = kubernetesConf.sparkConf
+      .get(SPARK_CONF_DIR_CONFIG_MAP_NAME).getOrElse({
+      logDebug(s"${SPARK_CONF_DIR_CONFIG_MAP_NAME.key} is not set, this is running as k8s-client" +
+        s" mode. Use the default configMap name for executor")
+      KubernetesClientUtils.configMapNameExecutor
+    })
+
     // According to
     // https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names,
     // hostname must be no longer than `KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH`(63) characters,
@@ -204,9 +206,7 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
-    val executorContainerWithConfVolume = if (disableConfigMap) {
-      executorContainer
-    } else {
+    val executorContainerWithConfVolume = {
       new ContainerBuilder(executorContainer)
         .addNewVolumeMount()
           .withName(SPARK_CONF_VOLUME_EXEC)
@@ -271,16 +271,13 @@ private[spark] class BasicExecutorFeatureStep(
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
-    val executorPod = if (disableConfigMap) {
-      executorPodBuilder.endSpec().build()
-    } else {
+    val executorPod = {
       executorPodBuilder
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME_EXEC)
           .withNewConfigMap()
-            .withItems(keyToPaths.asJava)
             .withName(configMapName)
-            .endConfigMap()
+          .endConfigMap()
           .endVolume()
         .endSpec()
       .build()

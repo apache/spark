@@ -356,7 +356,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
-  test("SPARK-34316 Disable configmap volume on executor pod's container") {
+  ignore("SPARK-34316 Disable configmap volume on executor pod's container") {
     baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
     val baseDriverPod = SparkPod.initialPod()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
@@ -377,7 +377,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
-  test("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
+  ignore("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
     baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
     val baseDriverPod = SparkPod.initialPod()
     val rp = new ResourceProfileBuilder().build()

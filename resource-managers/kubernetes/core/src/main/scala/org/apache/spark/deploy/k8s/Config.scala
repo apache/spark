@@ -165,6 +165,16 @@ private[spark] object Config extends Logging {
       .checkValue(_ <= 1048576, "Must have at most 1048576 bytes")
       .createWithDefault(1048576) // 1.0 MiB
 
+  val SPARK_CONF_DIR_CONFIG_MAP_NAME =
+    ConfigBuilder("spark.kubernetes.sparkConfDir.configMapName")
+      .internal()
+      .doc("Name of the config map that would be mounted as driver and executor's " +
+        "spark conf dir. This is used internally and propagated from spark-submit client to " +
+        "driver pod.")
+      .version("3.5.0")
+      .stringConf
+      .createOptional
+
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")
       .doc("Interval between executor roll operations. To disable, set 0 (default)")
@@ -378,7 +388,9 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
     ConfigBuilder("spark.kubernetes.executor.disableConfigMap")
-      .doc("If true, disable ConfigMap creation for executors.")
+      .doc("If true, disable ConfigMap creation for executors. Deprecated since 3.5.0 as spark " +
+        "will propagate config map from the driver pod to executor pod, which wouldn't create " +
+        "new config map.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
