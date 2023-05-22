@@ -88,7 +88,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         errorClass = "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
         messageParameters = Map(
           "name" -> name,
-          "limitExpr" -> limitExpr.sql))
+          "limitExpr" -> toSQLExpr(limitExpr)))
       case e if e.dataType != IntegerType => limitExpr.failAnalysis(
         errorClass = "_LEGACY_ERROR_TEMP_2401",
         messageParameters = Map(

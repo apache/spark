@@ -143,7 +143,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END",
+    "limitExpr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
     "name" : "limit"
   },
   "queryContext" : [ {
@@ -163,7 +163,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "CASE WHEN (_nondeterministic < CAST(0.5BD AS DOUBLE)) THEN CAST(NULL AS BIGINT) END",
+    "limitExpr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
     "name" : "offset"
   },
   "queryContext" : [ {
