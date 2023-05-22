@@ -20,13 +20,14 @@ from typing import Optional
 
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 import pyspark.sql.connect.proto as proto
-from pyspark.testing.connectutils import should_test_connect
+from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
     import pandas as pd
     import pyarrow as pa
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientTestCase(unittest.TestCase):
     def test_user_agent_passthrough(self):
         client = SparkConnectClient("sc://foo/;user_agent=bar")
@@ -115,4 +116,12 @@ class MockService:
 
 
 if __name__ == "__main__":
-    unittest.main()
+    from pyspark.sql.tests.connect.client.test_client import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

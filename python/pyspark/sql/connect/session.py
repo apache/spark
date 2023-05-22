@@ -617,11 +617,28 @@ class SparkSession:
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
         and only relevant for testing.
+
         Returns
         -------
         :class:`SparkConnectClient`
         """
         return self._client
+
+    def addArtifacts(self, *path: str) -> None:
+        """
+        Add artifact(s) to the client session. Currently only local files with .jar extension is
+        supported.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        *path : tuple of str
+            Artifact's URIs to add.
+        """
+        self._client.add_artifacts(*path)
+
+    addArtifact = addArtifacts
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
