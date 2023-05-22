@@ -278,7 +278,7 @@ object ShuffleExchangeExec {
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
-      case RangePartitioning(sortingExpressions, numPartitions) =>
+      case RangePartitioning(sortingExpressions, numPartitions, needClusteredDistribution) =>
         def prepareRangePartitioner(orderingExpressions: Seq[SortOrder]):
         RangePartitioner[InternalRow, Null] = {
           // Extract only fields used for sorting to avoid collecting large fields that does not
@@ -309,8 +309,7 @@ object ShuffleExchangeExec {
         rangeSortingExprs = Some(sortingExpressions)
         val partitioner = prepareRangePartitioner(sortingExpressions)
         val minPartitionNum = SQLConf.get.rangePartitionMinPartitionNum
-        if (minPartitionNum > 0 &&
-          !newPartitioning.asInstanceOf[RangePartitioning].needClusteredDistribution &&
+        if (minPartitionNum > 0 && !needClusteredDistribution &&
           partitioner.numPartitions < minPartitionNum) {
           rangeSortingExprs =
             Some(sortingExpressions :+ SortOrder(Rand(Utils.random.nextLong), Ascending))
@@ -342,7 +341,7 @@ object ShuffleExchangeExec {
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
-      case RangePartitioning(_, _) =>
+      case RangePartitioning(_, _, _) =>
         val projection =
           UnsafeProjection.create(rangeSortingExprs.get.map(_.child), outputAttributes)
         projection.initialize(index)

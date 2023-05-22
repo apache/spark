@@ -22,7 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -396,14 +396,15 @@ object KeyGroupedPartitioning {
  * This class extends expression primarily so that transformations over expression will descend
  * into its child.
  */
-case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
+case class RangePartitioning(
+    ordering: Seq[SortOrder],
+    numPartitions: Int,
+    var needClusteredDistribution: Boolean = false)
   extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[SortOrder] = ordering
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
-
-  var needClusteredDistribution = false
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -448,6 +449,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RangePartitioning =
     copy(ordering = newChildren.asInstanceOf[Seq[SortOrder]])
+
+  override def toString: String = prettyName + truncatedString(
+    flatArguments.take(2).toSeq, "(", ", ", ")", SQLConf.get.maxToStringFields)
 }
 
 /**

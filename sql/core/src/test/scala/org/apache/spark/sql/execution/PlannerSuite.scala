@@ -993,7 +993,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val projects = collect(planned) { case p: ProjectExec => p }
       assert(projects.exists(_.outputPartitioning match {
-        case RangePartitioning(Seq(SortOrder(ar: AttributeReference, _, _, _)), _) =>
+        case RangePartitioning(Seq(SortOrder(ar: AttributeReference, _, _, _)), _, _) =>
           ar.name == "id1"
         case _ => false
       }))
