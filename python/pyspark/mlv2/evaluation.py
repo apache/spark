@@ -26,7 +26,6 @@ import torcheval.metrics as torchmetrics
 
 
 class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
-
     def __init__(self, metricName, labelCol, predictionCol):
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)

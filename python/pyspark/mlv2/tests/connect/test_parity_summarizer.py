@@ -22,10 +22,7 @@ from pyspark.mlv2.tests.test_summarizer import SummarizerTestsMixin
 
 class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.remote("local[2]")
-                .getOrCreate()
-        )
+        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()

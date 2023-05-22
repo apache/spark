@@ -20,7 +20,6 @@ from pyspark.mlv2.util import aggregate_dataframe
 
 
 class SummarizerAggState:
-
     def __init__(self, input_array):
         self.min_values = input_array.copy()
         self.max_values = input_array.copy()
@@ -57,9 +56,14 @@ class SummarizerAggState:
                 result["mean"] = self.sum_values / self.count
             if metric == "std":
                 if self.count <= 1:
-                    raise ValueError("Standard deviation evaluation requires more than one row data.")
+                    raise ValueError(
+                        "Standard deviation evaluation requires more than one row data."
+                    )
                 result["std"] = np.sqrt(
-                    ((self.square_sum_values / self.count) - np.square(self.sum_values / self.count))
+                    (
+                        (self.square_sum_values / self.count)
+                        - np.square(self.sum_values / self.count)
+                    )
                     * (self.count / (self.count - 1))
                 )
 

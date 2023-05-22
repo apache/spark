@@ -69,9 +69,9 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         raise NotImplementedError()
 
     def fit(
-            self,
-            dataset: Union[DataFrame, pd.DataFrame],
-            params: Optional["ParamMap"] = None,
+        self,
+        dataset: Union[DataFrame, pd.DataFrame],
+        params: Optional["ParamMap"] = None,
     ) -> Union[M, List[M]]:
         """
         Fits a model to the input dataset with optional parameters.
@@ -159,7 +159,7 @@ class Transformer(Params, metaclass=ABCMeta):
             dataset,
             input_col_name=input_col_name,
             transform_fn=transform_fn,
-            output_cols=output_cols
+            output_cols=output_cols,
         )
 
 

@@ -21,12 +21,8 @@ from pyspark.mlv2.tests.test_feature import FeatureTestsMixin
 
 
 class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
-
     def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.remote("local[2]")
-                .getOrCreate()
-        )
+        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()

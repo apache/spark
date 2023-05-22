@@ -49,7 +49,6 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
 
 
 class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
-
     def __init__(self, max_abs_values):
         super().__init__()
         self.max_abs_values = max_abs_values
@@ -62,7 +61,7 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
 
     def _get_transform_fn(self):
         max_abs_values = self.max_abs_values
-        max_abs_values_zero_cond = (max_abs_values == 0.0)
+        max_abs_values_zero_cond = max_abs_values == 0.0
 
         def transform_fn(series):
             def map_value(x):
@@ -97,7 +96,6 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
 
 
 class StandardScalerModel(Model, HasInputCol, HasOutputCol):
-
     def __init__(self, mean_values, std_values):
         super().__init__()
         self.mean_values = mean_values

@@ -22,11 +22,11 @@ from pyspark.sql.functions import col, pandas_udf
 
 
 def aggregate_dataframe(
-        dataframe,
-        input_col_names,
-        local_agg_fn,
-        merge_agg_state,
-        agg_state_to_result,
+    dataframe,
+    input_col_names,
+    local_agg_fn,
+    merge_agg_state,
+    agg_state_to_result,
 ):
     """
     The function can be used to run arbitrary aggregation logic on a spark dataframe
@@ -70,6 +70,7 @@ def aggregate_dataframe(
         col_type = col_types[col_name]
         if col_type == "vector":
             from pyspark.ml.functions import vector_to_array
+
             # pandas UDF does not support vector type for now,
             # we convert it into vector type
             dataframe = dataframe.withColumn(col_name, vector_to_array(col_name))
@@ -91,9 +92,9 @@ def aggregate_dataframe(
             pickled_state = None
         else:
             pickled_state = cloudpickle.dumps(state)
-        yield pd.DataFrame({'state': [pickled_state]})
+        yield pd.DataFrame({"state": [pickled_state]})
 
-    result_pdf = dataframe.mapInPandas(compute_state, schema='state binary').toPandas()
+    result_pdf = dataframe.mapInPandas(compute_state, schema="state binary").toPandas()
 
     merged_state = None
     for state in result_pdf.state:
@@ -109,10 +110,10 @@ def aggregate_dataframe(
 
 
 def transform_dataframe_column(
-        dataframe,
-        input_col_name,
-        transform_fn,
-        output_cols,
+    dataframe,
+    input_col_name,
+    transform_fn,
+    output_cols,
 ):
     """
     Transform specified column of the input spark dataframe or pandas dataframe,
@@ -150,8 +151,8 @@ def transform_dataframe_column(
 
     if len(output_cols) > 1:
         output_col_name = "__spark_ml_transformer_output_tmp__"
-        spark_udf_return_type = (
-            ",".join([f"{col_name} {col_type}" for col_name, col_type in output_cols])
+        spark_udf_return_type = ",".join(
+            [f"{col_name} {col_type}" for col_name, col_type in output_cols]
         )
     else:
         output_col_name, spark_udf_return_type = output_cols[0]
@@ -174,13 +175,12 @@ def transform_dataframe_column(
 
     if input_col_type == "vector":
         from pyspark.ml.functions import vector_to_array
+
         # pandas UDF does not support vector type for now,
         # we convert it into vector type
         input_col = vector_to_array(input_col)
 
-    result_spark_df = dataframe.withColumn(
-        output_col_name, transform_fn_pandas_udf(input_col)
-    )
+    result_spark_df = dataframe.withColumn(output_col_name, transform_fn_pandas_udf(input_col))
 
     if len(output_cols) > 1:
         return result_spark_df.select(

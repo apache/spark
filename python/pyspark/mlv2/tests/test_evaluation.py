@@ -23,13 +23,15 @@ from pyspark.sql import SparkSession
 
 
 class EvaluationTestsMixin:
-
     def test_regressor_evaluator(self):
-        df1 = self.spark.createDataFrame([
-            (0.5, 1.0),
-            (-0.5, -0.8),
-            (2.0, 3.0),
-        ], schema=['label', 'prediction'])
+        df1 = self.spark.createDataFrame(
+            [
+                (0.5, 1.0),
+                (-0.5, -0.8),
+                (2.0, 3.0),
+            ],
+            schema=["label", "prediction"],
+        )
 
         local_df1 = df1.toPandas()
 
@@ -59,12 +61,8 @@ class EvaluationTestsMixin:
 
 
 class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
-
     def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.master("local[2]")
-                .getOrCreate()
-        )
+        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()
