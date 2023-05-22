@@ -904,11 +904,6 @@
     ],
     "sqlState" : "42000"
   },
-  "INVALID_DATA_TYPE_FOR_LIMIT_LIKE_EXPRESSION" : {
-    "message" : [
-      "The <name> expression must be integer type, but got <dataType>."
-    ]
-  },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
       "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
@@ -1218,20 +1213,32 @@
       }
     }
   },
-  "LIMIT_LIKE_EXPRESSION_IS_NEGATIVE" : {
+  "INVALID_LIMIT_LIKE_EXPRESSION" : {
     "message" : [
-      "The <name> expression must be equal to or greater than 0, but got <v>."
-    ]
-  },
-  "LIMIT_LIKE_EXPRESSION_IS_NULL" : {
-    "message" : [
-      "The evaluated <name> expression must not be null, but got <limitExpr>."
-    ]
-  },
-  "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE" : {
-    "message" : [
-      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
-    ]
+      "The limit like expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "IS_UNFOLDABLE" : {
+        "message" : [
+          "The <name> expression must evaluate to a constant value."
+        ]
+      },
+      "DATA_TYPE" : {
+        "message" : [
+          "The <name> expression must be integer type, but got <dataType>."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "The <name> expression must be equal to or greater than 0, but got <v>."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "The evaluated <name> expression must not be null."
+        ]
+      }
+    }
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [

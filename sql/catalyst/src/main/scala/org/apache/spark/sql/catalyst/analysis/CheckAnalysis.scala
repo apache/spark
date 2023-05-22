@@ -85,26 +85,28 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
-        errorClass = "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
+        errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
         messageParameters = Map(
           "name" -> name,
-          "limitExpr" -> toSQLExpr(limitExpr)))
+          "expr" -> toSQLExpr(limitExpr)))
       case e if e.dataType != IntegerType => limitExpr.failAnalysis(
-        errorClass = "INVALID_DATA_TYPE_FOR_LIMIT_LIKE_EXPRESSION",
+        errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
         messageParameters = Map(
           "name" -> name,
+          "expr" -> toSQLExpr(limitExpr),
           "dataType" -> e.dataType.catalogString))
       case e =>
         e.eval() match {
           case null => limitExpr.failAnalysis(
-            errorClass = "LIMIT_LIKE_EXPRESSION_IS_NULL",
+            errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
             messageParameters = Map(
               "name" -> name,
-              "limitExpr" -> toSQLExpr(limitExpr)))
+              "expr" -> toSQLExpr(limitExpr)))
           case v: Int if v < 0 => limitExpr.failAnalysis(
-            errorClass = "LIMIT_LIKE_EXPRESSION_IS_NEGATIVE",
+            errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
             messageParameters = Map(
               "name" -> name,
+              "expr" -> toSQLExpr(limitExpr),
               "v" -> v.toString))
           case _ => // OK
         }

@@ -54,8 +54,9 @@ SELECT * FROM testdata LIMIT -1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_NEGATIVE",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "messageParameters" : {
+    "expr" : "\"-1\"",
     "name" : "limit",
     "v" : "-1"
   },
@@ -74,8 +75,9 @@ SELECT * FROM testData TABLESAMPLE (-1 ROWS)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_NEGATIVE",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "messageParameters" : {
+    "expr" : "\"-1\"",
     "name" : "limit",
     "v" : "-1"
   },
@@ -104,9 +106,9 @@ SELECT * FROM testdata LIMIT CAST(NULL AS INT)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_NULL",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
   "messageParameters" : {
-    "limitExpr" : "\"CAST(NULL AS INT)\"",
+    "expr" : "\"CAST(NULL AS INT)\"",
     "name" : "limit"
   },
   "queryContext" : [ {
@@ -124,9 +126,9 @@ SELECT * FROM testdata LIMIT key > 3
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "\"(key > 3)\"",
+    "expr" : "\"(key > 3)\"",
     "name" : "limit"
   },
   "queryContext" : [ {
@@ -144,9 +146,10 @@ SELECT * FROM testdata LIMIT true
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_DATA_TYPE_FOR_LIMIT_LIKE_EXPRESSION",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "messageParameters" : {
     "dataType" : "boolean",
+    "expr" : "\"true\"",
     "name" : "limit"
   }
 }
@@ -157,9 +160,10 @@ SELECT * FROM testdata LIMIT 'a'
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_DATA_TYPE_FOR_LIMIT_LIKE_EXPRESSION",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "messageParameters" : {
     "dataType" : "string",
+    "expr" : "\"a\"",
     "name" : "limit"
   },
   "queryContext" : [ {

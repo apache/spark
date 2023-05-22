@@ -629,7 +629,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "an evaluated limit class must not be null",
     testRelation.limit(Literal(null, IntegerType)),
-    "The evaluated limit expression must not be null, but got " :: Nil
+    "The limit like expression \"NULL\" is invalid. " +
+      "The evaluated limit expression must not be null." :: Nil
   )
 
   errorTest(
@@ -653,7 +654,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "an evaluated offset class must not be null",
     testRelation.offset(Literal(null, IntegerType)),
-    "The evaluated offset expression must not be null, but got " :: Nil
+    "The limit like expression \"NULL\" is invalid. " +
+      "The evaluated offset expression must not be null." :: Nil
   )
 
   errorTest(
