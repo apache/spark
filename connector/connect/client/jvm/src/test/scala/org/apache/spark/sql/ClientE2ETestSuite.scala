@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,7 +26,6 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import io.grpc.StatusRuntimeException
-import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -205,7 +205,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
           .builder()
           .port(port)
           .build())
-      .build()
+      .create()
 
     val df2 = spark2.range(10).limit(3)
 

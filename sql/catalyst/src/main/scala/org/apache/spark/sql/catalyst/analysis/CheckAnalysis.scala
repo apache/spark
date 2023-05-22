@@ -85,10 +85,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2400",
+        errorClass = "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
         messageParameters = Map(
           "name" -> name,
-          "limitExpr" -> limitExpr.sql))
+          "limitExpr" -> toSQLExpr(limitExpr)))
       case e if e.dataType != IntegerType => limitExpr.failAnalysis(
         errorClass = "_LEGACY_ERROR_TEMP_2401",
         messageParameters = Map(
@@ -138,7 +138,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass: String): Nothing = {
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    val orderedCandidates =
+      StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)
     throw QueryCompilationErrors.unresolvedAttributeError(
       errorClass, missingCol, orderedCandidates, a.origin)
   }

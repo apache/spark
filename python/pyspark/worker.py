@@ -419,7 +419,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         func = fail_on_stopiteration(chained_func)
 
     # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return arg_offsets, wrap_batch_iter_udf(func, return_type)
@@ -445,7 +445,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-# Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
+# Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF and SQL_ARROW_BATCHED_UDF when
+# returning StructType
 def assign_cols_by_name(runner_conf):
     return (
         runner_conf.get(
@@ -459,6 +460,7 @@ def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
     if eval_type in (
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -509,7 +511,8 @@ def read_udfs(pickleSer, infile, eval_type):
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
             df_for_struct = (
-                eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
                 or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )

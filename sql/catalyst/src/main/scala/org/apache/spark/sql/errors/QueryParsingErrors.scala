@@ -42,8 +42,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0003",
-      messageParameters = Map("op" -> op),
+      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      messageParameters = Map("op" -> toSQLStmt(op)),
       ctx.identifierList())
   }
 
@@ -460,7 +460,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def duplicateClausesError(clauseName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       messageParameters = Map("clauseName" -> clauseName),
       ctx)
   }
@@ -666,6 +666,20 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
           "columnName" -> columnName,
           "optionName" -> optionName
         ),
+      ctx
+    )
+  }
+
+  def invalidDatetimeUnitError(
+      ctx: ParserRuleContext,
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> invalidValue),
       ctx
     )
   }

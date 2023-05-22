@@ -265,7 +265,10 @@ class DataFrame:
 
     def checkSameSparkSession(self, other: "DataFrame") -> None:
         if self._session.session_id != other._session.session_id:
-            raise SessionNotSameException("Both Datasets must belong to the same SparkSession")
+            raise SessionNotSameException(
+                error_class="SESSION_NOT_SAME",
+                message_parameters={},
+            )
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
@@ -444,11 +447,6 @@ class DataFrame:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "cols", "arg_type": type(cols).__name__},
-            )
-        if len(_cols) == 0:
-            raise PySparkValueError(
-                error_class="CANNOT_BE_EMPTY",
-                message_parameters={"item": "cols"},
             )
 
         return DataFrame.withPlan(
@@ -2170,6 +2168,9 @@ def _test() -> None:
 
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
     del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
+
+    # TODO(SPARK-43435): should reenable this test
+    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
