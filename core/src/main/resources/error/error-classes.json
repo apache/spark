@@ -1284,7 +1284,7 @@
   },
   "NOT_ALLOWED_IN_FROM" : {
     "message" : [
-      "Not supported in the From clause:"
+      "Not allowed in the FROM clause:"
     ],
     "subClass" : {
       "LATERAL_WITH_PIVOT" : {
