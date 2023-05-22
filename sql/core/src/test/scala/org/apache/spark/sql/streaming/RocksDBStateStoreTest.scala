@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
+import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
+
 
 trait RocksDBStateStoreTest extends SQLTestUtils {
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
@@ -46,6 +53,7 @@ trait RocksDBStateStoreTest extends SQLTestUtils {
     }
   }
 
+
   def rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
     ".changelogCheckpointing.enabled"
 
@@ -54,7 +62,58 @@ trait RocksDBStateStoreTest extends SQLTestUtils {
 }
 
 class RocksDBStateStoreStreamingAggregationSuite
-  extends StreamingAggregationSuite with RocksDBStateStoreTest  {}
+  extends StreamingAggregationSuite with RocksDBStateStoreTest  {
+  import testImplicits._
+  def snapshotVersionsPresent(dir: File): Seq[Long] = {
+    dir.listFiles.filter(_.getName.endsWith(".zip"))
+      .map(_.getName.stripSuffix(".zip"))
+      .map(_.toLong)
+      .sorted
+  }
+  def changelogVersionsPresent(dir: File): Seq[Long] = {
+    dir.listFiles.filter(_.getName.endsWith(".changelog"))
+      .map(_.getName.stripSuffix(".changelog"))
+      .map(_.toLong)
+      .sorted
+  }
+  test("Streaming aggregation RocksDB State Store backward compatibility.") {
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    checkpointDir.delete()
+
+    val rocksDBStateDir = new File(checkpointDir.getAbsolutePath, "/state/0/0")
+    val inputData = MemoryStream[Int]
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    // Run the stream with changelog checkpointing disabled.
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(rocksdbChangelogCheckpointingConfKey -> "false")),
+      AddData(inputData, 3),
+      CheckLastBatch((3, 1)),
+      AddData(inputData, 3, 2),
+      CheckLastBatch((3, 2), (2, 1)),
+      StopStream
+    )
+    assert(changelogVersionsPresent(rocksDBStateDir).isEmpty)
+    assert(snapshotVersionsPresent(rocksDBStateDir) == List(1L, 2L))
+
+    // Run the stream with changelog checkpointing enabled.
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(rocksdbChangelogCheckpointingConfKey -> "true")),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch((3, 3), (2, 2), (1, 1)),
+      // By default we run in new tuple mode.
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch((4, 4))
+    )
+    assert(changelogVersionsPresent(rocksDBStateDir) == List(3L, 4L))
+  }
+}
 
 class RocksDBStateStoreStreamingDeduplicationSuite
   extends StreamingDeduplicationSuite with RocksDBStateStoreTest  {}
