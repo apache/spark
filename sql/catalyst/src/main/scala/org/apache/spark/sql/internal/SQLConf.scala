@@ -3316,7 +3316,7 @@ object SQLConf {
     buildConf("spark.sql.rangePartitioning.minPartitionNum")
       .doc(s"Support the minimum number of range shuffle partitions when this value is greater " +
         s"than 0")
-      .version("3.4.1")
+      .version("3.5.0")
       .intConf
       .createWithDefault(-1)
 
@@ -3629,7 +3629,7 @@ object SQLConf {
     .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
       "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
       "'codegen', 'cost' and 'formatted'.")
-    .createWithDefault("formatted")
+    .createWithDefault("extended")
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +
