@@ -97,6 +97,7 @@ jobs:
               \"docker-integration-tests\": \"$docker\",
               \"scala-213\": \"true\",
               \"java-11-17\": \"true\",
+              \"connect-maven\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
@@ -727,6 +728,68 @@ jobs:
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
+
+  connect-maven:
+    needs: precondition
+    if: fromJson(needs.precondition.outputs.required).connect-maven == 'true'
+    name: Test connect modules with Maven
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+          - ${{ inputs.java }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v3
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Maven local repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            java${{ matrix.java }}-maven-
+      - name: Install Java ${{ matrix.java }}
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: Build with Maven
+        run: |
+          export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+          export MAVEN_CLI_OPTS="--no-transfer-progress"
+          export JAVA_VERSION=${{ matrix.java }}
+          # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
+          # 1. Test without -Phive
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm
+          # 2. Test with -Phive
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl assembly -Phive
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server -Phive
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm -Phive
+          rm -rf ~/.m2/repository/org/apache/spark      
 
   scala-213:
     needs: precondition
