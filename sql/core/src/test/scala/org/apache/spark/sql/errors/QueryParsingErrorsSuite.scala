@@ -159,7 +159,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         start = 0,
         stop = 97))
   }
-  
+
   test("INVALID_SQL_SYNTAX.TRANSFORM_WRONG_NUM_ARGS: Wrong number arguments for transform") {
     checkError(
       exception = parseException("CREATE TABLE table(col int) PARTITIONED BY (years(col,col))"),
