@@ -576,6 +576,11 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_NOT_SAME" : {
+    "message" : [
+      "Both Datasets must belong to the same SparkSession."
+    ]
+  },
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
