@@ -191,7 +191,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_ESC",
-      messageParameters = Map("invalidEscape" -> toSQLConf(invalidEscape)),
+      messageParameters = Map("invalidEscape" -> toSQLValue(invalidEscape, StringType)),
       ctx)
   }
 

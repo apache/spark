@@ -199,7 +199,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
       errorClass = "INVALID_ESC",
-      parameters = Map("invalidEscape" -> "\"##\""),
+      parameters = Map("invalidEscape" -> "'##'"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 2,
@@ -208,7 +208,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
       errorClass = "INVALID_ESC",
-      parameters = Map("invalidEscape" -> "\"\""),
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
         start = 2,
@@ -220,7 +220,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
       errorClass = "INVALID_ESC",
-      parameters = Map("invalidEscape" -> "\"\"/\""),
+      parameters = Map("invalidEscape" -> "'\"/'"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
         start = 2,
@@ -229,7 +229,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
       errorClass = "INVALID_ESC",
-      parameters = Map("invalidEscape" -> "\"\""),
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
         start = 2,
