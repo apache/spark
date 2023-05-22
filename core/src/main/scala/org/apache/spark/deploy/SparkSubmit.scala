@@ -414,7 +414,7 @@ private[spark] class SparkSubmit extends Logging {
         // directory too.
         // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
         // working directory
-        // SPARK-43540: add current working directory into classpath
+        // SPARK-43540: add current working directory into driver classpath
         val workingDirectory = "."
         childClasspath += workingDirectory
         def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
