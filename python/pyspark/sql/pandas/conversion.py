@@ -453,7 +453,7 @@ class SparkConversionMixin:
                                     return (
                                         pd.Timestamp(value)
                                         .tz_localize(
-                                            timezone, ambiguous=False  # type: ignore[arg-type]
+                                            timezone, ambiguous=False  # type: ignore
                                         )
                                         .tz_convert(_get_local_timezone())
                                         .tz_localize(None)
