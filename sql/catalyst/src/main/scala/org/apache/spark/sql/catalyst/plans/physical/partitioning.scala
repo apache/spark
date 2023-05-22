@@ -403,6 +403,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
+  var needClusteredDistribution = false
+
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
       required match {
@@ -427,13 +429,14 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
           val expressions = ordering.map(_.child)
-          if (requireAllClusterKeys) {
+          needClusteredDistribution = if (requireAllClusterKeys) {
             // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
             // `ClusteredDistribution`.
             c.areAllClusterKeysMatched(expressions)
           } else {
             expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
+          needClusteredDistribution
         case _ => false
       }
     }

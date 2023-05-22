@@ -2846,15 +2846,24 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
       SQLConf.RANGE_PARTITIONING_MIN_PARTITION_NUM.key -> "4") {
-      // The number of RangePartitioner changed from 3 to 5
-      val df = sql(
-        s"""SELECT * FROM (
-           |  SELECT case when id < 500 then 500 else 1000 end as key, id as value
-           |  FROM RANGE(1000) t
-           |) tt
-           |ORDER BY key
-           |""".stripMargin)
+      // If the parent plan doesn't need ClusteredDistribution, add rand() to RangePartitioning to
+      // to increase the partition number from 3 to 5
+      val globalSortQuery =
+      s"""SELECT * FROM (
+         |  SELECT case when id < 500 then 500 else 1000 end as key, id as value
+         |  FROM RANGE(1000) t
+         |) tt
+         |ORDER BY key
+         |""".stripMargin
+      val df = sql(globalSortQuery)
       assert(df.rdd.partitions.length == 5)
+
+      // If the parent plan requires ClusteredDistribution, RangePartitioning can not be changed
+      val df2 = sql(
+        s"""SELECT *, ROW_NUMBER() OVER(PARTITION BY key, value ORDER BY VALUE) RN
+           |FROM ( $globalSortQuery ) tt
+           |""".stripMargin)
+      assert(df2.rdd.partitions.length == 3)
     }
   }
 }

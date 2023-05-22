@@ -309,7 +309,9 @@ object ShuffleExchangeExec {
         rangeSortingExprs = Some(sortingExpressions)
         val partitioner = prepareRangePartitioner(sortingExpressions)
         val minPartitionNum = SQLConf.get.rangePartitionMinPartitionNum
-        if (minPartitionNum > 0 && partitioner.numPartitions < minPartitionNum) {
+        if (minPartitionNum > 0 &&
+          !newPartitioning.asInstanceOf[RangePartitioning].needClusteredDistribution &&
+          partitioner.numPartitions < minPartitionNum) {
           rangeSortingExprs =
             Some(sortingExpressions :+ SortOrder(Rand(Utils.random.nextLong), Ascending))
           prepareRangePartitioner(rangeSortingExprs.get)
