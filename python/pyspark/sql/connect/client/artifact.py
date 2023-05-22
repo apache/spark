@@ -122,8 +122,9 @@ class ArtifactManager:
     CHUNK_SIZE: int = 32 * 1024
 
     def __init__(self, user_id: Optional[str], session_id: str, channel: grpc.Channel):
-        assert user_id is not None
-        self._user_context = proto.UserContext(user_id=user_id)
+        self._user_context = proto.UserContext()
+        if user_id is not None:
+            self._user_context.user_id = user_id
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
 
