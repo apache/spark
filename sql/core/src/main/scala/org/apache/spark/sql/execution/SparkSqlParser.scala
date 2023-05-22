@@ -331,7 +331,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           "CREATE TEMPORARY VIEW ... USING ... instead")
 
       val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-      val optionsWithLocation = location.map(l => options + ("path" -> l)).getOrElse(options)
+      val optionsList: Map[String, String] =
+        options.map { case (key, value) => (key, Option(value).map(_.sql).getOrElse("")) }
+      val optionsWithLocation =
+        location.map(l => optionsList + ("path" -> l)).getOrElse(optionsList)
       CreateTempViewUsing(table, schema, replace = false, global = false, provider,
         optionsWithLocation)
     }

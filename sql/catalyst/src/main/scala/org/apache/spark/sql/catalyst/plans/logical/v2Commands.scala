@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TreePattern, TreePatternBits}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -455,6 +456,8 @@ case class CreateTable(
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
+
+  override lazy val treePatternBits: BitSet = tableSpec.treePatternBits
 }
 
 /**
@@ -1385,12 +1388,25 @@ case class DropIndex(
 case class TableSpec(
     properties: Map[String, String],
     provider: Option[String],
-    options: Map[String, String],
+    // Note that the map value can be null if the input option only provided a key.
+    optionsList: Map[String, Expression],
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean,
-    // If non-empty, this contains the values of the 'options' list as parsed but unresolved
-    // expressions. The analyzer will then constant-fold them to literals and clear this field,
-    // assigning the result to 'options'.
-    unresolvedOptions: Map[String, Option[Expression]] = Map.empty)
+    external: Boolean) extends TreePatternBits {
+  /** This is a convenience method to obtain the options list as a map of strings to strings. */
+  def options: Map[String, String] = optionsList.map { case (key, value) =>
+    (key, if (value != null) value.sql else "")
+  }
+
+  /** Implement treePatternBits so bitmap checks on expressions on operators work properly. */
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    optionsList.foreach { case (_, optValue) =>
+      if (optValue != null) {
+        bits.union(optValue.treePatternBits)
+      }
+    }
+    bits
+  }
+}
