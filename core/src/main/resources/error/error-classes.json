@@ -1277,11 +1277,6 @@
     ],
     "sqlState" : "42000"
   },
-  "NOT_A_PARTITIONED_TABLE" : {
-    "message" : [
-      "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
-    ]
-  },
   "NOT_ALLOWED_IN_FROM" : {
     "message" : [
       "Not allowed in the FROM clause:"
@@ -1303,6 +1298,11 @@
         ]
       }
     }
+  },
+  "NOT_A_PARTITIONED_TABLE" : {
+    "message" : [
+      "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
+    ]
   },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
