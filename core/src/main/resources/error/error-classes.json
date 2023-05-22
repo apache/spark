@@ -1282,6 +1282,28 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ]
   },
+  "NOT_ALLOWED_IN_FROM" : {
+    "message" : [
+      "Not supported in the From clause:"
+    ],
+    "subClass" : {
+      "LATERAL_WITH_PIVOT" : {
+        "message" : [
+          "LATERAL cannot be used together with PIVOT."
+        ]
+      },
+      "LATERAL_WITH_UNPIVOT" : {
+        "message" : [
+          "LATERAL cannot be used together with UNPIVOT."
+        ]
+      },
+      "UNPIVOT_WITH_PIVOT" : {
+        "message" : [
+          "UNPIVOT cannot be used together with PIVOT."
+        ]
+      }
+    }
+  },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
       "Assigning a NULL is not allowed here."
@@ -1875,11 +1897,6 @@
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
-        ]
-      },
-      "LATERAL_WITH_PIVOT" : {
-        "message" : [
-          "LATERAL cannot be used together with PIVOT in FROM clause."
         ]
       },
       "LITERAL_TYPE" : {

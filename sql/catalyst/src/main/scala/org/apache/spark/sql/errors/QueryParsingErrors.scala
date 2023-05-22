@@ -102,15 +102,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unpivotWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("UNPIVOT cannot be used together with PIVOT in FROM clause", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT", ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "UNSUPPORTED_FEATURE.LATERAL_WITH_PIVOT", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_PIVOT", ctx)
   }
 
   def lateralWithUnpivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_UNPIVOT", ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
