@@ -1151,8 +1151,85 @@
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
-      "Invalid SQL syntax: <inputString>."
+      "Invalid SQL syntax:"
     ],
+    "subClass" : {
+      "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+        "message" : [
+          "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+        ]
+      },
+      "CREATE_TEMP_FUNC_WITH_DATABASE" : {
+        "message" : [
+          "CREATE TEMPORARY FUNCTION with specifying a database(<database>) is not allowed."
+        ]
+      },
+      "CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS" : {
+        "message" : [
+          "CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed."
+        ]
+      },
+      "EMPTY_PARTITION_VALUE" : {
+        "message" : [
+          "Partition key <partKey> must set value."
+        ]
+      },
+      "INVALID_COLUMN_REFERENCE" : {
+        "message" : [
+          "Expected a column reference for transform <transform>: <expr>."
+        ]
+      },
+      "INVALID_TABLE_VALUED_FUNC_NAME" : {
+        "message" : [
+          "Table valued function cannot specify database name: <funcName>."
+        ]
+      },
+      "INVALID_WINDOW_REFERENCE" : {
+        "message" : [
+          "Window reference <windowName> is not a window specification."
+        ]
+      },
+      "LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC" : {
+        "message" : [
+          "LATERAL can only be used with subquery and table-valued functions."
+        ]
+      },
+      "MULTI_PART_NAME" : {
+        "message" : [
+          "<statement> with multiple part function name(<funcName>) is not allowed."
+        ]
+      },
+      "REPETITIVE_WINDOW_DEFINITION" : {
+        "message" : [
+          "The definition of window <windowName> is repetitive."
+        ]
+      },
+      "SHOW_FUNCTIONS_INVALID_PATTERN" : {
+        "message" : [
+          "Invalid pattern in SHOW FUNCTIONS: <pattern>. It must be a \"STRING\" literal."
+        ]
+      },
+      "SHOW_FUNCTIONS_INVALID_SCOPE" : {
+        "message" : [
+          "SHOW <scope> FUNCTIONS not supported."
+        ]
+      },
+      "TRANSFORM_WRONG_NUM_ARGS" : {
+        "message" : [
+          "The transform<transform> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
+      "UNRESOLVED_WINDOW_REFERENCE" : {
+        "message" : [
+          "Cannot resolve window reference <windowName>."
+        ]
+      },
+      "UNSUPPORTED_FUNC_NAME" : {
+        "message" : [
+          "Unsupported function name <funcName>."
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {

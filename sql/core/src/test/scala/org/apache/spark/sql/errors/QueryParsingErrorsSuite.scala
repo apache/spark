@@ -70,7 +70,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("INVALID_SQL_SYNTAX: LATERAL can only be used with subquery") {
+  test("INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC: " +
+    "LATERAL can only be used with subquery") {
     Seq(
       ", LATERAL t2" -> ("FROM t1, LATERAL t2", 9, 27),
       " JOIN LATERAL t2" -> ("JOIN LATERAL t2", 17, 31),
@@ -80,10 +81,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     ).foreach { case (sqlText, (fragment, start, stop)) =>
       checkError(
         exception = parseException(s"SELECT * FROM t1$sqlText"),
-        errorClass = "INVALID_SQL_SYNTAX",
+        errorClass = "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC",
         sqlState = "42000",
-        parameters = Map("inputString" ->
-          "LATERAL can only be used with subquery and table-valued functions."),
         context = ExpectedContext(fragment, start, stop))
     }
   }
@@ -100,36 +99,36 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         stop = 35))
   }
 
-  test("INVALID_SQL_SYNTAX: redefine window") {
+  test("INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION: redefine window") {
     checkError(
       exception = parseException("SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
       sqlState = "42000",
-      parameters = Map("inputString" -> "The definition of window `win` is repetitive."),
+      parameters = Map("windowName" -> "`win`"),
       context = ExpectedContext(
         fragment = "WINDOW win AS win, win AS win2",
         start = 31,
         stop = 60))
   }
 
-  test("INVALID_SQL_SYNTAX: invalid window reference") {
+  test("INVALID_SQL_SYNTAX.INVALID_WINDOW_REFERENCE: invalid window reference") {
     checkError(
       exception = parseException("SELECT min(a) OVER win FROM t1 WINDOW win AS win"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_WINDOW_REFERENCE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Window reference `win` is not a window specification."),
+      parameters = Map("windowName" -> "`win`"),
       context = ExpectedContext(
         fragment = "WINDOW win AS win",
         start = 31,
         stop = 47))
   }
 
-  test("INVALID_SQL_SYNTAX: window reference cannot be resolved") {
+  test("INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE: window reference cannot be resolved") {
     checkError(
       exception = parseException("SELECT min(a) OVER win FROM t1 WINDOW win AS win2"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Cannot resolve window reference `win2`."),
+      parameters = Map("windowName" -> "`win2`"),
       context = ExpectedContext(
         fragment = "WINDOW win AS win2",
         start = 31,
@@ -160,26 +159,28 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         start = 0,
         stop = 97))
   }
-
-  test("INVALID_SQL_SYNTAX: Too many arguments for transform") {
+  
+  test("INVALID_SQL_SYNTAX.TRANSFORM_WRONG_NUM_ARGS: Wrong number arguments for transform") {
     checkError(
       exception = parseException("CREATE TABLE table(col int) PARTITIONED BY (years(col,col))"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.TRANSFORM_WRONG_NUM_ARGS",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Too many arguments for transform `years`"),
+      parameters = Map(
+        "transform" -> "`years`",
+        "expectedNum" -> "1",
+        "actualNum" -> "2"),
       context = ExpectedContext(
         fragment = "years(col,col)",
         start = 44,
         stop = 57))
   }
 
-  test("INVALID_SQL_SYNTAX: Invalid table value function name") {
+  test("INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME: Invalid table value function name") {
     checkError(
       exception = parseException("SELECT * FROM db.func()"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
       sqlState = "42000",
-      parameters = Map(
-        "inputString" -> "table valued function cannot specify database name: `db`.`func`"),
+      parameters = Map("funcName" -> "`db`.`func`"),
       context = ExpectedContext(
         fragment = "db.func()",
         start = 14,
@@ -187,37 +188,35 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = parseException("SELECT * FROM ns.db.func()"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
       sqlState = "42000",
-      parameters = Map(
-        "inputString" -> "table valued function cannot specify database name: `ns`.`db`.`func`"),
+      parameters = Map("funcName" -> "`ns`.`db`.`func`"),
       context = ExpectedContext(
         fragment = "ns.db.func()",
         start = 14,
         stop = 25))
   }
 
-  test("INVALID_SQL_SYNTAX: Invalid scope in show functions") {
+  test("INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE: Invalid scope in show functions") {
     val sqlText = "SHOW sys FUNCTIONS"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "SHOW `sys` FUNCTIONS not supported"),
+      parameters = Map("scope" -> "`sys`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
         stop = 17))
   }
 
-  test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
+  test("INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN: Invalid pattern in show functions") {
     val sqlText1 = "SHOW FUNCTIONS IN db f1"
     checkError(
       exception = parseException(sqlText1),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN",
       sqlState = "42000",
-      parameters = Map("inputString" ->
-        "Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a \"STRING\" literal."),
+      parameters = Map("pattern" -> "`f1`"),
       context = ExpectedContext(
         fragment = sqlText1,
         start = 0,
@@ -225,17 +224,17 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     val sqlText2 = "SHOW FUNCTIONS IN db LIKE f1"
     checkError(
       exception = parseException(sqlText2),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN",
       sqlState = "42000",
-      parameters = Map("inputString" ->
-        "Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a \"STRING\" literal."),
+      parameters = Map("pattern" -> "`f1`"),
       context = ExpectedContext(
         fragment = sqlText2,
         start = 0,
         stop = 27))
   }
 
-  test("INVALID_SQL_SYNTAX: Create function with both if not exists and replace") {
+  test("INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE: " +
+    "Create function with both if not exists and replace") {
     val sqlText =
       """CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -243,17 +242,16 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",
       sqlState = "42000",
-      parameters = Map("inputString" ->
-        "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
         stop = 142))
   }
 
-  test("INVALID_SQL_SYNTAX: Create temporary function with if not exists") {
+  test("INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS: " +
+    "Create temporary function with if not exists") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -261,17 +259,15 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS",
       sqlState = "42000",
-      parameters = Map("inputString" ->
-        "It is not allowed to define a TEMPORARY FUNCTION with IF NOT EXISTS."),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
         stop = 141))
   }
 
-  test("INVALID_SQL_SYNTAX: Create temporary function with multi-part name") {
+  test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Create temporary function with multi-part name") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION ns.db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -279,16 +275,19 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Unsupported function name `ns`.`db`.`func`"),
+      parameters = Map(
+        "statement" -> "CREATE TEMPORARY FUNCTION",
+        "funcName" -> "`ns`.`db`.`func`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
         stop = 132))
   }
 
-  test("INVALID_SQL_SYNTAX: Specifying database while creating temporary function") {
+  test("INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE: " +
+    "Specifying database while creating temporary function") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -296,24 +295,24 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
       sqlState = "42000",
-      parameters = Map("inputString" ->
-        "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `db`"),
+      parameters = Map("database" -> "`db`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
         stop = 129))
   }
 
-  test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
+  test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Drop temporary function requires a single part name") {
     val sqlText = "DROP TEMPORARY FUNCTION db.func"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       sqlState = "42000",
-      parameters = Map("inputString" ->
-        "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`"),
+      parameters = Map(
+        "statement" -> "DROP TEMPORARY FUNCTION",
+        "funcName" -> "`db`.`func`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
@@ -433,24 +432,28 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       parameters = Map("error" -> "'NOT'", "hint" -> ""))
   }
 
-  test("INVALID_SQL_SYNTAX: show table partition key must set value") {
+  test("INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE: show table partition key must set value") {
     checkError(
       exception = parseException("SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Partition key `grade` must set value (can't be empty)."),
+      parameters = Map("partKey" -> "`grade`"),
       context = ExpectedContext(
         fragment = "PARTITION (grade)",
         start = 47,
         stop = 63))
   }
 
-  test("INVALID_SQL_SYNTAX: expected a column reference for transform bucket") {
+  test("INVALID_SQL_SYNTAX.INVALID_COLUMN_REFERENCE: " +
+    "expected a column reference for transform bucket") {
     checkError(
-      exception = parseException("CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))"),
-      errorClass = "INVALID_SQL_SYNTAX",
+      exception = parseException("CREATE TABLE my_tab(a INT, b STRING) " +
+        "USING parquet PARTITIONED BY (bucket(32, a, 66))"),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_COLUMN_REFERENCE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "Expected a column reference for transform `bucket`: 66"),
+      parameters = Map(
+        "transform" -> "`bucket`",
+        "expr" -> "66"),
       context = ExpectedContext(
         fragment = "bucket(32, a, 66)",
         start = 67,
@@ -469,13 +472,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         stop = 68))
   }
 
-  test("INVALID_SQL_SYNTAX: PARTITION specification is incomplete") {
+  test("INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE: PARTITION specification is incomplete") {
     val sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade)"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
       sqlState = "42000",
-      parameters = Map("inputString" -> "PARTITION specification is incomplete: `grade`"),
+      parameters = Map("partKey" -> "`grade`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
