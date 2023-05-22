@@ -212,6 +212,13 @@
       "Another instance of this query was just started by a concurrent session."
     ]
   },
+  "CONCURRENT_STREAM_LOG_UPDATE" : {
+    "message" : [
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
+      "Please make sure only one streaming job runs on a specific checkpoint location at a time."
+    ],
+    "sqlState" : "40000"
+  },
   "CONNECT" : {
     "message" : [
       "Generic Spark Connect error."
@@ -1205,6 +1212,11 @@
         ]
       }
     }
+  },
+  "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE" : {
+    "message" : [
+      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
+    ]
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -5207,11 +5219,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2400" : {
-    "message" : [
-      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2401" : {
