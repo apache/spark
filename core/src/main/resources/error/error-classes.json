@@ -5,6 +5,13 @@
     ],
     "sqlState" : "42710"
   },
+  "AMBIGUOUS_ALIAS_IN_NESTED_CTE" : {
+    "message" : [
+      "Name <name> is ambiguous in nested CTE.",
+      "Please set <config> to \"CORRECTED\" so that name defined in inner CTE takes precedence. If set it to \"LEGACY\", outer CTE definitions will take precedence.",
+      "See '<docroot>/sql-migration-guide.html#query-engine'."
+    ]
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
