@@ -212,7 +212,7 @@ class SeriesDateTimeTestsMixin:
         self.check_func(lambda x: x.dt.dayofyear)
 
     def test_quarter(self):
-        self.check_func(lambda x: x.dt.dayofyear)
+        self.check_func(lambda x: x.dt.quarter)
 
     def test_is_month_start(self):
         self.check_func(lambda x: x.dt.is_month_start)
