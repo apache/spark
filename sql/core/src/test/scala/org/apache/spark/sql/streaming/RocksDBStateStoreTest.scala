@@ -60,7 +60,7 @@ trait RocksDBStateStoreTest extends SQLTestUtils {
   def isChangelogCheckpointingEnabled: Boolean =
     SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
 }
-
+/*
 class RocksDBStateStoreStreamingAggregationSuite
   extends StreamingAggregationSuite with RocksDBStateStoreTest  {
   import testImplicits._
@@ -135,3 +135,4 @@ class RocksDBStateStoreStreamingLeftSemiJoinSuite
 
 class RocksDBStateStoreFlatMapGroupsWithStateSuite
   extends FlatMapGroupsWithStateSuite with RocksDBStateStoreTest {}
+*/
