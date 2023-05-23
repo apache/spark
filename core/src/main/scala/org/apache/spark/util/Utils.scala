@@ -203,11 +203,11 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     values: IndexedSeq[Double],
     quantiles: Array[Double]): IndexedSeq[Double] = {
     val count = values.size
-    val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
     if (count > 0) {
+      val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
       indices.map(i => values(i.toInt)).toIndexedSeq
     } else {
-      quantiles.map(_ => 0.0)
+      IndexedSeq.fill(quantiles.length)(0.0)
     }
   }
 
