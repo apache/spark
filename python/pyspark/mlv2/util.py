@@ -17,16 +17,19 @@
 
 import pandas as pd
 import cloudpickle
+from collections.abc import Callable, Iterator
+from typing import Any, Union
 
+from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, pandas_udf
 
 
 def aggregate_dataframe(
-    dataframe,
-    input_col_names,
-    local_agg_fn,
-    merge_agg_state,
-    agg_state_to_result,
+    dataframe: Union["DataFrame", "pd.DataFrame"],
+    input_col_names: list[str],
+    local_agg_fn: Callable[["DataFrame"], Any],
+    merge_agg_state: Callable[[Any, Any], Any],
+    agg_state_to_result: Callable[[Any], Any],
 ):
     """
     The function can be used to run arbitrary aggregation logic on a spark dataframe
@@ -77,11 +80,10 @@ def aggregate_dataframe(
 
     dataframe = dataframe.select(*input_col_names)
 
-    def compute_state(iterator):
+    def compute_state(iterator: Iterator["pd.DataFrame"]) -> Iterator["pd.DataFrame"]:
         state = None
 
         for batch_pandas_df in iterator:
-            # print(f"DBG compute state batch_pandas_df len: {len(batch_pandas_df)}\n")
             new_batch_state = local_agg_fn(batch_pandas_df)
             if state is None:
                 state = new_batch_state
@@ -110,10 +112,10 @@ def aggregate_dataframe(
 
 
 def transform_dataframe_column(
-    dataframe,
-    input_col_name,
-    transform_fn,
-    output_cols,
+    dataframe: Union["DataFrame", "pd.DataFrame"],
+    input_col_name: str,
+    transform_fn: Callable[["pd.Series"], Any],
+    output_cols: list[str],
 ):
     """
     Transform specified column of the input spark dataframe or pandas dataframe,

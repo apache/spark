@@ -15,8 +15,9 @@
 # limitations under the License.
 #
 
-from pyspark.mlv2.base import Evaluator
+from typing import Any, Union
 
+from pyspark.mlv2.base import Evaluator
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol
 from pyspark.mlv2.util import aggregate_dataframe
@@ -26,7 +27,13 @@ import torcheval.metrics as torchmetrics
 
 
 class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
-    def __init__(self, metricName, labelCol, predictionCol):
+    """
+    Evaluator for Regression, which expects input columns prediction and label.
+    Supported metrics are 'mse' and 'r2'.
+
+    .. versionadded:: 3.5.0
+    """
+    def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
 
@@ -37,7 +44,7 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
         typeConverter=TypeConverters.toString,
     )
 
-    def _get_torch_metric(self):
+    def _get_torch_metric(self) -> Any:
         metric_name = self.getOrDefault(self.metricName)
 
         if metric_name == "mse":
@@ -47,26 +54,26 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
 
         raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 
-    def _evaluate(self, dataset):
+    def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
 
         prediction_col = self.getPredictionCol()
         label_col = self.getLabelCol()
 
         torch_metric = self._get_torch_metric()
 
-        def local_agg_fn(pandas_df):
+        def local_agg_fn(pandas_df: "pd.DataFrame") -> "pd.DataFrame":
             with torch.inference_mode():
                 preds_tensor = torch.tensor(pandas_df[prediction_col].values)
                 labels_tensor = torch.tensor(pandas_df[label_col].values)
                 torch_metric.update(preds_tensor, labels_tensor)
                 return torch_metric
 
-        def merge_agg_state(state1, state2):
+        def merge_agg_state(state1: Any, state2: Any) -> Any:
             with torch.inference_mode():
                 state1.merge_state([state2])
                 return state1
 
-        def agg_state_to_result(state):
+        def agg_state_to_result(state: Any) -> Any:
             with torch.inference_mode():
                 return state.compute().item()
 

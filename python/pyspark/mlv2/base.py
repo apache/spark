@@ -16,10 +16,12 @@
 #
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Callable
 
 import pandas as pd
 
 from typing import (
+    Any,
     Generic,
     List,
     Optional,
@@ -38,7 +40,6 @@ from pyspark.mlv2.util import transform_dataframe_column
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
-T = TypeVar("T")
 M = TypeVar("M", bound="Transformer")
 
 
@@ -114,20 +115,20 @@ class Transformer(Params, metaclass=ABCMeta):
     Abstract class for transformers that transform one dataset into another.
     """
 
-    def _input_column_name(self):
+    def _input_column_name(self) -> str:
         """
         Return the name of the input column that is transformed.
         """
         raise NotImplementedError()
 
-    def _output_columns(self):
+    def _output_columns(self) -> list[str]:
         """
         Return a list of output transformed columns, each elements in the list
         is a tuple of (column_name, column_spark_type)
         """
         raise NotImplementedError()
 
-    def _get_transform_fn(self):
+    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         """
         Return a transformation function that accepts an instance of `pd.Series` as input and
         returns transformed result as an instance of `pd.Series` or `pd.DataFrame`
@@ -172,7 +173,7 @@ class Evaluator(Params, metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def _evaluate(self, dataset: DataFrame) -> float:
+    def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
         """
         Evaluates the output.
 

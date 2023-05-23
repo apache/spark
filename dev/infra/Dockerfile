@@ -71,4 +71,4 @@ RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.3' scipy unittest-xml-re
 RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status
 
 # Add torch as a testing dependency for TorchDistributor
-RUN python3.9 -m pip install torch torchvision
+RUN python3.9 -m pip install torch torchvision torcheval

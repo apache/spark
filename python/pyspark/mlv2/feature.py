@@ -15,8 +15,12 @@
 # limitations under the License.
 #
 
+from collections.abc import Callable
 import numpy as np
+import pandas as pd
+from typing import Any, Union
 
+from pyspark.sql import DataFrame
 from pyspark.mlv2.base import Estimator, Model
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
@@ -49,17 +53,17 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
 
 
 class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
-    def __init__(self, max_abs_values):
+    def __init__(self, max_abs_values: "np.ndarray") -> None:
         super().__init__()
         self.max_abs_values = max_abs_values
 
-    def _input_column_name(self):
+    def _input_column_name(self) -> str:
         return self.getInputCol()
 
-    def _output_columns(self):
+    def _output_columns(self) -> list[str]:
         return [(self.getOutputCol(), "array<double>")]
 
-    def _get_transform_fn(self):
+    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         max_abs_values = self.max_abs_values
         max_abs_values_zero_cond = max_abs_values == 0.0
 
@@ -78,12 +82,12 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
     statistics on the samples in the training set.
     """
 
-    def __init__(self, inputCol, outputCol):
+    def __init__(self, inputCol: str, outputCol: str) -> None:
         super().__init__()
         self.set(self.inputCol, inputCol)
         self.set(self.outputCol, outputCol)
 
-    def _fit(self, dataset):
+    def _fit(self, dataset: Union[DataFrame, pd.DataFrame]):
         input_col = self.getInputCol()
 
         min_max_res = summarize_dataframe(dataset, input_col, ["mean", "std"])
@@ -96,22 +100,22 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
 
 
 class StandardScalerModel(Model, HasInputCol, HasOutputCol):
-    def __init__(self, mean_values, std_values):
+    def __init__(self, mean_values: "np.ndarray", std_values: "np.ndarray") -> None:
         super().__init__()
         self.mean_values = mean_values
         self.std_values = std_values
 
-    def _input_column_name(self):
+    def _input_column_name(self) -> str:
         return self.getInputCol()
 
-    def _output_columns(self):
+    def _output_columns(self) -> list[str]:
         return [(self.getOutputCol(), "array<double>")]
 
-    def _get_transform_fn(self):
+    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         mean_values = self.mean_values
         std_values = self.std_values
 
-        def transform_fn(series):
+        def transform_fn(series: "pd.Series") -> "pd.Series":
             def map_value(x):
                 return (x - mean_values) / std_values
 

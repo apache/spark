@@ -16,25 +16,26 @@
 #
 
 import numpy as np
+from typing import Any, Union
 from pyspark.mlv2.util import aggregate_dataframe
 
 
 class SummarizerAggState:
-    def __init__(self, input_array):
+    def __init__(self, input_array: "np.ndarray") -> None:
         self.min_values = input_array.copy()
         self.max_values = input_array.copy()
         self.count = 1
         self.sum_values = np.array(input_array.copy())
         self.square_sum_values = np.square(input_array.copy())
 
-    def update(self, input_array):
+    def update(self, input_array: "np.ndarray") -> None:
         self.count += 1
         self.sum_values += input_array
         self.square_sum_values += np.square(input_array)
         self.min_values = np.minimum(self.min_values, input_array)
         self.max_values = np.maximum(self.max_values, input_array)
 
-    def merge(self, state):
+    def merge(self, state: "SummarizerAggState") -> "SummarizerAggState":
         self.count += state.count
         self.sum_values += state.sum_values
         self.square_sum_values += state.square_sum_values
@@ -42,7 +43,7 @@ class SummarizerAggState:
         self.max_values = np.maximum(self.max_values, state.max_values)
         return self
 
-    def to_result(self, metrics):
+    def to_result(self, metrics: list[str]) -> dict[str, Any]:
         result = {}
 
         for metric in metrics:
@@ -70,7 +71,11 @@ class SummarizerAggState:
         return result
 
 
-def summarize_dataframe(dataframe, column, metrics):
+def summarize_dataframe(
+        dataframe: Union["DataFrame", "pd.DataFrame"],
+        column: str,
+        metrics: list[str]
+) -> dict[str, Any]:
     """
     Summarize an array type column over a spark dataframe or a pandas dataframe
 
@@ -91,7 +96,7 @@ def summarize_dataframe(dataframe, column, metrics):
     Summary results as a dict, the keys in the dict are the metrics being summarized.
     """
 
-    def local_agg_fn(pandas_df):
+    def local_agg_fn(pandas_df: "pd.DataFrame") -> Any:
         state = None
         for _, value_array in pandas_df[column].iteritems():
             if state is None:
@@ -101,10 +106,10 @@ def summarize_dataframe(dataframe, column, metrics):
 
         return state
 
-    def merge_agg_state(state1, state2):
+    def merge_agg_state(state1: Any, state2: Any) -> Any:
         return state1.merge(state2)
 
-    def agg_state_to_result(state):
+    def agg_state_to_result(state: Any) -> Any:
         return state.to_result(metrics)
 
     return aggregate_dataframe(
