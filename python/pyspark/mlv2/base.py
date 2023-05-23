@@ -129,8 +129,8 @@ class Transformer(Params, metaclass=ABCMeta):
 
     def _get_transform_fn(self):
         """
-        Return a transformation function that accepts an instance of `pd.Series` as input and returns
-        transformed result as an instance of `pd.Series` or `pd.DataFrame`
+        Return a transformation function that accepts an instance of `pd.Series` as input and
+        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`
         """
         raise NotImplementedError()
 

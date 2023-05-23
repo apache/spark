@@ -22,6 +22,13 @@ from pyspark.mlv2.evaluation import RegressionEvaluator
 from pyspark.sql import SparkSession
 
 
+have_torcheval = True
+try:
+    import torcheval  # noqa: F401
+except ImportError:
+    have_torcheval = False
+
+
 class EvaluationTestsMixin:
     def test_regressor_evaluator(self):
         df1 = self.spark.createDataFrame(
@@ -60,6 +67,7 @@ class EvaluationTestsMixin:
         np.testing.assert_almost_equal(r2_local, expected_r2)
 
 
+@unittest.skipIf(not have_torcheval, "torcheval is required")
 class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()
@@ -69,7 +77,7 @@ class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_evaluation import *  # noqa: F401
+    from pyspark.mlv2.tests.test_evaluation import *  # noqa: F401,F403
 
     try:
         import xmlrunner

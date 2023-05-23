@@ -69,7 +69,7 @@ class SummarizerTests(SummarizerTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_summarizer import *  # noqa: F401
+    from pyspark.mlv2.tests.test_summarizer import *  # noqa: F401,F403
 
     try:
         import xmlrunner

@@ -19,7 +19,14 @@ import unittest
 from pyspark.sql import SparkSession
 from pyspark.mlv2.tests.test_evaluation import EvaluationTestsMixin
 
+have_torcheval = True
+try:
+    import torcheval  # noqa: F401
+except ImportError:
+    have_torcheval = False
 
+
+@unittest.skipIf(not have_torcheval, "torcheval is required")
 class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
