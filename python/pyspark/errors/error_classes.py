@@ -591,6 +591,11 @@ ERROR_CLASSES_JSON = """
       "Cannot start a remote Spark session because there is a regular Spark session already running."
     ]
   },
+  "SESSION_NOT_SAME" : {
+    "message" : [
+      "Both Datasets must belong to the same SparkSession."
+    ]
+  },
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."

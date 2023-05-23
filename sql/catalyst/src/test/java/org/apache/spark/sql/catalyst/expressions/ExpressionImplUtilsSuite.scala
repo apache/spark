@@ -17,21 +17,31 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ExpressionImplUtilsSuite extends SparkFunSuite {
+  private val b64decoder = java.util.Base64.getDecoder
+  private val b64encoder = java.util.Base64.getEncoder
+
   case class TestCase(
     plaintext: String,
     key: String,
     base64CiphertextExpected: String,
     mode: String,
-    padding: String = "Default") {
-    val plaintextBytes = plaintext.getBytes("UTF-8")
-    val keyBytes = key.getBytes("UTF-8")
-    val utf8mode = UTF8String.fromString(mode)
-    val utf8Padding = UTF8String.fromString(padding)
-    val deterministic = mode.equalsIgnoreCase("ECB")
+    padding: String = "Default",
+    ivHexOpt: Option[String] = None,
+    aadOpt: Option[String] = None,
+    expectedErrorClassOpt: Option[String] = None,
+    errorParamsMap: Map[String, String] = Map()) {
+    val plaintextBytes: Array[Byte] = plaintext.getBytes("UTF-8")
+    val keyBytes: Array[Byte] = key.getBytes("UTF-8")
+    val utf8mode: UTF8String = UTF8String.fromString(mode)
+    val utf8Padding: UTF8String = UTF8String.fromString(padding)
+    val deterministic: Boolean = mode.equalsIgnoreCase("ECB") || ivHexOpt.isDefined
+    val ivBytes: Array[Byte] =
+      ivHexOpt.map({ivHex => Hex.unhex(ivHex.getBytes("UTF-8"))}).getOrElse(null)
+    val aadBytes: Array[Byte] = aadOpt.map({aad => aad.getBytes("UTF-8")}).getOrElse(null)
   }
 
   val testCases = Seq(
@@ -85,29 +95,233 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
   )
 
   test("AesDecrypt Only") {
-    val decoder = java.util.Base64.getDecoder
-    testCases.foreach { t =>
-      val expectedBytes = decoder.decode(t.base64CiphertextExpected)
-      val decryptedBytes =
-        ExpressionImplUtils.aesDecrypt(expectedBytes, t.keyBytes, t.utf8mode, t.utf8Padding)
-      val decryptedString = new String(decryptedBytes)
-      assert(decryptedString == t.plaintext)
-    }
+    testCases.map(decOnlyCase)
   }
 
   test("AesEncrypt and AesDecrypt") {
-    val encoder = java.util.Base64.getEncoder
-    testCases.foreach { t =>
-      val ciphertextBytes =
-        ExpressionImplUtils.aesEncrypt(t.plaintextBytes, t.keyBytes, t.utf8mode, t.utf8Padding)
-      val ciphertextBase64 = encoder.encodeToString(ciphertextBytes)
-      val decryptedBytes =
-        ExpressionImplUtils.aesDecrypt(ciphertextBytes, t.keyBytes, t.utf8mode, t.utf8Padding)
-      val decryptedString = new String(decryptedBytes)
-      assert(decryptedString == t.plaintext)
-      if (t.deterministic) {
-        assert(t.base64CiphertextExpected == ciphertextBase64)
-      }
+    testCases.map(encDecCase)
+  }
+
+  val ivAadTestCases = Seq(
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=",
+      "CBC",
+      ivHexOpt = Some("00000000000000000000000000000000")),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f",
+      "GCM",
+      ivHexOpt = Some("000000000000000000000000")
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
+      "GCM",
+      ivHexOpt = Some("000000000000000000000000"),
+      aadOpt = Some("This is an AAD mixed into the input")
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
+      "GCM",
+      aadOpt = Some("This is an AAD mixed into the input")
+    )
+  )
+
+  test("AesDecrypt only with IVs or AADs") {
+    ivAadTestCases.map(decOnlyCase)
+  }
+
+  test("AesEncrypt and AesDecrypt with IVs or AADs") {
+    ivAadTestCases.map(encDecCase)
+  }
+
+  def decOnlyCase(t: TestCase): Unit = {
+    val expectedBytes = b64decoder.decode(t.base64CiphertextExpected)
+    val decryptedBytes = ExpressionImplUtils.aesDecrypt(
+      expectedBytes,
+      t.keyBytes,
+      t.utf8mode,
+      t.utf8Padding,
+      t.aadBytes
+    )
+    val decryptedString = new String(decryptedBytes)
+    assert(decryptedString == t.plaintext)
+  }
+
+  def encDecCase(t: TestCase): Unit = {
+    val ciphertextBytes = ExpressionImplUtils.aesEncrypt(
+      t.plaintextBytes,
+      t.keyBytes,
+      t.utf8mode,
+      t.utf8Padding,
+      t.ivBytes,
+      t.aadBytes
+    )
+    val ciphertextBase64 = b64encoder.encodeToString(ciphertextBytes)
+    val decryptedBytes = ExpressionImplUtils.aesDecrypt(
+      ciphertextBytes,
+      t.keyBytes,
+      t.utf8mode,
+      t.utf8Padding,
+      t.aadBytes
+    )
+    val decryptedString = new String(decryptedBytes)
+    assert(decryptedString == t.plaintext)
+    if (t.deterministic) {
+      assert(t.base64CiphertextExpected == ciphertextBase64)
     }
+  }
+
+  val unsupportedErrorCases = Seq(
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "unused",
+      "ECB",
+      ivHexOpt = Some("0000000000000000"),
+      expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE_IV"),
+      errorParamsMap = Map(
+        "mode" -> "ECB",
+        "functionName" -> "`aes_encrypt`"
+      )
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "unused",
+      "ECB",
+      aadOpt = Some("ECB does not support AAD mode"),
+      expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE_AAD"),
+      errorParamsMap = Map(
+        "mode" -> "ECB",
+        "functionName" -> "`aes_encrypt`"
+      )
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "unused",
+      "CBC",
+      ivHexOpt = Some("0000000000"),
+      expectedErrorClassOpt = Some("INVALID_PARAMETER_VALUE.AES_IV_LENGTH"),
+      errorParamsMap = Map(
+        "mode" -> "CBC",
+        "parameter" -> "`iv`",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`",
+        "actualLength" -> "5"
+      )
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "unused",
+      "GCM",
+      ivHexOpt = Some("0000000000"),
+      expectedErrorClassOpt = Some("INVALID_PARAMETER_VALUE.AES_IV_LENGTH"),
+      errorParamsMap = Map(
+        "mode" -> "GCM",
+        "parameter" -> "`iv`",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`",
+        "actualLength" -> "5"
+      )
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "unused",
+      "GCM",
+      padding = "PKCS",
+      expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE"),
+      errorParamsMap = Map(
+        "mode" -> "GCM",
+        "padding" -> "PKCS",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`"
+      )
+    ),
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "unused",
+      "CBC",
+      aadOpt = Some("CBC doesn't support AADs"),
+      expectedErrorClassOpt = Some("UNSUPPORTED_FEATURE.AES_MODE_AAD"),
+      errorParamsMap = Map(
+        "mode" -> "CBC",
+        "functionName" -> "`aes_encrypt`"
+      )
+    )
+  )
+
+  test("AesEncrypt unsupported errors") {
+    unsupportedErrorCases.foreach { t =>
+      checkExpectedError(t, encDecCase)
+    }
+  }
+
+  val corruptedCiphertexts = Seq(
+    // This is truncated
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93=",
+      "CBC",
+      expectedErrorClassOpt = Some("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR"),
+      errorParamsMap = Map(
+        "parameter" -> "`expr`, `key`",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`",
+        "detailMessage" ->
+          "Input length must be multiple of 16 when decrypting with padded cipher"
+      )
+    ),
+    // The ciphertext is corrupted
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "y5la3muiuxN2suj6VsYXB+1XUFjtrUD0/zv5eDafsA3U",
+      "GCM",
+      expectedErrorClassOpt = Some("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR"),
+      errorParamsMap = Map(
+        "parameter" -> "`expr`, `key`",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`",
+        "detailMessage" -> "Tag mismatch!"
+      )
+    ),
+    // Valid ciphertext, wrong AAD
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4",
+      "GCM",
+      aadOpt = Some("The ciphertext is valid, but the AAD is wrong"),
+      expectedErrorClassOpt = Some("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR"),
+      errorParamsMap = Map(
+        "parameter" -> "`expr`, `key`",
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`",
+        "detailMessage" -> "Tag mismatch!"
+      )
+    )
+  )
+
+  test("AesEncrypt Expected Errors") {
+    corruptedCiphertexts.foreach { t =>
+      checkExpectedError(t, decOnlyCase)
+    }
+  }
+
+
+  private def checkExpectedError(t: TestCase, f: TestCase => Unit) = {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        f(t)
+      },
+      errorClass = t.expectedErrorClassOpt.get,
+      parameters = t.errorParamsMap
+    )
   }
 }

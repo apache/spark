@@ -567,7 +567,7 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t lateral view posexplode(x) posexpl as x, y",
       expected)
 
-    val sql =
+    val sql1 =
       """select *
         |from t
         |lateral view explode(x) expl
@@ -575,7 +575,7 @@ class PlanParserSuite extends AnalysisTest {
         |  sum(x)
         |  FOR y IN ('a', 'b')
         |)""".stripMargin
-    val fragment =
+    val fragment1 =
       """from t
         |lateral view explode(x) expl
         |pivot (
@@ -583,13 +583,65 @@ class PlanParserSuite extends AnalysisTest {
         |  FOR y IN ('a', 'b')
         |)""".stripMargin
     checkError(
-      exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0013",
+      exception = parseException(sql1),
+      errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_PIVOT",
       parameters = Map.empty,
       context = ExpectedContext(
-        fragment = fragment,
+        fragment = fragment1,
         start = 9,
         stop = 84))
+
+    val sql2 =
+      """select *
+        |from t
+        |lateral view explode(x) expl
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    val fragment2 =
+      """from t
+        |lateral view explode(x) expl
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_UNPIVOT",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = fragment2,
+        start = 9,
+        stop = 74))
+
+    val sql3 =
+      """select *
+        |from t
+        |lateral view explode(x) expl
+        |pivot (
+        |  sum(x)
+        |  FOR y IN ('a', 'b')
+        |)
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    val fragment3 =
+      """from t
+        |lateral view explode(x) expl
+        |pivot (
+        |  sum(x)
+        |  FOR y IN ('a', 'b')
+        |)
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = fragment3,
+        start = 9,
+        stop = 115))
   }
 
   test("joins") {
