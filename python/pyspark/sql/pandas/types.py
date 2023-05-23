@@ -208,11 +208,15 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
+def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
-            StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+            StructField(
+                field.name,
+                from_arrow_type(field.type, prefer_timestamp_ntz),
+                nullable=field.nullable,
+            )
             for field in arrow_schema
         ]
     )

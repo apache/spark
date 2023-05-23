@@ -573,7 +573,7 @@ class ArrowTestsMixin:
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 
         arrow_schema = to_arrow_schema(self.schema)
-        schema_rt = from_arrow_schema(arrow_schema)
+        schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
     def test_createDataFrame_with_ndarray(self):
