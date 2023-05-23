@@ -23,9 +23,6 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
     def test_nondeterministic_vectorized_udf_in_aggregate(self):
         self.check_nondeterministic_analysis_exception()
 
-    # def test_scalar_iter_udf_close_early(self):
-    #     self.check_scalar_iter_udf_close_early()
-
     @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
     def test_vectorized_udf_empty_partition(self):
         super().test_vectorized_udf_empty_partition()
@@ -46,11 +43,13 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
     def test_scalar_iter_udf_close(self):
         self.check_scalar_iter_udf_close()
 
-    @unittest.skip("Spark Connect doesn't have parity returnType check.")
+    # TODO(SPARK-43727): Parity returnType check in Spark Connect
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_vectorized_udf_wrong_return_type(self):
         self.check_vectorized_udf_wrong_return_type()
 
-    @unittest.skip("Spark Connect doesn't have parity returnType check.")
+    # TODO(SPARK-43727): Parity returnType check in Spark Connect
+    @unittest.skip("SFails in Spark Connect, should enable.")
     def check_vectorized_udf_nested_struct(self):
         super.check_vectorized_udf_nested_struct()
 
