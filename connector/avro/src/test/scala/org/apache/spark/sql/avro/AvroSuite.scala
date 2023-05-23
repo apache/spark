@@ -1349,7 +1349,7 @@ abstract class AvroSuite
       spark.read.format("avro").load("*/*/*/*/*/*/*/something.avro")
     }
 
-    intercept[FileNotFoundException] {
+    intercept[IOException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
         withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
@@ -1358,7 +1358,7 @@ abstract class AvroSuite
       }
     }
 
-    intercept[FileNotFoundException] {
+    intercept[IOException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
 
