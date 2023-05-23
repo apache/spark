@@ -18,7 +18,7 @@ import unittest
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.pandas.tests.test_dataframe import *  # noqa: F401
 
     try:
         import xmlrunner
@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     loader = unittest.loader.TestLoader()
     loader.testNamePatterns = [
-        "pyspark.pandas.tests.connect.test_parity_dataframe.DataFrameParityTests.test_[stuvwxyz]*",
+        "pyspark.pandas.tests.test_dataframe.DataFrameTests.test_[tuvwxyz]*",
     ]
 
     unittest.main(testRunner=testRunner, verbosity=2, testLoader=loader)

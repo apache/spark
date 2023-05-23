@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     loader = unittest.loader.TestLoader()
     loader.testNamePatterns = [
-        "pyspark.pandas.tests.connect.test_parity_dataframe.DataFrameParityTests.test_[qr]*",
+        "pyspark.pandas.tests.connect.test_parity_dataframe.DataFrameParityTests.test_[qrs]*",
     ]
 
     unittest.main(testRunner=testRunner, verbosity=2, testLoader=loader)
