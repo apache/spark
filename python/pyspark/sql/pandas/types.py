@@ -505,6 +505,10 @@ def _create_converter_to_pandas(
     error_on_duplicated_field_names : bool, optional
         Whether raise an exception when there are duplicated field names.
         (default ``True``)
+    timestamp_utc_localized : bool, optional
+        Whether the timestamp values are localized to UTC or not.
+        The timestamp values from Arrow are localized to UTC,
+        whereas the ones from `df.collect()` are localized to the local timezone.
 
     Returns
     -------
@@ -666,6 +670,16 @@ def _create_converter_to_pandas(
                     return ts.tz_convert(timezone).tz_localize(None)
 
             return convert_timestamp
+
+        elif isinstance(dt, TimestampNTZType):
+
+            def convert_timestamp_ntz(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return pd.Timestamp(value)
+
+            return convert_timestamp_ntz
 
         else:
             return None
