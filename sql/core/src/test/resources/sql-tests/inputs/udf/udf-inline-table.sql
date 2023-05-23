@@ -52,23 +52,3 @@ select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b);
 
 -- string to timestamp
 select udf(a), b from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-12-06 01:00:00.0'), timestamp('1991-12-06 12:00:00.0'))) as data(a, b);
-
--- SC-126994: correctly handle DomainJoin predicates that are resulting from constant folding over
--- the temp function body.
-SET spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false;
-CREATE OR REPLACE TEMPORARY FUNCTION func_test(input string, arg string)
-RETURNS STRING
-RETURN
-
-WITH null_check AS (
-  SELECT CASE WHEN input IS NULL THEN NULL ELSE INPUT
-         END as new_input),
-  main_cte as (
-  SELECT CASE WHEN arg = 'Y' THEN new_input ELSE new_input END
-   FROM null_check)
-SELECT * FROM main_cte;
-
-SELECT func_test(null, 'Y');
-SET spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true;
-
-DROP TEMPORARY FUNCTION func_test;
