@@ -62,7 +62,7 @@ private[sql] class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
  * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
  * @param session
  */
-private[sql] class AmmoniteClassFinder(session: Session) extends ClassFinder {
+class AmmoniteClassFinder(session: Session) extends ClassFinder {
 
   override def findClasses(): Iterator[Artifact] = {
     session.frames.iterator.flatMap { frame =>
