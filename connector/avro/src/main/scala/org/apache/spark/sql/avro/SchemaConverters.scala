@@ -20,6 +20,7 @@ package org.apache.spark.sql.avro
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
@@ -147,27 +148,30 @@ object SchemaConverters {
           case _ =>
             // Convert complex unions to struct types where field names are member0, member1, etc.
             // This is consistent with the behavior when converting between Avro and Parquet.
-            val use_stable_id = SQLConf.get.getConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE)
+            val useSchemaId = SQLConf.get.getConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE)
 
-            var fieldNameSet : Set[String] = Set()
+            val fieldNameSet : mutable.Set[String] = mutable.Set()
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
                 val schemaType = toSqlTypeHelper(s, existingRecordNames)
-                // All fields are nullable because only one of them is set at a time
 
-                val fieldName = if (use_stable_id) {
+                val fieldName = if (useSchemaId) {
                   // Avro's field name may be case sensitive, so field names for two named type
-                  // could be "a" and "A" and we need to distinguish them.
-                  var temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
-                  while (fieldNameSet.contains(temp_name)) {
-                    temp_name = s"${temp_name}_$i"
+                  // could be "a" and "A" and we need to distinguish them. In this case, we throw
+                  // an option.
+                  val temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
+                  if (fieldNameSet.contains(temp_name)) {
+                    throw new IncompatibleSchemaException(
+                      "Cannot generate stable indentifier for Avro union type due to name " +
+                      s"conflict of type name ${s.getName}")
                   }
-                  fieldNameSet += temp_name
+                  fieldNameSet.add(temp_name)
                   temp_name
                 } else {
                   s"member$i"
                 }
 
+                // All fields are nullable because only one of them is set at a time
                 StructField(fieldName, schemaType.dataType, nullable = true)
             }
 

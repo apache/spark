@@ -98,10 +98,18 @@ abstract class AvroSuite
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
 
-  def checkUnionStableId(
-    types: List[Schema],
-    expectedSchema: String,
-    fieldsAndRow : Seq[(Any, Row)]): Unit = {
+  /* Check whether an Avro schema of union type is converted to SQL in an expected way, when the
+   * stable ID option is on.
+   *
+   * @param types           Avro types that contain in an Avro union type
+   * @param expectedSchema  expeted SQL schema, provided in DDL string form
+   * @param fieldsAndRow    A list of rows to be appended to the Avro file and the expected
+   *                        converted SQL rows
+   */
+  private def checkUnionStableId(
+      types: List[Schema],
+      expectedSchema: String,
+      fieldsAndRow: Seq[(Any, Row)]): Unit = {
     withSQLConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE.key -> "true") {
       withTempDir { dir =>
         val unionType = Schema.createUnion(
@@ -309,7 +317,7 @@ abstract class AvroSuite
     }
   }
 
-  test("union stable id") {
+  test("SPARK-43333: union stable id") {
     checkUnionStableId(
       List(Type.INT, Type.NULL, Type.STRING).map(Schema.create(_)),
       "struct<member_int: int, member_string: string>",
@@ -338,74 +346,77 @@ abstract class AvroSuite
       List(
         Schema.createEnum("myenum", "", null, List[String]("e1", "e2").asJava),
         Schema.createRecord("myrecord", "", null, false,
-          List[Schema.Field](new Schema.Field("field", Schema.createFixed("myfield", "", null, 6)))
+          List[Schema.Field](new Schema.Field("f", Schema.createFixed("myfield", "", null, 6)))
             .asJava),
         Schema.createRecord("myrecord2", "", null, false,
-          List[Schema.Field](new Schema.Field("field", Schema.create(Type.FLOAT)))
+          List[Schema.Field](new Schema.Field("f", Schema.create(Type.FLOAT)))
             .asJava)),
-      "struct<member_myenum: string, member_myrecord: struct<field: binary>, " +
-        "member_myrecord2: struct<field: float>>",
+      "struct<member_myenum: string, member_myrecord: struct<f: binary>, " +
+                    "member_myrecord2: struct<f: float>>",
       Seq())
 
-    // Two array or map is not allowed in union.
-    val e = intercept[Exception] {
-      Schema.createUnion(
-        List(
-          Schema.createArray(Schema.create(Type.FLOAT)),
-          Schema.createArray(Schema.create(Type.STRING))).asJava)
+    {
+      val e = intercept[Exception] {
+        checkUnionStableId(
+          List(
+            Schema.createFixed("MYFIELD2", "", null, 6),
+            Schema.createFixed("myfield1", "", null, 6),
+            Schema.createFixed("myfield2", "", null, 9)),
+          "",
+          Seq())
+      }
+      assert(e.getMessage.contains("Cannot generate stable indentifier"))
     }
-    assert(e.getMessage.contains("Duplicate in union"))
 
-    val e2 = intercept[Exception] {
-      Schema.createUnion(
-        List(
-          Schema.createMap(Schema.create(Type.FLOAT)),
-          Schema.createMap(Schema.create(Type.STRING))).asJava)
+    // Two array types or two map types are not allowed in union.
+    {
+      val e = intercept[Exception] {
+        Schema.createUnion(
+          List(
+           Schema.createArray(Schema.create(Type.FLOAT)),
+           Schema.createArray(Schema.create(Type.STRING))).asJava)
+      }
+      assert(e.getMessage.contains("Duplicate in union"))
     }
-    assert(e2.getMessage.contains("Duplicate in union"))
+    {
+      val e = intercept[Exception] {
+        Schema.createUnion(
+          List(
+            Schema.createMap(Schema.create(Type.FLOAT)),
+            Schema.createMap(Schema.create(Type.STRING))).asJava)
+      }
+      assert(e.getMessage.contains("Duplicate in union"))
+    }
 
     // Somehow Avro allows named type "array", but doesn't allow an array type in the same union.
-    val e3 = intercept[Exception] {
-      Schema.createUnion(
-        List(
-          Schema.createArray(Schema.create(Type.FLOAT)),
-          Schema.createFixed("array", "", null, 6)
-        ).asJava
-      )
+    {
+      val e = intercept[Exception] {
+        Schema.createUnion(
+          List(
+            Schema.createArray(Schema.create(Type.FLOAT)),
+            Schema.createFixed("array", "", null, 6)
+          ).asJava
+        )
+      }
+      assert(e.getMessage.contains("Duplicate in union"))
     }
-    assert(e3.getMessage.contains("Duplicate in union"))
-
-    val e4 = intercept[Exception] {
-      Schema.createUnion(
-        List(Schema.createFixed("long", "", null, 6)).asJava
-      )
+    {
+      val e = intercept[Exception] {
+        Schema.createUnion(
+          List(Schema.createFixed("long", "", null, 6)).asJava
+        )
+      }
+      assert(e.getMessage.contains("Schemas may not be named after primitives"))
     }
-    assert(e4.getMessage.contains("Schemas may not be named after primitives"))
 
-    val e5 = intercept[Exception] {
-      Schema.createUnion(
-        List(Schema.createFixed("bytes", "", null, 6)).asJava
-      )
+    {
+      val e = intercept[Exception] {
+        Schema.createUnion(
+          List(Schema.createFixed("bytes", "", null, 6)).asJava
+        )
+      }
+      assert(e.getMessage.contains("Schemas may not be named after primitives"))
     }
-    assert(e5.getMessage.contains("Schemas may not be named after primitives"))
-
-    checkUnionStableId(
-      List(
-        Schema.createFixed("MYFIELD2", "", null, 6),
-        Schema.createFixed("myfield1", "", null, 6),
-        Schema.createFixed("myfield2", "", null, 9),
-        Schema.createFixed("myfielD2", "", null, 12)),
-      "struct<member_myfield2: binary, member_myfield1: binary, " +
-        "member_myfield2_2: binary, member_myfield2_3: binary>",
-      Seq())
-
-    checkUnionStableId(
-      List(
-        Schema.createFixed("myfield", "", null, 6),
-        Schema.createFixed("MYFIELD", "", null, 6),
-        Schema.createFixed("myfield_1", "", null, 9)),
-      "struct<member_myfield: binary, member_myfield_1: binary, member_myfield_1_2: binary>",
-      Seq())
   }
 
   test("SPARK-27858 Union type: More than one non-null type") {
