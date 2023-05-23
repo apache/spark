@@ -187,6 +187,11 @@
     ],
     "sqlState" : "22003"
   },
+  "CODEC_NOT_AVAILABLE" : {
+    "message" : [
+      "Codec [<codecName>] is not available. Consider setting <configKey>=<configVal>"
+    ]
+  },
   "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
     "message" : [
       "Columns aliases are not allowed in <op>."
@@ -1383,6 +1388,11 @@
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
+    ]
+  },
+  "NO_SHORT_NAME_FOR_CODEC" : {
+    "message" : [
+      "No short name for codec <codecName>."
     ]
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {

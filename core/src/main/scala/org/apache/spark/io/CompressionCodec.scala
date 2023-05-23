@@ -26,7 +26,7 @@ import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
 import net.jpountz.xxhash.XXHashFactory
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
@@ -88,8 +88,12 @@ private[spark] object CompressionCodec {
     } catch {
       case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
-    codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
-      s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
+    codec.getOrElse(throw new SparkIllegalArgumentException(
+      errorClass = "CODEC_NOT_AVAILABLE",
+      messageParameters = Map(
+        "codecName" -> codecName,
+        "configKey" -> configKey,
+        "configVal" -> FALLBACK_COMPRESSION_CODEC)))
   }
 
   /**
@@ -102,7 +106,9 @@ private[spark] object CompressionCodec {
     } else {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
-        .getOrElse { throw new IllegalArgumentException(s"No short name for codec $codecName.") }
+        .getOrElse { throw new SparkIllegalArgumentException(
+          errorClass = "NO_SHORT_NAME_FOR_CODEC",
+          messageParameters = Map("codecName" -> codecName))}
     }
   }
 
