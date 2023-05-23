@@ -1865,7 +1865,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             val escapeChar = Option(ctx.escapeChar)
               .map(stringLitCtx => string(visitStringLit(stringLitCtx))).map { str =>
               if (str.length != 1) {
-                throw QueryParsingErrors.invalidEscapeStringError(ctx)
+                throw QueryParsingErrors.invalidEscapeStringError(str, ctx)
               }
               str.charAt(0)
             }.getOrElse('\\')

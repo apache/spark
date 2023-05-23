@@ -139,8 +139,4 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     return true;
   }
 
-  @Override
-  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
-    return saslHandler.getMergedBlockMetaReqHandler();
-  }
 }

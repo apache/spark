@@ -134,4 +134,15 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       }
     }
   }
+
+  test("Check Python includes when zipped package is added") {
+    withTempPath { path =>
+      val stagingPath = path.toPath
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      val session = sessionHolder()
+      val remotePath = Paths.get("pyfiles/abc.zip")
+      artifactManager.addArtifact(session, remotePath, stagingPath)
+      assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
+    }
+  }
 }

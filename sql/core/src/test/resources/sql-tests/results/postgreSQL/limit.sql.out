@@ -132,9 +132,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
+    "expr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
     "name" : "limit"
   },
   "queryContext" : [ {
@@ -154,9 +154,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
+    "expr" : "\"CASE WHEN (_nondeterministic < 0.5) THEN NULL END\"",
     "name" : "offset"
   },
   "queryContext" : [ {

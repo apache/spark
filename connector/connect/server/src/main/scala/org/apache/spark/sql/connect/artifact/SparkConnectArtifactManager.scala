@@ -34,8 +34,8 @@ import org.apache.spark.util.Utils
  *
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
  * Currently, jars and classfile artifacts undergo additional processing:
- *   - Jars are automatically added to the underlying [[SparkContext]] and are accessible by all
- *     users of the cluster.
+ *   - Jars and pyfiles are automatically added to the underlying [[SparkContext]] and are
+ *     accessible by all users of the cluster.
  *   - Class files are moved into a common directory that is shared among all users of the
  *     cluster. Note: Under a multi-user setup, class file conflicts may occur between user
  *     classes as the class file directory is shared.
@@ -72,6 +72,7 @@ class SparkConnectArtifactManager private[connect] {
     }
 
   private val jarsList = new CopyOnWriteArrayList[Path]
+  private val pythonIncludeList = new CopyOnWriteArrayList[String]
 
   /**
    * Get the URLs of all jar artifacts added through the [[SparkConnectService]].
@@ -79,6 +80,13 @@ class SparkConnectArtifactManager private[connect] {
    * @return
    */
   def getSparkConnectAddedJars: Seq[URL] = jarsList.asScala.map(_.toUri.toURL).toSeq
+
+  /**
+   * Get the py-file names added through the [[SparkConnectService]].
+   *
+   * @return
+   */
+  def getSparkConnectPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
@@ -127,10 +135,17 @@ class SparkConnectArtifactManager private[connect] {
             s"Jars cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
-      if (remoteRelativePath.startsWith("jars")) {
+      if (remoteRelativePath.startsWith("jars/")) {
         // Adding Jars to the underlying spark context (visible to all users)
         sessionHolder.session.sessionState.resourceLoader.addJar(target.toString)
         jarsList.add(target)
+      } else if (remoteRelativePath.startsWith("pyfiles/")) {
+        sessionHolder.session.sparkContext.addFile(target.toString)
+        val stringRemotePath = remoteRelativePath.toString
+        if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
+            ".egg") || stringRemotePath.endsWith(".jar")) {
+          pythonIncludeList.add(target.getFileName.toString)
+        }
       }
     }
   }

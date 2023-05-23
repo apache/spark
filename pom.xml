@@ -170,12 +170,8 @@
     <scala.version>2.12.17</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <!--
-      This needs to be managed in different profiles to avoid
-      errors building different Hadoop versions.
-      See: SPARK-36547, SPARK-38394.
-       -->
-    <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
+    <!-- dont update scala-maven-plugin to version 4.8.1 SPARK-42809 and SPARK-43595 -->   
+    <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -785,7 +781,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-2</version>
+        <version>1.5.5-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

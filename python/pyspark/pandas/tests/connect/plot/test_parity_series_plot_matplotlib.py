@@ -24,27 +24,27 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class SeriesPlotMatplotlibParityTests(
     SeriesPlotMatplotlibTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43711): Fix Transformer.transform to work with Spark Connect.")
     def test_hist(self):
         super().test_hist()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43711): Fix Transformer.transform to work with Spark Connect.")
     def test_hist_plot(self):
         super().test_hist_plot()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43629): Enable RDD with Spark Connect.")
     def test_kde_plot(self):
         super().test_kde_plot()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43712): Enable SeriesPlotMatplotlibParityTests.test_line_plot.")
     def test_line_plot(self):
         super().test_line_plot()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43713): Enable SeriesPlotMatplotlibParityTests.test_pie_plot.")
     def test_pie_plot(self):
         super().test_pie_plot()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43711): Fix Transformer.transform to work with Spark Connect.")
     def test_single_value_hist(self):
         super().test_single_value_hist()
 

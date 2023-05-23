@@ -5,6 +5,13 @@
     ],
     "sqlState" : "42710"
   },
+  "AMBIGUOUS_ALIAS_IN_NESTED_CTE" : {
+    "message" : [
+      "Name <name> is ambiguous in nested CTE.",
+      "Please set <config> to \"CORRECTED\" so that name defined in inner CTE takes precedence. If set it to \"LEGACY\", outer CTE definitions will take precedence.",
+      "See '<docroot>/sql-migration-guide.html#query-engine'."
+    ]
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -916,6 +923,11 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_ESC" : {
+    "message" : [
+      "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
+    ]
+  },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
       "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
@@ -1040,6 +1052,33 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_LIMIT_LIKE_EXPRESSION" : {
+    "message" : [
+      "The limit like expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "The <name> expression must be integer type, but got <dataType>."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "The <name> expression must be equal to or greater than 0, but got <v>."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "The evaluated <name> expression must not be null."
+        ]
+      },
+      "IS_UNFOLDABLE" : {
+        "message" : [
+          "The <name> expression must evaluate to a constant value."
+        ]
+      }
+    }
+  },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
@@ -1069,9 +1108,14 @@
       "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
     "subClass" : {
-      "AES_KEY" : {
+      "AES_CRYPTO_ERROR" : {
         "message" : [
           "detail message: <detailMessage>"
+        ]
+      },
+      "AES_IV_LENGTH" : {
+        "message" : [
+          "supports 16-byte CBC IVs and 12-byte GCM IVs, but got <actualLength> bytes for <mode>."
         ]
       },
       "AES_KEY_LENGTH" : {
@@ -1213,11 +1257,6 @@
       }
     }
   },
-  "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE" : {
-    "message" : [
-      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
-    ]
-  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -1293,6 +1332,28 @@
       "PARTITION clause cannot contain the non-partition column: <columnName>."
     ],
     "sqlState" : "42000"
+  },
+  "NOT_ALLOWED_IN_FROM" : {
+    "message" : [
+      "Not allowed in the FROM clause:"
+    ],
+    "subClass" : {
+      "LATERAL_WITH_PIVOT" : {
+        "message" : [
+          "LATERAL together with PIVOT."
+        ]
+      },
+      "LATERAL_WITH_UNPIVOT" : {
+        "message" : [
+          "LATERAL together with UNPIVOT."
+        ]
+      },
+      "UNPIVOT_WITH_PIVOT" : {
+        "message" : [
+          "UNPIVOT together with PIVOT."
+        ]
+      }
+    }
   },
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
@@ -1834,6 +1895,16 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
+      "AES_MODE_AAD" : {
+        "message" : [
+          "<functionName> with AES-<mode> does not support additional authenticate data (AAD)."
+        ]
+      },
+      "AES_MODE_IV" : {
+        "message" : [
+          "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -2182,11 +2253,6 @@
       "DISTRIBUTE BY is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0013" : {
-    "message" : [
-      "LATERAL cannot be used together with PIVOT in FROM clause."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0014" : {
     "message" : [
       "TABLESAMPLE does not accept empty inputs."
@@ -2200,11 +2266,6 @@
   "_LEGACY_ERROR_TEMP_0016" : {
     "message" : [
       "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0017" : {
-    "message" : [
-      "Invalid escape string. Escape string must contain only one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_0018" : {
@@ -5219,21 +5280,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2401" : {
-    "message" : [
-      "The <name> expression must be integer type, but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2402" : {
-    "message" : [
-      "The evaluated <name> expression must not be null, but got <limitExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2403" : {
-    "message" : [
-      "The <name> expression must be equal to or greater than 0, but got <v>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2404" : {
