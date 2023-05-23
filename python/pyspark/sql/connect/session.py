@@ -593,16 +593,17 @@ class SparkSession:
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
         and only relevant for testing.
 
+        .. versionadded:: 3.4.0
+
         Returns
         -------
         :class:`SparkConnectClient`
         """
         return self._client
 
-    def addArtifacts(self, *path: str) -> None:
+    def addArtifacts(self, *path: str, pyfile: bool = False) -> None:
         """
-        Add artifact(s) to the client session. Currently only local files with .jar extension is
-        supported.
+        Add artifact(s) to the client session. Currently only local files are supported.
 
         .. versionadded:: 3.5.0
 
@@ -610,8 +611,10 @@ class SparkSession:
         ----------
         *path : tuple of str
             Artifact's URIs to add.
+        pyfile : bool
+            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
         """
-        self._client.add_artifacts(*path)
+        self._client.add_artifacts(*path, pyfile=pyfile)
 
     addArtifact = addArtifacts
 
