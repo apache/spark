@@ -19,8 +19,11 @@ package org.apache.spark.deploy.yarn
 
 import java.util
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
 import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
@@ -34,6 +37,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
@@ -46,8 +50,6 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
 import org.apache.spark.util.ManualClock
-
-import java.util.concurrent.atomic.AtomicInteger
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
