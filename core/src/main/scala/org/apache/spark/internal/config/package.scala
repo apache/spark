@@ -20,6 +20,7 @@ package org.apache.spark.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkContext
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
@@ -1108,6 +1109,19 @@ package object config {
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .version("2.2.0")
     .stringConf
+    .createOptional
+
+  private[spark] val OVERRIDE_LOG_LEVEL = ConfigBuilder("spark.log.level")
+    .doc("When set, overrides any user-defiend log settings as if calling " +
+      "SparkContext.setLogLevel() at Spark startup. Valid log levels include: " +
+      SparkContext.VALID_LOG_LEVELS.mkString(","))
+    .version("3.5.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(
+      logLevel => SparkContext.VALID_LOG_LEVELS.contains(logLevel),
+      "Invalid value for 'spark.log.level'. Valid values are " +
+      SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
