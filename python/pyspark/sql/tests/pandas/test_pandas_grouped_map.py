@@ -16,7 +16,6 @@
 #
 
 import datetime
-from distutils.version import LooseVersion
 import unittest
 
 from collections import OrderedDict
@@ -51,6 +50,7 @@ from pyspark.sql.types import (
     StructField,
     NullType,
     MapType,
+    YearMonthIntervalType,
 )
 from pyspark.errors import PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
@@ -403,10 +403,6 @@ class GroupedApplyInPandasTestsMixin:
         expected = df.toPandas().groupby("id").apply(foo_udf.func).reset_index(drop=True)
         assert_frame_equal(expected, result)
 
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not happen with pyarrow>=2.0",
-    )
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
             self.check_wrong_return_type()
@@ -414,9 +410,13 @@ class GroupedApplyInPandasTestsMixin:
     def check_wrong_return_type(self):
         with self.assertRaisesRegex(
             NotImplementedError,
-            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*StructType",
+            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*YearMonthIntervalType",
         ):
-            pandas_udf(lambda pdf: pdf, "id long, v array<struct<>>", PandasUDFType.GROUPED_MAP)
+            pandas_udf(
+                lambda pdf: pdf,
+                StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType())),
+                PandasUDFType.GROUPED_MAP,
+            )
 
     def test_wrong_args(self):
         with QuietTest(self.sc):
@@ -442,10 +442,6 @@ class GroupedApplyInPandasTestsMixin:
         with self.assertRaisesRegex(ValueError, "Invalid udf.*GROUPED_MAP"):
             df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not happen with pyarrow>=2.0",
-    )
     def test_unsupported_types(self):
         with QuietTest(self.sc):
             self.check_unsupported_types()
@@ -453,8 +449,8 @@ class GroupedApplyInPandasTestsMixin:
     def check_unsupported_types(self):
         common_err_msg = "Invalid return type.*grouped map Pandas UDF.*"
         unsupported_types = [
-            StructField("array_struct", ArrayType(StructType())),
-            StructField("map", MapType(StringType(), LongType())),
+            StructField("array_struct", ArrayType(YearMonthIntervalType())),
+            StructField("map", MapType(StringType(), YearMonthIntervalType())),
         ]
 
         for unsupported_type in unsupported_types:

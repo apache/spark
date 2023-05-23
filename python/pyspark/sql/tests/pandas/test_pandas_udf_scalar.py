@@ -48,6 +48,7 @@ from pyspark.sql.types import (
     MapType,
     DateType,
     BinaryType,
+    YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
@@ -653,18 +654,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             actual = df.select(g(f(col("id"))).alias("struct")).collect()
             self.assertEqual(expected, actual)
 
-    @unittest.skipIf(
-        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
-        "will not happen with pyarrow>=2.0",
-    )
     def test_vectorized_udf_wrong_return_type(self):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegex(
                     NotImplementedError,
-                    "Invalid return type.*scalar Pandas UDF.*ArrayType.*StructType",
+                    "Invalid return type.*scalar Pandas UDF.*ArrayType.*YearMonthIntervalType",
                 ):
-                    pandas_udf(lambda x: x, ArrayType(StructType()), udf_type)
+                    pandas_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         df = self.spark.range(10)
