@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from distutils.version import LooseVersion
 import unittest
 from typing import cast
 
@@ -31,7 +32,7 @@ from pyspark.sql.functions import (
     pandas_udf,
     PandasUDFType,
 )
-from pyspark.sql.types import ArrayType, TimestampType
+from pyspark.sql.types import ArrayType, StructType
 from pyspark.errors import AnalysisException, PySparkNotImplementedError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -46,6 +47,9 @@ from pyspark.testing.utils import QuietTest
 if have_pandas:
     import pandas as pd
     from pandas.testing import assert_frame_equal
+
+if have_pyarrow:
+    import pyarrow as pa
 
 
 @unittest.skipIf(
@@ -175,11 +179,15 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         )
         assert_frame_equal(expected4.toPandas(), result4.toPandas())
 
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not happen with pyarrow>=2.0",
+    )
     def test_unsupported_types(self):
         with QuietTest(self.sc):
             with self.assertRaises(PySparkNotImplementedError) as pe:
                 pandas_udf(
-                    lambda x: x, ArrayType(ArrayType(TimestampType())), PandasUDFType.GROUPED_AGG
+                    lambda x: x, ArrayType(ArrayType(StructType())), PandasUDFType.GROUPED_AGG
                 )
 
             self.check_error(
@@ -187,7 +195,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={
                     "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-                    "ArrayType(ArrayType(TimestampType(), True), True)"
+                    "ArrayType(ArrayType(StructType([]), True), True)"
                 },
             )
 
@@ -211,7 +219,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaises(PySparkNotImplementedError) as pe:
 
-                @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
+                @pandas_udf(ArrayType(StructType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):  # noqa: F811
                     return {v.mean(): v.std()}
 
@@ -220,7 +228,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={
                     "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-                    "ArrayType(TimestampType(), True)"
+                    "ArrayType(StructType([]), True)"
                 },
             )
 
