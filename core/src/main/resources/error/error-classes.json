@@ -1040,6 +1040,33 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_LIMIT_LIKE_EXPRESSION" : {
+    "message" : [
+      "The limit like expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "The <name> expression must be integer type, but got <dataType>."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "The <name> expression must be equal to or greater than 0, but got <v>."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "The evaluated <name> expression must not be null."
+        ]
+      },
+      "IS_UNFOLDABLE" : {
+        "message" : [
+          "The <name> expression must evaluate to a constant value."
+        ]
+      }
+    }
+  },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
@@ -1209,33 +1236,6 @@
       "PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION" : {
         "message" : [
           "The advisory partition size can't be specified with unspecified distribution."
-        ]
-      }
-    }
-  },
-  "INVALID_LIMIT_LIKE_EXPRESSION" : {
-    "message" : [
-      "The limit like expression <expr> is invalid."
-    ],
-    "subClass" : {
-      "IS_UNFOLDABLE" : {
-        "message" : [
-          "The <name> expression must evaluate to a constant value."
-        ]
-      },
-      "DATA_TYPE" : {
-        "message" : [
-          "The <name> expression must be integer type, but got <dataType>."
-        ]
-      },
-      "IS_NEGATIVE" : {
-        "message" : [
-          "The <name> expression must be equal to or greater than 0, but got <v>."
-        ]
-      },
-      "IS_NULL" : {
-        "message" : [
-          "The evaluated <name> expression must not be null."
         ]
       }
     }

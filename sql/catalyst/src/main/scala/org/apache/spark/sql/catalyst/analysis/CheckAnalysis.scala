@@ -94,7 +94,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         messageParameters = Map(
           "name" -> name,
           "expr" -> toSQLExpr(limitExpr),
-          "dataType" -> e.dataType.catalogString))
+          "dataType" -> toSQLType(e.dataType)))
       case e =>
         e.eval() match {
           case null => limitExpr.failAnalysis(
@@ -107,7 +107,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             messageParameters = Map(
               "name" -> name,
               "expr" -> toSQLExpr(limitExpr),
-              "v" -> v.toString))
+              "v" -> toSQLValue(v, IntegerType)))
           case _ => // OK
         }
     }
