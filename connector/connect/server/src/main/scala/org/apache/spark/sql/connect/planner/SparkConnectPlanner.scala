@@ -2401,13 +2401,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       } else {
         val foreachWriterPkt = unpackForeachWriter(writeOp.getForeachWriter.getScalaWriter)
         val clientWriter = foreachWriterPkt.foreachWriter
-        if (foreachWriterPkt.rowEncoder == null) {
-          // rowEncoder is null means the client-side writer has type parameter Row,
+        if (foreachWriterPkt.datasetEncoder == null) {
+          // datasetEncoder is null means the client-side writer has type parameter Row,
           // Since server-side dataset is always dataframe, here just use foreach directly.
           writer.foreach(clientWriter.asInstanceOf[ForeachWriter[Row]])
         } else {
           val encoder = ExpressionEncoder(
-            foreachWriterPkt.rowEncoder.asInstanceOf[AgnosticEncoder[Any]])
+            foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])
           writer.foreachImplementation(
             clientWriter.asInstanceOf[ForeachWriter[Any]],
             Left(encoder))

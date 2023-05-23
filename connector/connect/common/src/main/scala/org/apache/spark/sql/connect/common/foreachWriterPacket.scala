@@ -16,9 +16,6 @@
  */
 package org.apache.spark.sql.connect.common
 
-import com.google.protobuf.ByteString
-import java.io.{InputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
-
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 
 /**
@@ -33,33 +30,5 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
  *   An [[AgnosticEncoder]] for the input row
  */
 @SerialVersionUID(3882541391565582579L)
-case class foreachWriterPacket(foreachWriter: AnyRef, rowEncoder: AgnosticEncoder[_])
-    extends Serializable {
-
-  def writeTo(out: OutputStream): Unit = {
-    val oos = new ObjectOutputStream(out)
-    oos.writeObject(this)
-    oos.flush()
-  }
-
-  def toByteString: ByteString = {
-    val out = ByteString.newOutput()
-    writeTo(out)
-    out.toByteString
-  }
-}
-
-object foreachWriterPacket {
-  def apply(in: InputStream): foreachWriterPacket = {
-    val ois = new ObjectInputStream(in)
-    ois.readObject().asInstanceOf[foreachWriterPacket]
-  }
-
-  def apply(bytes: ByteString): foreachWriterPacket = {
-    val in = bytes.newInput()
-    try foreachWriterPacket(in)
-    finally {
-      in.close()
-    }
-  }
-}
+case class foreachWriterPacket(foreachWriter: AnyRef, datasetEncoder: AgnosticEncoder[_])
+    extends Serializable
