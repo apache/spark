@@ -42,8 +42,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0003",
-      messageParameters = Map("op" -> op),
+      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      messageParameters = Map("op" -> toSQLStmt(op)),
       ctx.identifierList())
   }
 
@@ -102,15 +102,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unpivotWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("UNPIVOT cannot be used together with PIVOT in FROM clause", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT", ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0013", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_PIVOT", ctx)
   }
 
   def lateralWithUnpivotInFromClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
+    new ParseException(errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_UNPIVOT", ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
@@ -188,8 +188,11 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def invalidEscapeStringError(ctx: PredicateContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0017", ctx)
+  def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_ESC",
+      messageParameters = Map("invalidEscape" -> toSQLValue(invalidEscape, StringType)),
+      ctx)
   }
 
   def trimOptionUnsupportedError(trimOption: Int, ctx: TrimContext): Throwable = {
@@ -460,7 +463,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def duplicateClausesError(clauseName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       messageParameters = Map("clauseName" -> clauseName),
       ctx)
   }

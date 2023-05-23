@@ -5,6 +5,13 @@
     ],
     "sqlState" : "42710"
   },
+  "AMBIGUOUS_ALIAS_IN_NESTED_CTE" : {
+    "message" : [
+      "Name <name> is ambiguous in nested CTE.",
+      "Please set <config> to \"CORRECTED\" so that name defined in inner CTE takes precedence. If set it to \"LEGACY\", outer CTE definitions will take precedence.",
+      "See '<docroot>/sql-migration-guide.html#query-engine'."
+    ]
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -62,14 +69,14 @@
       "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
     ]
   },
-  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>."
-    ]
-  },
   "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
     "message" : [
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> is not in defined values for enum: <enumString>."
     ]
   },
   "CANNOT_DECODE_URL" : {
@@ -180,11 +187,21 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Columns aliases are not allowed in <op>."
+    ]
+  },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
+  },
+  "COLUMN_NOT_DEFINED_IN_TABLE" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
@@ -201,6 +218,13 @@
     "message" : [
       "Another instance of this query was just started by a concurrent session."
     ]
+  },
+  "CONCURRENT_STREAM_LOG_UPDATE" : {
+    "message" : [
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
+      "Please make sure only one streaming job runs on a specific checkpoint location at a time."
+    ],
+    "sqlState" : "40000"
   },
   "CONNECT" : {
     "message" : [
@@ -556,6 +580,11 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATE_CLAUSES" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>. Please, remove one of them."
+    ]
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -894,6 +923,11 @@
     ],
     "sqlState" : "42K05"
   },
+  "INVALID_ESC" : {
+    "message" : [
+      "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
+    ]
+  },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
       "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
@@ -1018,6 +1052,33 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_LIMIT_LIKE_EXPRESSION" : {
+    "message" : [
+      "The limit like expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "The <name> expression must be integer type, but got <dataType>."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "The <name> expression must be equal to or greater than 0, but got <v>."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "The evaluated <name> expression must not be null."
+        ]
+      },
+      "IS_UNFOLDABLE" : {
+        "message" : [
+          "The <name> expression must evaluate to a constant value."
+        ]
+      }
+    }
+  },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
@@ -1047,9 +1108,14 @@
       "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
     "subClass" : {
-      "AES_KEY" : {
+      "AES_CRYPTO_ERROR" : {
         "message" : [
           "detail message: <detailMessage>"
+        ]
+      },
+      "AES_IV_LENGTH" : {
+        "message" : [
+          "supports 16-byte CBC IVs and 12-byte GCM IVs, but got <actualLength> bytes for <mode>."
         ]
       },
       "AES_KEY_LENGTH" : {
@@ -1266,6 +1332,28 @@
       "PARTITION clause cannot contain the non-partition column: <columnName>."
     ],
     "sqlState" : "42000"
+  },
+  "NOT_ALLOWED_IN_FROM" : {
+    "message" : [
+      "Not allowed in the FROM clause:"
+    ],
+    "subClass" : {
+      "LATERAL_WITH_PIVOT" : {
+        "message" : [
+          "LATERAL together with PIVOT."
+        ]
+      },
+      "LATERAL_WITH_UNPIVOT" : {
+        "message" : [
+          "LATERAL together with UNPIVOT."
+        ]
+      },
+      "UNPIVOT_WITH_PIVOT" : {
+        "message" : [
+          "UNPIVOT together with PIVOT."
+        ]
+      }
+    }
   },
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
@@ -1807,6 +1895,16 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
+      "AES_MODE_AAD" : {
+        "message" : [
+          "<functionName> with AES-<mode> does not support additional authenticate data (AAD)."
+        ]
+      },
+      "AES_MODE_IV" : {
+        "message" : [
+          "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -2135,11 +2233,6 @@
       "INSERT OVERWRITE DIRECTORY is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0003" : {
-    "message" : [
-      "Columns aliases are not allowed in <op>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
@@ -2160,11 +2253,6 @@
       "DISTRIBUTE BY is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0013" : {
-    "message" : [
-      "LATERAL cannot be used together with PIVOT in FROM clause."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0014" : {
     "message" : [
       "TABLESAMPLE does not accept empty inputs."
@@ -2178,11 +2266,6 @@
   "_LEGACY_ERROR_TEMP_0016" : {
     "message" : [
       "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0017" : {
-    "message" : [
-      "Invalid escape string. Escape string must contain only one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_0018" : {
@@ -2263,11 +2346,6 @@
   "_LEGACY_ERROR_TEMP_0039" : {
     "message" : [
       "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0041" : {
-    "message" : [
-      "Found duplicate clauses: <clauseName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {
@@ -3196,11 +3274,6 @@
   "_LEGACY_ERROR_TEMP_1205" : {
     "message" : [
       "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1206" : {
-    "message" : [
-      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1207" : {
@@ -4877,7 +4950,7 @@
   },
   "_LEGACY_ERROR_TEMP_2249" : {
     "message" : [
-      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB."
+      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>: <dataSize>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2250" : {
@@ -5207,26 +5280,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2400" : {
-    "message" : [
-      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2401" : {
-    "message" : [
-      "The <name> expression must be integer type, but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2402" : {
-    "message" : [
-      "The evaluated <name> expression must not be null, but got <limitExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2403" : {
-    "message" : [
-      "The <name> expression must be equal to or greater than 0, but got <v>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2404" : {

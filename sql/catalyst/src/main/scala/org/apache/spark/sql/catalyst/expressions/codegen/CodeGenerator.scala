@@ -1443,7 +1443,7 @@ object CodeGenerator extends Logging {
     cache.get(code)
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
-    // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
+    // https://guava.dev/releases/14.0.1/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
     case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
       throw e.getCause

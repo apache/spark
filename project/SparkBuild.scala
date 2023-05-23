@@ -31,7 +31,7 @@ import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import sbtpomreader.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
@@ -549,6 +549,7 @@ object SparkParallelTestGrouping {
 
   private val testsWhichShouldRunInTheirOwnDedicatedJvm = Set(
     "org.apache.spark.DistributedSuite",
+    "org.apache.spark.scheduler.HealthTrackerIntegrationSuite",
     "org.apache.spark.sql.catalyst.expressions.DateExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.HashExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.CastSuite",
@@ -1123,7 +1124,7 @@ object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"))
     .settings(oldDepsSettings)
-    .disablePlugins(com.typesafe.sbt.pom.PomReaderPlugin)
+    .disablePlugins(sbtpomreader.PomReaderPlugin)
 
   lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Set[ModuleID]]] {
     SparkBuild.mimaProjects

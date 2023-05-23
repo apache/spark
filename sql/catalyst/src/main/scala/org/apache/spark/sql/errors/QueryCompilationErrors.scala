@@ -2050,14 +2050,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "inputTypesLen" -> bound.inputTypes().length.toString))
   }
 
-  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1200",
-      messageParameters = Map(
-        "name" -> name,
-        "config" -> LEGACY_CTE_PRECEDENCE_POLICY.key))
-  }
-
   def commandUnsupportedInV2TableError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1200",
@@ -2132,12 +2124,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def columnNotDefinedInTableError(
       colType: String, colName: String, tableName: String, tableCols: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       messageParameters = Map(
         "colType" -> colType,
-        "colName" -> colName,
-        "tableName" -> tableName,
-        "tableCols" -> tableCols.mkString(", ")))
+        "colName" -> toSQLId(colName),
+        "tableName" -> toSQLId(tableName),
+        "tableCols" -> tableCols.map(toSQLId).mkString(", ")))
   }
 
   def invalidLiteralForWindowDurationError(): Throwable = {
@@ -3440,6 +3432,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
+  }
+
+  def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "config" -> toSQLConf(LEGACY_CTE_PRECEDENCE_POLICY.key),
+        "docroot" -> SPARK_DOC_ROOT))
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {

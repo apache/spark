@@ -20,6 +20,8 @@ package org.apache.spark.sql.streaming
 import java.io.{File, FileWriter}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -70,6 +72,27 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         eventually(timeout(30.seconds)) {
           assert(query.status.isDataAvailable)
           assert(query.recentProgress.nonEmpty) // Query made progress.
+        }
+
+        val lastProgress = query.lastProgress
+        assert(lastProgress != null)
+        assert(lastProgress.name == queryName)
+        assert(!lastProgress.durationMs.isEmpty)
+        assert(!lastProgress.eventTime.isEmpty)
+        assert(lastProgress.stateOperators.nonEmpty)
+        assert(
+          lastProgress.stateOperators.head.customMetrics.keySet().asScala == Set(
+            "loadedMapCacheHitCount",
+            "loadedMapCacheMissCount",
+            "stateOnCurrentVersionSizeBytes"))
+        assert(lastProgress.sources.nonEmpty)
+        assert(lastProgress.sink.description == "MemorySink")
+        assert(lastProgress.observedMetrics.isEmpty)
+
+        query.recentProgress.foreach { p =>
+          assert(p.id == lastProgress.id)
+          assert(p.runId == lastProgress.runId)
+          assert(p.name == lastProgress.name)
         }
 
         query.explain() // Prints the plan to console.
