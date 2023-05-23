@@ -2027,6 +2027,12 @@
       "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
     ]
   },
+  "OPERATION_CANCELLED" : {
+    "message" : [
+      "Operation has been cancelled."
+    ],
+    "sqlState" : "HY008"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."

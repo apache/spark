@@ -54,10 +54,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.MetricGenerator
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -2377,7 +2377,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         .build())
 
     // Send Metrics
-    responseObserver.onNext(SparkConnectStreamHandler.createMetricsResponse(sessionId, df))
+    responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionId, df))
   }
 
   private def handleRegisterUserDefinedFunction(

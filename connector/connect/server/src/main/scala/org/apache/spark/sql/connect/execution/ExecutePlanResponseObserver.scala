@@ -15,17 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.service
+package org.apache.spark.sql.connect.execution
 
-import org.apache.spark.connect.proto
+import io.grpc.stub.StreamObserver
+
+import org.apache.spark.connect.proto.ExecutePlanResponse
 
 /**
- * Object used to hold the Spark Connect execution state.
+ * Container for responses to Execution.
+ *
+ * TODO: At this moment, it simply forwards response to the underlying GRPC StreamObserver.
+ * Detaching execution from the RPC handler, this can be used to store the responses, and then
+ * send them to different GRPC StreamObservers.
+ *
+ * @param responseObserver
  */
-case class ExecutePlanHolder(
-    operationId: String,
-    sessionHolder: SessionHolder,
-    request: proto.ExecutePlanRequest) {
+class ExecutePlanResponseObserver(responseObserver: StreamObserver[ExecutePlanResponse])
+    extends StreamObserver[ExecutePlanResponse] {
 
   val jobTag =
     "SparkConnect_" +
@@ -39,4 +45,15 @@ case class ExecutePlanHolder(
     sessionHolder.session.sparkContext.cancelJobsWithTag(jobTag)
   }
 
+  def onNext(r: ExecutePlanResponse): Unit = {
+    responseObserver.onNext(r)
+  }
+
+  def onError(t: Throwable): Unit = {
+    responseObserver.onError(t)
+  }
+
+  def onCompleted(): Unit = {
+    responseObserver.onCompleted()
+  }
 }

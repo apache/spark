@@ -49,7 +49,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     q1.onComplete {
       case Success(_) =>
         error = Some("q1 shouldn't have finished!")
-      case Failure(t) if t.getMessage.contains("cancelled") =>
+      case Failure(t) if t.getMessage.contains("OPERATION_CANCELLED") =>
         q1Interrupted = true
       case Failure(t) =>
         error = Some("unexpected failure in q1: " + t.toString)
@@ -57,7 +57,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     q2.onComplete {
       case Success(_) =>
         error = Some("q2 shouldn't have finished!")
-      case Failure(t) if t.getMessage.contains("cancelled") =>
+      case Failure(t) if t.getMessage.contains("OPERATION_CANCELLED") =>
         q2Interrupted = true
       case Failure(t) =>
         error = Some("unexpected failure in q2: " + t.toString)
@@ -89,11 +89,11 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     val e1 = intercept[SparkException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
-    assert(e1.getMessage.contains("cancelled"), s"Unexpected exception: $e1")
+    assert(e1.getMessage.contains("OPERATION_CANCELLED"), s"Unexpected exception: $e1")
     val e2 = intercept[SparkException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
-    assert(e2.getMessage.contains("cancelled"), s"Unexpected exception: $e2")
+    assert(e2.getMessage.contains("OPERATION_CANCELLED"), s"Unexpected exception: $e2")
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds))
   }
