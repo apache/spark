@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
+import pandas as pd
 from typing import Any, Union
 
-from pyspark.mlv2.base import Evaluator
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol
+from pyspark.mlv2.base import Evaluator
 from pyspark.mlv2.util import aggregate_dataframe
+from pyspark.sql import DataFrame
 
 import torch
 import torcheval.metrics as torchmetrics
