@@ -50,7 +50,7 @@ if have_pandas:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class WindowPandasUDFTests(ReusedSQLTestCase):
+class WindowPandasUDFTestsMixin:
     @property
     def data(self):
         return (
@@ -392,6 +392,10 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         )
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
+
+
+class WindowPandasUDFTests(ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

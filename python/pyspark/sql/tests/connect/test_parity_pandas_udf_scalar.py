@@ -16,7 +16,7 @@
 #
 import unittest
 from pyspark.sql.tests.pandas.test_pandas_udf_scalar import ScalarPandasUDFTestsMixin
-from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCase):
