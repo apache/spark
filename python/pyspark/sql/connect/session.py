@@ -553,49 +553,24 @@ class SparkSession:
             error_class="NOT_IMPLEMENTED", message_parameters={"feature": "getActiveSession()"}
         )
 
-    def newSession(self) -> Any:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "newSession()"}
-        )
-
     @property
     def conf(self) -> RuntimeConf:
         return RuntimeConf(self.client)
 
     @property
-    def sparkContext(self) -> Any:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "sparkContext()"}
-        )
-
-    @property
     def streams(self) -> "StreamingQueryManager":
         return StreamingQueryManager(self)
 
-    @property
-    def _jsc(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jsc"}
-        )
-
-    @property
-    def _jconf(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jconf"}
-        )
-
-    @property
-    def _jvm(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jvm"}
-        )
-
-    @property
-    def _jsparkSession(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-            message_parameters={"attr_name": "_jsparkSession"},
-        )
+    def __getattr__(self, name: str) -> Any:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
+        elif name in ["newSession", "sparkContext"]:
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
+            )
+        return object.__getattribute__(self, name)
 
     @property
     def udf(self) -> "UDFRegistration":
