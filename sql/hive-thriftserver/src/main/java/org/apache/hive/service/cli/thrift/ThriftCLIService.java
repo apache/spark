@@ -383,7 +383,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       return cliService.getDelegationTokenFromMetaStore(userName);
     } catch (UnsupportedOperationException e) {
       // The delegation token is not applicable in the given deployment mode
-      // such as HMS is not kerberos secured 
+      // such as HMS is not kerberos secured
     }
     return null;
   }
