@@ -3457,18 +3457,21 @@ class Analyzer(override val catalogManager: CatalogManager)
     // the output list looks like: join keys, columns from left, columns from right
     val (projectList, hiddenList) = joinType match {
       case LeftOuter =>
-        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)), rightKeys)
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)),
+          rightKeys.map(_.withNullability(true)))
       case LeftExistence(_) =>
         (leftKeys ++ lUniqueOutput, Seq.empty)
       case RightOuter =>
-        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput, leftKeys)
+        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput,
+          leftKeys.map(_.withNullability(true)))
       case FullOuter =>
         // in full outer join, joinCols should be non-null if there is.
         val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
         (joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true)),
-          leftKeys ++ rightKeys)
+          leftKeys.map(_.withNullability(true)) ++
+          rightKeys.map(_.withNullability(true)))
       case _ : InnerLike =>
         (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
