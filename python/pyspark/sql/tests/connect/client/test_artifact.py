@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import shutil
+import tempfile
 import unittest
 import os
 
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
+from pyspark.sql.functions import udf
 
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -46,7 +48,7 @@ class ArtifactTests(ReusedConnectTestCase):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         response = self.artifact_manager._retrieve_responses(
-            self.artifact_manager._create_requests(small_jar_path)
+            self.artifact_manager._create_requests(small_jar_path, pyfile=False)
         )
         self.assertTrue(response.artifacts[0].name.endswith(f"{file_name}.jar"))
 
@@ -55,7 +57,7 @@ class ArtifactTests(ReusedConnectTestCase):
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
-        requests = list(self.artifact_manager._create_requests(small_jar_path))
+        requests = list(self.artifact_manager._create_requests(small_jar_path, pyfile=False))
         self.assertEqual(len(requests), 1)
 
         request = requests[0]
@@ -77,7 +79,7 @@ class ArtifactTests(ReusedConnectTestCase):
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
-        requests = list(self.artifact_manager._create_requests(large_jar_path))
+        requests = list(self.artifact_manager._create_requests(large_jar_path, pyfile=False))
         # Expected chunks = roundUp( file_size / chunk_size) = 12
         # File size of `junitLargeJar.jar` is 384581 bytes.
         large_jar_size = os.path.getsize(large_jar_path)
@@ -108,7 +110,9 @@ class ArtifactTests(ReusedConnectTestCase):
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
-        requests = list(self.artifact_manager._create_requests(small_jar_path, small_jar_path))
+        requests = list(
+            self.artifact_manager._create_requests(small_jar_path, small_jar_path, pyfile=False)
+        )
         # Single request containing 2 artifacts.
         self.assertEqual(len(requests), 1)
 
@@ -143,7 +147,7 @@ class ArtifactTests(ReusedConnectTestCase):
 
         requests = list(
             self.artifact_manager._create_requests(
-                small_jar_path, large_jar_path, small_jar_path, small_jar_path
+                small_jar_path, large_jar_path, small_jar_path, small_jar_path, pyfile=False
             )
         )
         # There are a total of 14 requests.
@@ -199,6 +203,39 @@ class ArtifactTests(ReusedConnectTestCase):
             self.assertEqual(artifact1.data.data, data)
             self.assertEqual(artifact2.data.crc, crc)
             self.assertEqual(artifact2.data.data, data)
+
+    def test_add_pyfile(self):
+        with tempfile.TemporaryDirectory() as d:
+            pyfile_path = os.path.join(d, "my_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 10")
+
+            @udf("long")
+            def func(x):
+                import my_pyfile
+
+                return my_pyfile.my_func()
+
+            self.spark.addArtifacts(pyfile_path, pyfile=True)
+            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], 10)
+
+    def test_add_zipped_package(self):
+        with tempfile.TemporaryDirectory() as d:
+            package_path = os.path.join(d, "my_zipfile")
+            os.mkdir(package_path)
+            pyfile_path = os.path.join(package_path, "__init__.py")
+            with open(pyfile_path, "w") as f:
+                _ = f.write("my_func = lambda: 5")
+            shutil.make_archive(package_path, "zip", d, "my_zipfile")
+
+            @udf("long")
+            def func(x):
+                import my_zipfile
+
+                return my_zipfile.my_func()
+
+            self.spark.addArtifacts(f"{package_path}.zip", pyfile=True)
+            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], 5)
 
 
 if __name__ == "__main__":

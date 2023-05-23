@@ -18,6 +18,8 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import importlib
+import sys
 import os
 import zlib
 from itertools import chain
@@ -35,6 +37,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 
 
 JAR_PREFIX: str = "jars"
+PYFILE_PREFIX: str = "pyfiles"
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -94,6 +97,11 @@ def new_jar_artifact(file_name: str, storage: LocalData) -> Artifact:
     return _new_artifact(JAR_PREFIX, ".jar", file_name, storage)
 
 
+def new_pyfile_artifact(file_name: str, storage: LocalData) -> Artifact:
+    assert any(file_name.endswith(s) for s in (".py", ".zip", ".egg", ".jar"))
+    return _new_artifact(PYFILE_PREFIX, "", file_name, storage)
+
+
 def _new_artifact(
     prefix: str, required_suffix: str, file_name: str, storage: LocalData
 ) -> Artifact:
@@ -128,7 +136,7 @@ class ArtifactManager:
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
 
-    def _parse_artifacts(self, path_or_uri: str) -> List[Artifact]:
+    def _parse_artifacts(self, path_or_uri: str, pyfile: bool) -> List[Artifact]:
         # Currently only local files with .jar extension is supported.
         uri = path_or_uri
         if urlparse(path_or_uri).scheme == "":  # Is path?
@@ -137,16 +145,25 @@ class ArtifactManager:
         if parsed.scheme == "file":
             local_path = url2pathname(parsed.path)
             name = Path(local_path).name
-            if name.endswith(".jar"):
+            if pyfile and name.endswith(".py"):
+                artifact = new_pyfile_artifact(name, LocalFile(local_path))
+                importlib.invalidate_caches()
+            elif pyfile and (
+                name.endswith(".zip") or name.endswith(".egg") or name.endswith(".jar")
+            ):
+                sys.path.insert(1, local_path)
+                artifact = new_pyfile_artifact(name, LocalFile(local_path))
+                importlib.invalidate_caches()
+            elif name.endswith(".jar"):
                 artifact = new_jar_artifact(name, LocalFile(local_path))
             else:
                 raise RuntimeError(f"Unsupported file format: {local_path}")
             return [artifact]
         raise RuntimeError(f"Unsupported scheme: {uri}")
 
-    def _create_requests(self, *path: str) -> Iterator[proto.AddArtifactsRequest]:
+    def _create_requests(self, *path: str, pyfile: bool) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
-        return self._add_artifacts(chain(*(self._parse_artifacts(p) for p in path)))
+        return self._add_artifacts(chain(*(self._parse_artifacts(p, pyfile=pyfile) for p in path)))
 
     def _retrieve_responses(
         self, requests: Iterator[proto.AddArtifactsRequest]
@@ -154,12 +171,12 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
-    def add_artifacts(self, *path: str) -> None:
+    def add_artifacts(self, *path: str, pyfile: bool) -> None:
         """
         Add a single artifact to the session.
         Currently only local files with .jar extension is supported.
         """
-        requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(*path)
+        requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(*path, pyfile=pyfile)
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
         summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
 
