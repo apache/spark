@@ -117,6 +117,7 @@ object SparkConnectServerUtils {
             "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
             "2. Test with sbt: run test with `-Phive` profile")
         // scalastyle:on println
+        IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
         "in-memory"
       }
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
