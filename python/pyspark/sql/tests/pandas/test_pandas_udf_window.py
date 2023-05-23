@@ -394,7 +394,7 @@ class WindowPandasUDFTestsMixin:
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
 
-class WindowPandasUDFTests(ReusedSQLTestCase):
+class WindowPandasUDFTests(WindowPandasUDFTestsMixin, ReusedSQLTestCase):
     pass
 
 
