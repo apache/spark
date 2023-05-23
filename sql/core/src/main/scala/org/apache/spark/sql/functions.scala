@@ -2912,11 +2912,22 @@ object functions {
   def lower(e: Column): Column = withExpr { Lower(e.expr) }
 
   /**
+   * Computes the Levenshtein distance of the two given string columns if it's less than or
+   * equal to a given threshold.
+   * @return result distance, or -1
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def levenshtein(l: Column, r: Column, threshold: Int): Column = withExpr {
+    Levenshtein(l.expr, r.expr, Some(Literal(threshold)))
+  }
+
+  /**
    * Computes the Levenshtein distance of the two given string columns.
    * @group string_funcs
    * @since 1.5.0
    */
-  def levenshtein(l: Column, r: Column): Column = withExpr { Levenshtein(l.expr, r.expr) }
+  def levenshtein(l: Column, r: Column): Column = withExpr { Levenshtein(l.expr, r.expr, None) }
 
   /**
    * Locate the position of the first occurrence of substr.
