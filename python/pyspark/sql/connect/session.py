@@ -564,11 +564,11 @@ class SparkSession:
     def __getattr__(self, name: str) -> Any:
         if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
             raise PySparkAttributeError(
-                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jsc"}
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
         elif name in ["newSession", "sparkContext"]:
             raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED", message_parameters={"feature": "sparkContext()"}
+                error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
         return object.__getattribute__(self, name)
 
