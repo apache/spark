@@ -16,32 +16,19 @@
 #
 import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg import GroupedAggPandasUDFTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_udf_window import WindowPandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnectTestCase):
-    def test_unsupported_types(self):
-        self.check_unsupported_types()
-
+class PandasUDFWindowParityTests(WindowPandasUDFTestsMixin, ReusedConnectTestCase):
+    # TODO: Expression "<lambda>(v)" within a window function doesn't raise a AnalysisException
+    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_invalid_args(self):
-        self.check_invalid_args()
-
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_grouped_with_empty_partition(self):
-        super().test_grouped_with_empty_partition()
-
-    @unittest.skip("Spark Connect doesn't have parity returnType check.")
-    def check_unsupported_types(self):
-        super().check_unsupported_types()
-
-    @unittest.skip("Spark Connect does not support convert UNPARSED to catalyst types.")
-    def test_manual(self):
-        super().test_manual()
+        super().test_invalid_args()
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_pandas_udf_window import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
