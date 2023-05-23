@@ -72,9 +72,7 @@ class SummarizerAggState:
 
 
 def summarize_dataframe(
-        dataframe: Union["DataFrame", "pd.DataFrame"],
-        column: str,
-        metrics: list[str]
+    dataframe: Union["DataFrame", "pd.DataFrame"], column: str, metrics: list[str]
 ) -> dict[str, Any]:
     """
     Summarize an array type column over a spark dataframe or a pandas dataframe

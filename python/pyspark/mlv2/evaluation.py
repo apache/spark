@@ -33,6 +33,7 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
 
     .. versionadded:: 3.5.0
     """
+
     def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
         super().__init__()
         self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
@@ -55,7 +56,6 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
         raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 
     def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
-
         prediction_col = self.getPredictionCol()
         label_col = self.getLabelCol()
 
