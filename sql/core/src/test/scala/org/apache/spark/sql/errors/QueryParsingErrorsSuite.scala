@@ -262,9 +262,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS",
       sqlState = "42000",
       context = ExpectedContext(
-        fragment = "func1",
-        start = 40,
-        stop = 44))
+        fragment = sqlText,
+        start = 0,
+        stop = 141))
   }
 
   test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Create temporary function with multi-part name") {
@@ -281,9 +281,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         "statement" -> "CREATE TEMPORARY FUNCTION",
         "funcName" -> "`ns`.`db`.`func`"),
       context = ExpectedContext(
-        fragment = "ns.db.func",
-        start = 26,
-        stop = 35))
+        fragment = sqlText,
+        start = 0,
+        stop = 132))
   }
 
   test("INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE: " +
@@ -299,9 +299,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       parameters = Map("database" -> "`db`"),
       context = ExpectedContext(
-        fragment = "db.func",
-        start = 26,
-        stop = 32))
+        fragment = sqlText,
+        start = 0,
+        stop = 129))
   }
 
   test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Drop temporary function requires a single part name") {
@@ -314,8 +314,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         "statement" -> "DROP TEMPORARY FUNCTION",
         "funcName" -> "`db`.`func`"),
       context = ExpectedContext(
-        fragment = "db.func",
-        start = 24,
+        fragment = sqlText,
+        start = 0,
         stop = 30))
   }
 

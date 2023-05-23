@@ -1690,9 +1690,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
       parameters = Map("op" -> "DELETE"),
       context = ExpectedContext(
-        fragment = "testcat.ns1.ns2.tbl",
-        start = 12,
-        stop = 30))
+        fragment = sql,
+        start = 0,
+        stop = 56))
   }
 
   test("update table: basic") {
@@ -1732,9 +1732,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
       parameters = Map("op" -> "UPDATE"),
       context = ExpectedContext(
-        fragment = "testcat.ns1.ns2.tbl",
-        start = 7,
-        stop = 25))
+        fragment = sql,
+        start = 0,
+        stop = 70))
   }
 
   test("merge into table: basic") {
@@ -1932,9 +1932,9 @@ class DDLParserSuite extends AnalysisTest {
           errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
           parameters = Map("op" -> "MERGE"),
           context = ExpectedContext(
-            fragment = "testcat1.ns1.ns2.tbl",
-            start = 11,
-            stop = 30))
+            fragment = sql,
+            start = 0,
+            stop = 365))
     }
   }
 
@@ -1992,9 +1992,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
-        fragment = "testcat1.ns1.ns2.tbl",
-        start = 11,
-        stop = 30))
+        fragment = sql,
+        start = 0,
+        stop = 369))
   }
 
   test("merge into table: only the last not matched clause can omit the condition") {
@@ -2015,9 +2015,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "NON_LAST_NOT_MATCHED_BY_TARGET_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
-        fragment = "testcat1.ns1.ns2.tbl",
-        start = 11,
-        stop = 30))
+        fragment = sql,
+        start = 0,
+        stop = 494))
   }
 
   test("merge into table: only the last not matched by source clause can omit the " +
@@ -2039,9 +2039,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "NON_LAST_NOT_MATCHED_BY_SOURCE_CLAUSE_OMIT_CONDITION",
       parameters = Map.empty,
       context = ExpectedContext(
-        fragment = "testcat1.ns1.ns2.tbl",
-        start = 11,
-        stop = 30))
+        fragment = sql,
+        start = 0,
+        stop = 531))
   }
 
   test("merge into table: there must be a when (not) matched condition") {
@@ -2054,9 +2054,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "_LEGACY_ERROR_TEMP_0008",
       parameters = Map.empty,
       context = ExpectedContext(
-        fragment = "testcat1.ns1.ns2.tbl",
-        start = 11,
-        stop = 30))
+        fragment = sql,
+        start = 0,
+        stop = 106))
   }
 
   test("show views") {
@@ -2304,9 +2304,9 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "_LEGACY_ERROR_TEMP_0037",
       parameters = Map("quoted" -> "a.b"),
       context = ExpectedContext(
-        fragment = "a.b.c",
-        start = 12,
-        stop = 16))
+        fragment = sql,
+        start = 0,
+        stop = 42))
   }
 
   test("UNCACHE TABLE") {

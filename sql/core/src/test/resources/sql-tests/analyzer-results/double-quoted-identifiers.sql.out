@@ -218,8 +218,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 15,
-    "stopIndex" : 23,
-    "fragment" : "not_exist"
+    "stopIndex" : 37,
+    "fragment" : "not_exist AS X(`hello`)"
   } ]
 }
 

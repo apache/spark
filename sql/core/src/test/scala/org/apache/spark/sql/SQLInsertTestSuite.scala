@@ -175,7 +175,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         sqlState = None,
         parameters = Map("objectName" -> "`c4`", "proposal" -> "`c1`, `c2`, `c3`"),
         context = ExpectedContext(
-          fragment = "t1", start = 12, stop = 13
+          fragment = "INSERT INTO t1 (c1, c2, c4)", start = 0, stop = 26
         ))
     }
   }

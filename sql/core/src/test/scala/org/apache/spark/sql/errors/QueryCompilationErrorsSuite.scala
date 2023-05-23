@@ -536,7 +536,7 @@ class QueryCompilationErrorsSuite
         errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
         parameters = Map("name" -> "`c`.`X`", "n" -> "2"),
         context = ExpectedContext(
-          fragment = "t", start = 12, stop = 12))
+          fragment = query, start = 0, stop = 52))
     }
   }
 

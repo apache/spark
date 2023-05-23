@@ -2074,10 +2074,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES,
         UNRESOLVED_IDENTIFIER_CLAUSE), ruleId) {
-      case UnresolvedFunctionNameIdentifierClause(expr, cmd, requirePersistentFunc, mismatchHint,
-      possibleQualifiedName) if (expr.resolved) =>
-        UnresolvedFunctionName(IdentifierClauseUtil.evalIdentifierClause(expr), cmd,
-          requirePersistentFunc, mismatchHint, possibleQualifiedName)
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)

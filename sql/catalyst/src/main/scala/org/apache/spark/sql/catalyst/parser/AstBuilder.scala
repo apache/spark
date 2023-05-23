@@ -64,9 +64,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   def withIdentClause(ctx: IdentifierReferenceContext, builder: Seq[String]
-    => LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    => LogicalPlan): LogicalPlan = {
     if (ctx.expression != null) {
-      PlanWithUnresolvedIdentifier(expression(ctx.expression), builder)
+      PlanWithUnresolvedIdentifier(withOrigin(ctx) { expression(ctx.expression) }, builder)
     } else {
       builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier()))
     }
@@ -284,7 +284,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         val (relation, cols, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
         withIdentClause(relation, ident => {
           InsertIntoStatement(
-            UnresolvedRelation(ident),
+            createUnresolvedRelation(relation, ident),
             partition,
             cols,
             query,
@@ -295,7 +295,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         val (relation, cols, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
         withIdentClause(relation, ident => {
           InsertIntoStatement(
-            UnresolvedRelation(ident),
+            createUnresolvedRelation(relation, ident),
             partition,
             cols,
             query,
@@ -303,9 +303,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             ifPartitionNotExists)
         })
       case ctx: InsertIntoReplaceWhereContext =>
-        withIdentClause(ctx.identifierReference(), ident => {
+        withIdentClause(ctx.identifierReference, ident => {
           OverwriteByExpression.byPosition(
-            UnresolvedRelation(ident),
+            createUnresolvedRelation(ctx.identifierReference, ident),
             query,
             expression(ctx.whereClause().booleanExpression()))
         })
@@ -384,8 +384,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), ident => {
-      val table = UnresolvedRelation(ident)
+    val relation = ctx.identifierReference()
+    withIdentClause(relation, ident => {
+      val table = createUnresolvedRelation(relation, ident)
       val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
       val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
       val predicate = if (ctx.whereClause() != null) {
@@ -398,8 +399,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), ident => {
-      val table = UnresolvedRelation(ident)
+    val relation = ctx.identifierReference()
+    withIdentClause(relation, ident => {
+      val table = createUnresolvedRelation(relation, ident)
       val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
       val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
       val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -423,12 +425,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.target, ident => {
-      val targetTable = UnresolvedRelation(ident)
+      val targetTable = createUnresolvedRelation(ctx.target, ident)
       val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
       val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
 
       val sourceTableOrQuery = if (ctx.source != null) {
-        createUnresolvedRelation(ctx.source)
+        createUnresolvedRelationOrIdentifierClause(ctx.source)
       } else if (ctx.sourceQuery != null) {
         visitQuery(ctx.sourceQuery)
       } else {
@@ -2699,12 +2701,72 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   /**
    * Create an [[UnresolvedRelationOrIdentifierClause]] from a relation reference context.
    */
-  private def createUnresolvedRelation(
+  private def createUnresolvedRelationOrIdentifierClause(
       ctx: IdentifierReferenceContext):
   UnresolvedRelationOrIdentifierClause = withOrigin(ctx) {
     Option(ctx.multipartIdentifier()).map(p =>
       UnresolvedRelation(visitMultipartIdentifier(p)))
     .getOrElse(UnresolvedRelationIdentifierClause(expression(ctx.expression())))
+  }
+
+  /**
+   * Create an [[UnresolvedRelation]] from a multi-part identifier.
+   */
+  private def createUnresolvedRelation(
+      ctx: ParserRuleContext, ident: Seq[String]): UnresolvedRelation = withOrigin(ctx) {
+    UnresolvedRelation(ident)
+  }
+
+  /**
+   * Create an [[UnresolvedTable]] from a multi-part identifier context.
+   */
+  private def createUnresolvedTable(
+      ctx: ParserRuleContext,
+      ident: Seq[String],
+      commandName: String,
+      relationTypeMismatchHint: Option[String] = None): UnresolvedTable = withOrigin(ctx) {
+    UnresolvedTable(ident, commandName, relationTypeMismatchHint)
+  }
+
+  /**
+   * Create an [[UnresolvedView]] from a multi-part identifier context.
+   */
+  private def createUnresolvedView(
+      ctx: ParserRuleContext,
+      ident: Seq[String],
+      commandName: String,
+      allowTemp: Boolean = true,
+      relationTypeMismatchHint: Option[String] = None): UnresolvedView = withOrigin(ctx) {
+    UnresolvedView(ident, commandName, allowTemp, relationTypeMismatchHint)
+  }
+
+  /**
+   * Create an [[UnresolvedTableOrView]] from a multi-part identifier context.
+   */
+  private def createUnresolvedTableOrView(
+      ctx: ParserRuleContext,
+      ident: Seq[String],
+      commandName: String,
+      allowTempView: Boolean = true): UnresolvedTableOrView = withOrigin(ctx) {
+    UnresolvedTableOrView(ident, commandName, allowTempView)
+  }
+
+  /**
+   * Create an [[UnresolvedFunction]] from a multi-part identifier context.
+   */
+  private def createUnresolvedFunctionName(
+      ctx: ParserRuleContext,
+      ident: Seq[String],
+      commandName: String,
+      requirePersistent: Boolean = false,
+      funcTypeMismatchHint: Option[String] = None,
+      possibleQualifiedName: Option[Seq[String]] = None): UnresolvedFunctionName = withOrigin(ctx) {
+    UnresolvedFunctionName(
+      ident,
+      commandName,
+      requirePersistent,
+      funcTypeMismatchHint,
+      possibleQualifiedName)
   }
 
   /**
@@ -4156,7 +4218,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val colToken = if (ctx.COLUMN() != null) "COLUMN" else "COLUMNS"
     withIdentClause(ctx.identifierReference, ident => {
       AddColumns(
-        UnresolvedTable(ident, s"ALTER TABLE ... ADD $colToken", None),
+        createUnresolvedTable(ctx.identifierReference, ident, s"ALTER TABLE ... ADD $colToken"),
         ctx.columns.qualifiedColTypeWithPosition.asScala.map(typedVisit[QualifiedColType]).toSeq)
     })
   }
@@ -4173,7 +4235,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.table, ident => {
       RenameColumn(
-        UnresolvedTable(ident, "ALTER TABLE ... RENAME COLUMN", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.table, ident, "ALTER TABLE ... RENAME COLUMN"),
         UnresolvedFieldName(typedVisit[Seq[String]](ctx.from)),
         ctx.to.getText)
     })
@@ -4241,7 +4303,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     withIdentClause(ctx.table, ident => {
       AlterColumn(
-        UnresolvedTable(ident, s"ALTER TABLE ... $verb COLUMN", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.table, ident, s"ALTER TABLE ... $verb COLUMN"),
         UnresolvedFieldName(typedVisit[Seq[String]](ctx.column)),
         dataType = dataType,
         nullable = nullable,
@@ -4278,7 +4340,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     withIdentClause(ctx.table, ident => {
       AlterColumn(
-        UnresolvedTable(ident, "ALTER TABLE ... CHANGE COLUMN", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.table, ident, "ALTER TABLE ... CHANGE COLUMN"),
         UnresolvedFieldName(columnNameParts),
         dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
         nullable = None,
@@ -4334,7 +4396,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     withIdentClause(ctx.table, ident => {
       ReplaceColumns(
-        UnresolvedTable(ident, "ALTER TABLE ... REPLACE COLUMNS", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.table, ident, "ALTER TABLE ... REPLACE COLUMNS"),
         columnsToAdd)
     })
   }
@@ -4354,7 +4416,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val columnsToDrop = ctx.columns.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
     withIdentClause(ctx.identifierReference, ident => {
       DropColumns(
-        UnresolvedTable(ident, "ALTER TABLE ... DROP COLUMNS", None),
+        createUnresolvedTable(ctx.identifierReference, ident, "ALTER TABLE ... DROP COLUMNS"),
         columnsToDrop.map(UnresolvedFieldName(_)).toSeq,
         ifExists)
     })
@@ -4376,7 +4438,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     if (ctx.VIEW != null) {
       withIdentClause(ctx.identifierReference, ident => {
         SetViewProperties(
-          UnresolvedView(ident,
+          createUnresolvedView(
+            ctx.identifierReference,
+            ident,
             commandName = "ALTER VIEW ... SET TBLPROPERTIES",
             allowTemp = false,
             relationTypeMismatchHint = alterViewTypeMismatchHint),
@@ -4385,7 +4449,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } else {
       withIdentClause(ctx.identifierReference, ident => {
         SetTableProperties(
-          UnresolvedTable(ident,
+          createUnresolvedTable(
+            ctx.identifierReference,
+            ident,
             "ALTER TABLE ... SET TBLPROPERTIES",
             alterTableTypeMismatchHint),
           cleanedTableProperties)
@@ -4411,7 +4477,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     if (ctx.VIEW != null) {
       withIdentClause(ctx.identifierReference, ident => {
         UnsetViewProperties(
-          UnresolvedView(ident,
+          createUnresolvedView(
+            ctx.identifierReference,
+            ident,
             commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
             allowTemp = false,
             relationTypeMismatchHint = alterViewTypeMismatchHint),
@@ -4421,7 +4489,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } else {
       withIdentClause(ctx.identifierReference, ident => {
         UnsetTableProperties(
-          UnresolvedTable(ident,
+          createUnresolvedTable(
+            ctx.identifierReference,
+            ident,
             "ALTER TABLE ... UNSET TBLPROPERTIES",
             alterTableTypeMismatchHint),
           cleanedProperties,
@@ -4441,7 +4511,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       SetTableLocation(
-        UnresolvedTable(ident,
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident,
           "ALTER TABLE ... SET LOCATION ...",
           alterTableTypeMismatchHint),
         Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
@@ -4460,7 +4532,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       } else {
         withIdentClause(ctx.identifierReference, ident => {
           DescribeColumn(
-            UnresolvedTableOrView(ident, "DESCRIBE TABLE", allowTempView = true),
+            createUnresolvedTableOrView(
+              ctx.identifierReference,
+              ident,
+              "DESCRIBE TABLE"),
               UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
               isExtended)
         })
@@ -4478,7 +4553,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       }
       withIdentClause(ctx.identifierReference, ident => {
         DescribeRelation(
-          UnresolvedTableOrView(ident, "DESCRIBE TABLE", allowTempView = true),
+          createUnresolvedTableOrView(ctx.identifierReference, ident, "DESCRIBE TABLE"),
           partitionSpec, isExtended)
       })
     }
@@ -4518,7 +4593,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       checkPartitionSpec()
       withIdentClause(ctx.identifierReference, ident => {
         AnalyzeColumn(
-          UnresolvedTableOrView(ident, "ANALYZE TABLE ... FOR ALL COLUMNS", allowTempView = true),
+          createUnresolvedTableOrView(
+            ctx.identifierReference,
+            ident,
+            "ANALYZE TABLE ... FOR ALL COLUMNS"),
           None,
           allColumns = true)
       })
@@ -4530,7 +4608,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       }
       withIdentClause(ctx.identifierReference, ident => {
         AnalyzeTable(
-          UnresolvedTableOrView(ident, "ANALYZE TABLE", allowTempView = false),
+          createUnresolvedTableOrView(
+            ctx.identifierReference,
+            ident,
+            "ANALYZE TABLE",
+            allowTempView = false),
           partitionSpec,
           noScan = ctx.identifier != null)
       })
@@ -4538,7 +4620,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       checkPartitionSpec()
       withIdentClause(ctx.identifierReference, ident => {
         AnalyzeColumn(
-          UnresolvedTableOrView(ident, "ANALYZE TABLE ... FOR COLUMNS ...", allowTempView = true),
+          createUnresolvedTableOrView(
+            ctx.identifierReference,
+            ident,
+            "ANALYZE TABLE ... FOR COLUMNS ..."),
           Option(visitIdentifierSeq(ctx.identifierSeq())),
           allColumns = false)
       })
@@ -4587,7 +4672,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       }
     withIdentClause(ctx.identifierReference, ident => {
       RepairTable(
-        UnresolvedTable(ident, s"MSCK REPAIR TABLE$option", relationTypeMismatchHint = None),
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident, s"MSCK REPAIR TABLE$option"),
         enableAddPartitions,
         enableDropPartitions)
     })
@@ -4605,7 +4692,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       LoadData(
-        child = UnresolvedTable(ident, "LOAD DATA", relationTypeMismatchHint = None),
+        child = createUnresolvedTable(ctx.identifierReference, ident, "LOAD DATA"),
         path = string(visitStringLit(ctx.path)),
         isLocal = ctx.LOCAL != null,
         isOverwrite = ctx.OVERWRITE != null,
@@ -4620,8 +4707,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       ShowCreateTable(
-        UnresolvedTableOrView(ident, "SHOW CREATE TABLE",
-        allowTempView = false),
+        createUnresolvedTableOrView(
+          ctx.identifierReference,
+          ident,
+          "SHOW CREATE TABLE",
+          allowTempView = false),
         ctx.SERDE != null)
     })
   }
@@ -4640,7 +4730,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     val query = Option(ctx.query).map(plan)
     withIdentClause(ctx.identifierReference, ident => {
-      val relation = UnresolvedRelation(ident)
+      val relation = createUnresolvedRelation(ctx.identifierReference, ident)
       val tableName = relation.multipartIdentifier
       if (query.isDefined && tableName.length > 1) {
         val catalogAndNamespace = tableName.init
@@ -4663,7 +4753,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       UncacheTable(
-        UnresolvedRelation(ident),
+        createUnresolvedRelation(ctx.identifierReference, ident),
         ctx.EXISTS != null)
     })
   }
@@ -4678,7 +4768,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
-      val table = UnresolvedTable(ident, "TRUNCATE TABLE", relationTypeMismatchHint = None)
+      val table = createUnresolvedTable(ctx.identifierReference, ident, "TRUNCATE TABLE")
       Option(ctx.partitionSpec).map { spec =>
         TruncatePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
       }.getOrElse(TruncateTable(table))
@@ -4702,7 +4792,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
     withIdentClause(ctx.identifierReference, ident => {
       ShowPartitions(
-        UnresolvedTable(ident, "SHOW PARTITIONS", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.identifierReference, ident, "SHOW PARTITIONS"),
       partitionKeys)
     })
   }
@@ -4717,7 +4807,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
-      RefreshTable(UnresolvedTableOrView(ident, "REFRESH TABLE", allowTempView = true))
+      RefreshTable(
+        createUnresolvedTableOrView(
+          ctx.identifierReference,
+          ident,
+          "REFRESH TABLE"))
     })
   }
 
@@ -4733,7 +4827,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.table, ident => {
-      val table = UnresolvedTableOrView(ident, "SHOW COLUMNS", allowTempView = true)
+      val table = createUnresolvedTableOrView(ctx.table, ident, "SHOW COLUMNS")
       val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
       // Use namespace only if table name doesn't specify it. If namespace is already specified
       // in the table name, it's checked against the given namespace after table/view is resolved.
@@ -4759,7 +4853,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
-      RecoverPartitions(UnresolvedTable(ident,
+      RecoverPartitions(
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident,
         "ALTER TABLE ... RECOVER PARTITIONS",
         alterTableTypeMismatchHint))
     })
@@ -4790,7 +4887,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
     withIdentClause(ctx.identifierReference, ident => {
       AddPartitions(
-        UnresolvedTable(ident,
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident,
           "ALTER TABLE ... ADD PARTITION ...",
           alterTableTypeMismatchHint),
         specsAndLocs.toSeq,
@@ -4810,7 +4909,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       RenamePartitions(
-        UnresolvedTable(ident,
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident,
           "ALTER TABLE ... RENAME TO PARTITION",
           alterTableTypeMismatchHint),
         UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
@@ -4840,7 +4941,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       .map(spec => UnresolvedPartitionSpec(spec))
     withIdentClause(ctx.identifierReference, ident => {
       DropPartitions(
-        UnresolvedTable(ident,
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident,
           "ALTER TABLE ... DROP PARTITION ...",
           alterTableTypeMismatchHint),
         partSpecs.toSeq,
@@ -4862,7 +4965,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       SetTableSerDeProperties(
-        UnresolvedTable(ident,
+        createUnresolvedTable(
+          ctx.identifierReference,
+          ident,
           "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
           alterTableTypeMismatchHint),
         Option(ctx.stringLit).map(x => string(visitStringLit(x))),
@@ -4883,9 +4988,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference, ident => {
       AlterViewAs(
-        UnresolvedView(ident, "ALTER VIEW ... AS",
-          allowTemp = true,
-          relationTypeMismatchHint = None),
+        createUnresolvedView(ctx.identifierReference, ident, "ALTER VIEW ... AS"),
         originalText = source(ctx.query),
         query = plan(ctx.query))
     })
@@ -4905,7 +5008,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val relationStr = if (isView) "VIEW" else "TABLE"
     withIdentClause(ctx.from, ident => {
       RenameTable(
-        UnresolvedTableOrView(ident, s"ALTER $relationStr ... RENAME TO", allowTempView = true),
+        createUnresolvedTableOrView(ctx.from, ident, s"ALTER $relationStr ... RENAME TO"),
         visitMultipartIdentifier(ctx.to),
         isView)
     })
@@ -4924,7 +5027,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.table, ident => {
       ShowTableProperties(
-        UnresolvedTableOrView(ident, "SHOW TBLPROPERTIES", allowTempView = true),
+        createUnresolvedTableOrView(ctx.table, ident, "SHOW TBLPROPERTIES"),
         Option(ctx.key).map(visitPropertyKey))
     })
   }
@@ -4943,7 +5046,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           Seq(describeFuncName.getText)
         }
       DescribeFunction(
-        UnresolvedFunctionName(
+        createUnresolvedFunctionName(
+          ctx.describeFuncName(),
           functionName,
           "DESCRIBE FUNCTION",
           requirePersistent = false,
@@ -4952,7 +5056,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } else {
       withIdentClause(describeFuncName.identifierReference(), ident => {
         DescribeFunction(
-          UnresolvedFunctionName(
+          createUnresolvedFunctionName(
+            describeFuncName.identifierReference,
             ident,
             "DESCRIBE FUNCTION",
             requirePersistent = false,
@@ -4992,8 +5097,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), ident => {
-      RefreshFunction(UnresolvedFunctionName(
+    withIdentClause(ctx.identifierReference, ident => {
+      RefreshFunction(createUnresolvedFunctionName(
+        ctx.identifierReference,
         ident,
         "REFRESH FUNCTION",
         requirePersistent = true,
@@ -5012,8 +5118,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val comment = visitComment(ctx.comment)
     withIdentClause(ctx.identifierReference, ident => {
       CommentOnTable(
-        UnresolvedTable(ident, "COMMENT ON TABLE", relationTypeMismatchHint = None),
-        comment)
+        createUnresolvedTable(ctx.identifierReference, ident, "COMMENT ON TABLE"), comment)
     })
   }
 
@@ -5046,7 +5151,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     withIdentClause(ctx.identifierReference, ident => {
       CreateIndex(
-        UnresolvedTable(ident, "CREATE INDEX", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.identifierReference, ident, "CREATE INDEX"),
         indexName,
         indexType,
         ctx.EXISTS != null,
@@ -5066,7 +5171,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val indexName = ctx.identifier.getText
     withIdentClause(ctx.identifierReference, ident => {
       DropIndex(
-        UnresolvedTable(ident, "DROP INDEX", relationTypeMismatchHint = None),
+        createUnresolvedTable(ctx.identifierReference, ident, "DROP INDEX"),
         indexName,
         ctx.EXISTS != null)
     })

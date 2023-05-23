@@ -887,17 +887,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX",
+  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "inputString" : "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `default`"
+    "database" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 27,
-    "stopIndex" : 65,
-    "fragment" : "IDENTIFIER('default.my' || 'DoubleAvg')"
+    "startIndex" : 1,
+    "stopIndex" : 108,
+    "fragment" : "CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.apache.spark.sql.MyDoubleAvg'"
   } ]
 }
 
@@ -909,17 +909,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX",
+  "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
-    "inputString" : "DROP TEMPORARY FUNCTION requires a single part name but got: `default`.`myDoubleAvg`"
+    "funcName" : "`default`.`myDoubleAvg`",
+    "statement" : "DROP TEMPORARY FUNCTION"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 25,
+    "startIndex" : 1,
     "stopIndex" : 63,
-    "fragment" : "IDENTIFIER('default.my' || 'DoubleAvg')"
+    "fragment" : "DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')"
   } ]
 }
 
@@ -939,9 +940,9 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 23,
-    "stopIndex" : 45,
-    "fragment" : "IDENTIFIER('default.v')"
+    "startIndex" : 1,
+    "stopIndex" : 62,
+    "fragment" : "CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1)"
   } ]
 }
 
@@ -1040,10 +1041,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX",
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
-    "inputString" : "table valued function cannot specify database name: `s`.`IDENTIFIER`"
+    "funcName" : "`s`.`IDENTIFIER`"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -140,9 +140,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       parameters = Map("statement" -> "CreateView"),
       context = ExpectedContext(
-        fragment = "v",
-        start = 12,
-        stop = 12))
+        fragment = "CREATE VIEW v AS SELECT :p AS p",
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("non-substituted parameters") {
