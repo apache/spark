@@ -862,9 +862,8 @@ class PlanParserSuite extends AnalysisTest {
     val fragment1 = "default.range(2)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map(
-        "inputString" -> "table valued function cannot specify database name: `default`.`range`"),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      parameters = Map("funcName" -> "`default`.`range`"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 14,
@@ -872,13 +871,11 @@ class PlanParserSuite extends AnalysisTest {
 
     // SPARK-38957
     val sql2 = "select * from spark_catalog.default.range(2)"
-    val value2 = "table valued function cannot specify database name: " +
-      "`spark_catalog`.`default`.`range`"
     val fragment2 = "spark_catalog.default.range(2)"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map("inputString" -> value2),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      parameters = Map("funcName" -> "`spark_catalog`.`default`.`range`"),
       context = ExpectedContext(
         fragment = fragment2,
         start = 14,

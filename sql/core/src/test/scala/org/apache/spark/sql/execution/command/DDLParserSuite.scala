@@ -718,9 +718,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "DROP TEMPORARY FUNCTION a.b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map(
-        "inputString" -> "DROP TEMPORARY FUNCTION requires a single part name but got: `a`.`b`"),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -729,9 +728,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map(
-        "inputString" -> "DROP TEMPORARY FUNCTION requires a single part name but got: `a`.`b`"),
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
