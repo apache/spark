@@ -184,14 +184,14 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
 
         # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
         # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
-        batch_iter = [
+        batch_iter = (
             (batch, arrow_type)
             for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
             for batch in batches
-        ]
+        )
 
         if self._assign_cols_by_name:
-            batch_iter = [
+            batch_iter = (
                 (
                     pa.RecordBatch.from_arrays(
                         [batch.column(field.name) for field in arrow_type],
@@ -200,7 +200,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
                     arrow_type,
                 )
                 for batch, arrow_type in batch_iter
-            ]
+            )
 
         super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
 
