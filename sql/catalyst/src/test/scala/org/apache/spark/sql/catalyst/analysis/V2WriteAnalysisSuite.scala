@@ -445,7 +445,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'", "too many data columns",
-      "Table columns: 'x', 'y'",
+      "Table columns (excluding columns with static partition values): 'x', 'y'",
       "Data columns: 'x', 'y', 'z'"))
   }
 
@@ -525,7 +525,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'", "not enough data columns",
-      "Table columns: 'x', 'y'",
+      "Table columns (excluding columns with static partition values): 'x', 'y'",
       "Data columns: 'y'"))
   }
 
@@ -539,7 +539,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'", "not enough data columns",
-      "Table columns: 'x', 'y'",
+      "Table columns (excluding columns with static partition values): 'x', 'y'",
       "Data columns: 'y'"))
   }
 
@@ -574,7 +574,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write", "'table-name'", "too many data columns",
-      "Table columns: 'x', 'y'",
+      "Table columns (excluding columns with static partition values): 'x', 'y'",
       "Data columns: 'a', 'b', 'c'"))
   }
 

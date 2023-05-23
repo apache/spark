@@ -63,7 +63,9 @@ case object ResolveReferencesInUpdate extends SQLConfHelper with ColumnResolutio
       resolved
     }
 
-    val newUpdate = u.copy(assignments = newAssignments)
+    val newUpdate = u.copy(
+      assignments = newAssignments,
+      condition = u.condition.map(resolveExpressionByPlanChildren(_, u)))
     newUpdate.copyTagsFrom(u)
     newUpdate
   }

@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.StructField
  *    all unary nodes that inherit the output columns from its child.
  */
 case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolutionHelper {
-  // TODO: support v2 write commands as well.
+  // TODO (SPARK-43752): support v2 write commands as well.
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
         i.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
