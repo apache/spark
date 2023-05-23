@@ -18,7 +18,6 @@
 from pyspark.mlv2.base import (
     Estimator,
     Transformer,
-    Evaluator,
     Model,
 )
 
