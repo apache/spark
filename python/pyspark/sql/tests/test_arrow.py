@@ -193,7 +193,7 @@ class ArrowTestsMixin:
         )
 
     @unittest.skipIf(
-        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
         "will not fallback with pyarrow>=2.0",
     )
     def test_toPandas_fallback_enabled(self):
@@ -215,7 +215,7 @@ class ArrowTestsMixin:
                         assert_frame_equal(pdf, pd.DataFrame({"a": [[Row()]]}))
 
     @unittest.skipIf(
-        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
         "will not fallback with pyarrow>=2.0",
     )
     def test_toPandas_fallback_disabled(self):
@@ -775,7 +775,7 @@ class ArrowTestsMixin:
         self.assertEqual(pdf_col_names, df.columns)
 
     @unittest.skipIf(
-        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
         "will not fallback with pyarrow>=2.0",
     )
     def test_createDataFrame_fallback_enabled(self):
@@ -796,7 +796,7 @@ class ArrowTestsMixin:
                     self.assertEqual(df.collect(), [Row(a=[Row()])])
 
     @unittest.skipIf(
-        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
         "will not fallback with pyarrow>=2.0",
     )
     def test_createDataFrame_fallback_disabled(self):

@@ -654,7 +654,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             self.assertEqual(expected, actual)
 
     @unittest.skipIf(
-        not have_pandas or LooseVersion(pa.__version__) >= "2.0",
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
         "will not happen with pyarrow>=2.0",
     )
     def test_vectorized_udf_wrong_return_type(self):
