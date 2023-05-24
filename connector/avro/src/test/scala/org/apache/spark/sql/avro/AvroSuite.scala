@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.io._
 import java.net.URL
-import java.nio.file.{Files, Paths, StandardCopyOption}
+import java.nio.file.{Files, NoSuchFileException, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 
@@ -1349,7 +1349,7 @@ abstract class AvroSuite
       spark.read.format("avro").load("*/*/*/*/*/*/*/something.avro")
     }
 
-    intercept[IOException] {
+    intercept[NoSuchFileException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
         withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
@@ -1358,7 +1358,7 @@ abstract class AvroSuite
       }
     }
 
-    intercept[IOException] {
+    intercept[NoSuchFileException] {
       withTempPath { dir =>
         FileUtils.touch(new File(dir, "test"))
 
