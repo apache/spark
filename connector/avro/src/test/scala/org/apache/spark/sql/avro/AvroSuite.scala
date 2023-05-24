@@ -98,14 +98,13 @@ abstract class AvroSuite
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
 
-  /* Check whether an Avro schema of union type is converted to SQL in an expected way, when the
-   * stable ID option is on.
-   *
-   * @param types           Avro types that contain in an Avro union type
-   * @param expectedSchema  expeted SQL schema, provided in DDL string form
-   * @param fieldsAndRow    A list of rows to be appended to the Avro file and the expected
-   *                        converted SQL rows
-   */
+  // Check whether an Avro schema of union type is converted to SQL in an expected way, when the
+  // stable ID option is on.
+  //
+  // @param types           Avro types that contain in an Avro union type
+  // @param expectedSchema  expeted SQL schema, provided in DDL string form
+  // @param fieldsAndRow    A list of rows to be appended to the Avro file and the expected
+  // converted SQL rows
   private def checkUnionStableId(
       types: List[Schema],
       expectedSchema: String,

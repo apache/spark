@@ -158,7 +158,7 @@ object SchemaConverters {
                 val fieldName = if (useSchemaId) {
                   // Avro's field name may be case sensitive, so field names for two named type
                   // could be "a" and "A" and we need to distinguish them. In this case, we throw
-                  // an option.
+                  // an exception.
                   val temp_name = s"member_${s.getName.toLowerCase(Locale.ROOT)}"
                   if (fieldNameSet.contains(temp_name)) {
                     throw new IncompatibleSchemaException(

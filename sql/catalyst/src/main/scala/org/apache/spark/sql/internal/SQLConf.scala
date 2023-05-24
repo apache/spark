@@ -3415,11 +3415,12 @@ object SQLConf {
 
   val AVRO_STABLE_ID_FOR_UNION_TYPE = buildConf(
     "spark.sql.avro.enableStableIdentifiersForUnionType")
-    .doc("If it is set to true, then Avro is desrialized to SQL schema, the union type is " +
-      "converted to structure in a way that field names of the structure are stable with the " +
-      "type. The generated field names are in lower cases. If two user defined type name are " +
-      "equal in case insensitive way, an exception would be thrown. Otherwise, the field names " +
-      "can be arbitrarily determined.")
+    .doc("If it is set to true, Avro schema is deserialized into Spark SQL schema, and the Avro " +
+      "Union type is transformed into a structure where the field names remain consistent with " +
+      "their respective types. The resulting field names are converted to lowercase, " +
+      "e.g. member_int or member_string. If two user-defined type names are identical regardless " +
+      "of case, an exception will be raised. However, in other cases, the field names can be " +
+      "uniquely identified.")
     .version("3.5.0")
     .booleanConf
     .createWithDefault(false)
