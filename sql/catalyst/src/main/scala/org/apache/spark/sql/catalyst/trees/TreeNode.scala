@@ -928,8 +928,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case map: Map[_, _] =>
       redactMapString(map, maxFields)
     case t: TableSpec =>
+      val newOptionsList = Utils.redact(t.options).toMap
+        .map { case (key, value) =>
+          (key, Literal(value))
+        }
       t.copy(properties = Utils.redact(t.properties).toMap,
-        options = Utils.redact(t.options).toMap) :: Nil
+        optionsList = newOptionsList) :: Nil
     case table: CatalogTable =>
       stringArgsForCatalogTable(table)
 
