@@ -29,9 +29,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
-import org.apache.spark.sql.connect.common.{foreachWriterPacket, ForeachWriter}
+import org.apache.spark.sql.connect.common.foreachWriterPacket
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger
