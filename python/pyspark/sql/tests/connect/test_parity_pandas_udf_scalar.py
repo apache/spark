@@ -48,11 +48,6 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
     def test_vectorized_udf_wrong_return_type(self):
         self.check_vectorized_udf_wrong_return_type()
 
-    # TODO(SPARK-43727): Parity returnType check in Spark Connect
-    @unittest.skip("SFails in Spark Connect, should enable.")
-    def check_vectorized_udf_nested_struct(self):
-        super.check_vectorized_udf_nested_struct()
-
     def test_vectorized_udf_invalid_length(self):
         self.check_vectorized_udf_invalid_length()
 
