@@ -45,9 +45,6 @@ case class PlanWithUnresolvedIdentifier(identifierExpr: Expression,
   override lazy val resolved = false
 }
 
-abstract class UnresolvedRelationOrIdentifierClause
-  extends LeafNode with NamedRelation
-
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
@@ -58,7 +55,7 @@ case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false)
-  extends UnresolvedRelationOrIdentifierClause {
+  extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
@@ -341,23 +338,6 @@ case class UnresolvedFunctionIdentifierClause(
       copy(arguments = newChildren)
     }
   }
-}
-
-/**
- * Holds the name of a relation that has yet to be looked up in a catalog.
- *
- * @param expr multipartIdentifier table name
- */
-case class UnresolvedRelationIdentifierClause(expr: Expression)
-  extends UnresolvedRelationOrIdentifierClause {
-
-  override def name: String = throw new UnresolvedException("name")
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
 }
 
 /**

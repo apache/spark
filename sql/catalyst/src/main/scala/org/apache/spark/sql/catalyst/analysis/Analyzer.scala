@@ -1084,8 +1084,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
-          case u@UnresolvedRelationIdentifierClause(expr) if expr.resolved =>
-            UnresolvedRelation(IdentifierClauseUtil.evalIdentifierClause(expr))
           case other => other
         }
 
@@ -2113,10 +2111,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 messageParameters = Map("name" -> u.name.quoted))
           }
         }
-
-      // Resolve IDENTIFIER clause.
-      case u@UnresolvedRelationIdentifierClause(expr) if expr.resolved =>
-        UnresolvedRelation(IdentifierClauseUtil.evalIdentifierClause(expr))
 
       // Resolve table-valued functions' output column aliases.
       case u: UnresolvedTVFAliases if u.child.resolved =>

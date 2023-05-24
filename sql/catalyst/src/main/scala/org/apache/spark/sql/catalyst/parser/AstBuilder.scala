@@ -433,104 +433,103 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.target, ident => {
-      val targetTable = createUnresolvedRelation(ctx.target, ident)
-      val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
-      val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
+    val targetTable = withIdentClause(ctx.target,
+      ident => { createUnresolvedRelation(ctx.target, ident) })
+    val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
+    val aliasedTarget = targetTableAlias.map(SubqueryAlias(_, targetTable)).getOrElse(targetTable)
 
-      val sourceTableOrQuery = if (ctx.source != null) {
-        createUnresolvedRelationOrIdentifierClause(ctx.source)
-      } else if (ctx.sourceQuery != null) {
-        visitQuery(ctx.sourceQuery)
-      } else {
-        throw QueryParsingErrors.emptySourceForMergeError(ctx)
-      }
-      val sourceTableAlias = getTableAliasWithoutColumnAlias(ctx.sourceAlias, "MERGE")
-      val aliasedSource =
-        sourceTableAlias.map(SubqueryAlias(_, sourceTableOrQuery)).getOrElse(sourceTableOrQuery)
+    val sourceTableOrQuery = if (ctx.source != null) {
+      withIdentClause(ctx.source,
+        ident => { createUnresolvedRelation(ctx.source, ident) })
+    } else if (ctx.sourceQuery != null) {
+      visitQuery(ctx.sourceQuery)
+    } else {
+      throw QueryParsingErrors.emptySourceForMergeError(ctx)
+    }
+    val sourceTableAlias = getTableAliasWithoutColumnAlias(ctx.sourceAlias, "MERGE")
+    val aliasedSource =
+      sourceTableAlias.map(SubqueryAlias(_, sourceTableOrQuery)).getOrElse(sourceTableOrQuery)
 
-      val mergeCondition = expression(ctx.mergeCondition)
+    val mergeCondition = expression(ctx.mergeCondition)
 
-      val matchedActions = ctx.matchedClause().asScala.map {
-        clause => {
-          if (clause.matchedAction().DELETE() != null) {
-            DeleteAction(Option(clause.matchedCond).map(expression))
-          } else if (clause.matchedAction().UPDATE() != null) {
-            val condition = Option(clause.matchedCond).map(expression)
-            if (clause.matchedAction().ASTERISK() != null) {
-              UpdateStarAction(condition)
-            } else {
-              UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
-            }
+    val matchedActions = ctx.matchedClause().asScala.map {
+      clause => {
+        if (clause.matchedAction().DELETE() != null) {
+          DeleteAction(Option(clause.matchedCond).map(expression))
+        } else if (clause.matchedAction().UPDATE() != null) {
+          val condition = Option(clause.matchedCond).map(expression)
+          if (clause.matchedAction().ASTERISK() != null) {
+            UpdateStarAction(condition)
           } else {
-            throw SparkException.internalError(
-              s"Unrecognized matched action: ${clause.matchedAction().getText}")
+            UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
           }
+        } else {
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.matchedAction().getText}")
         }
       }
-      val notMatchedActions = ctx.notMatchedClause().asScala.map {
-        clause => {
-          if (clause.notMatchedAction().INSERT() != null) {
-            val condition = Option(clause.notMatchedCond).map(expression)
-            if (clause.notMatchedAction().ASTERISK() != null) {
-              InsertStarAction(condition)
-            } else {
-              val columns = clause.notMatchedAction().columns.multipartIdentifier()
+    }
+    val notMatchedActions = ctx.notMatchedClause().asScala.map {
+      clause => {
+        if (clause.notMatchedAction().INSERT() != null) {
+          val condition = Option(clause.notMatchedCond).map(expression)
+          if (clause.notMatchedAction().ASTERISK() != null) {
+            InsertStarAction(condition)
+          } else {
+            val columns = clause.notMatchedAction().columns.multipartIdentifier()
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
-              val values = clause.notMatchedAction().expression().asScala.map(expression)
-              if (columns.size != values.size) {
-                throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
-              }
-              InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
+            val values = clause.notMatchedAction().expression().asScala.map(expression)
+            if (columns.size != values.size) {
+              throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
             }
-          } else {
-            throw SparkException.internalError(
-              s"Unrecognized matched action: ${clause.notMatchedAction().getText}")
+            InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }
+        } else {
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.notMatchedAction().getText}")
         }
       }
-      val notMatchedBySourceActions = ctx.notMatchedBySourceClause().asScala.map {
-        clause => {
-          val notMatchedBySourceAction = clause.notMatchedBySourceAction()
-          if (notMatchedBySourceAction.DELETE() != null) {
-            DeleteAction(Option(clause.notMatchedBySourceCond).map(expression))
-          } else if (notMatchedBySourceAction.UPDATE() != null) {
-            val condition = Option(clause.notMatchedBySourceCond).map(expression)
-            UpdateAction(condition,
-              withAssignments(clause.notMatchedBySourceAction().assignmentList()))
-          } else {
-            throw SparkException.internalError(
-              s"Unrecognized matched action: ${clause.notMatchedBySourceAction().getText}")
-          }
+    }
+    val notMatchedBySourceActions = ctx.notMatchedBySourceClause().asScala.map {
+      clause => {
+        val notMatchedBySourceAction = clause.notMatchedBySourceAction()
+        if (notMatchedBySourceAction.DELETE() != null) {
+          DeleteAction(Option(clause.notMatchedBySourceCond).map(expression))
+        } else if (notMatchedBySourceAction.UPDATE() != null) {
+          val condition = Option(clause.notMatchedBySourceCond).map(expression)
+          UpdateAction(condition,
+            withAssignments(clause.notMatchedBySourceAction().assignmentList()))
+        } else {
+          throw SparkException.internalError(
+            s"Unrecognized matched action: ${clause.notMatchedBySourceAction().getText}")
         }
       }
-      if (matchedActions.isEmpty && notMatchedActions.isEmpty
-        && notMatchedBySourceActions.isEmpty) {
-        throw QueryParsingErrors.mergeStatementWithoutWhenClauseError(ctx)
-      }
-      // children being empty means that the condition is not set
-      val matchedActionSize = matchedActions.length
-      if (matchedActionSize >= 2 && !matchedActions.init.forall(_.condition.nonEmpty)) {
-        throw QueryParsingErrors.nonLastMatchedClauseOmitConditionError(ctx)
-      }
-      val notMatchedActionSize = notMatchedActions.length
-      if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
-        throw QueryParsingErrors.nonLastNotMatchedClauseOmitConditionError(ctx)
-      }
-      val notMatchedBySourceActionSize = notMatchedBySourceActions.length
-      if (notMatchedBySourceActionSize >= 2 &&
-        !notMatchedBySourceActions.init.forall(_.condition.nonEmpty)) {
-        throw QueryParsingErrors.nonLastNotMatchedBySourceClauseOmitConditionError(ctx)
-      }
+    }
+    if (matchedActions.isEmpty && notMatchedActions.isEmpty && notMatchedBySourceActions.isEmpty) {
+      throw QueryParsingErrors.mergeStatementWithoutWhenClauseError(ctx)
+    }
+    // children being empty means that the condition is not set
+    val matchedActionSize = matchedActions.length
+    if (matchedActionSize >= 2 && !matchedActions.init.forall(_.condition.nonEmpty)) {
+      throw QueryParsingErrors.nonLastMatchedClauseOmitConditionError(ctx)
+    }
+    val notMatchedActionSize = notMatchedActions.length
+    if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
+      throw QueryParsingErrors.nonLastNotMatchedClauseOmitConditionError(ctx)
+    }
+    val notMatchedBySourceActionSize = notMatchedBySourceActions.length
+    if (notMatchedBySourceActionSize >= 2 &&
+     !notMatchedBySourceActions.init.forall(_.condition.nonEmpty)) {
+      throw QueryParsingErrors.nonLastNotMatchedBySourceClauseOmitConditionError(ctx)
+    }
 
-      MergeIntoTable(
-        aliasedTarget,
-        aliasedSource,
-        mergeCondition,
-        matchedActions.toSeq,
-        notMatchedActions.toSeq,
-        notMatchedBySourceActions.toSeq)
-    })
+    MergeIntoTable(
+      aliasedTarget,
+      aliasedSource,
+      mergeCondition,
+      matchedActions.toSeq,
+      notMatchedActions.toSeq,
+      notMatchedBySourceActions.toSeq)
   }
 
   /**
@@ -2693,18 +2692,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
   }
 
-  /**
-   * Create an [[UnresolvedRelationOrIdentifierClause]] from a relation reference context.
-   */
-  private def createUnresolvedRelationOrIdentifierClause(
-      ctx: IdentifierReferenceContext):
-  UnresolvedRelationOrIdentifierClause = withOrigin(ctx) {
-    Option(ctx.multipartIdentifier()).map(p =>
-      UnresolvedRelation(visitMultipartIdentifier(p)))
-    .getOrElse(UnresolvedRelationIdentifierClause(expression(ctx.expression())))
-  }
-
-  /**
+   /**
    * Create an [[UnresolvedRelation]] from a multi-part identifier.
    */
   private def createUnresolvedRelation(
