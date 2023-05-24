@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{File, FileWriter}
+import java.io.FileWriter
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -30,7 +30,6 @@ import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
-import org.apache.spark.util.Utils
 
 class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
@@ -171,12 +170,10 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
-  class TestForeachWriter[T] extends ForeachWriter[T] {
+  class TestForeachWriter[T](path: String) extends ForeachWriter[T] {
     var fileWriter: FileWriter = _
-    var path: File = _
 
     def open(partitionId: Long, version: Long): Boolean = {
-      path = Utils.createTempDir()
       fileWriter = new FileWriter(path, true)
       true
     }
@@ -188,52 +185,57 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
     def close(errorOrNull: Throwable): Unit = {
       fileWriter.close()
-      Utils.deleteRecursively(path)
     }
   }
 
   test("foreach Row") {
-    val writer = new TestForeachWriter[Row]
+    withTempPath { f =>
+      val path = f.getCanonicalPath + "/output"
+      val writer = new TestForeachWriter[Row](path)
 
-    val df = spark.readStream
-      .format("rate")
-      .option("rowsPerSecond", "10")
-      .load()
+      val df = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .load()
 
-    val query = df.writeStream
-      .foreach(writer)
-      .outputMode("update")
-      .start()
+      val query = df.writeStream
+        .foreach(writer)
+        .outputMode("update")
+        .start()
 
-    assert(query.isActive)
-    assert(query.exception.isEmpty)
+      assert(query.isActive)
+      assert(query.exception.isEmpty)
 
-    query.stop()
+      query.stop()
+    }
   }
 
   test("foreach Int") {
     val session: SparkSession = spark
     import session.implicits._
 
-    val writer = new TestForeachWriter[Int]
+    withTempPath { f =>
+      val path = f.getCanonicalPath + "/output"
+      val writer = new TestForeachWriter[Int](path)
 
-    val df = spark.readStream
-      .format("rate")
-      .option("rowsPerSecond", "10")
-      .load()
+      val df = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .load()
 
-    val query = df
-      .selectExpr("CAST(value AS INT)")
-      .as[Int]
-      .writeStream
-      .foreach(writer)
-      .outputMode("update")
-      .start()
+      val query = df
+        .selectExpr("CAST(value AS INT)")
+        .as[Int]
+        .writeStream
+        .foreach(writer)
+        .outputMode("update")
+        .start()
 
-    assert(query.isActive)
-    assert(query.exception.isEmpty)
+      assert(query.isActive)
+      assert(query.exception.isEmpty)
 
-    query.stop()
+      query.stop()
+    }
   }
 
   test("foreach Custom class") {
@@ -241,31 +243,34 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     import session.implicits._
 
     //      val path = "/home/wei.liu/test_foreach/output-test-class"
-    case class TestClass(value: Int) {
+    case class MyTestClass(value: Int) {
       override def toString: String = value.toString
     }
 
-    val writer = new TestForeachWriter[TestClass]
-    //      val df = spark.readStream .format("rate") .option("rowsPerSecond", "10") .load()
-    val df = spark.readStream
-      .format("rate")
-      .option("rowsPerSecond", "10")
-      .load()
+    withTempPath { f =>
+      val path = f.getCanonicalPath + "/output"
+      val writer = new TestForeachWriter[MyTestClass](path)
+      //      val df = spark.readStream .format("rate") .option("rowsPerSecond", "10") .load()
+      val df = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "10")
+        .load()
 
-    val query = df
-      .selectExpr("CAST(value AS INT)")
-      .as[TestClass]
-      .writeStream
-      .foreach(writer)
-      .outputMode("update")
-      .start()
+      val query = df
+        .selectExpr("CAST(value AS INT)")
+        .as[MyTestClass]
+        .writeStream
+        .foreach(writer)
+        .outputMode("update")
+        .start()
 
-    //      val query = df .selectExpr("CAST(value AS INT)") .as[TestClass] .
-    //      writeStream .foreach(writer) .outputMode("update") .start()
-    assert(query.isActive)
-    assert(query.exception.isEmpty)
+      //      val query = df .selectExpr("CAST(value AS INT)") .as[MyTestClass] .
+      //      writeStream .foreach(writer) .outputMode("update") .start()
+      assert(query.isActive)
+      assert(query.exception.isEmpty)
 
-    query.stop()
+      query.stop()
+    }
   }
 
   test("streaming query manager") {

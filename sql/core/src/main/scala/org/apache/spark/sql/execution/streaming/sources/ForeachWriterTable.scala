@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
-import org.apache.spark.sql.{ForeachWriter, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -30,6 +30,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.python.PythonForeachWriter
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ForeachWriter
 
 /**
  * A write-only table for forwarding data into the specified [[ForeachWriter]].

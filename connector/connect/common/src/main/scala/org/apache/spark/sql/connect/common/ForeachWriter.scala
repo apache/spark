@@ -15,6 +15,6 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.connect.common
 
-abstract class ForeachWriter[T] extends org.apache.spark.sql.connect.common.ForeachWriter[T]
+abstract class ForeachWriter[T] extends org.apache.spark.sql.util.ForeachWriter[T]
