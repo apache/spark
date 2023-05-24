@@ -27,98 +27,117 @@ class DataFrameParityTests(DataFrameTestsMixin, PandasOnSparkTestUtils, ReusedCo
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    # "Spark Connect does not depend on JVM but the tests depend on SparkSession._jvm."
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
+    )
     def test_aggregate(self):
         super().test_aggregate()
 
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-41876): Implement DataFrame `toLocalIterator`")
     def test_iterrows(self):
         super().test_iterrows()
 
-    # TODO(SPARK-41876): Implement DataFrame `toLocalIterator`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-41876): Implement DataFrame `toLocalIterator`")
     def test_itertuples(self):
         super().test_itertuples()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cummax(self):
         super().test_cummax()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cummax_multiindex_columns(self):
         super().test_cummax_multiindex_columns()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cummin(self):
         super().test_cummin()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cummin_multiindex_columns(self):
         super().test_cummin_multiindex_columns()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cumprod(self):
         super().test_cumprod()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cumprod_multiindex_columns(self):
         super().test_cumprod_multiindex_columns()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cumsum(self):
         super().test_cumsum()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_cumsum_multiindex_columns(self):
         super().test_cumsum_multiindex_columns()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cummax(self):
-        super().test_cummax()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cummax(self):
-        super().test_cummax()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cummax(self):
-        super().test_cummax()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
+    )
     def test_binary_operator_multiply(self):
         super().test_binary_operator_multiply()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43622): Enable pyspark.pandas.spark.functions.var in Spark Connect.")
     def test_dataframe(self):
         super().test_dataframe()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_fillna(self):
         return super().test_fillna()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_pivot_table(self):
         super().test_pivot_table()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_pivot_table_dtypes(self):
         super().test_pivot_table_dtypes()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_reset_index_with_default_index_types(self):
         super().test_reset_index_with_default_index_types()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_transpose(self):
         super().test_transpose()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
+    )
     def test_unstack(self):
         super().test_unstack()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_append(self):
         super().test_append()
 

@@ -24,11 +24,11 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class SeriesPlotPlotlyParityTests(
     SeriesPlotPlotlyTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43711): Fix Transformer.transform to work with Spark Connect.")
     def test_hist_plot(self):
         super().test_hist_plot()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43629): Enable RDD with Spark Connect.")
     def test_kde_plot(self):
         super().test_kde_plot()
 
