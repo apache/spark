@@ -2894,6 +2894,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYSPARK_WORKER_PYTHON_EXECUTABLE =
+    buildConf("spark.sql.execution.pyspark.python")
+      .internal()
+      .doc("Python binary executable to use for PySpark in executors when running Python " +
+        "UDF, pandas UDF and pandas function APIs." +
+        "If not set, it falls back to 'spark.pyspark.python' by default.")
+      .version("3.5.0")
+      .stringConf
+      .createOptional
+
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
     .doc("When true, the apply function of the rule verifies whether the right node of the" +
@@ -4199,6 +4209,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_IN_SUBQUERY_NULLABILITY =
+    buildConf("spark.sql.legacy.inSubqueryNullability")
+      .internal()
+      .doc(s"When set to false, IN subquery nullability is correctly calculated based on " +
+        s"both the left and right sides of the IN. When set to true, restores the legacy " +
+        "behavior that does not check the right side's nullability.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
       "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
@@ -4890,6 +4910,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def pysparkWorkerPythonExecutable: Option[String] =
+    getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

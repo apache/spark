@@ -30,23 +30,23 @@ class DatetimeOpsParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43676): Fix DatetimeOps.ge to work with Spark Connect Column.")
     def test_ge(self):
         super().test_ge()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43677): Fix DatetimeOps.gt to work with Spark Connect Column.")
     def test_gt(self):
         super().test_gt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43678): Fix DatetimeOps.le to work with Spark Connect Column.")
     def test_le(self):
         super().test_le()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43679): Fix DatetimeOps.lt to work with Spark Connect Column.")
     def test_lt(self):
         super().test_lt()
 

@@ -1865,7 +1865,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             val escapeChar = Option(ctx.escapeChar)
               .map(stringLitCtx => string(visitStringLit(stringLitCtx))).map { str =>
               if (str.length != 1) {
-                throw QueryParsingErrors.invalidEscapeStringError(ctx)
+                throw QueryParsingErrors.invalidEscapeStringError(str, ctx)
               }
               str.charAt(0)
             }.getOrElse('\\')
@@ -3341,7 +3341,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         arguments: Seq[V2Expression]): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       if (arguments.size > 1) {
-        throw QueryParsingErrors.tooManyArgumentsForTransformError(name, ctx)
+        throw QueryParsingErrors.wrongNumberArgumentsForTransformError(name, arguments.size, ctx)
       } else if (arguments.isEmpty) {
         throw new IllegalStateException(s"Not enough arguments for transform $name")
       } else {
@@ -4387,7 +4387,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         visitPartitionSpec(ctx.partitionSpec).map {
           case (key, Some(value)) => key -> value
           case (key, _) =>
-            throw QueryParsingErrors.incompletePartitionSpecificationError(key, ctx)
+            throw QueryParsingErrors.emptyPartitionKeyError(key, ctx.partitionSpec)
         }
       } else {
         Map.empty[String, String]
@@ -4943,14 +4943,28 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a TimestampAdd expression.
    */
   override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
-    TimestampAdd(ctx.unit.getText, expression(ctx.unitsAmount), expression(ctx.timestamp))
+    if (ctx.invalidUnit != null) {
+      throw QueryParsingErrors.invalidDatetimeUnitError(
+        ctx,
+        ctx.name.getText,
+        ctx.invalidUnit.getText)
+    } else {
+      TimestampAdd(ctx.unit.getText, expression(ctx.unitsAmount), expression(ctx.timestamp))
+    }
   }
 
   /**
    * Create a TimestampDiff expression.
    */
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
-    TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
+    if (ctx.invalidUnit != null) {
+      throw QueryParsingErrors.invalidDatetimeUnitError(
+        ctx,
+        ctx.name.getText,
+        ctx.invalidUnit.getText)
+    } else {
+      TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
+    }
   }
 
   /**

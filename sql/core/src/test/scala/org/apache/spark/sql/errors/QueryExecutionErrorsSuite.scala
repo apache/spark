@@ -121,7 +121,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE.AES_KEY: AES decrypt failure - key mismatch") {
+  test("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR: AES decrypt failure - key mismatch") {
     val (_, df2) = getAesInputs()
     Seq(
       ("value16", "1234567812345678"),
@@ -131,32 +131,13 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
           "detailMessage" -> ("Given final block not properly padded. " +
             "Such issues can arise if a bad key is used during decryption.")),
         sqlState = "22023")
     }
-  }
-
-  test("INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC: AES decrypt failure - invalid salt") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql(
-          """
-            |SELECT aes_decrypt(
-            |  unbase64('INVALID_SALT_ERGxwEOTDpDD4bQvDtQaNe+gXGudCcUk='),
-            |  '0000111122223333',
-            |  'CBC', 'PKCS')
-            |""".stripMargin).collect()
-      },
-      errorClass = "INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC",
-      parameters = Map(
-        "parameter" -> "`expr`",
-        "functionName" -> "`aes_decrypt`",
-        "saltedMagic" -> "0x20D5402C80D200B4"),
-      sqlState = "22023")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
@@ -869,6 +850,17 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> "The aggregate window function `row_number` does not support merging."),
       sqlState = "XX000")
+  }
+
+  test("SPARK-43589: Use bytesToString instead of shift operation") {
+    checkError(
+      exception = intercept[SparkException] {
+        throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+          maxBroadcastTableBytes = 1024 * 1024 * 1024,
+          dataSize = 2 * 1024 * 1024 * 1024 - 1)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2249",
+      parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
   }
 }
 

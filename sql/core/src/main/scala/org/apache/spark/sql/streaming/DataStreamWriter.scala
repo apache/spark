@@ -29,6 +29,7 @@ import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, TableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -354,7 +355,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == SOURCE_NAME_FOREACH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
+      val sink = ForeachWriterTable[Any](foreachWriter,
+        ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]])
       startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
@@ -446,6 +448,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
+    foreachImplementation(writer.asInstanceOf[ForeachWriter[Any]])
+  }
+
+  private[sql] def foreachImplementation(writer: ForeachWriter[Any]): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
@@ -532,7 +538,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
-  private var foreachWriter: ForeachWriter[T] = null
+  private var foreachWriter: ForeachWriter[Any] = null
 
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 

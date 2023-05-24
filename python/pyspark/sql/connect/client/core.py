@@ -25,6 +25,7 @@ check_dependencies(__name__)
 
 import logging
 import os
+import platform
 import random
 import time
 import urllib.parse
@@ -57,7 +58,9 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
+from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -299,7 +302,14 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return user_agent
+        return " ".join(
+            [
+                user_agent,
+                f"spark/{__version__}",
+                f"os/{platform.uname().system.lower()}",
+                f"python/{platform.python_version()}",
+            ]
+        )
 
     def get(self, key: str) -> Any:
         """
@@ -585,6 +595,7 @@ class SparkConnectClient(object):
 
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._artifact_manager = ArtifactManager(self._user_id, self._session_id, self._channel)
         # Configure logging for the SparkConnect client.
 
     def register_udf(
@@ -713,31 +724,32 @@ class SparkConnectClient(object):
         pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
         pdf.columns = schema.names
 
-        timezone: Optional[str] = None
-        struct_in_pandas: Optional[str] = None
-        error_on_duplicated_field_names: bool = False
-        if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
-            timezone, struct_in_pandas = self.get_configs(
-                "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+        if len(pdf.columns) > 0:
+            timezone: Optional[str] = None
+            struct_in_pandas: Optional[str] = None
+            error_on_duplicated_field_names: bool = False
+            if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
+                timezone, struct_in_pandas = self.get_configs(
+                    "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+                )
+
+                if struct_in_pandas == "legacy":
+                    error_on_duplicated_field_names = True
+                    struct_in_pandas = "dict"
+
+            pdf = pd.concat(
+                [
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=struct_in_pandas,
+                        error_on_duplicated_field_names=error_on_duplicated_field_names,
+                    )(pser)
+                    for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
+                ],
+                axis="columns",
             )
-
-            if struct_in_pandas == "legacy":
-                error_on_duplicated_field_names = True
-                struct_in_pandas = "dict"
-
-        pdf = pd.concat(
-            [
-                _create_converter_to_pandas(
-                    field.dataType,
-                    field.nullable,
-                    timezone=timezone,
-                    struct_in_pandas=struct_in_pandas,
-                    error_on_duplicated_field_names=error_on_duplicated_field_names,
-                )(pser)
-                for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
-            ],
-            axis="columns",
-        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -748,6 +760,7 @@ class SparkConnectClient(object):
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
         Helper method to generate a one line string representation of the plan.
+
         Parameters
         ----------
         p : google.protobuf.message.Message
@@ -1223,6 +1236,9 @@ class SparkConnectClient(object):
             raise SparkConnectGrpcException(status.message) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
+
+    def add_artifacts(self, *path: str, pyfile: bool) -> None:
+        self._artifact_manager.add_artifacts(*path, pyfile=pyfile)
 
 
 class RetryState:

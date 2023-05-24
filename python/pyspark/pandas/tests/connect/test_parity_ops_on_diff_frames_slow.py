@@ -24,31 +24,43 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class OpsOnDiffFramesEnabledSlowParityTests(
     OpsOnDiffFramesEnabledSlowTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
+    )
     def test_cov(self):
         super().test_cov()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_diff(self):
         super().test_diff()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43658): Fix unexpected `SparkConnectGrpcException` from Spark Connect client."
+    )
     def test_frame_iloc_setitem(self):
         super().test_frame_iloc_setitem()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43652): Enable GroupBy.rank with Spark Connect.")
     def test_rank(self):
         super().test_rank()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43659): Enable OpsOnDiffFramesEnabledSlowParityTests.test_series_eq."
+    )
     def test_series_eq(self):
         super().test_series_eq()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43658): Fix unexpected `SparkConnectGrpcException` from Spark Connect client."
+    )
     def test_series_iloc_setitem(self):
         super().test_series_iloc_setitem()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_shift(self):
         super().test_shift()
 

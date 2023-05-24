@@ -22,35 +22,51 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class StatsParityTests(StatsTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+    )
     def test_axis_on_dataframe(self):
         super().test_axis_on_dataframe()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
+    )
     def test_product(self):
         super().test_product()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+    )
     def test_skew_kurt_numerical_stability(self):
         super().test_skew_kurt_numerical_stability()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
+    )
     def test_stat_functions(self):
         super().test_stat_functions()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
+    )
     def test_stat_functions_multiindex_column(self):
         super().test_stat_functions_multiindex_column()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
+    )
     def test_stats_on_boolean_dataframe(self):
         super().test_stats_on_boolean_dataframe()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
+    )
     def test_stats_on_boolean_series(self):
         super().test_stats_on_boolean_series()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
+    )
     def test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true(self):
         super().test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true()
 

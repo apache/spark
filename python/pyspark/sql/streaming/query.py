@@ -445,7 +445,7 @@ class StreamingQueryManager:
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    def get(self, id: str) -> StreamingQuery:
+    def get(self, id: str) -> Optional[StreamingQuery]:
         """
         Returns an active query from this :class:`SparkSession`.
 
@@ -484,7 +484,11 @@ class StreamingQueryManager:
         True
         >>> sq.stop()
         """
-        return StreamingQuery(self._jsqm.get(id))
+        query = self._jsqm.get(id)
+        if query is not None:
+            return StreamingQuery(query)
+        else:
+            return None
 
     def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         """
