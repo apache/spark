@@ -1198,6 +1198,11 @@
       "Invalid SQL syntax:"
     ],
     "subClass" : {
+      "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
+        "message" : [
+          "ANALYZE TABLE ... COMPUTE STATISTICS ... <ctx> must be 'NOSCAN'"
+        ]
+      },
       "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
         "message" : [
           "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
