@@ -366,7 +366,17 @@ abstract class AvroSuite
       }
       assert(e.getMessage.contains("Cannot generate stable indentifier"))
     }
-
+    {
+      val e = intercept[Exception] {
+        checkUnionStableId(
+          List(
+            Schema.createFixed("ARRAY", "", null, 6),
+            Schema.createArray(Schema.create(Type.STRING))),
+          "",
+          Seq())
+      }
+      assert(e.getMessage.contains("Cannot generate stable indentifier"))
+    }
     // Two array types or two map types are not allowed in union.
     {
       val e = intercept[Exception] {
