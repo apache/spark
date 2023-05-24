@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
@@ -1396,7 +1397,14 @@ case class TableSpec(
     external: Boolean) extends TreePatternBits {
   /** This is a convenience method to obtain the options list as a map of strings to strings. */
   def options: Map[String, String] = optionsList.map { case (key, value) =>
-    (key, if (value != null) value.sql else "")
+    val newValue = if (value == null) {
+      null
+    } else value match {
+      case Literal(litVal: String, _) => litVal
+      case Literal(litVal: UTF8String, _) => litVal.toString
+      case _ => value.sql
+    }
+    (key, newValue)
   }
 
   /** Implement treePatternBits so bitmap checks on expressions on operators work properly. */
