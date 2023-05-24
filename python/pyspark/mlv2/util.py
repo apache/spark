@@ -17,7 +17,7 @@
 
 import pandas as pd
 import cloudpickle  # type: ignore[import]
-from collections.abc import Callable, Iterator, Iterable
+from collections.abc import Callable, Iterable
 from typing import Any, Union
 
 from pyspark.sql import DataFrame
