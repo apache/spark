@@ -466,4 +466,16 @@ private[spark] object SparkCoreErrors {
         "requestedBytes" -> requestedBytes.toString,
         "receivedBytes" -> receivedBytes.toString).asJava)
   }
+
+  private def quoteByDefault(elem: String): String = {
+    "\"" + elem + "\""
+  }
+
+  def toConf(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
+  def toConfVal(conf: String): String = {
+    quoteByDefault(conf)
+  }
 }

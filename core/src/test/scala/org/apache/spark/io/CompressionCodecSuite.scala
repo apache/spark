@@ -134,8 +134,8 @@ class CompressionCodecSuite extends SparkFunSuite {
       errorClass = "CODEC_NOT_AVAILABLE",
       parameters = Map(
         "codecName" -> "foobar",
-        "configKey" -> "spark.io.compression.codec",
-        "configVal" -> "snappy"
+        "configKey" -> "\"spark.io.compression.codec\"",
+        "configVal" -> "\"snappy\""
       )
     )
   }

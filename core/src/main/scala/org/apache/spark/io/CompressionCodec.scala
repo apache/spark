@@ -28,6 +28,7 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors.{toConf, toConfVal}
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -92,8 +93,8 @@ private[spark] object CompressionCodec {
       errorClass = "CODEC_NOT_AVAILABLE",
       messageParameters = Map(
         "codecName" -> codecName,
-        "configKey" -> configKey,
-        "configVal" -> FALLBACK_COMPRESSION_CODEC)))
+        "configKey" -> toConf(configKey),
+        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC))))
   }
 
   /**
