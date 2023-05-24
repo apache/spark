@@ -175,6 +175,11 @@
     ],
     "sqlState" : "22018"
   },
+  "CAST_IS_UNRESOLVED" : {
+    "message" : [
+      "invalid cast from <srcType> to <targetType>."
+    ]
+  },
   "CAST_OVERFLOW" : {
     "message" : [
       "The value <value> of the type <sourceType> cannot be cast to <targetType> due to an overflow. Use `try_cast` to tolerate overflow and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -572,6 +577,11 @@
       "Default database <defaultDatabase> does not exist, please create it first or change default database to `<defaultDatabase>`."
     ],
     "sqlState" : "42704"
+  },
+  "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
+    "message" : [
+      "Distinct window functions are not supported: <w>."
+    ]
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [
@@ -2303,6 +2313,16 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
+    "message" : [
+      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>."
+    ]
+  },
+  "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
+    "message" : [
+      "Window function <w> requires an OVER clause."
+    ]
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
