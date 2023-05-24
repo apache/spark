@@ -35,11 +35,19 @@ class AlterTableDropPartitionSuite
   test("SPARK-33650: drop partition into a table which doesn't support partition management") {
     withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
-      }.getMessage
       val tableName = UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
-      assert(errMsg.contains(s"Table $tableName does not support partition management"))
+      val sqlText = s"ALTER TABLE $t ADD PARTITION (id=1)"
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        parameters = Map("name" -> tableName),
+        context = ExpectedContext(
+          fragment = t,
+          start = 12,
+          stop = 39))
     }
   }
 

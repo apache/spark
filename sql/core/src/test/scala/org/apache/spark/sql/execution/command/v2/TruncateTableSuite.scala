@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
@@ -31,12 +33,20 @@ class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuit
     withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0")
+      val sqlText = s"TRUNCATE TABLE $t PARTITION (c0=1)"
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
 
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
-      }.getMessage
-      assert(errMsg.contains(
-        "Table `non_part_test_catalog`.`ns`.`tbl` does not support partition management"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        parameters = Map("name" -> tableName),
+        context = ExpectedContext(
+          fragment = t,
+          start = 15,
+          stop = 42))
     }
   }
 }

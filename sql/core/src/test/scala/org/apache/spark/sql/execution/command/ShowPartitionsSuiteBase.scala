@@ -18,8 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -63,20 +61,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       .format(format)
       .mode(SaveMode.Overwrite)
       .saveAsTable(table)
-  }
-
-  test("show partitions of non-partitioned table") {
-    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
-      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $t")
-      }.getMessage
-      lazy val tableName =
-        UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
-      assert(errMsg.contains("not allowed on a table that is not partitioned") ||
-        // V2 error message.
-        errMsg.contains(s"Table $tableName is not partitioned"))
-    }
   }
 
   test("non-partitioning columns") {

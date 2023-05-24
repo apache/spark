@@ -117,6 +117,17 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
+  test("show partitions of non-partitioned table") {
+    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
+      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $t")
+      }.getMessage
+
+      assert(errMsg.contains("not allowed on a table that is not partitioned"))
+    }
+  }
+
   test("SPARK-33904: null and empty string as partition values") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createNullPartTable(t, "parquet")
