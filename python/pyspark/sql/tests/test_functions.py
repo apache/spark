@@ -377,6 +377,13 @@ class FunctionsTestsMixin:
         actual = df.select(F.array_contains(df.data, "1").alias("b")).collect()
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
+    def test_levenshtein_function(self):
+        df = self.spark.createDataFrame([('kitten', 'sitting')], ['l', 'r'])
+        actual1 = df.select(F.levenshtein(df.l, df.r).alias('b')).collect()
+        self.assertEqual([Row(b=3)], actual1)
+        actual2 = df.select(F.levenshtein(df.l, df.r, 2).alias('b')).collect()
+        self.assertEqual([Row(b=-1)], actual2)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
