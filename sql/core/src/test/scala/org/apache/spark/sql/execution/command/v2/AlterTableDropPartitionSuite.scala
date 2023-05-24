@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
@@ -36,7 +38,8 @@ class AlterTableDropPartitionSuite
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }.getMessage
-      assert(errMsg.contains(s"Table $t does not support partition management"))
+      val tableName = UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+      assert(errMsg.contains(s"Table $tableName does not support partition management"))
     }
   }
 

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
@@ -33,7 +35,9 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $table")
       }.getMessage
-      assert(errMsg.contains(s"Table $table does not support partition management"))
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(table).map(quoteIdentifier).mkString(".")
+      assert(errMsg.contains(s"Table $tableName does not support partition management"))
     }
   }
 

@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -38,7 +39,8 @@ class AlterTableAddPartitionSuite
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
       }.getMessage
-      assert(errMsg.contains(s"Table $t does not support partition management"))
+      val tableName = UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+      assert(errMsg.contains(s"Table $tableName does not support partition management"))
     }
   }
 

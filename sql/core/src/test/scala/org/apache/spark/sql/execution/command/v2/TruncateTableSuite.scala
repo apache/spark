@@ -36,7 +36,7 @@ class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuit
         sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
       }.getMessage
       assert(errMsg.contains(
-        "Table non_part_test_catalog.ns.tbl does not support partition management"))
+        "Table `non_part_test_catalog`.`ns`.`tbl` does not support partition management"))
     }
   }
 }
