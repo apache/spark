@@ -91,26 +91,29 @@ class MapInArrowTestsMixin(object):
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_other_than_recordbatch_iter(self):
+        with QuietTest(self.sc):
+            self.check_other_than_recordbatch_iter()
+
+    def check_other_than_recordbatch_iter(self):
         def not_iter(_):
             return 1
 
         def bad_iter_elem(_):
             return iter([1])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Return type of the user-defined function should be iterator "
-                "of pyarrow.RecordBatch, but is <class 'int'>",
-            ):
-                (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator "
+            "of pyarrow.RecordBatch, but is <class 'int'>",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
 
-            with self.assertRaisesRegex(
-                PythonException,
-                "Return type of the user-defined function should be iterator "
-                "of pyarrow.RecordBatch, but is iterator of <class 'int'>",
-            ):
-                (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator "
+            "of pyarrow.RecordBatch, but is iterator of <class 'int'>",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
     def test_empty_iterator(self):
         def empty_iter(_):
