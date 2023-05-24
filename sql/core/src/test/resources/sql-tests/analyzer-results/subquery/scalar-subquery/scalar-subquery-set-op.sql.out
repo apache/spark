@@ -1802,3 +1802,83 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
   } ]
 }
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1b) FROM
+  (SELECT t1b
+  FROM   t1 join t2 ON (t1a = t0a and t1b = t2b)
+  UNION ALL
+  SELECT t2b
+  FROM   t1 join t2 ON (t2a = t0a and t1a = t2a))
+)
+FROM t0
+-- !query analysis
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(t1b#x) AS sum(t1b)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1b#x]
+:           :  +- Join Inner, ((t1a#x = outer(t0a#x)) AND (t1b#x = t2b#x))
+:           :     :- SubqueryAlias t1
+:           :     :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :     :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :     :        +- LocalRelation [col1#x, col2#x, col3#x]
+:           :     +- SubqueryAlias t2
+:           :        +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:           :           +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2b#x]
+:              +- Join Inner, ((t2a#x = outer(t0a#x)) AND (t1a#x = t2a#x))
+:                 :- SubqueryAlias t1
+:                 :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:                 :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:                 :        +- LocalRelation [col1#x, col2#x, col3#x]
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1b) FROM
+  (SELECT t1b
+  FROM   t1 left join t2 ON (t1a = t0a and t1b = t2b)
+  UNION ALL
+  SELECT t2b
+  FROM   t1 join t2 ON (t2a = t0a + 1 and t1a = t2a))
+)
+FROM t0
+-- !query analysis
+Project [t0a#x, scalar-subquery#x [t0a#x && t0a#x] AS scalarsubquery(t0a, t0a)#xL]
+:  +- Aggregate [sum(t1b#x) AS sum(t1b)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Union false, false
+:           :- Project [t1b#x]
+:           :  +- Join LeftOuter, ((t1a#x = outer(t0a#x)) AND (t1b#x = t2b#x))
+:           :     :- SubqueryAlias t1
+:           :     :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:           :     :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:           :     :        +- LocalRelation [col1#x, col2#x, col3#x]
+:           :     +- SubqueryAlias t2
+:           :        +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:           :           +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:           :              +- LocalRelation [col1#x, col2#x, col3#x]
+:           +- Project [t2b#x]
+:              +- Join Inner, ((t2a#x = (outer(t0a#x) + 1)) AND (t1a#x = t2a#x))
+:                 :- SubqueryAlias t1
+:                 :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+:                 :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+:                 :        +- LocalRelation [col1#x, col2#x, col3#x]
+:                 +- SubqueryAlias t2
+:                    +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+:                       +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+:                          +- LocalRelation [col1#x, col2#x, col3#x]
++- SubqueryAlias t0
+   +- View (`t0`, [t0a#x,t0b#x])
+      +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+         +- LocalRelation [col1#x, col2#x]

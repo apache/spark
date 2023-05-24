@@ -1241,3 +1241,84 @@ Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
       +- View (`t0`, [t0a#x,t0b#x])
          +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+   FROM   t1 JOIN t2 ON (t1a = t0a AND t2b = t1b))
+)
+-- !query analysis
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x])
+   :  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Project [t1c#x]
+   :           +- Join Inner, ((t1a#x = outer(t0a#x)) AND (t2b#x = t1b#x))
+   :              :- SubqueryAlias t1
+   :              :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :              :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :              :        +- LocalRelation [col1#x, col2#x, col3#x]
+   :              +- SubqueryAlias t2
+   :                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                       +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+   FROM   t1 JOIN t2 ON (t1a < t0a AND t2b >= t1b))
+)
+-- !query analysis
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x])
+   :  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Project [t1c#x]
+   :           +- Join Inner, ((t1a#x < outer(t0a#x)) AND (t2b#x >= t1b#x))
+   :              :- SubqueryAlias t1
+   :              :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :              :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :              :        +- LocalRelation [col1#x, col2#x, col3#x]
+   :              +- SubqueryAlias t2
+   :                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                       +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM  t1 LEFT JOIN t2 ON (t1a = t0a AND t2b = t0b))
+)
+-- !query analysis
+Project [t0a#x, t0b#x]
++- Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
+   :  +- Aggregate [sum(t1c#x) AS sum(t1c)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Project [t1c#x]
+   :           +- Join LeftOuter, ((t1a#x = outer(t0a#x)) AND (t2b#x = outer(t0b#x)))
+   :              :- SubqueryAlias t1
+   :              :  +- View (`t1`, [t1a#x,t1b#x,t1c#x])
+   :              :     +- Project [cast(col1#x as int) AS t1a#x, cast(col2#x as int) AS t1b#x, cast(col3#x as int) AS t1c#x]
+   :              :        +- LocalRelation [col1#x, col2#x, col3#x]
+   :              +- SubqueryAlias t2
+   :                 +- View (`t2`, [t2a#x,t2b#x,t2c#x])
+   :                    +- Project [cast(col1#x as int) AS t2a#x, cast(col2#x as int) AS t2b#x, cast(col3#x as int) AS t2c#x]
+   :                       +- LocalRelation [col1#x, col2#x, col3#x]
+   +- SubqueryAlias t0
+      +- View (`t0`, [t0a#x,t0b#x])
+         +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
+            +- LocalRelation [col1#x, col2#x]

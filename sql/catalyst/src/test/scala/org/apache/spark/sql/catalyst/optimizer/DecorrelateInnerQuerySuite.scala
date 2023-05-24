@@ -35,10 +35,13 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   val a3 = AttributeReference("a3", IntegerType)()
   val b3 = AttributeReference("b3", IntegerType)()
   val c3 = AttributeReference("c3", IntegerType)()
+  val a4 = AttributeReference("a4", IntegerType)()
+  val b4 = AttributeReference("b4", IntegerType)()
   val t0 = OneRowRelation()
   val testRelation = LocalRelation(a, b, c)
   val testRelation2 = LocalRelation(x, y, z)
   val testRelation3 = LocalRelation(a3, b3, c3)
+  val testRelation4 = LocalRelation(a4, b4)
 
   private def hasOuterReferences(plan: LogicalPlan): Boolean = {
     plan.exists(_.expressions.exists(SubExprUtils.containsOuter))
@@ -453,5 +456,85 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           Filter(x > a,
             DomainJoin(Seq(x), testRelation))))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated equi-join") {
+    // Join in the subquery is on equi-predicates, so all the correlated references can be
+    // substituted by equivalent ones from the outer query, and domain join is not needed.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y === OuterReference(a))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Aggregate(
+        Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner, Some(x === a3), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated non-equi-join") {
+    // Join in the subquery is on non-equi-predicate, so we introduce a DomainJoin.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y > OuterReference(a))), JoinHint.NONE)))
+    val correctAnswer =
+      Aggregate(
+        Seq(a), Seq(Alias(count(Literal(1)), "a")(), a),
+        Project(Seq(x, y, a3, b3, a),
+          Join(
+            DomainJoin(Seq(a), testRelation2),
+            testRelation3, Inner, Some(And(x === a3, y > a)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
+  }
+
+  test("SPARK-43780: aggregation in subquery with correlated left join") {
+    // Join in the subquery is on equi-predicates, so all the correlated references can be
+    // substituted by equivalent ones from the outer query, and domain join is not needed.
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(x === a3, y === OuterReference(a))), JoinHint.NONE)))
+
+    val correctAnswer =
+      Aggregate(
+        Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, LeftOuter, Some(x === a3), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
+  }
+
+  test("SPARK-43780: union all in subquery with correlated join") {
+    val outerPlan = testRelation
+    val innerPlan =
+      Union(
+        Seq(Project(Seq(x, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y === OuterReference(a))), JoinHint.NONE)),
+          Project(Seq(a4, b4),
+            testRelation4)))
+    val correctAnswer =
+      Union(
+        Seq(Project(Seq(x, b3, a),
+          Project(Seq(x, b3, a),
+            Join(
+              DomainJoin(Seq(a), testRelation2),
+              testRelation3, Inner,
+              Some(And(x === a3, y === a)), JoinHint.NONE))),
+          Project(Seq(a4, b4, a),
+            DomainJoin(Seq(a),
+              Project(Seq(a4, b4), testRelation4)))))
+    check(innerPlan, outerPlan, correctAnswer, Seq(a <=> a))
   }
 }

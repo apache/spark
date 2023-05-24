@@ -398,3 +398,22 @@ HAVING t0a <
   FROM   t2
   WHERE  t2b <= t0b)
 );
+
+-- Correlated references in join predicates
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+   FROM   t1 JOIN t2 ON (t1a = t0a AND t2b = t1b))
+);
+
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+   FROM   t1 JOIN t2 ON (t1a < t0a AND t2b >= t1b))
+);
+
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM  t1 LEFT JOIN t2 ON (t1a = t0a AND t2b = t0b))
+);

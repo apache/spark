@@ -1041,3 +1041,35 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "SELECT sum(t0a) as d\n  FROM   t1"
   } ]
 }
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1b) FROM
+  (SELECT t1b
+  FROM   t1 join t2 ON (t1a = t0a and t1b = t2b)
+  UNION ALL
+  SELECT t2b
+  FROM   t1 join t2 ON (t2a = t0a and t1a = t2a))
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+-- !query output
+1	2
+2	NULL
+
+
+-- !query
+SELECT t0a, (SELECT sum(t1b) FROM
+  (SELECT t1b
+  FROM   t1 left join t2 ON (t1a = t0a and t1b = t2b)
+  UNION ALL
+  SELECT t2b
+  FROM   t1 join t2 ON (t2a = t0a + 1 and t1a = t2a))
+)
+FROM t0
+-- !query schema
+struct<t0a:int,scalarsubquery(t0a, t0a):bigint>
+-- !query output
+1	1
+2	1
