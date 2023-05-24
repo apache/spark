@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{getDefaultValueExpr, isExplicitDefaultColumn}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExpr, isExplicitDefaultColumn}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[UpdateTable]]. It's only used by the real
@@ -52,6 +53,9 @@ case object ResolveReferencesInUpdate extends SQLConfHelper with ColumnResolutio
               resolved match {
                 case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
                   getDefaultValueExpr(attr).getOrElse(Literal(null, attr.dataType))
+                case other if containsExplicitDefaultColumn(other) =>
+                  throw QueryCompilationErrors
+                    .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
                 case other => other
               }
             case _ => resolved

@@ -159,6 +159,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
+    // The target table is not a child plan of the insert command. We should report errors for table
+    // not found first, instead of errors in the input query of the insert command, by doing a
+    // top-down traversal.
+    plan.foreach {
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
+        u.tableNotFound(u.multipartIdentifier)
+
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
+        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        write.table.tableNotFound(tblName)
+
+      case _ =>
+    }
+
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -194,14 +209,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         u.failAnalysis(
           errorClass = "_LEGACY_ERROR_TEMP_2313",
           messageParameters = Map("name" -> u.name))
-
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
-        u.tableNotFound(u.multipartIdentifier)
-
-      // TODO (SPARK-27484): handle streaming write commands when we have them.
-      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
-        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.tableNotFound(tblName)
 
       case command: V2PartitionCommand =>
         command.table match {

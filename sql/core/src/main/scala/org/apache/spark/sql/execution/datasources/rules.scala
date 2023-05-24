@@ -394,8 +394,21 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     } else {
       insert.query
     }
-    val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, query, byName = isByName, conf, supportColDefaultValue = true)
+    val newQuery = try {
+      TableOutputResolver.resolveOutputColumns(
+        tblName, expectedColumns, query, byName = isByName, conf, supportColDefaultValue = true)
+    } catch {
+      case e: AnalysisException if staticPartCols.nonEmpty &&
+          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH" =>
+        val newException = e.copy(
+          errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
+          messageParameters = e.messageParameters ++ Map(
+            "tableColumns" -> insert.table.output.map(c => s"'${c.name}'").mkString(", "),
+            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => s"'$c'").mkString(", ")
+          ))
+        newException.setStackTrace(e.getStackTrace)
+        throw newException
+    }
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(

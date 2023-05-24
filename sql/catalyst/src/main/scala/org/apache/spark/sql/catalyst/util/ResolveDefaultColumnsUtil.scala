@@ -163,6 +163,16 @@ object ResolveDefaultColumns {
   }
 
   /**
+   * Returns true if the given expression contains an explicit DEFAULT column reference.
+   */
+  def containsExplicitDefaultColumn(expr: Expression): Boolean = {
+    expr.exists {
+      case u: UnresolvedAttribute => isExplicitDefaultColumn(u)
+      case _ => false
+    }
+  }
+
+  /**
    * Generates the expression of the default value for the given field. If there is no
    * user-specified default value for this field, returns None.
    */

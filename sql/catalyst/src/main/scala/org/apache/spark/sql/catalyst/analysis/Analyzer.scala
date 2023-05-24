@@ -1761,6 +1761,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedExpr = resolveExprInAssignment(c, resolvePlan) match {
                   case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
                     getDefaultValueExpr(attr).getOrElse(Literal(null, attr.dataType))
+                  case other if containsExplicitDefaultColumn(other) =>
+                    throw QueryCompilationErrors
+                      .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates()
                   case other => other
                 }
                 checkResolvedMergeExpr(resolvedExpr, resolvePlan)

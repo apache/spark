@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{getDefaultValueExpr, isExplicitDefaultColumn}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExpr, isExplicitDefaultColumn}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructField
 
@@ -34,8 +35,10 @@ import org.apache.spark.sql.types.StructField
  *    `ResolveReferences` resolves the query plan bottom up. This means that when we reach here to
  *    resolve [[InsertIntoStatement]], its child plans have already been resolved by
  *    `ResolveReferences`.
- * 2. The plan nodes between [[Project]]/[[UnresolvedInlineTable]] and [[InsertIntoStatement]] are
+ * 2. The plan nodes between [[Project]] and [[InsertIntoStatement]] are
  *    all unary nodes that inherit the output columns from its child.
+ * 3. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
+ *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
  */
 case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolutionHelper {
   // TODO (SPARK-43752): support v2 write commands as well.
@@ -69,49 +72,55 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
 
   private def resolveColumnDefault(
       plan: LogicalPlan,
-      expectedQuerySchema: Seq[StructField]): LogicalPlan = {
+      expectedQuerySchema: Seq[StructField],
+      acceptProject: Boolean = true,
+      acceptInlineTable: Boolean = true): LogicalPlan = {
     plan match {
-      case _: GlobalLimit | _: LocalLimit | _: Offset | _: SubqueryAlias | _: Sort =>
-        plan.mapChildren(resolveColumnDefault(_, expectedQuerySchema))
+      case _: SubqueryAlias =>
+        plan.mapChildren(
+          resolveColumnDefault(_, expectedQuerySchema, acceptProject, acceptInlineTable))
 
-      case p: Project if p.child.resolved && p.containsPattern(UNRESOLVED_ATTRIBUTE) &&
+      case _: GlobalLimit | _: LocalLimit | _: Offset | _: Sort if acceptProject =>
+        plan.mapChildren(
+          resolveColumnDefault(_, expectedQuerySchema, acceptInlineTable = false))
+
+      case p: Project if acceptProject && p.child.resolved &&
+          p.containsPattern(UNRESOLVED_ATTRIBUTE) &&
           p.projectList.length <= expectedQuerySchema.length =>
-        var changed = false
         val newProjectList = p.projectList.zipWithIndex.map {
           case (u: UnresolvedAttribute, i) if isExplicitDefaultColumn(u) =>
-            changed = true
             val field = expectedQuerySchema(i)
             Alias(getDefaultValueExpr(field).getOrElse(Literal(null, field.dataType)), u.name)()
+          case (other, _) if containsExplicitDefaultColumn(other) =>
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
           case (other, _) => other
         }
-        if (changed) {
-          val newProj = p.copy(projectList = newProjectList)
-          newProj.copyTagsFrom(p)
-          newProj
-        } else {
-          p
-        }
+        val newChild = resolveColumnDefault(p.child, expectedQuerySchema, acceptProject = false)
+        val newProj = p.copy(projectList = newProjectList, child = newChild)
+        newProj.copyTagsFrom(p)
+        newProj
 
-      case inlineTable: UnresolvedInlineTable
-          if inlineTable.containsPattern(UNRESOLVED_ATTRIBUTE) &&
-            inlineTable.rows.forall(exprs => exprs.length <= expectedQuerySchema.length) =>
-        var changed = false
+      case _: Project | _: Aggregate if acceptInlineTable =>
+        plan.mapChildren(resolveColumnDefault(_, expectedQuerySchema, acceptProject = false))
+
+      case inlineTable: UnresolvedInlineTable if acceptInlineTable &&
+          inlineTable.containsPattern(UNRESOLVED_ATTRIBUTE) &&
+          inlineTable.rows.forall(exprs => exprs.length <= expectedQuerySchema.length) =>
         val newRows = inlineTable.rows.map { exprs =>
           exprs.zipWithIndex.map {
             case (u: UnresolvedAttribute, i) if isExplicitDefaultColumn(u) =>
-              changed = true
               val field = expectedQuerySchema(i)
               getDefaultValueExpr(field).getOrElse(Literal(null, field.dataType))
+            case (other, _) if containsExplicitDefaultColumn(other) =>
+              throw QueryCompilationErrors
+                .defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
             case (other, _) => other
           }
         }
-        if (changed) {
-          val newInlineTable = inlineTable.copy(rows = newRows)
-          newInlineTable.copyTagsFrom(inlineTable)
-          newInlineTable
-        } else {
-          inlineTable
-        }
+        val newInlineTable = inlineTable.copy(rows = newRows)
+        newInlineTable.copyTagsFrom(inlineTable)
+        newInlineTable
 
       case other => other
     }
@@ -123,7 +132,7 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
    * @param str the field name to normalize
    * @return the normalized result
    */
-  def normalizeFieldName(str: String): String = {
+  private def normalizeFieldName(str: String): String = {
     if (SQLConf.get.caseSensitiveAnalysis) {
       str
     } else {

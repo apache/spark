@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
@@ -1731,17 +1731,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
   }
 
-  def mismatchedInsertedDataColumnNumberError(
-      tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
-      messageParameters = Map(
-        "tableName" -> tableName,
-        "targetColumns" -> insert.table.output.size.toString,
-        "insertedColumns" -> (insert.query.output.length + staticPartCols.size).toString,
-        "staticPartCols" -> staticPartCols.size.toString))
-  }
-
   def requestedPartitionsMismatchTablePartitionsError(
       tableName: String,
       normalizedPartSpec: Map[String, Option[String]],
@@ -1751,7 +1740,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tableName" -> tableName,
         "normalizedPartSpec" -> normalizedPartSpec.keys.mkString(","),
-        "partColNames" -> partColNames.mkString(",")))
+        "partColNames" -> partColNames.map(_.name).mkString(",")))
   }
 
   def ddlWithoutHiveSupportEnabledError(detail: String): Throwable = {
@@ -2074,11 +2063,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotWriteTooManyColumnsToTableError(
-      tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
+      tableName: String,
+      expected: Seq[Attribute],
+      query: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1202",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
       messageParameters = Map(
         "tableName" -> tableName,
+        "reason" -> "too many data columns",
         "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
         "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }
@@ -2086,9 +2078,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotWriteNotEnoughColumnsToTableError(
       tableName: String, expected: Seq[Attribute], query: LogicalPlan): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1203",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
       messageParameters = Map(
         "tableName" -> tableName,
+        "reason" -> "not enough data columns",
         "tableColumns" -> expected.map(c => s"'${c.name}'").mkString(", "),
         "dataColumns" -> query.output.map(c => s"'${c.name}'").mkString(", ")))
   }

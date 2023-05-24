@@ -785,7 +785,18 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+      "Cannot write to '<tableName>', <reason>:",
+      "Table columns: <tableColumns>.",
+      "Data columns: <dataColumns>."
+    ],
+    "sqlState" : "21S01"
+  },
+  "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "Cannot write to '<tableName>', <reason>:",
+      "Table columns: <tableColumns>.",
+      "Partition columns with static values: <staticPartCols>.",
+      "Data columns: <dataColumns>."
     ],
     "sqlState" : "21S01"
   },
@@ -3171,20 +3182,6 @@
   "_LEGACY_ERROR_TEMP_1201" : {
     "message" : [
       "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1202" : {
-    "message" : [
-      "Cannot write to '<tableName>', too many data columns:",
-      "Table columns (excluding columns with static partition values): <tableColumns>.",
-      "Data columns: <dataColumns>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1203" : {
-    "message" : [
-      "Cannot write to '<tableName>', not enough data columns:",
-      "Table columns (excluding columns with static partition values): <tableColumns>.",
-      "Data columns: <dataColumns>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1204" : {
