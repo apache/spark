@@ -215,6 +215,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    * @since 3.5.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
+    // TODO [SPARK-43761] Update this once resolved UnboundRowEncoder serialization issue.
     // ds.encoder equal to UnboundRowEncoder means type parameter T is Row,
     // which is not able to be serialized. Server will detect this and use default encoder.
     val rowEncoder = if (ds.encoder != UnboundRowEncoder) {
