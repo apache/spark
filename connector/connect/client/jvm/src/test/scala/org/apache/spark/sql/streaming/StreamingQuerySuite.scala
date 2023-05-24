@@ -26,7 +26,7 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{ForeachWriter, SQLHelper}
+import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
@@ -212,6 +212,9 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("foreach Int") {
+    val session: SparkSession = spark
+    import session.implicits._
+
     val writer = new TestForeachWriter[Int]
 
     val df = spark.readStream
@@ -257,7 +260,8 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       .outputMode("update")
       .start()
 
-    //      val query = df .selectExpr("CAST(value AS INT)") .as[TestClass] .writeStream .foreach(writer) .outputMode("update") .start()
+    //      val query = df .selectExpr("CAST(value AS INT)") .as[TestClass] .
+    //      writeStream .foreach(writer) .outputMode("update") .start()
     assert(query.isActive)
     assert(query.exception.isEmpty)
 
