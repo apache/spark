@@ -304,8 +304,8 @@ object functions {
 
   private def emptyOptions: java.util.Map[String, String] = Collections.emptyMap[String, String]()
 
+  // This method is copied from org.apache.spark.sql.protobuf.util.ProtobufUtils
   private def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    // This method is copied from org.apache.spark.sql.protobuf.util.ProtobufUtils
     try {
       FileUtils.readFileToByteArray(new File(filePath))
     } catch {

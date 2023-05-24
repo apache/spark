@@ -1469,7 +1469,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             (None, ExprUtils.convertToMapData(CreateMap(arguments)))
           case other =>
             throw InvalidPlanInput(
-              s"The valid type for the 3rd arg in $functionName is string or map, but got $other")
+              s"The valid type for the 3rd arg in $functionName " +
+              s"is binary or map, but got $other")
         }
       } else if (argumentsCount == 4) {
         val fileDescSetOpt = children(2) match {
@@ -1477,7 +1478,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             Some(b.asInstanceOf[Array[Byte]])
           case other =>
             throw InvalidPlanInput(
-              s"DescFilePath in $functionName should be a literal string, but got $other")
+              s"DescFilePath in $functionName should be a literal binary, but got $other")
         }
         val map = children(3) match {
           case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>

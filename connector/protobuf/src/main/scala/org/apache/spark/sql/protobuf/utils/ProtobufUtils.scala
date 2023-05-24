@@ -288,7 +288,7 @@ private[sql] object ProtobufUtils extends Logging {
     case n => s"field '${n.mkString(".")}'"
   }
 
-  /** Builds [[TypeRegistry]] with all the messages found in the descriptor file. */
+  /** Builds [[TypeRegistry]] with all the messages found in the descriptor set. */
   private[protobuf] def buildTypeRegistry(descriptorBytes: Array[Byte]): TypeRegistry = {
     val registryBuilder = TypeRegistry.newBuilder()
     for (fileDesc <- parseFileDescriptorSet(descriptorBytes)) {
