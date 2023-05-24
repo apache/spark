@@ -1012,14 +1012,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
-    assertAnalysisError(testRelation2.select(RowNumber()),
-      Seq("Window function \"row_number()\" requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(RowNumber()),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("w" -> "\"row_number()\"")
+    )
 
-    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
-      Seq("Window function \"row_number()\" requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(Sum(RowNumber())),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("w" -> "\"row_number()\"")
+    )
 
-    assertAnalysisError(testRelation2.select(RowNumber() + 1),
-      Seq("Window function \"row_number()\" requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(RowNumber() + 1),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("w" -> "\"row_number()\"")
+    )
   }
 
   test("SPARK-32237: Hint in CTE") {
