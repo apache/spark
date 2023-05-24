@@ -127,10 +127,17 @@ class CompressionCodecSuite extends SparkFunSuite {
   }
 
   test("bad compression codec") {
-    val e = intercept[SparkIllegalArgumentException] {
-      CompressionCodec.createCodec(conf, "foobar")
-    }
-    assert(e.getErrorClass == "CODEC_NOT_AVAILABLE")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CompressionCodec.createCodec(conf, "foobar")
+      },
+      errorClass = "CODEC_NOT_AVAILABLE",
+      parameters = Map(
+        "codecName" -> "foobar",
+        "configKey" -> "spark.io.compression.codec",
+        "configVal" -> "snappy"
+      )
+    )
   }
 
   private def testConcatenationOfSerializedStreams(codec: CompressionCodec): Unit = {

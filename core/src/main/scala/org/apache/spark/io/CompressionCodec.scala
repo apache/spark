@@ -107,7 +107,7 @@ private[spark] object CompressionCodec {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
         .getOrElse { throw new SparkIllegalArgumentException(
-          errorClass = "NO_SHORT_NAME_FOR_CODEC",
+          errorClass = "CODEC_SHORT_NAME_NOT_FOUND",
           messageParameters = Map("codecName" -> codecName))}
     }
   }

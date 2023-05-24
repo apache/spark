@@ -189,7 +189,12 @@
   },
   "CODEC_NOT_AVAILABLE" : {
     "message" : [
-      "Codec [<codecName>] is not available. Consider setting <configKey>=<configVal>"
+      "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
+    ]
+  },
+  "CODEC_SHORT_NAME_NOT_FOUND" : {
+    "message" : [
+      "Cannot find a short name for the codec <codecName>."
     ]
   },
   "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
@@ -1388,11 +1393,6 @@
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
-    ]
-  },
-  "NO_SHORT_NAME_FOR_CODEC" : {
-    "message" : [
-      "No short name for codec <codecName>."
     ]
   },
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
