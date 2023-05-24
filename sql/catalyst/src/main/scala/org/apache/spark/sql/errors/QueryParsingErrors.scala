@@ -396,8 +396,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map("inputString" -> s"${ctx.getText} must be ${toSQLStmt("NOSCAN")}"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      messageParameters = Map("identifier" -> toSQLStmt(ctx.getText)),
       ctx)
   }
 
