@@ -1820,3 +1820,18 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 }
+
+class RocksDBStateStoreStreamingDeduplicationWithinWatermarkSuite
+  extends StreamingDeduplicationWithinWatermarkSuite with RocksDBStateStoreTest  {}
+
+class RocksDBStateStoreStreamingInnerJoinSuite
+  extends StreamingInnerJoinSuite with RocksDBStateStoreTest  {}
+
+class RocksDBStateStoreStreamingOuterJoinSuite
+  extends StreamingOuterJoinSuite with RocksDBStateStoreTest  {}
+
+class RocksDBStateStoreStreamingFullOuterJoinSuite
+  extends StreamingFullOuterJoinSuite with RocksDBStateStoreTest  {}
+
+class RocksDBStateStoreStreamingLeftSemiJoinSuite
+  extends StreamingLeftSemiJoinSuite with RocksDBStateStoreTest  {}
