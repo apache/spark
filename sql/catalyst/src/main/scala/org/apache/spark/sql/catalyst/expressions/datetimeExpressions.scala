@@ -2044,12 +2044,13 @@ case class MonthsBetween(
 case class ParseToDate(
     left: Expression,
     format: Option[Expression],
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
     Cast(GetTimestamp(left, f, TimestampType, timeZoneId), DateType, timeZoneId)
-  }.getOrElse(Cast(left, DateType, timeZoneId)) // backwards compatibility
+  }.getOrElse(Cast(left, DateType, timeZoneId, evalMode)) // backwards compatibility
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format))
