@@ -622,7 +622,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val tableSpec = TableSpec(
       properties = Map(),
       provider = Some(source),
-      options = options,
+      optionsList = TableSpec.toExpressionOptions(options),
       location = location,
       comment = { if (description.isEmpty) None else Some(description) },
       serde = None,

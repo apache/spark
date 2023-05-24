@@ -292,7 +292,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val tableSpec = TableSpec(
         Map.empty[String, String],
         Some(source),
-        Map.empty[String, String],
+        Map.empty,
         extraOptions.get("path"),
         None,
         None,

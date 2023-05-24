@@ -22,7 +22,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
@@ -172,7 +172,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
-        c.tableSpec.optionsList ++ writeOptions.map { case (key, value) => (key, Literal(value)) },
+        c.tableSpec.options ++ writeOptions,
         c.tableSpec.location,
         c.tableSpec.serde,
         ctas = true)
