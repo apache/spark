@@ -872,7 +872,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
           // Set state and timeout once, only on the first call. The timeout should get cleared
           // in the subsequent batch which has data for the key.
           if (!state.exists) {
-            state.update(0)Î
+            state.update(0)
             state.setTimeoutTimestamp(500)  // Timeout at 500 milliseconds.
           }
           0
