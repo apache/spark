@@ -2831,7 +2831,7 @@ object SQLConf {
         "types. Regular string and binary types have a 2GiB limit for a column in a single " +
         "record batch. Large variable types remove this limitation at the cost of higher memory " +
         "usage per value.")
-      .version("3.4.0")
+      .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
 
