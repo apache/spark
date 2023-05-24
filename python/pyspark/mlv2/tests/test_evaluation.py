@@ -80,7 +80,7 @@ if __name__ == "__main__":
     from pyspark.mlv2.tests.test_evaluation import *  # noqa: F401,F403
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

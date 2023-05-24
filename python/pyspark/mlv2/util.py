@@ -16,8 +16,8 @@
 #
 
 import pandas as pd
-import cloudpickle
-from collections.abc import Callable, Iterator
+import cloudpickle  # type: ignore[import]
+from collections.abc import Callable, Iterator, Iterable
 from typing import Any, Union
 
 from pyspark.sql import DataFrame
@@ -27,10 +27,10 @@ from pyspark.sql.functions import col, pandas_udf
 def aggregate_dataframe(
     dataframe: Union["DataFrame", "pd.DataFrame"],
     input_col_names: list[str],
-    local_agg_fn: Callable[["DataFrame"], Any],
+    local_agg_fn: Callable[["pd.DataFrame"], Any],
     merge_agg_state: Callable[[Any, Any], Any],
     agg_state_to_result: Callable[[Any], Any],
-):
+) -> Any:
     """
     The function can be used to run arbitrary aggregation logic on a spark dataframe
     or a pandas dataframe.
@@ -76,11 +76,11 @@ def aggregate_dataframe(
 
             # pandas UDF does not support vector type for now,
             # we convert it into vector type
-            dataframe = dataframe.withColumn(col_name, vector_to_array(col_name))
+            dataframe = dataframe.withColumn(col_name, vector_to_array(col(col_name)))
 
     dataframe = dataframe.select(*input_col_names)
 
-    def compute_state(iterator: Iterator["pd.DataFrame"]) -> Iterator["pd.DataFrame"]:
+    def compute_state(iterator: Iterable["pd.DataFrame"]) -> Iterable["pd.DataFrame"]:
         state = None
 
         for batch_pandas_df in iterator:
@@ -115,8 +115,8 @@ def transform_dataframe_column(
     dataframe: Union["DataFrame", "pd.DataFrame"],
     input_col_name: str,
     transform_fn: Callable[["pd.Series"], Any],
-    output_cols: list[str],
-):
+    output_cols: list[tuple[str, str]],
+) -> Union["DataFrame", "pd.DataFrame"]:
     """
     Transform specified column of the input spark dataframe or pandas dataframe,
     returns a new dataframe
@@ -168,8 +168,8 @@ def transform_dataframe_column(
             assert set(result_data.columns) == set(col_name for col_name, _ in output_cols)
             return result_data
 
-    @pandas_udf(returnType=spark_udf_return_type)
-    def transform_fn_pandas_udf(s: pd.Series) -> pd.Series:
+    @pandas_udf(returnType=spark_udf_return_type)  # type: ignore[call-overload]
+    def transform_fn_pandas_udf(s: "pd.Series") -> "pd.Series":
         return transform_fn(s)
 
     input_col = col(input_col_name)

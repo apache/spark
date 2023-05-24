@@ -33,12 +33,12 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
     any sparsity.
     """
 
-    def __init__(self, inputCol, outputCol):
+    def __init__(self, inputCol: str, outputCol: str) -> None:
         super().__init__()
         self.set(self.inputCol, inputCol)
         self.set(self.outputCol, outputCol)
 
-    def _fit(self, dataset):
+    def _fit(self, dataset: Union["pd.DataFrame", "DataFrame"]) -> "MaxAbsScalerModel":
         input_col = self.getInputCol()
 
         min_max_res = summarize_dataframe(dataset, input_col, ["min", "max"])
@@ -60,15 +60,15 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
     def _input_column_name(self) -> str:
         return self.getInputCol()
 
-    def _output_columns(self) -> list[str]:
+    def _output_columns(self) -> list[tuple[str, str]]:
         return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         max_abs_values = self.max_abs_values
         max_abs_values_zero_cond = max_abs_values == 0.0
 
-        def transform_fn(series):
-            def map_value(x):
+        def transform_fn(series: "pd.Series") -> Any:
+            def map_value(x: "np.ndarray") -> "np.ndarray":
                 return np.where(max_abs_values_zero_cond, 0.0, x / max_abs_values)
 
             return series.apply(map_value)
@@ -87,7 +87,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
         self.set(self.inputCol, inputCol)
         self.set(self.outputCol, outputCol)
 
-    def _fit(self, dataset: Union[DataFrame, pd.DataFrame]):
+    def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "StandardScalerModel":
         input_col = self.getInputCol()
 
         min_max_res = summarize_dataframe(dataset, input_col, ["mean", "std"])
@@ -108,15 +108,15 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol):
     def _input_column_name(self) -> str:
         return self.getInputCol()
 
-    def _output_columns(self) -> list[str]:
+    def _output_columns(self) -> list[tuple[str, str]]:
         return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         mean_values = self.mean_values
         std_values = self.std_values
 
-        def transform_fn(series: "pd.Series") -> "pd.Series":
-            def map_value(x):
+        def transform_fn(series: "pd.Series") -> Any:
+            def map_value(x: "np.ndarray") -> "np.ndarray":
                 return (x - mean_values) / std_values
 
             return series.apply(map_value)

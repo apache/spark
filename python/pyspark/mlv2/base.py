@@ -123,7 +123,7 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def _output_columns(self) -> list[str]:
+    def _output_columns(self) -> list[tuple[str, str]]:
         """
         Return a list of output transformed columns, each elements in the list
         is a tuple of (column_name, column_spark_type)
