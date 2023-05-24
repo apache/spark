@@ -32,9 +32,6 @@
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
-    <guava.version>31.0.1-jre</guava.version>
-    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <mima.version>1.1.0</mima.version>
   </properties>
 
   <dependencies>
@@ -70,7 +67,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
+      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

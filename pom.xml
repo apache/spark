@@ -276,6 +276,13 @@
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
+    <!-- Version used in Connect -->
+    <connect.guava.version>31.0.1-jre</connect.guava.version>
+    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
+    <io.grpc.version>1.47.0</io.grpc.version>
+    <mima.version>1.1.0</mima.version>
+    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
+
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
