@@ -402,9 +402,6 @@ HAVING t0a <
 -- SPARK-43760: the result of the subquery can be NULL.
 select *
 from range(1, 3) t1
-where (select sum(c) from (
-        select t2.id * t2.id c
-        from range (1, 2) t2 where t1.id = t2.id
-        group by t2.id
-       )
-) is not null;
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) is not null;
