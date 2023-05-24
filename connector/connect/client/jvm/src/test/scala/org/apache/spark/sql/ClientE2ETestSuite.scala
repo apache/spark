@@ -802,11 +802,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("levenshtein") {
-    val df = spark.sql("select levenshtein('elephant', 'hippo', 7)")
-    df.withResult { result =>
-      val schema = result.schema
-      assert(schema == StructType(StructField("val", StringType, nullable = false) :: Nil))
-    }
+    val rows = java.util.Arrays.asList(Row("elephant", "hippo"))
+    val schema = new StructType().add("value1", "string").add("value2", "string")
+
+    val result1 = spark.createDataFrame(rows, schema).selectExpr("levenshtein(value1, value2)")
+    val expected1 = Array(Row(7))
+    checkSameResult(expected1, result1)
+
+    val result2 = spark.createDataFrame(rows, schema).selectExpr("levenshtein(value1, value2, 8)")
+    val expected2 = Array(Row(7))
+    checkSameResult(expected2, result2)
   }
 
   test("sameSemantics and semanticHash") {
