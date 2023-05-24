@@ -5391,27 +5391,22 @@
       "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2406" : {
+  "CAST_IS_UNRESOLVED" : {
     "message" : [
       "invalid cast from <srcType> to <targetType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2407" : {
-    "message" : [
-      "grouping_id() can only be used with GroupingSets/Cube/Rollup."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2408" : {
+  "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <w> requires an OVER clause."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2409" : {
+  "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <w>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2410" : {
+  "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
       "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>."
     ]

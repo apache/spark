@@ -1013,13 +1013,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
     assertAnalysisError(testRelation2.select(RowNumber()),
-      Seq("Window function row_number() requires an OVER clause."))
+      Seq("Window function \"row_number()\" requires an OVER clause."))
 
     assertAnalysisError(testRelation2.select(Sum(RowNumber())),
-      Seq("Window function row_number() requires an OVER clause."))
+      Seq("Window function \"row_number()\" requires an OVER clause."))
 
     assertAnalysisError(testRelation2.select(RowNumber() + 1),
-      Seq("Window function row_number() requires an OVER clause."))
+      Seq("Window function \"row_number()\" requires an OVER clause."))
   }
 
   test("SPARK-32237: Hint in CTE") {
@@ -1183,7 +1183,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |    GROUP BY a, b
         |)
       """.stripMargin),
-      Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
+      Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"),
       false)
   }
 
