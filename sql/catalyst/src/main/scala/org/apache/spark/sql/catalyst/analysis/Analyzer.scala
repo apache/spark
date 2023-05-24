@@ -2118,14 +2118,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u@UnresolvedRelationIdentifierClause(expr) if expr.resolved =>
         UnresolvedRelation(IdentifierClauseUtil.evalIdentifierClause(expr))
 
-      // Resolve IDENTIFIER clause and reduce to a regular unresolved table function
-      case u@UnresolvedTableValuedFunctionIdentifierClause(expr, args) if expr.resolved =>
-        UnresolvedTableValuedFunction(IdentifierClauseUtil.evalIdentifierClause(expr), args)
-
-      // Resolve IDENTIFIER clause and reduce to a regular unresolved TVF alias
-      case u@UnresolvedTVFAliasesIdentifierClause(expr, tvf, aliases)  if expr.resolved =>
-        UnresolvedTVFAliases(IdentifierClauseUtil.evalIdentifierClause(expr), tvf, aliases)
-
       // Resolve table-valued functions' output column aliases.
       case u: UnresolvedTVFAliases if u.child.resolved =>
         // Add `Project` with the aliases.

@@ -40,7 +40,7 @@ struct<c1:int>
 
 
 -- !query
-SELECT IDENTIFIER('c 1') FROM VALUES(1) AS T(`c 1`)
+SELECT IDENTIFIER('`c 1`') FROM VALUES(1) AS T(`c 1`)
 -- !query schema
 struct<c 1:int>
 -- !query output
@@ -48,7 +48,7 @@ struct<c 1:int>
 
 
 -- !query
-SELECT IDENTIFIER('') FROM VALUES(1) AS T(``)
+SELECT IDENTIFIER('``') FROM VALUES(1) AS T(``)
 -- !query schema
 struct<:int>
 -- !query output
@@ -658,6 +658,48 @@ DROP TEMPORARY FUNCTION IDENTIFIER('my' || 'DoubleAvg')
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT IDENTIFIER('c 1') FROM VALUES(1) AS T(`c 1`)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'1'",
+    "hint" : ": extra input '1'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "IDENTIFIER('c 1')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER('') FROM VALUES(1) AS T(``)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_EMPTY_STATEMENT",
+  "sqlState" : "42617",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "IDENTIFIER('')"
+  } ]
+}
 
 
 -- !query

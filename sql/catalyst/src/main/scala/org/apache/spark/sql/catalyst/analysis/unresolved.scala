@@ -186,33 +186,6 @@ object UnresolvedTVFAliases {
 }
 
 /**
- * A table-valued function with output column aliases, e.g.
- * {{{
- *   // Assign alias names
- *   select t.a from identifier('range')(10) t(a);
- * }}}
- *
- * @param identExpr user-specified name of the table-valued function
- * @param child logical plan of the table-valued function
- * @param outputNames alias names of function output columns. The analyzer adds [[Project]]
- *                    to rename the output columns.
- */
-case class UnresolvedTVFAliasesIdentifierClause(
-    identExpr: Expression,
-    child: LogicalPlan,
-    outputNames: Seq[String]) extends UnaryNode {
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(child = newChild)
-}
-
-/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
@@ -368,27 +341,6 @@ case class UnresolvedFunctionIdentifierClause(
       copy(arguments = newChildren)
     }
   }
-}
-
-/**
- * A table-valued function, e.g.
- * {{{
- *   select id from range(10);
- * }}}
- *
- * @param identExpr user-specified expression with teh name of this table-value function
- * @param functionArgs list of function arguments
- */
-case class UnresolvedTableValuedFunctionIdentifierClause(
-    identExpr: Expression,
-    functionArgs: Seq[Expression])
-  extends LeafNode {
-
-  override def output: Seq[Attribute] = Nil
-
-  override lazy val resolved = false
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
 }
 
 /**

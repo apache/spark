@@ -51,6 +51,6 @@ object IdentifierClauseUtil {
 
   def evalIdentifierClause(expr: Expression): Seq[String] = {
     val str = getNotNullFoldableSring("IDENTIFIER", expr)
-    UnresolvedAttribute.parseAttributeName(str)
+    UnresolvedAttribute(str).nameParts
   }
 }
