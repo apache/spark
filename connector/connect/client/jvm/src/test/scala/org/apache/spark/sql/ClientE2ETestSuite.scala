@@ -801,6 +801,14 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(plan.sameSemantics(otherPlan))
   }
 
+  test("levenshtein") {
+    val df = spark.sql("select levenshtein('elephant', 'hippo', 7)")
+    df.withResult { result =>
+      val schema = result.schema
+      assert(schema == StructType(StructField("val", StringType, nullable = false) :: Nil))
+    }
+  }
+
   test("sameSemantics and semanticHash") {
     val df1 = spark.createDataFrame(Seq((1, 2), (4, 5)))
     val df2 = spark.createDataFrame(Seq((1, 2), (4, 5)))
