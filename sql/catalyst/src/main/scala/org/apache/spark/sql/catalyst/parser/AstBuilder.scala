@@ -2163,33 +2163,34 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     // Create the function call.
-    withFuncIdentClause(ctx.functionName, ident => {
-      val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-      // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
-      val arguments = ctx.argument.asScala.map(expression).toSeq match {
-        case Seq(UnresolvedStar(None))
-          if ident.length == 1 && ident.head.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
-          // Transform COUNT(*) into COUNT(1).
-          Seq(Literal(1))
-        case expressions =>
-          expressions
-      }
-      val filter = Option(ctx.where).map(expression(_))
-      val ignoreNulls =
-        Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
-      val function = UnresolvedFunction(
-        ident, arguments, isDistinct, filter, ignoreNulls)
+    val name = ctx.functionName.getText
+    val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
+    // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
+    val arguments = ctx.argument.asScala.map(expression).toSeq match {
+      case Seq(UnresolvedStar(None))
+        if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
+        // Transform COUNT(*) into COUNT(1).
+        Seq(Literal(1))
+      case expressions =>
+        expressions
+    }
+    val filter = Option(ctx.where).map(expression(_))
+    val ignoreNulls =
+      Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
+    val function = Option(ctx.functionName.expression()).map(p =>
+      UnresolvedFunctionIdentifierClause(expression(p),
+        arguments, isDistinct, filter, ignoreNulls)).getOrElse(
+      UnresolvedFunction(getFunctionMultiparts(ctx.functionName),
+        arguments, isDistinct, filter, ignoreNulls))
 
-      // Check if the function is evaluated in a windowed context.
-      val funcWithWindowSpec: Expression = ctx.windowSpec match {
-        case spec: WindowRefContext =>
-          UnresolvedWindowExpression(function, visitWindowRef(spec))
-        case spec: WindowDefContext =>
-          WindowExpression(function, visitWindowDef(spec))
-        case _ => function
-      }
-      funcWithWindowSpec
-    })
+    // Check if the function is evaluated in a windowed context.
+    ctx.windowSpec match {
+      case spec: WindowRefContext =>
+        UnresolvedWindowExpression(function, visitWindowRef(spec))
+      case spec: WindowDefContext =>
+        WindowExpression(function, visitWindowDef(spec))
+      case _ => function
+    }
   }
 
   /**
