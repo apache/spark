@@ -640,7 +640,8 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-43380: Fix Avro data type conversion issues to avoid producing incorrect results") {
+  test("SPARK-43380: Fix Avro data type conversion" +
+      " of decimal type to avoid producing incorrect results") {
     withTempPath { path =>
       val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
@@ -670,6 +671,74 @@ abstract class AvroSuite
         checkAnswer(
           spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
           Row(new java.math.BigDecimal("13.123"))
+        )
+      }
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of DayTimeIntervalType to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
+      val schema = StructType(Array(StructField("a", DayTimeIntervalType(), false)))
+      val data = Seq(Row(java.time.Duration.ofDays(1).plusSeconds(1)))
+
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.format("avro").save(path.getCanonicalPath)
+
+      withSQLConf(confKey -> "false") {
+        Seq("Date", "Timestamp", "Timestamp_NTZ").foreach { sqlType =>
+          val e = intercept[SparkException] {
+            spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
+          }
+          ExceptionUtils.getRootCause(e) match {
+            case ex: IncompatibleSchemaException =>
+              assert(ex.getMessage.contains(confKey))
+            case other =>
+              fail(s"Received unexpected exception", other)
+          }
+        }
+      }
+
+      withSQLConf(confKey -> "true") {
+        val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
+        checkAnswer(
+          spark.read.schema("a Date").format("avro").load(path.toString),
+          Row(format.parse("1972-09-27"))
+        )
+      }
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion" +
+    " of YearMonthIntervalType to avoid producing incorrect results") {
+    withTempPath { path =>
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
+      val schema = StructType(Array(StructField("a", YearMonthIntervalType(), false)))
+      val data = Seq(Row(java.time.Period.of(1, 1, 0)))
+
+      val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+      df.write.format("avro").save(path.getCanonicalPath)
+
+      withSQLConf(confKey -> "false") {
+        Seq("Date", "Timestamp", "Timestamp_NTZ").foreach { sqlType =>
+          val e = intercept[SparkException] {
+            spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
+          }
+          ExceptionUtils.getRootCause(e) match {
+            case ex: IncompatibleSchemaException =>
+              assert(ex.getMessage.contains(confKey))
+            case other =>
+              fail(s"Received unexpected exception", other)
+          }
+        }
+      }
+
+      withSQLConf(confKey -> "true") {
+        val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
+        checkAnswer(
+          spark.read.schema("a Date").format("avro").load(path.toString),
+          Row( format.parse("1970-01-14"))
         )
       }
     }

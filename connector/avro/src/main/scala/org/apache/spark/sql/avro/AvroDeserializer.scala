@@ -32,7 +32,6 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -122,9 +121,6 @@ private[sql] class AvroDeserializer(
     val realDataType = SchemaConverters.toSqlType(avroType).dataType
     val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA
     val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
-    def isNotExactType: Boolean = {
-      preventReadingIncorrectType && !DataTypeUtils.sameType(realDataType, catalystType)
-    }
     def incorrectTypeException(provided: DataType): IncompatibleSchemaException = {
       new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
         s"${realDataType.catalogString}, however you're trying to read the field as " +
@@ -151,24 +147,28 @@ private[sql] class AvroDeserializer(
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
-      case (INT, DateType) if isNotExactType =>
-        throw incorrectTypeException(DateType)
-
-      case (LONG, DateType) if isNotExactType =>
-        throw new IncompatibleSchemaException(incompatibleMsg)
-
-      case (INT, y: YearMonthIntervalType) if isNotExactType =>
-        throw incorrectTypeException(y)
-
-      case (LONG, dt: DayTimeIntervalType) if isNotExactType =>
-        throw incorrectTypeException(dt)
-
       case (LONG, dt: TimestampType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
         throw incorrectTypeException(dt)
 
       case (LONG, dt: TimestampNTZType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
+        throw incorrectTypeException(dt)
+
+      case (LONG, dt: DateType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
+        throw incorrectTypeException(dt)
+
+      case (INT, dt: TimestampType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
+        throw incorrectTypeException(dt)
+
+      case (INT, dt: TimestampNTZType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
+        throw incorrectTypeException(dt)
+
+      case (INT, dt: DateType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
         throw incorrectTypeException(dt)
 
       case (INT, DateType) => (updater, ordinal, value) =>
