@@ -6604,9 +6604,6 @@ def levenshtein(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
-
     Parameters
     ----------
     left : :class:`~pyspark.sql.Column` or str
@@ -6616,6 +6613,9 @@ def levenshtein(
     threshold : int, optional
         if set when the levenshtein distance of the two given strings
         less than or equal to a given threshold then return result distance, or -1
+
+        .. versionchanged: 3.5.0
+            Added ``threshold`` argument.
 
     Returns
     -------
