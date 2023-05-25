@@ -639,4 +639,11 @@ abstract class Catalog {
    * @since 3.5.0
    */
   def listCatalogs(): Dataset[CatalogMetadata]
+
+  /**
+   * Returns a list of catalogs which name match the specify pattern available in this session.
+   *
+   * @since 3.5.0
+   */
+  def listCatalogs(pattern: String): Dataset[CatalogMetadata]
 }

@@ -653,6 +653,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataset(CatalogImpl.catalogEncoder) { builder =>
         builder.getCatalogBuilder.getListCatalogsBuilder
       }
+
+  /**
+   * Returns a list of catalogs which name match the specify pattern available in this session.
+   *
+   * @since 3.5.0
+   */
+  override def listCatalogs(pattern: String): Dataset[CatalogMetadata] =
+    sparkSession
+      .newDataset(CatalogImpl.catalogEncoder) { builder =>
+        builder.getCatalogBuilder.getListCatalogsBuilder.setPattern(pattern)
+      }
 }
 
 private object CatalogImpl {

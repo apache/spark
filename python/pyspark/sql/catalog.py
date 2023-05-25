@@ -119,10 +119,15 @@ class Catalog:
         """
         return self._jcatalog.setCurrentCatalog(catalogName)
 
-    def listCatalogs(self) -> List[CatalogMetadata]:
+    def listCatalogs(self, pattern: Optional[str] = None) -> List[CatalogMetadata]:
         """Returns a list of catalogs in this session.
 
         .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        pattern : str
+            The pattern that the catalog name needs to match.
 
         Returns
         -------
@@ -134,7 +139,10 @@ class Catalog:
         >>> spark.catalog.listCatalogs()
         [CatalogMetadata(name='spark_catalog', description=None)]
         """
-        iter = self._jcatalog.listCatalogs().toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listCatalogs().toLocalIterator()
+        else:
+            iter = self._jcatalog.listCatalogs(pattern).toLocalIterator()
         catalogs = []
         while iter.hasNext():
             jcatalog = iter.next()

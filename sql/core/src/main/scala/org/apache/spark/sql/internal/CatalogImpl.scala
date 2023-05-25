@@ -864,6 +864,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
   }
 
+  /**
+   * Returns a list of catalogs which name match the specify pattern available in this session.
+   *
+   * @since 3.5.0
+   */
+  override def listCatalogs(pattern: String): Dataset[CatalogMetadata] = {
+    val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(Some(pattern))
+    CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+  }
+
   private def makeCatalog(name: String): CatalogMetadata = {
     new CatalogMetadata(
       name = name,
