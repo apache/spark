@@ -3138,7 +3138,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def timeTravelUnsupportedError(target: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1336",
+      errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
       messageParameters = Map("target" -> target))
   }
 
