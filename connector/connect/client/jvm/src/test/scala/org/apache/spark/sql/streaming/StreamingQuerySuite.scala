@@ -236,37 +236,34 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     query.stop()
   }
 
-  test("foreach Custom class") {
-    val session: SparkSession = spark
-    import session.implicits._
-
-    //      val path = "/home/wei.liu/test_foreach/output-test-class"
-    case class TestClass(value: Int) {
-      override def toString: String = value.toString
-    }
-
-    val writer = new TestForeachWriter[TestClass]
-    //      val df = spark.readStream .format("rate") .option("rowsPerSecond", "10") .load()
-    val df = spark.readStream
-      .format("rate")
-      .option("rowsPerSecond", "10")
-      .load()
-
-    val query = df
-      .selectExpr("CAST(value AS INT)")
-      .as[TestClass]
-      .writeStream
-      .foreach(writer)
-      .outputMode("update")
-      .start()
-
-    //      val query = df .selectExpr("CAST(value AS INT)") .as[TestClass] .
-    //      writeStream .foreach(writer) .outputMode("update") .start()
-    assert(query.isActive)
-    assert(query.exception.isEmpty)
-
-    query.stop()
-  }
+  // TODO[SPARK-43796]: Enable this test once ammonite client fixes the issue.
+  //  test("foreach Custom class") {
+  //    val session: SparkSession = spark
+  //    import session.implicits._
+  //
+  //    case class TestClass(value: Int) {
+  //      override def toString: String = value.toString
+  //    }
+  //
+  //    val writer = new TestForeachWriter[TestClass]
+  //    val df = spark.readStream
+  //      .format("rate")
+  //      .option("rowsPerSecond", "10")
+  //      .load()
+  //
+  //    val query = df
+  //      .selectExpr("CAST(value AS INT)")
+  //      .as[TestClass]
+  //      .writeStream
+  //      .foreach(writer)
+  //      .outputMode("update")
+  //      .start()
+  //
+  //    assert(query.isActive)
+  //    assert(query.exception.isEmpty)
+  //
+  //    query.stop()
+  //  }
 
   test("streaming query manager") {
     assert(spark.streams.active.isEmpty)
