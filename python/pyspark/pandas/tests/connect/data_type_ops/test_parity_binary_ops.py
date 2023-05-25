@@ -29,10 +29,6 @@ class BinaryOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    # @unittest.skip("TODO(SPARK-43666): Fix BinaryOps.ge to work with Spark Connect Column.")
-    def test_ge(self):
-        super().test_ge()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_binary_ops import *  # noqa: F401
