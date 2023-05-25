@@ -130,6 +130,9 @@ private[sql] class AvroOptions(
   val datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+
+  val useStableIdForUnionType: Boolean =
+    parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
@@ -154,4 +157,5 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // datasource similarly to the SQL config `spark.sql.avro.datetimeRebaseModeInRead`,
   // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
   val DATETIME_REBASE_MODE = newOption("datetimeRebaseMode")
+  val STABLE_ID_FOR_UNION_TYPE = newOption("enableStableIdentifiersForUnionType")
 }

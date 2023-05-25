@@ -260,8 +260,12 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin
-    val avroSchema = AvroOptions(Map("avroSchema" -> avroTypeStruct)).schema.get
-    val sparkSchema = SchemaConverters.toSqlType(avroSchema).dataType.asInstanceOf[StructType]
+    val avroOptions = AvroOptions(Map("avroSchema" -> avroTypeStruct))
+    val avroSchema = avroOptions.schema.get
+    val sparkSchema = SchemaConverters.
+      toSqlType(avroSchema, avroOptions).
+      dataType.
+      asInstanceOf[StructType]
 
     val df = spark.range(5).select($"id")
     val structDf = df.select(struct($"id").as("struct"))

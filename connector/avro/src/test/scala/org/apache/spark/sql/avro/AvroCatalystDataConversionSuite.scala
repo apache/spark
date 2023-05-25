@@ -59,7 +59,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
     val expected = {
       val avroSchema = new Schema.Parser().parse(schema)
-      SchemaConverters.toSqlType(avroSchema).dataType match {
+      SchemaConverters.toSqlType(avroSchema, AvroOptions(Map())).dataType match {
         case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
         case _ => null
       }
@@ -281,7 +281,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       data: GenericData.Record,
       expected: Option[Any],
       filters: StructFilters = new NoopFilters): Unit = {
-    val dataType = SchemaConverters.toSqlType(schema).dataType
+    val dataType = SchemaConverters.toSqlType(schema, AvroOptions(Map())).dataType
     val deserializer = new AvroDeserializer(
       schema,
       dataType,

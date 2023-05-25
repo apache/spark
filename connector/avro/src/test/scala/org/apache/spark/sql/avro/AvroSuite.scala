@@ -109,37 +109,39 @@ abstract class AvroSuite
       types: List[Schema],
       expectedSchema: String,
       fieldsAndRow: Seq[(Any, Row)]): Unit = {
-    withSQLConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE.key -> "true") {
-      withTempDir { dir =>
-        val unionType = Schema.createUnion(
-          types.asJava
-        )
-        val fields =
-          Seq(new Field("field1", unionType, "doc", null.asInstanceOf[AnyVal])).asJava
-        val schema = Schema.createRecord("name", "docs", "namespace", false)
-        schema.setFields(fields)
-        val datumWriter = new GenericDatumWriter[GenericRecord](schema)
-        val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-        dataFileWriter.create(schema, new File(s"$dir.avro"))
+    withTempDir { dir =>
+      val unionType = Schema.createUnion(
+        types.asJava
+      )
+      val fields =
+        Seq(new Field("field1", unionType, "doc", null.asInstanceOf[AnyVal])).asJava
+      val schema = Schema.createRecord("name", "docs", "namespace", false)
+      schema.setFields(fields)
+      val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+      dataFileWriter.create(schema, new File(s"$dir.avro"))
 
-        fieldsAndRow.map(_._1).foreach { f =>
-          val avroRec = new GenericData.Record(schema)
-          f match {
-            case a : Array[Byte] =>
-              val fixedSchema = SchemaBuilder.fixed("fixed_name").size(4)
-              avroRec.put("field1", new Fixed(fixedSchema, a));
-            case other =>
-              avroRec.put("field1", other)
-          }
-          dataFileWriter.append(avroRec)
+      fieldsAndRow.map(_._1).foreach { f =>
+        val avroRec = new GenericData.Record(schema)
+        f match {
+          case a : Array[Byte] =>
+            val fixedSchema = SchemaBuilder.fixed("fixed_name").size(4)
+            avroRec.put("field1", new Fixed(fixedSchema, a));
+          case other =>
+            avroRec.put("field1", other)
         }
-        dataFileWriter.flush()
-        dataFileWriter.close()
-
-        val df = spark.read.format("avro").load(s"$dir.avro")
-        assert(df.schema === StructType.fromDDL("field1 " + expectedSchema))
-        assert(df.collect().toSet == fieldsAndRow.map(fr => Row(fr._2)).toSet)
+        dataFileWriter.append(avroRec)
       }
+      dataFileWriter.flush()
+      dataFileWriter.close()
+
+      val df = spark
+        .read.
+        format("avro")
+        .option(AvroOptions.STABLE_ID_FOR_UNION_TYPE, "true")
+        .load(s"$dir.avro")
+      assert(df.schema === StructType.fromDDL("field1 " + expectedSchema))
+      assert(df.collect().toSet == fieldsAndRow.map(fr => Row(fr._2)).toSet)
     }
   }
 
@@ -430,37 +432,39 @@ abstract class AvroSuite
 
   test("SPARK-27858 Union type: More than one non-null type") {
     Seq(true, false).foreach { isStableUnionMember =>
-      withSQLConf(SQLConf.AVRO_STABLE_ID_FOR_UNION_TYPE.key -> isStableUnionMember.toString) {
-        withTempDir { dir =>
-          val complexNullUnionType = Schema.createUnion(
-            List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING))
-              .asJava
-          )
-          val fields =
-            Seq(new Field("field1", complexNullUnionType, "doc", null.asInstanceOf[AnyVal])).asJava
-          val schema = Schema.createRecord("name", "docs", "namespace", false)
-          schema.setFields(fields)
-          val datumWriter = new GenericDatumWriter[GenericRecord](schema)
-          val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
-          dataFileWriter.create(schema, new File(s"$dir.avro"))
-          val avroRec = new GenericData.Record(schema)
-          avroRec.put("field1", 42)
-          dataFileWriter.append(avroRec)
-          val avroRec2 = new GenericData.Record(schema)
-          avroRec2.put("field1", "Alice")
-          dataFileWriter.append(avroRec2)
-          dataFileWriter.flush()
-          dataFileWriter.close()
+      withTempDir { dir =>
+        val complexNullUnionType = Schema.createUnion(
+          List(Schema.create(Type.INT), Schema.create(Type.NULL), Schema.create(Type.STRING))
+            .asJava
+        )
+        val fields =
+          Seq(new Field("field1", complexNullUnionType, "doc", null.asInstanceOf[AnyVal])).asJava
+        val schema = Schema.createRecord("name", "docs", "namespace", false)
+        schema.setFields(fields)
+        val datumWriter = new GenericDatumWriter[GenericRecord](schema)
+        val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+        dataFileWriter.create(schema, new File(s"$dir.avro"))
+        val avroRec = new GenericData.Record(schema)
+        avroRec.put("field1", 42)
+        dataFileWriter.append(avroRec)
+        val avroRec2 = new GenericData.Record(schema)
+        avroRec2.put("field1", "Alice")
+        dataFileWriter.append(avroRec2)
+        dataFileWriter.flush()
+        dataFileWriter.close()
 
-          val df = spark.read.format("avro").load(s"$dir.avro")
-          if (isStableUnionMember) {
-            assert(df.schema === StructType.fromDDL(
-              "field1 struct<member_int: int, member_string: string>"))
-          } else {
-            assert(df.schema === StructType.fromDDL("field1 struct<member0: int, member1: string>"))
-          }
-          assert(df.collect().toSet == Set(Row(Row(42, null)), Row(Row(null, "Alice"))))
+        val df = spark
+          .read
+          .format("avro")
+          .option(AvroOptions.STABLE_ID_FOR_UNION_TYPE, isStableUnionMember)
+          .load(s"$dir.avro")
+        if (isStableUnionMember) {
+          assert(df.schema === StructType.fromDDL(
+            "field1 struct<member_int: int, member_string: string>"))
+        } else {
+          assert(df.schema === StructType.fromDDL("field1 struct<member0: int, member1: string>"))
         }
+        assert(df.collect().toSet == Set(Row(Row(42, null)), Row(Row(null, "Alice"))))
       }
     }
   }
@@ -1968,7 +1972,7 @@ abstract class AvroSuite
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), AvroOptions(Map()))
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))
@@ -2521,7 +2525,7 @@ abstract class AvroSuite
   }
 
   test("SPARK-40667: validate Avro Options") {
-    assert(AvroOptions.getAllOptions.size == 9)
+    assert(AvroOptions.getAllOptions.size == 10)
     // Please add validation on any new Avro options here
     assert(AvroOptions.isValidOption("ignoreExtension"))
     assert(AvroOptions.isValidOption("mode"))
@@ -2532,6 +2536,7 @@ abstract class AvroSuite
     assert(AvroOptions.isValidOption("recordNamespace"))
     assert(AvroOptions.isValidOption("positionalFieldMatching"))
     assert(AvroOptions.isValidOption("datetimeRebaseMode"))
+    assert(AvroOptions.isValidOption("enableStableIdentifiersForUnionType"))
   }
 }
 
