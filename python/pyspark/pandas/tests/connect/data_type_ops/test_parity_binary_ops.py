@@ -29,18 +29,6 @@ class BinaryOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    def test_ge(self):
-        super().test_ge()
-
-    def test_gt(self):
-        super().test_gt()
-
-    def test_le(self):
-        super().test_le()
-
-    def test_lt(self):
-        super().test_lt()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_binary_ops import *  # noqa: F401
