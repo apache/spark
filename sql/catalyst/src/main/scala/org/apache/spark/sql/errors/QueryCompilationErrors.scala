@@ -3130,18 +3130,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
+  def invalidTimestampExprForTimeTravel(errorClass: String, expr: Expression): Throwable = {
+      new AnalysisException(
+        errorClass = errorClass,
+        messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
   def invalidTimestampExprForTimeTravel(
       errorClass: String,
       expr: Expression,
-      dataType: Option[DataType] = None): Throwable = {
-    dataType match {
-      case Some(v) =>
-        new AnalysisException(errorClass = errorClass,
-          messageParameters = Map("expr" -> toSQLExpr(expr), "dataType" -> toSQLType(v)))
-      case _ =>
-        new AnalysisException(errorClass = errorClass,
-          messageParameters = Map("expr" -> toSQLExpr(expr)))
-    }
+      dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = errorClass,
+      messageParameters = Map(
+        "expr" -> toSQLExpr(expr),
+        "dataType" -> toSQLType(dataType)))
   }
 
   def timeTravelUnsupportedError(target: String): Throwable = {
