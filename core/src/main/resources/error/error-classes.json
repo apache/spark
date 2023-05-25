@@ -2119,7 +2119,7 @@
       },
       "TIME_TRAVEL" : {
         "message" : [
-          "Time travel on: <target>"
+          "Time travel on the relation: <relationId>."
         ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {

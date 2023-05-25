@@ -2979,7 +2979,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         sqlState = None,
-        parameters = Map("target" -> "path-based tables"))
+        parameters = Map("relationId" -> "`parquet`.`/the/path`"))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2987,7 +2987,7 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         sqlState = None,
-        parameters = Map("target" -> "subqueries from WITH clause"))
+        parameters = Map("relationId" -> "`x`"))
 
       val subquery1 = "SELECT 1 FROM non_exist"
       checkError(

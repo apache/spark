@@ -3136,10 +3136,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("expr" -> expr.sql))
   }
 
-  def timeTravelUnsupportedError(target: String): Throwable = {
+  def timeTravelUnsupportedError(relationId: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
-      messageParameters = Map("target" -> target))
+      messageParameters = Map("relationId" -> relationId))
   }
 
   def tableNotSupportTimeTravelError(tableName: Identifier): Throwable = {
