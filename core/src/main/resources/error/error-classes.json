@@ -1156,6 +1156,23 @@
     },
     "sqlState" : "22023"
   },
+  "INVALID_PARTITION_OPERATION" : {
+    "message" : [
+      "The partition command is invalid."
+    ],
+    "subClass" : {
+      "PARTITION_MANAGEMENT_IS_UNSUPPORTED" : {
+        "message" : [
+          "Table <name> does not support partition management."
+        ]
+      },
+      "PARTITION_SCHEMA_IS_EMPTY" : {
+        "message" : [
+          "Table <name> is not partitioned."
+        ]
+      }
+    }
+  },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
       "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>."
@@ -5372,16 +5389,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2404" : {
-    "message" : [
-      "Table <name> is not partitioned."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2405" : {
-    "message" : [
-      "Table <name> does not support partition management."
     ]
   },
   "_LEGACY_ERROR_TEMP_2406" : {
