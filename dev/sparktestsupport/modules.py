@@ -606,6 +606,9 @@ pyspark_ml = Module(
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
         "pyspark.ml.torch.tests.test_data_loader",
+        "pyspark.mlv2.tests.test_summarizer",
+        "pyspark.mlv2.tests.test_evaluation",
+        "pyspark.mlv2.tests.test_feature",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -755,7 +758,6 @@ pyspark_connect = Module(
         "pyspark.sql.connect.streaming.readwriter",
         "pyspark.sql.connect.streaming.query",
         # sql unittests
-        "pyspark.sql.tests.connect.test_client",
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
@@ -778,15 +780,23 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_map",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.client.test_artifact",
+        "pyspark.sql.tests.connect.client.test_client",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map_with_state",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf_window",
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",
+        "pyspark.mlv2.tests.connect.test_parity_summarizer",
+        "pyspark.mlv2.tests.connect.test_parity_evaluation",
+        "pyspark.mlv2.tests.connect.test_parity_feature",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

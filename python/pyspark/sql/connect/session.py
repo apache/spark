@@ -553,49 +553,24 @@ class SparkSession:
             error_class="NOT_IMPLEMENTED", message_parameters={"feature": "getActiveSession()"}
         )
 
-    def newSession(self) -> Any:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "newSession()"}
-        )
-
     @property
     def conf(self) -> RuntimeConf:
         return RuntimeConf(self.client)
 
     @property
-    def sparkContext(self) -> Any:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "sparkContext()"}
-        )
-
-    @property
     def streams(self) -> "StreamingQueryManager":
         return StreamingQueryManager(self)
 
-    @property
-    def _jsc(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jsc"}
-        )
-
-    @property
-    def _jconf(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jconf"}
-        )
-
-    @property
-    def _jvm(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jvm"}
-        )
-
-    @property
-    def _jsparkSession(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-            message_parameters={"attr_name": "_jsparkSession"},
-        )
+    def __getattr__(self, name: str) -> Any:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
+        elif name in ["newSession", "sparkContext"]:
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
+            )
+        return object.__getattribute__(self, name)
 
     @property
     def udf(self) -> "UDFRegistration":
@@ -617,11 +592,38 @@ class SparkSession:
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
         and only relevant for testing.
+
+        .. versionadded:: 3.4.0
+
         Returns
         -------
         :class:`SparkConnectClient`
         """
         return self._client
+
+    def addArtifacts(self, *path: str, pyfile: bool = False, archive: bool = False) -> None:
+        """
+        Add artifact(s) to the client session. Currently only local files are supported.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        *path : tuple of str
+            Artifact's URIs to add.
+        pyfile : bool
+            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
+            The pyfiles are directly inserted into the path when executing Python functions
+            in executors.
+        archive : bool
+            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
+            The archives are unpacked on the executor side automatically.
+        """
+        if pyfile and archive:
+            raise ValueError("'pyfile' and 'archive' cannot be True together.")
+        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive)
+
+    addArtifact = addArtifacts
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

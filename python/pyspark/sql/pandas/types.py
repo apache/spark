@@ -19,8 +19,9 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
+import datetime
 import itertools
-from typing import Any, Callable, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.sql.types import (
     cast,
@@ -92,44 +93,25 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        if type(dt.elementType) == TimestampType:
+        if type(dt.elementType) == StructType and LooseVersion(pa.__version__) < LooseVersion(
+            "2.0.0"
+        ):
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": str(dt)},
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "Array of StructType"},
             )
-        elif type(dt.elementType) == StructType:
-            if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
-                    message_parameters={"data_type": "Array of StructType"},
-                )
-            if any(type(field.dataType) == StructType for field in dt.elementType):
-                raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                    message_parameters={"data_type": "Nested StructType"},
-                )
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+        field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
+        arrow_type = pa.list_(field)
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
                 message_parameters={"data_type": "MapType"},
             )
-        if type(dt.keyType) in [StructType, TimestampType] or type(dt.valueType) in [
-            StructType,
-            TimestampType,
-        ]:
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                message_parameters={"data_type": str(dt)},
-            )
-        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
+        key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
+        value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
+        arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
-        if any(type(field.dataType) == StructType for field in dt):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                message_parameters={"data_type": "Nested StructType"},
-            )
         fields = [
             pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
             for field in dt
@@ -192,38 +174,30 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
-        if types.is_timestamp(at.value_type):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                message_parameters={"data_type": str(at)},
-            )
-        spark_type = ArrayType(from_arrow_type(at.value_type))
+        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
             raise PySparkTypeError(
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
                 message_parameters={"data_type": "MapType"},
             )
-        if types.is_timestamp(at.key_type) or types.is_timestamp(at.item_type):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                message_parameters={"data_type": str(at)},
-            )
-        spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
+        spark_type = MapType(
+            from_arrow_type(at.key_type, prefer_timestamp_ntz),
+            from_arrow_type(at.item_type, prefer_timestamp_ntz),
+        )
     elif types.is_struct(at):
-        if any(types.is_struct(field.type) for field in at):
-            raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                message_parameters={"data_type": "Nested StructType"},
-            )
         return StructType(
             [
-                StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+                StructField(
+                    field.name,
+                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    nullable=field.nullable,
+                )
                 for field in at
             ]
         )
     elif types.is_dictionary(at):
-        spark_type = from_arrow_type(at.value_type)
+        spark_type = from_arrow_type(at.value_type, prefer_timestamp_ntz)
     elif types.is_null(at):
         spark_type = NullType()
     else:
@@ -234,11 +208,15 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
+def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
-            StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+            StructField(
+                field.name,
+                from_arrow_type(field.type, prefer_timestamp_ntz),
+                nullable=field.nullable,
+            )
             for field in arrow_schema
         ]
     )
@@ -508,6 +486,7 @@ def _create_converter_to_pandas(
     timezone: Optional[str] = None,
     struct_in_pandas: Optional[str] = None,
     error_on_duplicated_field_names: bool = True,
+    timestamp_utc_localized: bool = True,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -530,6 +509,10 @@ def _create_converter_to_pandas(
     error_on_duplicated_field_names : bool, optional
         Whether raise an exception when there are duplicated field names.
         (default ``True``)
+    timestamp_utc_localized : bool, optional
+        Whether the timestamp values are localized to UTC or not.
+        The timestamp values from Arrow are localized to UTC,
+        whereas the ones from `df.collect()` are localized to the local timezone.
 
     Returns
     -------
@@ -673,6 +656,35 @@ def _create_converter_to_pandas(
             else:
                 raise ValueError(f"Unknown value for `struct_in_pandas`: {struct_in_pandas}")
 
+        elif isinstance(dt, TimestampType):
+            assert timezone is not None
+
+            local_tz: Union[datetime.tzinfo, str] = (
+                datetime.timezone.utc if timestamp_utc_localized else _get_local_timezone()
+            )
+
+            def convert_timestamp(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+                        ts = pd.Timestamp(value)
+                    else:
+                        ts = pd.Timestamp(value).tz_localize(local_tz)
+                    return ts.tz_convert(timezone).tz_localize(None)
+
+            return convert_timestamp
+
+        elif isinstance(dt, TimestampNTZType):
+
+            def convert_timestamp_ntz(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return pd.Timestamp(value)
+
+            return convert_timestamp_ntz
+
         else:
             return None
 
@@ -706,7 +718,6 @@ def _create_converter_from_pandas(
     -------
     The converter of `pandas.Series`
     """
-    import numpy as np
     import pandas as pd
 
     if isinstance(data_type, TimestampType):
@@ -728,7 +739,7 @@ def _create_converter_from_pandas(
                 if value is None:
                     return None
                 else:
-                    return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
+                    return [_element_conv(v) for v in value]  # type: ignore[misc]
 
             return convert_array
 
@@ -772,6 +783,21 @@ def _create_converter_from_pandas(
                     return {dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)}
 
             return convert_struct
+
+        elif isinstance(dt, TimestampType):
+            assert timezone is not None
+
+            def convert_timestamp(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+                        ts = pd.Timstamp(value)
+                    else:
+                        ts = pd.Timestamp(value).tz_localize(timezone)
+                    return ts.to_pydatetime()
+
+            return convert_timestamp
 
         return None
 

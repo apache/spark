@@ -24,7 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class TimedeltaIndexParityTests(
     TimedeltaIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43710): Support functions.date_part for Spark Connect.")
     def test_properties(self):
         super().test_properties()
 

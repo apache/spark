@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.service
 
+import java.io.File
 import java.nio.file.{Files, Path, Paths}
 import java.util.zip.{CheckedOutputStream, CRC32}
 
@@ -85,7 +86,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   }
 
   protected def addStagedArtifactToArtifactManager(artifact: StagedArtifact): Unit = {
-    artifactManager.addArtifact(holder, artifact.path, artifact.stagedPath)
+    artifactManager.addArtifact(holder, artifact.path, artifact.stagedPath, artifact.fragment)
   }
 
   /**
@@ -148,7 +149,21 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
    * Handles rebuilding an artifact from bytes sent over the wire.
    */
   class StagedArtifact(val name: String) {
-    val path: Path = Paths.get(name)
+    // Workaround to keep the fragment.
+    val (canonicalFileName: String, fragment: Option[String]) =
+      if (name.startsWith(s"archives${File.separator}")) {
+        val splits = name.split("#")
+        assert(splits.length <= 2, "'#' in the path is not supported for adding an archive.")
+        if (splits.length == 2) {
+          (splits(0), Some(splits(1)))
+        } else {
+          (splits(0), None)
+        }
+      } else {
+        (name, None)
+      }
+
+    val path: Path = Paths.get(canonicalFileName)
     val stagedPath: Path = stagingDir.resolve(path)
 
     Files.createDirectories(stagedPath.getParent)

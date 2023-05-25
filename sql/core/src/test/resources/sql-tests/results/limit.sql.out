@@ -51,8 +51,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2403",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "messageParameters" : {
+    "expr" : "\"-1\"",
     "name" : "limit",
     "v" : "-1"
   },
@@ -73,8 +74,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2403",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
   "messageParameters" : {
+    "expr" : "\"-1\"",
     "name" : "limit",
     "v" : "-1"
   },
@@ -103,9 +105,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2402",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
   "messageParameters" : {
-    "limitExpr" : "CAST(NULL AS INT)",
+    "expr" : "\"CAST(NULL AS INT)\"",
     "name" : "limit"
   },
   "queryContext" : [ {
@@ -125,9 +127,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "LIMIT_LIKE_EXPRESSION_IS_UNFOLDABLE",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
   "messageParameters" : {
-    "limitExpr" : "\"(key > 3)\"",
+    "expr" : "\"(key > 3)\"",
     "name" : "limit"
   },
   "queryContext" : [ {
@@ -147,9 +149,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2401",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "messageParameters" : {
-    "dataType" : "boolean",
+    "dataType" : "\"BOOLEAN\"",
+    "expr" : "\"true\"",
     "name" : "limit"
   }
 }
@@ -162,9 +165,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2401",
+  "errorClass" : "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
   "messageParameters" : {
-    "dataType" : "string",
+    "dataType" : "\"STRING\"",
+    "expr" : "\"a\"",
     "name" : "limit"
   },
   "queryContext" : [ {

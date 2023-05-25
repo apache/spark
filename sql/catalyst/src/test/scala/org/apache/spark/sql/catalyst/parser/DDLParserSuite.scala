@@ -2142,8 +2142,8 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "analyze table a.b.c compute statistics xxxx"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      parameters = Map("ctx" -> "xxxx"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -2152,8 +2152,8 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = "analyze table a.b.c partition (a) compute statistics xxxx"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      parameters = Map("ctx" -> "xxxx"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -2169,8 +2169,8 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "ANALYZE TABLES IN a.b.c COMPUTE STATISTICS xxxx"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      parameters = Map("ctx" -> "xxxx"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
