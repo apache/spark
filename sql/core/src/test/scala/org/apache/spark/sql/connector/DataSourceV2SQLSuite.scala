@@ -2940,8 +2940,10 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF 'abc'").collect()
         },
-        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.IS_NULL",
-        parameters = Map("expr" -> "\"abc\""))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.DATA_TYPE",
+        parameters = Map(
+          "expr" -> "\"abc\"",
+          "dataType" -> "\"STRING\""))
 
       checkError(
         exception = intercept[AnalysisException] {

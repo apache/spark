@@ -39,7 +39,7 @@ object TimeTravelSpec {
       assert(ts.resolved && ts.references.isEmpty && !SubqueryExpression.hasSubquery(ts))
       if (!Cast.canAnsiCast(ts.dataType, TimestampType)) {
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.DATA_TYPE", ts, Some(ts.dataType))
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.DATA_TYPE", ts, ts.dataType)
       }
       val tsToEval = ts.transform {
         case r: RuntimeReplaceable => r.replacement
@@ -56,7 +56,7 @@ object TimeTravelSpec {
       val value = Cast(tsToEval, TimestampType, tz, ansiEnabled = false).eval()
       if (value == null) {
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
-          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.IS_NULL", ts)
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.DATA_TYPE", ts, tsToEval.dataType)
       }
       Some(AsOfTimestamp(value.asInstanceOf[Long]))
     } else if (version.nonEmpty) {

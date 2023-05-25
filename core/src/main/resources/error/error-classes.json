@@ -1062,33 +1062,6 @@
     ],
     "sqlState" : "42613"
   },
-  "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
-    "message" : [
-      "The time travel timestamp expression <expr> is invalid."
-    ],
-    "subClass" : {
-      "DATA_TYPE" : {
-        "message" : [
-          "Must be timestamp type, but got <dataType>."
-        ]
-      },
-      "IS_NULL" : {
-        "message" : [
-          "Must not be NULL."
-        ]
-      },
-      "NON_DETERMINISTIC" : {
-        "message" : [
-          "Must be deterministic."
-        ]
-      },
-      "UNEVALUABLE" : {
-        "message" : [
-          "Must be evaluable."
-        ]
-      }
-    }
-  },
   "INVALID_LIMIT_LIKE_EXPRESSION" : {
     "message" : [
       "The limit like expression <expr> is invalid."
@@ -1330,6 +1303,28 @@
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ]
+  },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
+    "message" : [
+      "The time travel timestamp expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "Must be timestamp type, but got <dataType>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Must be deterministic."
+        ]
+      },
+      "UNEVALUABLE" : {
+        "message" : [
+          "Must be evaluable."
+        ]
+      }
+    }
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [

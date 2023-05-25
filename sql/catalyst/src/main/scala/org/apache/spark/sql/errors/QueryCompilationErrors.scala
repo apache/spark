@@ -3131,9 +3131,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def invalidTimestampExprForTimeTravel(errorClass: String, expr: Expression): Throwable = {
-      new AnalysisException(
-        errorClass = errorClass,
-        messageParameters = Map("expr" -> toSQLExpr(expr)))
+    new AnalysisException(
+      errorClass = errorClass,
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
   }
 
   def invalidTimestampExprForTimeTravel(
