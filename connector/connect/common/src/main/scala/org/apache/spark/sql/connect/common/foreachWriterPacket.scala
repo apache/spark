@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
  *
  * @param foreachWriter
  *   The actual foreachWriter from client
- * @param rowEncoder
+ * @param datasetEncoder
  *   An [[AgnosticEncoder]] for the input row
  */
 @SerialVersionUID(3882541391565582579L)
