@@ -29,19 +29,15 @@ class BinaryOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("TODO(SPARK-43666): Fix BinaryOps.ge to work with Spark Connect Column.")
     def test_ge(self):
         super().test_ge()
 
-    @unittest.skip("TODO(SPARK-43667): Fix BinaryOps.gt to work with Spark Connect Column.")
     def test_gt(self):
         super().test_gt()
 
-    @unittest.skip("TODO(SPARK-43667): Fix BinaryOps.le to work with Spark Connect Column.")
     def test_le(self):
         super().test_le()
 
-    @unittest.skip("TODO(SPARK-43667): Fix BinaryOps.lt to work with Spark Connect Column.")
     def test_lt(self):
         super().test_lt()
 
