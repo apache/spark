@@ -30,5 +30,5 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
  *   An [[AgnosticEncoder]] for the input row
  */
 @SerialVersionUID(3882541391565582579L)
-case class foreachWriterPacket(foreachWriter: AnyRef, datasetEncoder: AgnosticEncoder[_])
+case class ForeachWriterPacket(foreachWriter: AnyRef, datasetEncoder: AgnosticEncoder[_])
     extends Serializable

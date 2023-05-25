@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
-import org.apache.spark.sql.connect.common.foreachWriterPacket
+import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger
@@ -223,7 +223,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
     } else {
       null
     }
-    val serialized = Utils.serialize(foreachWriterPacket(writer, rowEncoder))
+    val serialized = Utils.serialize(ForeachWriterPacket(writer, rowEncoder))
     val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))

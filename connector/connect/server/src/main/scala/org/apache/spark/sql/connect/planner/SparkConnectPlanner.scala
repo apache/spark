@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.Left
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
@@ -53,7 +52,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.common.{foreachWriterPacket, DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -1354,8 +1353,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       SparkConnectArtifactManager.classLoaderWithArtifacts)
   }
 
-  private def unpackForeachWriter(fun: proto.ScalarScalaUDF): foreachWriterPacket = {
-    Utils.deserialize[foreachWriterPacket](
+  private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
+    Utils.deserialize[ForeachWriterPacket](
       fun.getPayload.toByteArray,
       SparkConnectArtifactManager.classLoaderWithArtifacts)
   }
@@ -2467,9 +2466,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         } else {
           val encoder = ExpressionEncoder(
             foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])
-          writer.foreachImplementation(
-            clientWriter.asInstanceOf[ForeachWriter[Any]],
-            Left(encoder))
+          writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
         }
       }
     }
