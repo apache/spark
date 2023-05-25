@@ -559,3 +559,29 @@ struct<scalarsubquery():boolean>
 -- !query output
 false
 false
+
+
+-- !query
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline	false
+
+
+-- !query
+WITH T AS (SELECT 1 AS a)
+SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
+FROM (SELECT null as col) as foo
+-- !query schema
+struct<scalarsubquery(col, col):bigint>
+-- !query output
+NULL
+
+
+-- !query
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline	true
