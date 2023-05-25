@@ -138,6 +138,12 @@ class Catalog:
         --------
         >>> spark.catalog.listCatalogs()
         [CatalogMetadata(name='spark_catalog', description=None)]
+
+        >>> spark.catalog.listCatalogs("spark*")
+        [CatalogMetadata(name='spark_catalog', description=None)]
+
+        >>> spark.catalog.listTables("hive*")
+        []
         """
         if pattern is None:
             iter = self._jcatalog.listCatalogs().toLocalIterator()
