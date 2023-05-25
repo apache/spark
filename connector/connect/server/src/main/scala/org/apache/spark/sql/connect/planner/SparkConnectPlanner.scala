@@ -658,12 +658,20 @@ class SparkConnectPlanner(val session: SparkSession) {
       rel.getGroupingExpressionsList,
       new util.ArrayList[proto.Expression]())
 
-    val initialDs = UntypedKeyValueGroupedDataset(
-      rel.getInput,
-      rel.getInitialGroupingExpressionsList,
-      new util.ArrayList[proto.Expression]())
-
     val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty
+
+    val initialDs = if (hasInitialState) {
+      UntypedKeyValueGroupedDataset(
+        rel.getInput,
+        rel.getInitialGroupingExpressionsList,
+        new util.ArrayList[proto.Expression]())
+    } else {
+      UntypedKeyValueGroupedDataset(
+        rel.getInput,
+        rel.getGroupingExpressionsList,
+        new util.ArrayList[proto.Expression]())
+    }
+
     val timeoutConf = if (rel.getTimeoutConf.isEmpty) {
       GroupStateTimeout.NoTimeout
     } else {

@@ -330,7 +330,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
    *   Function to be called on every group.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.2.0
+   * @since 3.5.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
@@ -355,7 +355,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
    *   Timeout configuration for groups that do not receive data for a while.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.2.0
+   * @since 3.5.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
@@ -385,7 +385,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
    *   a KeyValueGroupedDataset[K, S] do {{{ds.groupByKey(x => x._1).mapValues(_._2)}}}
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 3.2.0
+   * @since 3.5.0
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout,
@@ -414,7 +414,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
    *   Timeout configuration for groups that do not receive data for a while.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.2.0
+   * @since 3.5.0
    */
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
@@ -448,7 +448,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
    *   `Dataset[(K, S)]` to a `KeyValueGroupedDataset[K, S]`, use
    *   {{{ds.groupByKey(x => x._1).mapValues(_._2)}}} See [[Encoder]] for more details on what
    *   types are encodable to Spark SQL.
-   * @since 3.2.0
+   * @since 3.5.0
    */
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
