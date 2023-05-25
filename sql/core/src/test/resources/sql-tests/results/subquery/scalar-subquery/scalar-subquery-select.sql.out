@@ -586,6 +586,7 @@ struct<key:string,value:string>
 -- !query output
 spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline	true
 
+
 -- !query
 select * from (
  select t1.id c1, (
