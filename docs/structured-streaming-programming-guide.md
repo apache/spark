@@ -2395,10 +2395,17 @@ You can also determine the max allowed memory for RocksDB instances by setting t
 Limits for individual RocksDB instances can also be configured by setting `spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB` and `spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber` to the required values. By default, RocksDB internal defaults are used for these settings.
 
 ##### RocksDB State Store Changelog Checkpointing
-Changelog checkpointing reduces latency of the stateful streaming query. This checkpointing mechanism avoids cost of capturing and uploading snapshots of RocksDB instances in the commit phase of RocksDB state store.
-You can enable RocksDB State Store changelog checkpointing by setting `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled` config to `true`.
-Changelog checkpointing is backward compatible. In a version of spark that supports changelog checkpointing, you can turn on changelog checkpointing for a streaming query without discarding the existing checkpoint. 
-Vice versa, if a query has already run with changelog checkpointing enabled, you can turn off changelog checkpointing safely.
+In newer version of Spark, changelog checkpointing is introduced for RocksDB state store. The traditional checkpointing mechanism for RocksDB State Store is incremental snapshot checkpointing, where the manifest files and newly generated RocksDB SST files of RocksDB instances are uploaded to a durable storage.
+Instead of uploading data files of RocksDB instances, changelog checkpointing uploads changes made to the state since the last checkpoint for durability.
+Snapshots are persisted periodically in the background for predictable failure recovery and changelog trimming.
+Changelog checkpointing avoids cost of capturing and uploading snapshots of RocksDB instances and significantly reduce streaming query latency.
+
+Changelog checkpointing is disabled by default. You can enable RocksDB State Store changelog checkpointing by setting `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled` config to `true`.
+Changelog checkpointing is designed to be backward compatible with traditional checkpointing mechanism.
+RocksDB state store provider offers seamless support for transitioning between two checkpointing mechanisms in both directions. This allows you to leverage the performance benefits of changelog checkpointing without discarding the old state checkpoint.
+In a version of spark that supports changelog checkpointing, you can migrate streaming queries from older versions of Spark to changelog checkpointing by enabling changelog checkpointing in the spark session.
+Vice versa, you can disable changelog checkpointing safely in newer version of Spark, then any query that already run with changelog checkpointing will switch back to traditional checkpointing.
+You would need to restart you streaming queries for change in checkpointing mechanism to be applied, but you won't observe any performance degrade in the process.
 
 ##### Performance-aspect considerations
 
