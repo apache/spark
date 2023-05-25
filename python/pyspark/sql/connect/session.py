@@ -601,7 +601,7 @@ class SparkSession:
         """
         return self._client
 
-    def addArtifacts(self, *path: str, pyfile: bool = False) -> None:
+    def addArtifacts(self, *path: str, pyfile: bool = False, archive: bool = False) -> None:
         """
         Add artifact(s) to the client session. Currently only local files are supported.
 
@@ -613,8 +613,15 @@ class SparkSession:
             Artifact's URIs to add.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
+            The pyfiles are directly inserted into the path when executing Python functions
+            in executors.
+        archive : bool
+            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
+            The archives are unpacked on the executor side automatically.
         """
-        self._client.add_artifacts(*path, pyfile=pyfile)
+        if pyfile and archive:
+            raise ValueError("'pyfile' and 'archive' cannot be True together.")
+        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive)
 
     addArtifact = addArtifacts
 
