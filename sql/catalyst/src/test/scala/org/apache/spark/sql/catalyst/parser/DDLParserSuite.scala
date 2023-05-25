@@ -23,9 +23,9 @@ import java.util.Locale
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, Hex, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, Hex, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
-import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
+import org.apache.spark.sql.catalyst.plans.logical.{ResolvedTableSpec => LogicalTableSpec, _}
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -900,45 +900,45 @@ class DDLParserSuite extends AnalysisTest {
       val folded = ConstantFolding(analyzed)
       folded
     }
-    def expectedTable(options: Map[String, Expression]): LogicalPlan = {
+    def expectedTable(option: Expression): LogicalPlan = {
       CreateTable(
         ResolvedIdentifier(
           analyzer.currentCatalog,
           Identifier.of(Array("default"), "t")),
         schema, Seq.empty[Transform],
         LogicalTableSpec(
-          Map.empty[String, String], Some("json"), options, None, None, None, false),
+          Map.empty[String, String], Some("json"), Map("k" -> option.toString), None, None,
+          None, false),
         false)
     }
     comparePlans(inputPlan("'k' = 1 + 2"),
-      expectedTable(Map("k" -> Literal(3))))
+      expectedTable(Literal(3)))
     comparePlans(inputPlan("'k' = 'a' || 'b'"),
-      expectedTable(Map("k" -> Literal("ab"))))
+      expectedTable(Literal("ab")))
     comparePlans(inputPlan("'k' = true or false"),
-      expectedTable(Map("k" -> Literal(true))))
+      expectedTable(Literal(true)))
     comparePlans(inputPlan("'k' = date_diff(current_date(), current_date())"),
-      expectedTable(Map("k" -> Literal(0))))
+      expectedTable(Literal(0)))
     comparePlans(inputPlan("'k' = date_sub(date'2022-02-02', 1)"),
-      expectedTable(Map("k" -> Literal(Date.valueOf("2022-02-01")))))
+      expectedTable(Literal(Date.valueOf("2022-02-01"))))
     comparePlans(inputPlan("'k' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')"),
-      expectedTable(Map("k" -> Literal(Timestamp.valueOf("2022-02-28 00:00:00.000005")))))
+      expectedTable(Literal(Timestamp.valueOf("2022-02-28 00:00:00.000005"))))
     comparePlans(inputPlan("'k' = round(cast(2.25 as decimal(5, 3)), 1)"),
-      expectedTable(Map("k" -> Literal(Decimal(BigDecimal(23, 1), precision = 4, scale = 1)))))
+      expectedTable(Literal(Decimal(BigDecimal(23, 1), precision = 4, scale = 1))))
     // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
     // too narrow to contain the result of the cast.
     comparePlans(inputPlan("'k' = round(cast(2.25 as decimal(3, 3)), 1)"),
-      expectedTable(Map("k" -> Literal(null, DecimalType(2, 1)))))
-    comparePlans(inputPlan("'k' = raise_error('failure')"),
-      expectedTable(Map("k" -> RaiseError(Literal("failure")))))
+      expectedTable(Literal(null, DecimalType(2, 1))))
     // Test some cases where the provided option value is a non-constant or invalid expression.
     Seq(
-      "('optKey' = 1 + 2 + unresolvedAttribute)",
-      "('optKey' = true or false or unresolvedAttribute)",
-      "('optKey' = date_diff(date'2023-01-02', unresolvedAttribute))"
-    ).foreach { options =>
+      " 1 + 2 + unresolvedAttribute",
+      "true or false or unresolvedAttribute",
+      "date_diff(date'2023-01-02', unresolvedAttribute)",
+      "raise_error('failure')"
+    ).foreach { option =>
       checkError(
         exception = intercept[AnalysisException](
-          ConstantFolding(analyzer.execute(parsePlan(prefix + options)))),
+          ConstantFolding(analyzer.execute(parsePlan(s"$prefix ('optKey' = $option)")))),
         errorClass = "INVALID_SQL_SYNTAX",
         parameters = Map(
           "inputString" ->
@@ -2496,16 +2496,11 @@ class DDLParserSuite extends AnalysisTest {
       partitioning: Seq[Transform],
       properties: Map[String, String],
       provider: Option[String],
-      optionsList: Map[String, Expression],
+      options: Map[String, Expression],
       location: Option[String],
       comment: Option[String],
       serdeInfo: Option[SerdeInfo],
-      external: Boolean = false) {
-    /** This is a convenience method to obtain the options list as a map of strings to strings. */
-    def options: Map[String, String] = optionsList.map { case (key, value) =>
-      (key, if (value != null) value.sql else null)
-    }
-  }
+      external: Boolean = false)
 
   private object TableSpec {
     def apply(plan: LogicalPlan): TableSpec = {
@@ -2517,7 +2512,7 @@ class DDLParserSuite extends AnalysisTest {
             create.partitioning,
             create.tableSpec.properties,
             create.tableSpec.provider,
-            create.tableSpec.optionsList,
+            create.tableSpec.asInstanceOf[UnresolvedTableSpec].optionsExpressions,
             create.tableSpec.location,
             create.tableSpec.comment,
             create.tableSpec.serde,
@@ -2529,7 +2524,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.partitioning,
             replace.tableSpec.properties,
             replace.tableSpec.provider,
-            replace.tableSpec.optionsList,
+            replace.tableSpec.asInstanceOf[UnresolvedTableSpec].optionsExpressions,
             replace.tableSpec.location,
             replace.tableSpec.comment,
             replace.tableSpec.serde)
@@ -2540,7 +2535,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.partitioning,
             ctas.tableSpec.properties,
             ctas.tableSpec.provider,
-            ctas.tableSpec.optionsList,
+            ctas.tableSpec.asInstanceOf[UnresolvedTableSpec].optionsExpressions,
             ctas.tableSpec.location,
             ctas.tableSpec.comment,
             ctas.tableSpec.serde,
@@ -2552,7 +2547,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.partitioning,
             rtas.tableSpec.properties,
             rtas.tableSpec.provider,
-            rtas.tableSpec.optionsList,
+            rtas.tableSpec.asInstanceOf[UnresolvedTableSpec].optionsExpressions,
             rtas.tableSpec.location,
             rtas.tableSpec.comment,
             rtas.tableSpec.serde)

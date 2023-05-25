@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.TableSpec
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
@@ -218,21 +217,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpression(e)
       case Some(value) => Some(recursiveTransform(value))
-      case t: TableSpec =>
-        val newOptionsList = t.optionsList.map { case (key, value) =>
-          try {
-            (key, if (value != null) transformExpression(value) else null)
-          } catch {
-            case _: AnalysisException =>
-              throw new AnalysisException(
-                errorClass = "INVALID_SQL_SYNTAX",
-                messageParameters = Map(
-                  "inputString" ->
-                    (s"option or property key $key is invalid; " +
-                      s"only constant expressions are supported")))
-          }
-        }
-        t.copy(optionsList = newOptionsList)
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case stream: Stream[_] => stream.map(recursiveTransform).force

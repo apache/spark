@@ -3509,4 +3509,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
     )
   }
+
+  def optionMustBeLiteralString(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Map(
+        "inputString" ->
+          s"option or property key $key is invalid; only literal strings are supported"))
+  }
+
+  def optionMustBeConstant(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Map(
+        "inputString" ->
+          s"option or property key $key is invalid; only constant expressions are supported"))
+  }
 }
