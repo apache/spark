@@ -128,14 +128,14 @@ Project [from_csv(StructField(date,DateType,true), (dateFormat,yyyy-DDD), 2018-3
 -- !query
 select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query analysis
-Project [to_date(2020-01-27T20:06:11.847, Some(yyyy-MM-dd HH:mm:ss.SSS), Some(America/Los_Angeles), LEGACY) AS to_date(2020-01-27T20:06:11.847, yyyy-MM-dd HH:mm:ss.SSS)#x]
+Project [to_date(2020-01-27T20:06:11.847, Some(yyyy-MM-dd HH:mm:ss.SSS), Some(America/Los_Angeles), false) AS to_date(2020-01-27T20:06:11.847, yyyy-MM-dd HH:mm:ss.SSS)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
 -- !query analysis
-Project [to_date(Unparseable, Some(yyyy-MM-dd HH:mm:ss.SSS), Some(America/Los_Angeles), LEGACY) AS to_date(Unparseable, yyyy-MM-dd HH:mm:ss.SSS)#x]
+Project [to_date(Unparseable, Some(yyyy-MM-dd HH:mm:ss.SSS), Some(America/Los_Angeles), false) AS to_date(Unparseable, yyyy-MM-dd HH:mm:ss.SSS)#x]
 +- OneRowRelation
 
 
