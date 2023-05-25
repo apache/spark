@@ -243,7 +243,6 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   }
 
   override def createTempFile(path: Path): FSDataOutputStream = {
-    fs.create(path, true, 4096)
     fs.create(path, true)
   }
 

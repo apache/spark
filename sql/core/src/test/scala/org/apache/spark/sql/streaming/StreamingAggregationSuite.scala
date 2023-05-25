@@ -960,18 +960,21 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 class RocksDBStateStoreStreamingAggregationSuite
   extends StreamingAggregationSuite with RocksDBStateStoreTest  {
   import testImplicits._
+
   def snapshotVersionsPresent(dir: File): Seq[Long] = {
     dir.listFiles.filter(_.getName.endsWith(".zip"))
       .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
   }
+
   def changelogVersionsPresent(dir: File): Seq[Long] = {
     dir.listFiles.filter(_.getName.endsWith(".changelog"))
       .map(_.getName.stripSuffix(".changelog"))
       .map(_.toLong)
       .sorted
   }
+
   test("Streaming aggregation RocksDB State Store backward compatibility.") {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     checkpointDir.delete()

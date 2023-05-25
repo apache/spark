@@ -38,8 +38,10 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager.Cancellabl
  * Write an Int -1 to signal the end of file.
  * The overall changelog format is: | put record | delete record | ... | put record | -1 |
  */
-class StateStoreChangelogWriter(fm: CheckpointFileManager, file: Path,
-                                compressionCodec: CompressionCodec) extends Logging {
+class StateStoreChangelogWriter(
+    fm: CheckpointFileManager,
+    file: Path,
+    compressionCodec: CompressionCodec) extends Logging {
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
@@ -112,8 +114,10 @@ class StateStoreChangelogWriter(fm: CheckpointFileManager, file: Path,
  * A put record is returned as a ByteArrayPair(key, value)
  * A delete record is return as a ByteArrayPair(key, null)
  */
-class StateStoreChangelogReader(fm: CheckpointFileManager, fileToRead: Path,
-                      compressionCodec: CompressionCodec)
+class StateStoreChangelogReader(
+    fm: CheckpointFileManager,
+    fileToRead: Path,
+    compressionCodec: CompressionCodec)
   extends Iterator[ByteArrayPair] with Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {

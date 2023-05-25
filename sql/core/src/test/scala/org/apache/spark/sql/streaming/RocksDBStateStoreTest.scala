@@ -25,6 +25,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 trait RocksDBStateStoreTest extends SQLTestUtils {
+
+  val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
+    ".changelogCheckpointing.enabled"
+
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
     super.test(testName + " (RocksDBStateStore)", testTags: _*) {
@@ -45,8 +49,4 @@ trait RocksDBStateStoreTest extends SQLTestUtils {
       }
     }
   }
-
-
-  def rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
-    ".changelogCheckpointing.enabled"
 }
