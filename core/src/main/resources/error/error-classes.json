@@ -1210,7 +1210,7 @@
     "subClass" : {
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
-          "ANALYZE TABLE ... COMPUTE STATISTICS ... <ctx> must be 'NOSCAN'"
+          "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty"
         ]
       },
       "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
