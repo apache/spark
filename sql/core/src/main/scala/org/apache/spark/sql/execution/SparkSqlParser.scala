@@ -255,9 +255,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetNamespaceCommand]] logical command.
    */
   override def visitUseNamespace(ctx: UseNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference, ident => {
-      SetNamespaceCommand(ident)
-    })
+    withIdentClause(ctx.identifierReference, SetNamespaceCommand(_))
   }
 
   /**
@@ -494,17 +492,15 @@ class SparkSqlAstBuilder extends AstBuilder {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,
         "'originalText' must be provided to create permanent view")
-      withIdentClause(ctx.identifierReference(), ident => {
-        CreateView(
-          UnresolvedIdentifier(ident),
-          userSpecifiedColumns,
-          visitCommentSpecList(ctx.commentSpec()),
-          properties,
-          Some(originalText),
-          plan(ctx.query),
-          ctx.EXISTS != null,
-          ctx.REPLACE != null)
-      })
+      CreateView(
+        withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        Some(originalText),
+        plan(ctx.query),
+        ctx.EXISTS != null,
+        ctx.REPLACE != null)
     } else {
       // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with
       // 'CREATE TEMPORARY TABLE'

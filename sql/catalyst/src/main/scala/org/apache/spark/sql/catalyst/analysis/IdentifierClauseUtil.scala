@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StringType
  * Resolves the catalog of the name parts for table/view/function/namespace.
  */
 object IdentifierClauseUtil {
-  private def getNotNullFoldableSring(clauseName: String, expr: Expression): String = {
+  private def getNotNullFoldableString(clauseName: String, expr: Expression): String = {
     expr match {
       case e if !e.foldable => expr.failAnalysis(
         errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
@@ -50,7 +50,7 @@ object IdentifierClauseUtil {
   }
 
   def evalIdentifierClause(expr: Expression): Seq[String] = {
-    val str = getNotNullFoldableSring("IDENTIFIER", expr)
+    val str = getNotNullFoldableString("IDENTIFIER", expr)
     UnresolvedAttribute(str).nameParts
   }
 }
