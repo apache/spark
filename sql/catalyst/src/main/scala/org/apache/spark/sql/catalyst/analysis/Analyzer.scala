@@ -1756,20 +1756,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               case MergeResolvePolicy.SOURCE => Project(Nil, mergeInto.sourceTable)
               case MergeResolvePolicy.TARGET => Project(Nil, mergeInto.targetTable)
             }
-            resolvedKey match {
-              case attr: AttributeReference =>
-                val resolvedExpr = resolveExprInAssignment(c, resolvePlan) match {
-                  case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-                    getDefaultValueExpr(attr).getOrElse(Literal(null, attr.dataType))
-                  case other if containsExplicitDefaultColumn(other) =>
-                    throw QueryCompilationErrors
-                      .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates()
-                  case other => other
-                }
-                checkResolvedMergeExpr(resolvedExpr, resolvePlan)
-                resolvedExpr
-              case _ => resolveMergeExprOrFail(c, resolvePlan)
+            val resolvedExpr = resolveExprInAssignment(c, resolvePlan)
+            val withDefaultResolved = if (conf.enableDefaultColumns) {
+              resolveColumnDefaultInAssignmentValue(resolvedKey, resolvedExpr)
+            } else {
+              resolvedExpr
             }
+            checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
+            withDefaultResolved
           case o => o
         }
         Assignment(resolvedKey, resolvedValue)

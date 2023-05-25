@@ -45,15 +45,24 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
         i.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
-      val staticPartCols = i.partitionSpec.filter(_._2.isDefined).keys.map(normalizeFieldName).toSet
+      val staticPartCols = i.partitionSpec.filter(_._2.isDefined).keySet.map(normalizeFieldName)
+      // For INSERT with static partitions, such as `INSERT INTO t PARTITION(c=1) SELECT ...`, the
+      // input query schema should match the table schema excluding columns with static
+      // partition values.
       val expectedQuerySchema = i.table.schema.filter { field =>
         !staticPartCols.contains(normalizeFieldName(field.name))
       }
+      // Normally, we should match the query schema with the table schema by position. If the n-th
+      // column of the query is the DEFAULT column, we should get the default value expression
+      // defined for the n-th column of the table. However, if the INSERT has a column list, such as
+      // `INSERT INTO t(b, c, a)`, the matching should be by name. For example, the first column of
+      // the query should match the column 'b' of the table.
+      // To simplify the implementation, `resolveColumnDefault` always does by-position match. If
+      // the INSERT has a column list, we reorder the table schema w.r.t. the column list and pass
+      // the reordered schema as the expected schema to `resolveColumnDefault`.
       if (i.userSpecifiedCols.isEmpty) {
         i.withNewChildren(Seq(resolveColumnDefault(i.query, expectedQuerySchema)))
       } else {
-        // Reorder the fields in `expectedQuerySchema` according to the user-specified column list
-        // of the INSERT command.
         val colNamesToFields: Map[String, StructField] = expectedQuerySchema.map { field =>
           normalizeFieldName(field.name) -> field
         }.toMap
@@ -70,6 +79,21 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
     case _ => plan
   }
 
+  /**
+   * Resolves the column "DEFAULT" in [[Project]] and [[UnresolvedInlineTable]]. A column is a
+   * "DEFAULT" column if all the following conditions are met:
+   * 1. The expression inside project list or inline table expressions is a single
+   *    [[UnresolvedAttribute]] with name "DEFAULT". This means `SELECT DEFAULT, ...` is valid but
+   *    `SELECT DEFAULT + 1, ...` is not.
+   * 2. The project list or inline table expressions have less elements than the expected schema.
+   *    To find the default value definition, we need to find the matching column for expressions
+   *    inside project list or inline table expressions. This matching is by position and it
+   *    doesn't make sense if we have more expressions than the columns of expected schema.
+   * 3. The plan nodes between [[Project]] and [[InsertIntoStatement]] are
+   *    all unary nodes that inherit the output columns from its child.
+   * 4. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
+   *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
+   */
   private def resolveColumnDefault(
       plan: LogicalPlan,
       expectedQuerySchema: Seq[StructField],

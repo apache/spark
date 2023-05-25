@@ -18,15 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExpr, isExplicitDefaultColumn}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.resolveColumnDefaultInAssignmentValue
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[UpdateTable]]. It's only used by the real
  * rule `ResolveReferences`. The column resolution order for [[UpdateTable]] is:
- * 1. Resolves the column to [[AttributeReference]] with the output of the child plan. This
+ * 1. Resolves the column to `AttributeReference`` with the output of the child plan. This
  *    includes metadata columns as well.
  * 2. Resolves the column to a literal function which is allowed to be invoked without braces, e.g.
  *    `SELECT col, current_date FROM t`.
@@ -48,17 +46,10 @@ case object ResolveReferencesInUpdate extends SQLConfHelper with ColumnResolutio
       val resolvedValue = assign.value match {
         case c if !c.resolved =>
           val resolved = resolveExprInAssignment(c, u)
-          resolvedKey match {
-            case attr: AttributeReference if conf.enableDefaultColumns =>
-              resolved match {
-                case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-                  getDefaultValueExpr(attr).getOrElse(Literal(null, attr.dataType))
-                case other if containsExplicitDefaultColumn(other) =>
-                  throw QueryCompilationErrors
-                    .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
-                case other => other
-              }
-            case _ => resolved
+          if (conf.enableDefaultColumns) {
+            resolveColumnDefaultInAssignmentValue(resolvedKey, resolved)
+          } else {
+            resolved
           }
         case o => o
       }

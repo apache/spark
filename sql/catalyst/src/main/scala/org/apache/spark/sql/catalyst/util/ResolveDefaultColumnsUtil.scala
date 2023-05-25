@@ -173,6 +173,32 @@ object ResolveDefaultColumns {
   }
 
   /**
+   * Resolves the column "DEFAULT" in UPDATE/MERGE assignment value expression if the following
+   * conditions are met:
+   * 1. The assignment value expression is a single `UnresolvedAttribute` with name "DEFAULT". This
+   *    means `key = DEFAULT` is allowed but `key = DEFAULT + 1` is not.
+   * 2. The assignment key expression is a top-level column. This means `col = DEFAULT` is allowed
+   *    but `col.field = DEFAULT` is not.
+   *
+   * The column "DEFAULT" will be resolved to the default value expression defined for the column of
+   * the assignment key.
+   */
+  def resolveColumnDefaultInAssignmentValue(key: Expression, value: Expression): Expression = {
+    key match {
+      case attr: AttributeReference =>
+        value match {
+          case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
+            getDefaultValueExpr(attr).getOrElse(Literal(null, attr.dataType))
+          case other if containsExplicitDefaultColumn(other) =>
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
+          case other => other
+        }
+      case _ => value
+    }
+  }
+
+  /**
    * Generates the expression of the default value for the given field. If there is no
    * user-specified default value for this field, returns None.
    */
