@@ -126,7 +126,15 @@ class ScalarPandasUDFTestsMixin:
         )
         data = [(1, ("John", 30, ("Value1", 10)))]
         df = self.spark.createDataFrame(data, schema)
-        return df
+        struct_df = df.select(struct(df.columns).alias("struct"))
+        # struct_df.dtype:
+        # [(
+        #   'struct',
+        #   'struct<id:int,info:
+        #     struct<name:string,age:int,details:
+        #       struct<field1:string, field2:int>>>'
+        # )]
+        return struct_df
 
     @property
     def df_with_nested_maps(self):
@@ -163,13 +171,15 @@ class ScalarPandasUDFTestsMixin:
     def test_input_nested_structs(self):
         df = self.df_with_nested_structs
 
-        str_repr = pandas_udf(
-            lambda s: s.astype(str), "struct<name:string,age:string,details:string>"
-        )
+        mirror = pandas_udf(lambda s: s, df.dtypes[0][1])
 
         self.assertEquals(
-            df.select(str_repr(df.info).alias("res")).first(),
-            Row(res=Row(name="John", age="30", details="{'field1': 'Value1', 'field2': 10}")),
+            df.select(mirror(df.struct).alias("res")).first(),
+            Row(
+                res=Row(
+                    id=1, info=Row(name="John", age=30, details=Row(field1="Value1", field2=10))
+                )
+            ),
         )
 
     def test_input_nested_maps(self):
