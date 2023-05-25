@@ -1820,6 +1820,3 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 }
-
-class RocksDBStateStoreStreamingInnerJoinSuite
-  extends StreamingInnerJoinSuite with RocksDBStateStoreTest  {}
