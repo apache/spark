@@ -318,7 +318,7 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-43333: union stable id") {
+  test("SPARK-43333: Stable field names when converting Union type") {
     checkUnionStableId(
       List(Type.INT, Type.NULL, Type.STRING).map(Schema.create(_)),
       "struct<member_int: int, member_string: string>",
@@ -1972,7 +1972,7 @@ abstract class AvroSuite
 
   private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
-      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), AvroOptions(Map()))
+      SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema))
     }.getMessage
 
     assert(message.contains("Found recursive reference in Avro schema"))

@@ -51,8 +51,11 @@ object SchemaConverters {
    *
    * @since 2.4.0
    */
-  def toSqlType(avroSchema: Schema, avroOptions: AvroOptions): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty, avroOptions)
+  def toSqlType(avroSchema: Schema): SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(Map()))
+  }
+  def toSqlType(avroSchema: Schema, options: Map[String, String]): SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty, AvroOptions(options))
   }
 
   // The property specifies Catalyst type of the given field

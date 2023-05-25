@@ -38,12 +38,8 @@ private[sql] case class AvroDataToCatalyst(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
-  override def nullable: Boolean = true
-
-  private lazy val avroOptions = AvroOptions(options)
-
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(expectedSchema, avroOptions).dataType
+    val dt = SchemaConverters.toSqlType(expectedSchema, options).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -52,6 +48,10 @@ private[sql] case class AvroDataToCatalyst(
       case _ => dt
     }
   }
+
+  override def nullable: Boolean = true
+
+  private lazy val avroOptions = AvroOptions(options)
 
   @transient private lazy val actualSchema =
     new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
