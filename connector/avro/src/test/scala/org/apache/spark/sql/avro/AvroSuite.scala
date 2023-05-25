@@ -318,6 +318,9 @@ abstract class AvroSuite
     }
   }
 
+  // The test test Avro option "enableStableIdentifiersForUnionType". It adds all types into union and validate they
+  // are converted to expected SQL field names. The test also creates different cases that might cause field name
+  // conflicts and see they are handled properly.
   test("SPARK-43333: Stable field names when converting Union type") {
     checkUnionStableId(
       List(Type.INT, Type.NULL, Type.STRING).map(Schema.create(_)),
