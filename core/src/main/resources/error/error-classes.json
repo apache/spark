@@ -1074,7 +1074,7 @@
       },
       "IS_NULL" : {
         "message" : [
-          "Must not be null."
+          "Must not be NULL."
         ]
       },
       "NON_DETERMINISTIC" : {
