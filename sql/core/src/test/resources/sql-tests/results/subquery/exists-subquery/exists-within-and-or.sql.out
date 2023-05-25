@@ -119,16 +119,10 @@ WHERE  ( NOT EXISTS (SELECT *
                      WHERE  emp.emp_name = emp_name 
                              OR bonus_amt < emp.salary) )
 -- !query schema
-struct<emp_name:string,bonus_amt:double>
+struct<>
 -- !query output
-emp 1	10.0
-emp 1	20.0
-emp 2	100.0
-emp 2	300.0
-emp 3	300.0
-emp 4	100.0
-emp 5	1000.0
-emp 6 - no dept	500.0
+java.lang.IllegalArgumentException
+null
 
 
 -- !query

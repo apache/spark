@@ -148,21 +148,21 @@ select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(n
 -- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
 -- !query analysis
-Project [to_date(cast(null as string), None, Some(America/Los_Angeles)) AS to_date(NULL)#x, to_date(2016-12-31, None, Some(America/Los_Angeles)) AS to_date(2016-12-31)#x, to_date(2016-12-31, Some(yyyy-MM-dd), Some(America/Los_Angeles)) AS to_date(2016-12-31, yyyy-MM-dd)#x]
+Project [to_date(cast(null as string), None, Some(America/Los_Angeles), LEGACY) AS to_date(NULL)#x, to_date(2016-12-31, None, Some(America/Los_Angeles), LEGACY) AS to_date(2016-12-31)#x, to_date(2016-12-31, Some(yyyy-MM-dd), Some(America/Los_Angeles), LEGACY) AS to_date(2016-12-31, yyyy-MM-dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date("16", "dd")
 -- !query analysis
-Project [to_date(16, Some(dd), Some(America/Los_Angeles)) AS to_date(16, dd)#x]
+Project [to_date(16, Some(dd), Some(America/Los_Angeles), LEGACY) AS to_date(16, dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date("02-29", "MM-dd")
 -- !query analysis
-Project [to_date(02-29, Some(MM-dd), Some(America/Los_Angeles)) AS to_date(02-29, MM-dd)#x]
+Project [to_date(02-29, Some(MM-dd), Some(America/Los_Angeles), LEGACY) AS to_date(02-29, MM-dd)#x]
 +- OneRowRelation
 
 
@@ -804,7 +804,7 @@ select date '2012-01-01' - interval '2-2' year to month,
 -- !query
 select to_date('26/October/2015', 'dd/MMMMM/yyyy')
 -- !query analysis
-Project [to_date(26/October/2015, Some(dd/MMMMM/yyyy), Some(America/Los_Angeles)) AS to_date(26/October/2015, dd/MMMMM/yyyy)#x]
+Project [to_date(26/October/2015, Some(dd/MMMMM/yyyy), Some(America/Los_Angeles), LEGACY) AS to_date(26/October/2015, dd/MMMMM/yyyy)#x]
 +- OneRowRelation
 
 
