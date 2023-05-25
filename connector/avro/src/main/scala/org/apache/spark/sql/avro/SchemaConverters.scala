@@ -28,7 +28,6 @@ import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -53,7 +52,7 @@ object SchemaConverters {
    * @since 2.4.0
    */
   def toSqlType(avroSchema: Schema, avroOptions: AvroOptions): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty. avroOptions)
+    toSqlTypeHelper(avroSchema, Set.empty, avroOptions)
   }
 
   // The property specifies Catalyst type of the given field
