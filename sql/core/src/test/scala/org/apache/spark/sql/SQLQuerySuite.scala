@@ -280,6 +280,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
+  test("SPARK-43522: Fix creating struct column name with index of array") {
+    val df = Seq("a=b,c=d,d=f").toDF.withColumn("key_value", split('value, ","))
+      .withColumn("map_entry", transform(col("key_value"), x => struct(split(x, "=")
+        .getItem(0), split(x, "=").getItem(1)))).select("map_entry")
+
+    checkAnswer(df, Row(Seq(Row("a", "b"), Row("c", "d"), Row("d", "f"))))
+  }
+
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
@@ -4647,6 +4655,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("CREATE TABLE t2(c2 bigint) USING PARQUET")
       sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
     }
+  }
+
+  test("SPARK-43199: InlineCTE is idempotent") {
+    sql(
+      """
+        |WITH
+        |  x(r) AS (SELECT random()),
+        |  y(r) AS (SELECT * FROM x),
+        |  z(r) AS (SELECT * FROM x)
+        |SELECT * FROM z
+        |""".stripMargin).collect()
   }
 }
 

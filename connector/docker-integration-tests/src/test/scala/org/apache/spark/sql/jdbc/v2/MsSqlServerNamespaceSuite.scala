@@ -70,7 +70,4 @@ class MsSqlServerNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNa
   override val supportsSchemaComment: Boolean = false
 
   override val supportsDropSchemaCascade: Boolean = false
-
-  testListNamespaces()
-  testDropNamespaces()
 }

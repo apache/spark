@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    YearMonthIntervalType,
     MapType,
     StringType,
     CharType,
@@ -49,6 +50,7 @@ from pyspark.sql.types import (
     NullType,
     UserDefinedType,
 )
+from pyspark.errors import PySparkAssertionError
 
 import pyspark.sql.connect.proto as pb2
 
@@ -108,16 +110,28 @@ class UnparsedDataType(DataType):
         return "UnparsedDataType(%s)" % repr(self.data_type_string)
 
     def jsonValue(self) -> Dict[str, Any]:
-        raise AssertionError("Invalid call to jsonValue on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "jsonValue"},
+        )
 
     def needConversion(self) -> bool:
-        raise AssertionError("Invalid call to needConversion on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "needConversion"},
+        )
 
     def toInternal(self, obj: Any) -> Any:
-        raise AssertionError("Invalid call to toInternal on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "toInternal"},
+        )
 
     def fromInternal(self, obj: Any) -> Any:
-        raise AssertionError("Invalid call to fromInternal on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "fromInternal"},
+        )
 
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
@@ -154,6 +168,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
+    elif isinstance(data_type, YearMonthIntervalType):
+        ret.year_month_interval.start_field = data_type.startField
+        ret.year_month_interval.end_field = data_type.endField
     elif isinstance(data_type, StructType):
         for field in data_type.fields:
             struct_field = pb2.DataType.StructField()
@@ -236,6 +253,18 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             else None
         )
         return DayTimeIntervalType(startField=start, endField=end)
+    elif schema.HasField("year_month_interval"):
+        start: Optional[int] = (  # type: ignore[no-redef]
+            schema.year_month_interval.start_field
+            if schema.year_month_interval.HasField("start_field")
+            else None
+        )
+        end: Optional[int] = (  # type: ignore[no-redef]
+            schema.year_month_interval.end_field
+            if schema.year_month_interval.HasField("end_field")
+            else None
+        )
+        return YearMonthIntervalType(startField=start, endField=end)
     elif schema.HasField("array"):
         return ArrayType(
             proto_schema_to_pyspark_data_type(schema.array.element_type),
@@ -378,13 +407,20 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type))
+        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
-        spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
+        spark_type = MapType(
+            from_arrow_type(at.key_type, prefer_timestamp_ntz),
+            from_arrow_type(at.item_type, prefer_timestamp_ntz),
+        )
     elif types.is_struct(at):
         return StructType(
             [
-                StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+                StructField(
+                    field.name,
+                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    nullable=field.nullable,
+                )
                 for field in at
             ]
         )
@@ -395,11 +431,15 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
+def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
-            StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+            StructField(
+                field.name,
+                from_arrow_type(field.type, prefer_timestamp_ntz),
+                nullable=field.nullable,
+            )
             for field in arrow_schema
         ]
     )

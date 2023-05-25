@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -496,21 +497,20 @@ object CatalogTable {
 
   def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
     props.get(key).orElse {
-      if (props.filterKeys(_.startsWith(key)).isEmpty) {
-        None
-      } else {
-        val numParts = props.get(s"$key.numParts")
-        if (numParts.isEmpty) {
-          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
-        } else {
-          val parts = (0 until numParts.get.toInt).map { index =>
-            props.getOrElse(s"$key.part.$index", {
-              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
-                key, s"Missing part $index, $numParts parts are expected.")
-            })
-          }
-          Some(parts.mkString)
+      if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
+        props.get(s"$key.numParts") match {
+          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
+          case Some(numParts) =>
+            val parts = (0 until numParts.toInt).map { index =>
+              val keyPart = s"$key.part.$index"
+              props.getOrElse(keyPart, {
+                throw QueryCompilationErrors.insufficientTablePropertyPartError(keyPart, numParts)
+              })
+            }
+            Some(parts.mkString)
         }
+      } else {
+        None
       }
     }
   }
@@ -824,8 +824,8 @@ case class HiveTableRelation(
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
-  assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
-  assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
+  assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
+  assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
 
   // The partition column should always appear after data columns.
   override def output: Seq[AttributeReference] = dataCols ++ partitionCols

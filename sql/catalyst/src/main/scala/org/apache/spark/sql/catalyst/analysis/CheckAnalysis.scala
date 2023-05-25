@@ -85,30 +85,44 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2400",
+        errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
         messageParameters = Map(
           "name" -> name,
-          "limitExpr" -> limitExpr.sql))
+          "expr" -> toSQLExpr(limitExpr)))
       case e if e.dataType != IntegerType => limitExpr.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2401",
+        errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
         messageParameters = Map(
           "name" -> name,
-          "dataType" -> e.dataType.catalogString))
+          "expr" -> toSQLExpr(limitExpr),
+          "dataType" -> toSQLType(e.dataType)))
       case e =>
         e.eval() match {
           case null => limitExpr.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2402",
+            errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
             messageParameters = Map(
               "name" -> name,
-              "limitExpr" -> limitExpr.sql))
+              "expr" -> toSQLExpr(limitExpr)))
           case v: Int if v < 0 => limitExpr.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2403",
+            errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
             messageParameters = Map(
               "name" -> name,
-              "v" -> v.toString))
+              "expr" -> toSQLExpr(limitExpr),
+              "v" -> toSQLValue(v, IntegerType)))
           case _ => // OK
         }
     }
+  }
+
+  /** Check and throw exception when a given resolved plan contains LateralColumnAliasReference. */
+  private def checkNotContainingLCA(exprSeq: Seq[NamedExpression], plan: LogicalPlan): Unit = {
+    if (!plan.resolved) return
+    exprSeq.foreach(_.transformDownWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+      case lcaRef: LateralColumnAliasReference =>
+        throw SparkException.internalError("Resolved plan should not contain any " +
+          s"LateralColumnAliasReference.\nDebugging information: plan:\n$plan",
+          context = lcaRef.origin.getQueryContext,
+          summary = lcaRef.origin.context.summary)
+    })
   }
 
   private def isMapWithStringKey(e: Expression): Boolean = if (e.resolved) {
@@ -126,16 +140,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass: String): Nothing = {
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
-    val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+    val orderedCandidates =
+      StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)
     throw QueryCompilationErrors.unresolvedAttributeError(
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     val inlineCTE = InlineCTE(alwaysInline = true)
-    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
+    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, refCount) =>
+    cteMap.values.foreach { case (relation, refCount, _) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       if (refCount == 0) checkAnalysis0(relation.child)
@@ -318,7 +333,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   messageParameters = Map("aggFunc" -> agg.aggregateFunction.prettyName))
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
                   errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
@@ -391,14 +405,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case Aggregate(groupingExprs, aggregateExprs, _) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case expr: Expression if AggregateExpression.isAggregate(expr) =>
-                val aggFunction = expr match {
-                  case agg: AggregateExpression => agg.aggregateFunction
-                  case udf: PythonUDF => udf
-                }
+              case expr: AggregateExpression =>
+                val aggFunction = expr.aggregateFunction
                 aggFunction.children.foreach { child =>
                   child.foreach {
-                    case expr: Expression if AggregateExpression.isAggregate(expr) =>
+                    case expr: AggregateExpression =>
                       expr.failAnalysis(
                         errorClass = "NESTED_AGGREGATE_FUNCTION",
                         messageParameters = Map.empty)
@@ -653,16 +664,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case UnresolvedWindowExpression(_, windowSpec) =>
                 throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
             })
-            // This should not happen, resolved Project or Aggregate should restore or resolve
-            // all lateral column alias references. Add check for extra safe.
-            projectList.foreach(_.transformDownWithPruning(
-              _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-              case lcaRef: LateralColumnAliasReference if p.resolved =>
-                throw SparkException.internalError("Resolved Project should not contain " +
-                  s"any LateralColumnAliasReference.\nDebugging information: plan: $p",
-                  context = lcaRef.origin.getQueryContext,
-                  summary = lcaRef.origin.context.summary)
-            })
 
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
@@ -738,31 +739,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map(
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
-          // This should not happen, resolved Project or Aggregate should restore or resolve
-          // all lateral column alias references. Add check for extra safe.
-          case agg @ Aggregate(_, aggList, _)
-            if aggList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) && agg.resolved =>
-            aggList.foreach(_.transformDownWithPruning(
-              _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-              case lcaRef: LateralColumnAliasReference =>
-                throw SparkException.internalError("Resolved Aggregate should not contain " +
-                  s"any LateralColumnAliasReference.\nDebugging information: plan: $agg",
-                  context = lcaRef.origin.getQueryContext,
-                  summary = lcaRef.origin.context.summary)
-            })
-
-          case w @ Window(pList, _, _, _)
-            if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) && w.resolved =>
-            pList.foreach(_.transformDownWithPruning(
-              _.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
-              case lcaRef: LateralColumnAliasReference =>
-                throw SparkException.internalError(
-                  s"Referencing lateral column alias ${toSQLId(lcaRef.nameParts)} is not " +
-                    s"supported in this Window query case yet. \nDebugging information: plan: $w",
-                  context = lcaRef.origin.getQueryContext,
-                  summary = lcaRef.origin.context.summary)
-            })
-
           case _ => // Analysis successful!
         }
     }
@@ -774,6 +750,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           msg = s"Found the unresolved operator: ${o.simpleString(SQLConf.get.maxToStringFields)}",
           context = o.origin.getQueryContext,
           summary = o.origin.context.summary)
+      // If the plan is resolved, the resolved Project, Aggregate or Window should have restored or
+      // resolved all lateral column alias references. Add check for extra safe.
+      case p @ Project(pList, _)
+        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        checkNotContainingLCA(pList, p)
+      case agg @ Aggregate(_, aggList, _)
+        if aggList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        checkNotContainingLCA(aggList, agg)
+      case w @ Window(pList, _, _, _)
+        if pList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        checkNotContainingLCA(pList, w)
       case _ =>
     }
   }
@@ -947,7 +934,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           expr.failAnalysis(

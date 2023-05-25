@@ -2136,6 +2136,61 @@ streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 
 </div>
 
+Specifically for streaming, you can deduplicate records in data streams using a unique identifier in the events, within the time range of watermark.
+For example, if you set the delay threshold of watermark as "1 hour", duplicated events which occurred within 1 hour can be correctly deduplicated.
+(For more details, please refer to the API doc of [dropDuplicatesWithinWatermark](/api/scala/org/apache/spark/sql/Dataset.html#dropDuplicatesWithinWatermark():org.apache.spark.sql.Dataset[T]).)
+
+This can be used to deal with use case where event time column cannot be a part of unique identifier, mostly due to the case
+where event times are somehow different for the same records. (E.g. non-idempotent writer where issuing event time happens at write)
+
+Users are encouraged to set the delay threshold of watermark longer than max timestamp differences among duplicated events.
+
+This feature requires watermark with delay threshold to be set in streaming DataFrame/Dataset.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+streamingDf = spark.readStream. ...
+
+# deduplicate using guid column with watermark based on eventTime column
+streamingDf \
+  .withWatermark("eventTime", "10 hours") \
+  .dropDuplicatesWithinWatermark("guid")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val streamingDf = spark.readStream. ...  // columns: guid, eventTime, ...
+
+// deduplicate using guid column with watermark based on eventTime column
+streamingDf
+  .withWatermark("eventTime", "10 hours")
+  .dropDuplicatesWithinWatermark("guid")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> streamingDf = spark.readStream(). ...;  // columns: guid, eventTime, ...
+
+// deduplicate using guid column with watermark based on eventTime column
+streamingDf
+  .withWatermark("eventTime", "10 hours")
+  .dropDuplicatesWithinWatermark("guid");
+{% endhighlight %}
+
+
+</div>
+
+</div>
+
 ### Policy for handling multiple watermarks
 A streaming query can have multiple input streams that are unioned or joined together.
 Each of the input streams can have a different threshold of late data that needs to
@@ -2305,7 +2360,34 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>The maximum number of MemTables in RocksDB, both active and immutable. Value of -1 means that RocksDB internal default values will be used</td>
     <td>-1</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage</td>
+    <td>Whether total memory usage for RocksDB state store instances on a single node is bounded.</td>
+    <td>false</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB</td>
+    <td>Total memory limit in MB for RocksDB state store instances on a single node.</td>
+    <td>500</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.writeBufferCacheRatio</td>
+    <td>Total memory to be occupied by write buffers as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
+    <td>0.5</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.highPriorityPoolRatio</td>
+    <td>Total memory to be occupied by blocks in high priority pool as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
+    <td>0.1</td>
+  </tr>
 </table>
+
+##### RocksDB State Store Memory Management
+RocksDB allocates memory for different objects such as memtables, block cache and filter/index blocks. If left unbounded, RocksDB memory usage across multiple instances could grow indefinitely and potentially cause OOM (out-of-memory) issues.
+RocksDB provides a way to limit the memory usage for all DB instances running on a single node by using the write buffer manager functionality.
+If you want to cap RocksDB memory usage in your Spark Structured Streaming deployment, this feature can be enabled by setting the `spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage` config to `true`.
+You can also determine the max allowed memory for RocksDB instances by setting the `spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB` value to a static number or as a fraction of the physical memory available on the node.
+Limits for individual RocksDB instances can also be configured by setting `spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB` and `spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber` to the required values. By default, RocksDB internal defaults are used for these settings.
 
 ##### Performance-aspect considerations
 

@@ -37,7 +37,9 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkNotImplementedError,
 )
+from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
 if TYPE_CHECKING:
@@ -142,7 +144,7 @@ def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
     """
-    return "SPARK_REMOTE" in os.environ
+    return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
 
 def try_remote_functions(f: FuncT) -> FuncT:
@@ -153,6 +155,22 @@ def try_remote_functions(f: FuncT) -> FuncT:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.sql.connect import functions
+
+            return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
+def try_remote_avro_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.avro import functions
 
             return getattr(functions, f.__name__)(*args, **kwargs)
         else:
@@ -193,6 +211,15 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def get_active_spark_context() -> SparkContext:
+    """Raise RuntimeError if SparkContext is not initialized,
+    otherwise, returns the active SparkContext."""
+    sc = SparkContext._active_spark_context
+    if sc is None or sc._jvm is None:
+        raise RuntimeError("SparkContext or SparkSession should be created first.")
+    return sc
+
+
 def try_remote_observation(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 
@@ -200,7 +227,10 @@ def try_remote_observation(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         # TODO(SPARK-41527): Add the support of Observation.
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            raise NotImplementedError()
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "Observation support for Spark Connect"},
+            )
         return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)

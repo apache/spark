@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.{ClientRMService, RMAppMana
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => meq}
@@ -48,7 +49,6 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceID
@@ -217,8 +217,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("specify a more specific type for the application") {
-    // TODO (SPARK-31733) Make this test case pass with hadoop-3
-    assume(!isYarnResourceTypesAvailable)
     // When the type exceeds 20 characters will be truncated by yarn
     val appTypes = Map(
       1 -> ("", ""),
@@ -245,11 +243,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
       when(yarnClient.submitApplication(any())).thenAnswer((invocationOnMock: InvocationOnMock) => {
         val subContext = invocationOnMock.getArguments()(0)
           .asInstanceOf[ApplicationSubmissionContext]
+        when(subContext.getApplicationTags).thenReturn(Set.empty[String].asJava)
         val request = Records.newRecord(classOf[SubmitApplicationRequest])
         request.setApplicationSubmissionContext(subContext)
 
         val rmContext = mock(classOf[RMContext])
-        val conf = mock(classOf[Configuration])
+        val conf = spy(classOf[Configuration])
         val map = new ConcurrentHashMap[ApplicationId, RMApp]()
         when(rmContext.getRMApps).thenReturn(map)
         val dispatcher = mock(classOf[Dispatcher])
@@ -264,18 +263,22 @@ class ClientSuite extends SparkFunSuite with Matchers {
         val publisher = mock(classOf[SystemMetricsPublisher])
         when(rmContext.getSystemMetricsPublisher).thenReturn(publisher)
         when(appContext.getUnmanagedAM).thenReturn(true)
+        val yarnConfiguration = mock(classOf[YarnConfiguration])
+        when(rmContext.getYarnConfiguration).thenReturn(yarnConfiguration)
+        val yarnScheduler = mock(classOf[YarnScheduler])
 
         val rmAppManager = new RMAppManager(rmContext,
-          null,
+          yarnScheduler,
           null,
           mock(classOf[ApplicationACLsManager]),
           conf)
         val clientRMService = new ClientRMService(rmContext,
-          null,
+          yarnScheduler,
           rmAppManager,
           null,
           null,
           null)
+        clientRMService.init(conf)
         clientRMService.submitApplication(request)
 
         assert(map.get(subContext.getApplicationId).getApplicationType === targetType)
@@ -468,7 +471,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     "cluster" -> YARN_DRIVER_RESOURCE_TYPES_PREFIX
   ).foreach { case (deployMode, prefix) =>
     test(s"custom resource request ($deployMode mode)") {
-      assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
       val resources = Map("fpga" -> 2, "gpu" -> 3)
       ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
 
@@ -487,14 +489,12 @@ class ClientSuite extends SparkFunSuite with Matchers {
         containerLaunchContext)
 
       resources.foreach { case (name, value) =>
-        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be (value)
+        appContext.getResource.getResourceInformation(name).getValue should be (value)
       }
     }
   }
 
   test("custom driver resource request yarn config and spark config fails") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
-
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu", conf.get(YARN_FPGA_DEVICE) -> "fpga")
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
@@ -516,7 +516,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("custom executor resource request yarn config and spark config fails") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu", conf.get(YARN_FPGA_DEVICE) -> "fpga")
     ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
@@ -539,7 +538,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
 
   test("custom resources spark config mapped to yarn config") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     val yarnMadeupResource = "yarn.io/madeup"
     val resources = Map(conf.get(YARN_GPU_DEVICE) -> "gpu",
@@ -562,8 +560,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
 
-    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
-    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+    val yarnRInfo = newContext.getResource.getResources
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
     assert(allResourceInfo.get(conf.get(YARN_GPU_DEVICE)).nonEmpty)
     assert(allResourceInfo.get(conf.get(YARN_GPU_DEVICE)).get === 3)
     assert(allResourceInfo.get(conf.get(YARN_FPGA_DEVICE)).nonEmpty)
@@ -573,7 +571,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("gpu/fpga spark resources mapped to custom yarn resources") {
-    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     val gpuCustomName = "custom/gpu"
     val fpgaCustomName = "custom/fpga"
@@ -595,8 +592,8 @@ class ClientSuite extends SparkFunSuite with Matchers {
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
 
-    val yarnRInfo = ResourceRequestTestHelper.getResources(newContext.getResource)
-    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+    val yarnRInfo = newContext.getResource.getResources
+    val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
     assert(allResourceInfo.get(gpuCustomName).nonEmpty)
     assert(allResourceInfo.get(gpuCustomName).get === 3)
     assert(allResourceInfo.get(fpgaCustomName).nonEmpty)

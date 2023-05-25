@@ -47,7 +47,8 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
 from pandas._libs import lib
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql.column import Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DayTimeIntervalType,
     FractionalType,
@@ -1820,7 +1821,7 @@ class Index(IndexOpsMixin):
         # when self._scol has name of '__index_level_0__'
         index_value_column_format = "__index_value_{}__"
 
-        sdf = self._internal._sdf
+        sdf = self._internal._sdf  # type: ignore[has-type]
         index_value_column_names = [
             verify_temp_column_name(sdf, index_value_column_format.format(i))
             for i in range(self._internal.index_level)
@@ -2087,11 +2088,10 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
-        if isinstance(self, MultiIndex):
-            if level is not None:
-                self_names = self.names
-                self_names[level] = names  # type: ignore[index]
-                names = self_names
+        if isinstance(self, MultiIndex) and level is not None:
+            self_names = self.names
+            self_names[level] = names  # type: ignore[index]
+            names = self_names
         return self.rename(name=names, inplace=inplace)
 
     def difference(self, other: "Index", sort: Optional[bool] = None) -> "Index":

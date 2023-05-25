@@ -1455,4 +1455,93 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(result1, result2)
     }
   }
+
+  def dupStreamSideColTest(hint: String, check: SparkPlan => Unit): Unit = {
+    val query =
+      s"""select /*+ ${hint}(r) */ *
+         |from testData2 l
+         |full outer join testData3 r
+         |on l.a = r.a
+         |and l.b < (r.b + 1)
+         |and l.b < (r.a + 1)""".stripMargin
+    val df = sql(query)
+    val plan = df.queryExecution.executedPlan
+    check(plan)
+    val expected = Row(1, 1, null, null) ::
+      Row(1, 2, null, null) ::
+      Row(null, null, 1, null) ::
+      Row(2, 1, 2, 2) ::
+      Row(2, 2, 2, 2) ::
+      Row(3, 1, null, null) ::
+      Row(3, 2, null, null) :: Nil
+    checkAnswer(df, expected)
+  }
+
+  test("SPARK-43113: Full outer join with duplicate stream-side references in condition (SMJ)") {
+    def check(plan: SparkPlan): Unit = {
+      assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 1)
+    }
+    dupStreamSideColTest("MERGE", check)
+  }
+
+  test("SPARK-43113: Full outer join with duplicate stream-side references in condition (SHJ)") {
+    def check(plan: SparkPlan): Unit = {
+      assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
+    }
+    dupStreamSideColTest("SHUFFLE_HASH", check)
+  }
+
+  test("SPARK-43718: USING with references to key columns: Full Outer") {
+    withTempView("t1", "t2") {
+      sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
+      sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
+
+      val query =
+        """select explode(array(t1.c1, t2.c1)) as x1
+          |from t1
+          |full outer join t2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(1), Row(2), Row(2), Row(3), Row(3), Row(4), Row(null), Row(null))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-43718: USING with references to key columns: Left Outer") {
+    withTempView("t1", "t2") {
+      sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
+      sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
+
+      val query =
+        """select explode(array(t1.c1, t2.c1)) as x1
+          |from t1
+          |left outer join t2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(1), Row(2), Row(2), Row(3), Row(3), Row(null))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-43718: USING with references to key columns: Right Outer") {
+    withTempView("t1", "t2") {
+      sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
+      sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
+
+      val query =
+        """select explode(array(t1.c1, t2.c1)) as x1
+          |from t1
+          |right outer join t2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(2), Row(2), Row(3), Row(3), Row(4), Row(null))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
 }

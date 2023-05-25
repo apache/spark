@@ -2816,6 +2816,31 @@ class AdaptiveQueryExecSuite
       }.size == 1)
     }
   }
+
+  test("SPARK-43026: Apply AQE with non-exchange table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(0).cache()
+      df.collect()
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      assert(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        .executedPlan.isInstanceOf[LocalTableScanExec])
+    }
+  }
+
+  test("SPARK-43376: Improve reuse subquery with table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      withTable("t1", "t2") {
+        withCache("t1") {
+          Seq(1).toDF("c1").cache().createOrReplaceTempView("t1")
+          Seq(2).toDF("c2").createOrReplaceTempView("t2")
+
+          val (_, adaptive) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM t1 WHERE c1 < (SELECT c2 FROM t2)")
+          assert(findReusedSubquery(adaptive).size == 1)
+        }
+      }
+    }
+  }
 }
 
 /**

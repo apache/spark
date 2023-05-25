@@ -691,7 +691,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val mapInPandas = MapInPandas(
       pythonUdf,
       output,
-      project)
+      project,
+      false)
     val left = SubqueryAlias("temp0", mapInPandas)
     val right = SubqueryAlias("temp1", mapInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)
@@ -741,7 +742,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("CTE with non-existing column alias") {
     assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      Map("objectName" -> "`y`", "proposal" -> "`t`.`x`"),
+      Map("objectName" -> "`y`", "proposal" -> "`x`"),
       Array(ExpectedContext("y", 46, 46))
     )
   }
@@ -1436,5 +1437,97 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         )
       ).analyze
     )
+  }
+
+  test("SPARK-43030: deduplicate relations in CTE relation definitions") {
+    val join = testRelation.as("left").join(testRelation.as("right"))
+    val cteDef = CTERelationDef(join)
+    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+
+    withClue("flat CTE") {
+      val plan = WithCTE(cteRef.select($"left.a"), Seq(cteDef)).analyze
+      val relations = plan.collect {
+        case r: LocalRelation => r
+      }
+      assert(relations.length == 2)
+      assert(relations.map(_.output).distinct.length == 2)
+    }
+
+    withClue("nested CTE") {
+      val cteDef2 = CTERelationDef(WithCTE(cteRef.join(testRelation), Seq(cteDef)))
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val plan = WithCTE(cteRef2, Seq(cteDef2)).analyze
+      val relations = plan.collect {
+        case r: LocalRelation => r
+      }
+      assert(relations.length == 3)
+      assert(relations.map(_.output).distinct.length == 3)
+    }
+  }
+
+  test("SPARK-43030: deduplicate CTE relation references") {
+    val cteDef = CTERelationDef(testRelation.select($"a"))
+    val cteRef = CTERelationRef(cteDef.id, false, Nil)
+
+    withClue("single reference") {
+      val plan = WithCTE(cteRef.where($"a" > 1), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      // Only one CTE ref, no need to deduplicate
+      assert(refs.length == 1)
+      assert(refs(0).output == testRelation.output.take(1))
+    }
+
+    withClue("two references") {
+      val plan = WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 2)
+      assert(refs.map(_.output).distinct.length == 2)
+    }
+
+    withClue("references in both CTE relation definition and main query") {
+      val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
+      val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
+      val plan = WithCTE(cteRef.union(cteRef2), Seq(cteDef, cteDef2)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 3)
+      assert(refs.map(_.cteId).distinct.length == 2)
+      assert(refs.map(_.output).distinct.length == 3)
+    }
+  }
+
+  test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
+    val listQuery1 = ListQuery(testRelation2.select($"a"))
+    val listQuery2 = ListQuery(testRelation2.select($"b"))
+    val plan = testRelation3.where($"f".in(listQuery1) && $"f".in(listQuery2)).analyze
+    val resolvedCondition = plan.expressions.head
+    val finalPlan = testRelation2.join(testRelation3).where(resolvedCondition).analyze
+    val resolvedListQueries = finalPlan.expressions.flatMap(_.collect {
+      case l: ListQuery => l
+    })
+    assert(resolvedListQueries.length == 2)
+
+    def collectLocalRelations(plan: LogicalPlan): Seq[LocalRelation] = plan.collect {
+      case l: LocalRelation => l
+    }
+    val localRelations = resolvedListQueries.flatMap(l => collectLocalRelations(l.plan))
+    assert(localRelations.length == 2)
+    // DeduplicateRelations should deduplicate plans in subquery expressions as well.
+    assert(localRelations.head.output != localRelations.last.output)
+
+    resolvedListQueries.foreach { l =>
+      assert(l.childOutputs == l.plan.output)
+    }
+  }
+
+  test("SPARK-43293: __qualified_access_only should be ignored in normal columns") {
+    val attr = $"a".int.markAsQualifiedAccessOnly()
+    val rel = LocalRelation(attr)
+    checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
   }
 }

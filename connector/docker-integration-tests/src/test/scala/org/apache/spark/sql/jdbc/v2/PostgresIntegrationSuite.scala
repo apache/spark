@@ -21,6 +21,7 @@ import java.sql.Connection
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -91,30 +92,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
 
   override def indexOptions: String = "FILLFACTOR=70"
 
-  testOffset()
-  testLimitAndOffset()
-  testPaging()
-
-  testVarPop()
-  testVarPop(true)
-  testVarSamp()
-  testVarSamp(true)
-  testStddevPop()
-  testStddevPop(true)
-  testStddevSamp()
-  testStddevSamp(true)
-  testCovarPop()
-  testCovarPop(true)
-  testCovarSamp()
-  testCovarSamp(true)
-  testCorr()
-  testCorr(true)
-  testRegrIntercept()
-  testRegrIntercept(true)
-  testRegrSlope()
-  testRegrSlope(true)
-  testRegrR2()
-  testRegrR2(true)
-  testRegrSXY()
-  testRegrSXY(true)
+  test("SPARK-42964: SQLState: 42P07 - duplicated table") {
+    val t1 = s"$catalogName.t1"
+    val t2 = s"$catalogName.t2"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1(c int)")
+      sql(s"CREATE TABLE $t2(c int)")
+      checkError(
+        exception = intercept[TableAlreadyExistsException](sql(s"ALTER TABLE $t1 RENAME TO t2")),
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`t2`")
+      )
+    }
+  }
 }

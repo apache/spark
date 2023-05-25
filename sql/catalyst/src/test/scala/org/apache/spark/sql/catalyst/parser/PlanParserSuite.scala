@@ -244,6 +244,12 @@ class PlanParserSuite extends AnalysisTest {
         stop = 25))
   }
 
+  test("SPARK-42552: select and union without parentheses") {
+    val plan = Distinct(OneRowRelation().select(Literal(1))
+      .union(OneRowRelation().select(Literal(1))))
+    assertEqual("select 1 union select 1", plan)
+  }
+
   test("set operations") {
     val a = table("a").select(star())
     val b = table("b").select(star())
@@ -561,7 +567,7 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t lateral view posexplode(x) posexpl as x, y",
       expected)
 
-    val sql =
+    val sql1 =
       """select *
         |from t
         |lateral view explode(x) expl
@@ -569,7 +575,7 @@ class PlanParserSuite extends AnalysisTest {
         |  sum(x)
         |  FOR y IN ('a', 'b')
         |)""".stripMargin
-    val fragment =
+    val fragment1 =
       """from t
         |lateral view explode(x) expl
         |pivot (
@@ -577,13 +583,65 @@ class PlanParserSuite extends AnalysisTest {
         |  FOR y IN ('a', 'b')
         |)""".stripMargin
     checkError(
-      exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0013",
+      exception = parseException(sql1),
+      errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_PIVOT",
       parameters = Map.empty,
       context = ExpectedContext(
-        fragment = fragment,
+        fragment = fragment1,
         start = 9,
         stop = 84))
+
+    val sql2 =
+      """select *
+        |from t
+        |lateral view explode(x) expl
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    val fragment2 =
+      """from t
+        |lateral view explode(x) expl
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    checkError(
+      exception = parseException(sql2),
+      errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_UNPIVOT",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = fragment2,
+        start = 9,
+        stop = 74))
+
+    val sql3 =
+      """select *
+        |from t
+        |lateral view explode(x) expl
+        |pivot (
+        |  sum(x)
+        |  FOR y IN ('a', 'b')
+        |)
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    val fragment3 =
+      """from t
+        |lateral view explode(x) expl
+        |pivot (
+        |  sum(x)
+        |  FOR y IN ('a', 'b')
+        |)
+        |unpivot (
+        |  val FOR y IN (x)
+        |)""".stripMargin
+    checkError(
+      exception = parseException(sql3),
+      errorClass = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = fragment3,
+        start = 9,
+        stop = 115))
   }
 
   test("joins") {
@@ -856,9 +914,8 @@ class PlanParserSuite extends AnalysisTest {
     val fragment1 = "default.range(2)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map(
-        "inputString" -> "table valued function cannot specify database name: `default`.`range`"),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      parameters = Map("funcName" -> "`default`.`range`"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 14,
@@ -866,13 +923,11 @@ class PlanParserSuite extends AnalysisTest {
 
     // SPARK-38957
     val sql2 = "select * from spark_catalog.default.range(2)"
-    val value2 = "table valued function cannot specify database name: " +
-      "`spark_catalog`.`default`.`range`"
     val fragment2 = "spark_catalog.default.range(2)"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX",
-      parameters = Map("inputString" -> value2),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      parameters = Map("funcName" -> "`spark_catalog`.`default`.`range`"),
       context = ExpectedContext(
         fragment = fragment2,
         start = 14,

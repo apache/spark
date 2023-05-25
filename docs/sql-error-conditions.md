@@ -77,17 +77,17 @@ SQLSTATE: none assigned
 
 Unable to convert `<protobufType>` of Protobuf to SQL type `<toType>`.
 
-### CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE
-
-SQLSTATE: none assigned
-
-Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` cannot be written since it's not defined in ENUM `<enumString>`.
-
 ### CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE
 
 SQLSTATE: none assigned
 
 Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because schema is incompatible (protobufType = `<protobufType>`, sqlType = `<sqlType>`).
+
+### CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE
+
+SQLSTATE: none assigned
+
+Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` is not in defined values for enum: `<enumString>`.
 
 ### CANNOT_DECODE_URL
 
@@ -288,12 +288,6 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 [SQLSTATE: 23505](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
 
 Found duplicate keys `<keyColumn>`.
-
-### ELEMENT_AT_BY_INDEX_ZERO
-
-[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
 
 ### EMPTY_JSON_FIELD_VALUE
 
@@ -572,6 +566,12 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The identifier `<ident>` is invalid. Please, consider quoting it with back-quotes as ``<ident>``.
+
+### INVALID_INDEX_OF_ZERO
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1155,7 +1155,7 @@ All unpivot value columns must have the same size as there are value column name
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Unrecognized SQL type `<typeName>`.
+Unrecognized SQL type - name: `<typeName>`, id: `<jdbcType>`.
 
 ### UNRESOLVED_ALL_IN_GROUP_BY
 

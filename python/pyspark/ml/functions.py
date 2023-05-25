@@ -236,7 +236,8 @@ def _validate_and_transform_single_input(
         # scalar columns
         if len(batch.columns) == 1:
             # single scalar column, remove extra dim
-            single_input = np.squeeze(batch.to_numpy())
+            np_batch = batch.to_numpy()
+            single_input = np.squeeze(np_batch, -1) if len(np_batch.shape) > 1 else np_batch
             if input_shapes and input_shapes[0] not in [None, [], [1]]:
                 raise ValueError("Invalid input_tensor_shape for scalar column.")
         elif not has_tuple:
@@ -344,7 +345,7 @@ def _validate_and_transform_prediction_result(
         ):
             raise ValueError("Invalid shape for scalar prediction result.")
 
-        output = np.squeeze(preds)  # type: ignore[arg-type]
+        output = np.squeeze(preds_array, -1) if len(preds_array.shape) > 1 else preds_array
         return pd.Series(output).astype(output.dtype)
     else:
         raise ValueError("Unsupported return type")
@@ -530,7 +531,7 @@ def predict_batch_udf(
         only showing top 5 rows
 
     * Multiple scalar columns
-        Input DataFrame has muliple columns of scalar values.  If the user-provided `predict`
+        Input DataFrame has multiple columns of scalar values.  If the user-provided `predict`
         function expects a single input, then the user must combine the multiple columns into a
         single tensor using `pyspark.sql.functions.array`.
 

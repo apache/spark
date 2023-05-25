@@ -21,7 +21,6 @@ A wrapper class for Spark Column to behave like pandas Series.
 import datetime
 import re
 import inspect
-import sys
 import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
@@ -7359,15 +7358,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __iter__(self) -> None:
         return MissingPandasLikeSeries.__iter__(self)
 
-    if sys.version_info >= (3, 7):
-        # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
-        def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
-            return create_type_for_series_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark Series.
-        is_series = None
+    # In order to support the type hints such as Series[...]. See DataFrame.__class_getitem__.
+    def __class_getitem__(cls, params: Any) -> Type[SeriesType]:
+        return create_type_for_series_type(params)
 
 
 def unpack_scalar(sdf: SparkDataFrame) -> Any:

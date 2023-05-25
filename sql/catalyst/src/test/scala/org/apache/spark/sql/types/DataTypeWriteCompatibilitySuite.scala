@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
@@ -482,7 +483,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       desc: String,
       byName: Boolean = true): Unit = {
     assert(
-      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
+      DataTypeUtils.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
         storeAssignmentPolicy,
         errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
@@ -508,7 +509,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       (checkErrors: Seq[String] => Unit): Unit = {
     val errs = new mutable.ArrayBuffer[String]()
     assert(
-      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
+      DataTypeUtils.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
         storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
     checkErrors(errs.toSeq)

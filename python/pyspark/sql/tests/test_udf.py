@@ -38,7 +38,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DayTimeIntervalType,
 )
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
 
@@ -109,10 +109,17 @@ class BaseUDFTestsMixin(object):
             self.check_udf_registration_return_type_not_none()
 
     def check_udf_registration_return_type_not_none(self):
-        with self.assertRaisesRegex(TypeError, "Invalid return type"):
+        # negative test for incorrect type
+        with self.assertRaises(PySparkTypeError) as pe:
             self.spark.catalog.registerFunction(
                 "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType()
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+            message_parameters={"arg_name": "f", "return_type": "StringType()"},
+        )
 
     def test_nondeterministic_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
@@ -838,47 +845,6 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 
-def test_use_arrow(self):
-    # useArrow=True
-    row_true = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=True)("array"),
-        )
-        .first()
-    )
-    # The input is a NumPy array when the Arrow optimization is on.
-    self.assertEquals(row_true[0], "[1 2 3]")
-
-    # useArrow=None
-    row_none = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=None)("array"),
-        )
-        .first()
-    )
-
-    # useArrow=False
-    row_false = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=False)("array"),
-        )
-        .first()
-    )
-    self.assertEquals(row_false[0], row_none[0])  # "[1, 2, 3]"
-
-
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
         if SparkSession._instantiatedSession is not None:
@@ -898,6 +864,13 @@ class UDFInitializationTests(unittest.TestCase):
             SparkSession._instantiatedSession,
             "SparkSession shouldn't be initialized when UserDefinedFunction is created.",
         )
+
+    def test_err_parse_type_when_no_sc(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "SparkContext or SparkSession should be created first",
+        ):
+            udf(lambda x: x, "integer")
 
 
 if __name__ == "__main__":

@@ -31,3 +31,27 @@ message FoobarWithRequiredFieldBar {
 message NestedFoobarWithRequiredFieldBar {
   optional FoobarWithRequiredFieldBar nested_foobar = 1;
 }
+
+// Contains a representative sample of all types, using the groupings defined
+// here: https://protobuf.dev/programming-guides/field_presence/#presence-in-proto3-apis
+message Proto2AllTypes {
+  enum NestedEnum {
+    NOTHING = 0;
+    FIRST = 1;
+    SECOND = 2;
+  }
+
+  optional int64 int = 1;
+  optional string text = 2;
+  optional NestedEnum enum_val = 3;
+  optional FoobarWithRequiredFieldBar message = 4;
+
+  repeated int64 repeated_num = 5;
+  repeated FoobarWithRequiredFieldBar repeated_message = 6;
+
+  oneof payload {
+    int32 option_a = 11;
+    string option_b = 12;
+  }
+  map<string, string> map = 13;
+}

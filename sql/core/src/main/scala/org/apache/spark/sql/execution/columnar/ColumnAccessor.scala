@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
@@ -71,7 +72,7 @@ private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Any](buffer, NULL)
   with NullableColumnAccessor
 
-private[columnar] abstract class NativeColumnAccessor[T <: AtomicType](
+private[columnar] abstract class NativeColumnAccessor[T <: PhysicalDataType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)
@@ -118,15 +119,17 @@ private[columnar] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: Deci
   with NullableColumnAccessor
 
 private[columnar] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
-  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(dataType))
+  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(PhysicalStructType(dataType.fields)))
   with NullableColumnAccessor
 
 private[columnar] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
-  extends BasicColumnAccessor[UnsafeArrayData](buffer, ARRAY(dataType))
+  extends BasicColumnAccessor[UnsafeArrayData](
+    buffer, ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
   with NullableColumnAccessor
 
 private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
-  extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
+  extends BasicColumnAccessor[UnsafeMapData](
+    buffer, MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
