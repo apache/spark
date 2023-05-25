@@ -884,6 +884,12 @@ SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999'), val 
 -- SELECT '' AS to_char_35, to_char('100'::numeric, 'f"ool\"999');
 -- SELECT '' AS to_char_36, to_char('100'::numeric, 'f"ool\\"999');
 
+-- [SC-131010] Add support for Snowflake built-in functions
+-- TO_VARCHAR()
+-- Alias of TO_CHAR()
+SELECT '' AS to_varchar_3, to_varchar(val, '9999999999999999.999999999999999PR'), val
+FROM num_data;
+
 -- [SPARK-28137] Missing Data Type Formatting Functions: TO_NUMBER
 -- TO_NUMBER()
 -- some queries are commented out as the format string is not supported by Spark
