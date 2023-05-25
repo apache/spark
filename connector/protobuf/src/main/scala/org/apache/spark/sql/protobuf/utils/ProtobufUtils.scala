@@ -18,6 +18,7 @@
 package org.apache.spark.sql.protobuf.utils
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -141,10 +142,10 @@ private[sql] object ProtobufUtils extends Logging {
    * Builds Protobuf message descriptor either from the Java class or from serialized descriptor
    * read from the file.
    * @param messageName
-   *  Protobuf message name or Java class name.
-   * @param descFilePathOpt
-   *  When the file name set, the descriptor and it's dependencies are read from the file. Other
-   *  the `messageName` is treated as Java class name.
+   *  Protobuf message name or Java class name (when binaryFileDescriptorSet is None)..
+   * @param binaryFileDescriptorSet
+   *  When the binary `FileDescriptorSet` is provided, the descriptor and its dependencies are
+   *  read from it.
    * @return
    */
   def buildDescriptor(messageName: String, binaryFileDescriptorSet: Option[Array[Byte]])
@@ -230,7 +231,9 @@ private[sql] object ProtobufUtils extends Logging {
     try {
       FileUtils.readFileToByteArray(new File(filePath))
     } catch {
-      case NonFatal(ex) => throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case ex: FileNotFoundException =>
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
     }
   }
 

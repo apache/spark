@@ -17,6 +17,7 @@
 package org.apache.spark.sql.protobuf
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.util.Collections
 
 import scala.collection.JavaConverters._
@@ -309,8 +310,9 @@ object functions {
     try {
       FileUtils.readFileToByteArray(new File(filePath))
     } catch {
-      case NonFatal(ex) =>
+      case ex: FileNotFoundException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
     }
   }
 }
