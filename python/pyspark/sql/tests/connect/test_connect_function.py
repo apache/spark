@@ -1920,10 +1920,16 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             cdf.select(CF.substring_index(cdf.e, ".", 2)).toPandas(),
             sdf.select(SF.substring_index(sdf.e, ".", 2)).toPandas(),
         )
+
         self.assert_eq(
             cdf.select(CF.levenshtein(cdf.b, cdf.c)).toPandas(),
             sdf.select(SF.levenshtein(sdf.b, sdf.c)).toPandas(),
         )
+        self.assert_eq(
+            cdf.select(CF.levenshtein(cdf.b, cdf.c, 1)).toPandas(),
+            sdf.select(SF.levenshtein(sdf.b, sdf.c, 1)).toPandas(),
+        )
+        
         self.assert_eq(
             cdf.select(CF.locate("e", cdf.b)).toPandas(),
             sdf.select(SF.locate("e", sdf.b)).toPandas(),
