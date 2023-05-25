@@ -34,18 +34,6 @@ class StringOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    def test_ge(self):
-        super().test_ge()
-
-    def test_gt(self):
-        super().test_gt()
-
-    def test_le(self):
-        super().test_le()
-
-    def test_lt(self):
-        super().test_lt()
-
     @unittest.skip(
         "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
     )
