@@ -1062,6 +1062,33 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
+    "message" : [
+      "The time travel timestamp expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "Must be timestamp type, but got <dataType>."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "Must not be null."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Must be deterministic."
+        ]
+      },
+      "UNEVALUABLE" : {
+        "message" : [
+          "Must be evaluable."
+        ]
+      }
+    }
+  },
   "INVALID_LIMIT_LIKE_EXPRESSION" : {
     "message" : [
       "The limit like expression <expr> is invalid."
