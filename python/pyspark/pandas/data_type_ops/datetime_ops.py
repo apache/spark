@@ -24,7 +24,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import SparkContext
-from pyspark.sql import Column, functions as F
+from pyspark.sql import Column as PySparkColumn, functions as F
 from pyspark.sql.types import (
     BooleanType,
     LongType,
@@ -33,6 +33,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     NumericType,
 )
+from pyspark.sql.utils import is_remote
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
@@ -112,25 +113,49 @@ class DatetimeOps(DataTypeOps):
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__lt__)(left, right)  # type: ignore[arg-type]
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__le__)(left, right)  # type: ignore[arg-type]
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__ge__)(left, right)  # type: ignore[arg-type]
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__gt__)(left, right)  # type: ignore[arg-type]
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
@@ -148,7 +173,7 @@ class DatetimeOps(DataTypeOps):
         else:
             return _as_other_type(index_ops, dtype, spark_type)
 
-    def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
+    def _cast_spark_column_timestamp_to_long(self, scol: PySparkColumn) -> PySparkColumn:
         return scol.cast(LongType())
 
 
@@ -158,9 +183,9 @@ class DatetimeNTZOps(DatetimeOps):
     TimestampNTZType.
     """
 
-    def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
+    def _cast_spark_column_timestamp_to_long(self, scol: PySparkColumn) -> PySparkColumn:
         jvm = SparkContext._active_spark_context._jvm
-        return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
+        return PySparkColumn(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
