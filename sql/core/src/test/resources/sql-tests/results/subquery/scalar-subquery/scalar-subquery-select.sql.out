@@ -577,3 +577,11 @@ FROM (SELECT null as col) as foo
 struct<scalarsubquery(col, col):bigint>
 -- !query output
 NULL
+
+
+-- !query
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline	true

@@ -246,3 +246,4 @@ set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false;
 WITH T AS (SELECT 1 AS a)
 SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
 FROM (SELECT null as col) as foo;
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true;

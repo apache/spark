@@ -1031,3 +1031,9 @@ WithCTE
    +- SubqueryAlias foo
       +- Project [null AS col#x]
          +- OneRowRelation
+
+
+-- !query
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline,Some(true))
