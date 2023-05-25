@@ -117,6 +117,9 @@ object SparkConnectServerUtils {
             "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
             "2. Test with sbt: run test with `-Phive` profile")
         // scalastyle:on println
+        // SPARK-43647: Proactively cleaning the `classes` and `test-classes` dir of hive
+        // module to avoid unexpected loading of `DataSourceRegister` in hive module during
+        // testing without `-Phive` profile.
         IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
         "in-memory"
       }
