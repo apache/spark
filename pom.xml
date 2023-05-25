@@ -280,7 +280,7 @@
     <connect.guava.version>31.0.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
     <io.grpc.version>1.47.0</io.grpc.version>
-    <mima.version>1.1.0</mima.version>
+    <mima.version>1.1.2</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
