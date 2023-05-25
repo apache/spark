@@ -1185,15 +1185,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |    ORDER BY grouping__id > 0
       """.stripMargin), false)
 
-    assertAnalysisError(parsePlan(
-      """
-        |SELECT grouping__id FROM (
-        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
-        |    GROUP BY a, b
-        |)
-      """.stripMargin),
-      Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"),
-      false)
+    assertAnalysisErrorClass(
+      parsePlan(
+        """
+          |SELECT grouping__id FROM (
+          |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+          |    GROUP BY a, b
+          |)
+        """.stripMargin),
+      "UNSUPPORTED_GROUPING_EXPRESSION",
+      Map.empty,
+      Array(ExpectedContext("grouping__id", 53, 64))
+    )
   }
 
   test("SPARK-36275: Resolve aggregate functions should work with nested fields") {
