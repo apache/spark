@@ -45,7 +45,6 @@ from pyspark.find_spark_home import _find_spark_home
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.column import Column as PySparkColumn
     from pyspark.pandas._typing import SeriesOrIndex
 
 has_numpy = False

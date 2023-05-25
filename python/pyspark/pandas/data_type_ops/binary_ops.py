@@ -29,9 +29,9 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
-from pyspark.sql import functions as F, Column as PySparkColumn
+from pyspark.sql import functions as F
 from pyspark.sql.types import BinaryType, BooleanType, StringType
-from pyspark.sql.utils import is_remote, pyspark_column_op
+from pyspark.sql.utils import pyspark_column_op
 
 
 class BinaryOps(DataTypeOps):
