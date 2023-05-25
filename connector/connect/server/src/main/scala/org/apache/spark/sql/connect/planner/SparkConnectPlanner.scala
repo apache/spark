@@ -1407,8 +1407,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       command = fun.getCommand.toByteArray,
       // Empty environment variables
       envVars = Maps.newHashMap(),
-      // No imported Python libraries
-      pythonIncludes = Lists.newArrayList(),
+      pythonIncludes =
+        SparkConnectArtifactManager.getOrCreateArtifactManager.getSparkConnectPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables

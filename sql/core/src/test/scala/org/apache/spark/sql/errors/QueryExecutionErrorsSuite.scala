@@ -121,7 +121,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE.AES_KEY: AES decrypt failure - key mismatch") {
+  test("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR: AES decrypt failure - key mismatch") {
     val (_, df2) = getAesInputs()
     Seq(
       ("value16", "1234567812345678"),
@@ -131,7 +131,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
           "detailMessage" -> ("Given final block not properly padded. " +

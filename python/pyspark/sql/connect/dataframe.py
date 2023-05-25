@@ -1624,7 +1624,7 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table, schema = self._session.client.to_table(query)
 
-        schema = schema or from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1902,7 +1902,7 @@ class DataFrame:
                 assert isinstance(schema_or_table, pa.Table)
                 table = schema_or_table
                 if schema is None:
-                    schema = from_arrow_schema(table.schema)
+                    schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(table, schema)
 
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__

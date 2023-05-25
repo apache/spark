@@ -25,31 +25,31 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class TimedeltaOpsParityTests(
     TimedeltaOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43696): Fix TimedeltaOps.ge to work with Spark Connect.")
     def test_ge(self):
         super().test_ge()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43697): Fix TimedeltaOps.gt to work with Spark Connect.")
     def test_gt(self):
         super().test_gt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43698): Fix TimedeltaOps.le to work with Spark Connect.")
     def test_le(self):
         super().test_le()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43699): Fix TimedeltaOps.lt to work with Spark Connect.")
     def test_lt(self):
         super().test_lt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43700): Fix TimedeltaOps.rsub to work with Spark Connect.")
     def test_rsub(self):
         super().test_rsub()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43701): Fix TimedeltaOps.sub to work with Spark Connect.")
     def test_sub(self):
         super().test_sub()
 

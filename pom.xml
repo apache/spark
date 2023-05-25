@@ -151,7 +151,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.17</codahale.metrics.version>
+    <codahale.metrics.version>4.2.18</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -170,12 +170,8 @@
     <scala.version>2.12.17</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <!--
-      This needs to be managed in different profiles to avoid
-      errors building different Hadoop versions.
-      See: SPARK-36547, SPARK-38394.
-       -->
-    <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
+    <!-- dont update scala-maven-plugin to version 4.8.1 SPARK-42809 and SPARK-43595 -->   
+    <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -185,11 +181,11 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.15.0</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.15.0</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.9.1</snappy.version>
+    <snappy.version>1.1.10.0</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
-    <commons-io.version>2.11.0</commons-io.version>
+    <commons-io.version>2.12.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -785,7 +781,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.5-2</version>
+        <version>1.5.5-3</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -3291,7 +3287,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.2.2</version>
+        <version>3.3.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>

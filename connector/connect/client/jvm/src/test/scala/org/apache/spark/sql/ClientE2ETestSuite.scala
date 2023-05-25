@@ -924,7 +924,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       case Failure(t) =>
         error = Some("unexpected failure in q1: " + t.toString)
     }
-    q1.onComplete {
+    q2.onComplete {
       case Success(_) =>
         error = Some("q2 shouldn't have finished!")
       case Failure(t) if t.getMessage.contains("cancelled") =>
@@ -937,9 +937,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     eventually(timeout(20.seconds), interval(1.seconds)) {
       // keep interrupting every second, until both queries get interrupted.
       spark.interruptAll()
+      assert(error.isEmpty, s"Error not empty: $error")
       assert(q1Interrupted)
       assert(q2Interrupted)
-      assert(error.isEmpty)
     }
   }
 
@@ -959,11 +959,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     val e1 = intercept[io.grpc.StatusRuntimeException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
-    assert(e1.getMessage.contains("cancelled"))
+    assert(e1.getMessage.contains("cancelled"), s"Unexpected exception: $e1")
     val e2 = intercept[io.grpc.StatusRuntimeException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
-    assert(e2.getMessage.contains("cancelled"))
+    assert(e2.getMessage.contains("cancelled"), s"Unexpected exception: $e2")
     finished = true
     assert(ThreadUtils.awaitResult(interruptor, 10.seconds) == true)
   }

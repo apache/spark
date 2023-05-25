@@ -74,7 +74,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client import Retrying
+    from pyspark.sql.connect.client.core import Retrying
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
