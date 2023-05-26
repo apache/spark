@@ -142,7 +142,7 @@ class Catalog:
         >>> spark.catalog.listCatalogs("spark*")
         [CatalogMetadata(name='spark_catalog', description=None)]
 
-        >>> spark.catalog.listTables("hive*")
+        >>> spark.catalog.listCatalogs("hive*")
         []
         """
         if pattern is None:

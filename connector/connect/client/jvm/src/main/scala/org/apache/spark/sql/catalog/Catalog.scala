@@ -641,7 +641,8 @@ abstract class Catalog {
   def listCatalogs(): Dataset[CatalogMetadata]
 
   /**
-   * Returns a list of catalogs which name match the specify pattern and available in this session.
+   * Returns a list of catalogs which name match the specify pattern and available in this
+   * session.
    *
    * @since 3.5.0
    */
