@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -27,7 +25,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
-import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
@@ -46,6 +43,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   protected def formattedViewName(viewName: String): String
   protected def fullyQualifiedViewName(viewName: String): String
   protected def tableIdentifier(viewName: String): TableIdentifier
+  protected def tableIdentQuotedString(viewName: String): String =
+    tableIdentifier(viewName).quotedString
 
   def createView(
       viewName: String,
@@ -180,10 +179,17 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       val viewName1 = createView("v1", "SELECT * FROM t")
       val viewName2 = createView("v2", s"SELECT * FROM $viewName1")
       withView(viewName2, viewName1) {
-        val e = intercept[AnalysisException] {
-          createView("v1", s"SELECT * FROM $viewName2", replace = true)
-        }.getMessage
-        assert(e.contains("Recursive view"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            createView("v1", s"SELECT * FROM $viewName2", replace = true)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1281",
+          parameters = Map(
+            "viewIdent" -> tableIdentQuotedString("v1"),
+            "newPath" -> (s"${tableIdentQuotedString("v1")} " +
+              s"-> ${tableIdentQuotedString("v2")} " +
+              s"-> ${tableIdentQuotedString("v1")}"))
+        )
       }
     }
   }
@@ -194,10 +200,17 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       val viewName1 = createView("v1", "SELECT * FROM t")
       val viewName2 = createView("v2", s"SELECT * FROM $viewName1")
       withView(viewName2, viewName1) {
-        val e = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
-        }.getMessage
-        assert(e.contains("Recursive view"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1281",
+          parameters = Map(
+            "viewIdent" -> tableIdentQuotedString("v1"),
+            "newPath" -> (s"${tableIdentQuotedString("v1")} " +
+              s"-> ${tableIdentQuotedString("v2")} " +
+              s"-> ${tableIdentQuotedString("v1")}"))
+        )
       }
     }
   }
@@ -211,11 +224,18 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
     }
     withView(viewNames.reverse.toSeq: _*) {
       withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
-        val e = intercept[AnalysisException] {
-          sql(s"SELECT * FROM ${viewNames.last}")
-        }.getMessage
-        assert(e.contains("exceeds the maximum view resolution depth (10)"))
-        assert(e.contains(s"Increase the value of ${MAX_NESTED_VIEW_DEPTH.key}"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT * FROM ${viewNames.last}")
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_1009",
+          parameters = Map(
+            "identifier" -> tableIdentQuotedString("view0"),
+            "maxNestedViewDepth" -> "10",
+            "config" -> s"${MAX_NESTED_VIEW_DEPTH.key}"),
+          context = ExpectedContext("VIEW", fullyQualifiedViewName("view1"),
+            14, 13 + formattedViewName("view0").length, formattedViewName("view0"))
+        )
       }
     }
   }
@@ -374,8 +394,16 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
             if (caseSensitive) {
               checkViewOutput(viewName, Seq(Row(1, 2, 1, 2)))
             } else {
-              val e = intercept[AnalysisException](spark.table(viewName).collect())
-              assert(e.message.contains("incompatible schema change"))
+              checkErrorMatchPVals(
+                exception = intercept[AnalysisException](spark.table(viewName).collect()),
+                errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+                parameters = Map(
+                  "viewName" -> ".*test[v|V]iew.*",
+                  "actualCols" -> "\\[COL,col,col\\]",
+                  "colName" -> "col",
+                  "suggestion" -> "CREATE OR REPLACE.*",
+                  "expectedNum" -> "2")
+              )
             }
           }
 
@@ -401,20 +429,20 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("SPARK-37219: time travel is unsupported") {
     val viewName = createView("testView", "SELECT 1 col")
     withView(viewName) {
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException](
           sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
         ),
         errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
-        parameters = Map("relationId" -> toSQLId(fullyQualifiedViewName("testView")))
+        parameters = Map("relationId" -> ".*test[v|V]iew.*")
       )
 
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException](
           sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
         ),
         errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
-        parameters = Map("relationId" -> toSQLId(fullyQualifiedViewName("testView")))
+        parameters = Map("relationId" -> ".*test[v|V]iew.*")
       )
     }
   }
@@ -454,11 +482,19 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
     val viewName = "spark_28383"
     withView(viewName) {
       createView(viewName, "SELECT 1 AS a")
-      val ex = intercept[AnalysisException] {
-        sql(s"SHOW CREATE TABLE ${formattedViewName(viewName)}")
-      }
-      assert(ex.getMessage.contains(
-        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW CREATE TABLE ${formattedViewName(viewName)}")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1016",
+        parameters = Map(
+          "nameParts" -> formattedViewName(viewName),
+          "cmd" -> "SHOW CREATE TABLE"),
+        context = ExpectedContext(
+          fragment = formattedViewName(viewName),
+          start = 18,
+          stop = 17 + formattedViewName(viewName).length)
+      )
     }
   }
 
@@ -532,22 +568,22 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
   override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
-  override protected def fullyQualifiedViewName(viewName: String): String =
-    conf.caseSensitiveAnalysis match {
-      case true => s"spark_catalog.$db.$viewName"
-      case false => s"spark_catalog.$db.${viewName.toLowerCase(Locale.ROOT)}"
-    }
-
+  override protected def fullyQualifiedViewName(viewName: String): String = {
+    s"spark_catalog.$db.$viewName"
+  }
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db), Some(SESSION_CATALOG_NAME))
   }
 
   test("SPARK-35686: error out for creating view with auto gen alias") {
     withView("v") {
-      val e = intercept[AnalysisException] {
-        sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
-      }
-      assert(e.getMessage.contains("without explicitly assigning an alias"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1282",
+        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "count(1)")
+      )
       sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
       checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
     }
@@ -555,10 +591,13 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
 
   test("SPARK-35686: error out for creating view with auto gen alias in subquery") {
     withView("v") {
-      val e = intercept[AnalysisException] {
-        sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
-      }
-      assert(e.getMessage.contains("without explicitly assigning an alias"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1282",
+        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "(a + b)")
+      )
       sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
       checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
     }
@@ -567,10 +606,13 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   test("SPARK-35686: error out for alter view with auto gen alias") {
     withView("v") {
       sql("CREATE VIEW v AS SELECT 1 AS a")
-      val e = intercept[AnalysisException] {
-        sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
-      }
-      assert(e.getMessage.contains("without explicitly assigning an alias"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1282",
+        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "count(1)")
+      )
     }
   }
 
@@ -681,11 +723,14 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       // Simulate the behavior of hackers
       val tamperedTable = table.copy(viewText = Some(dropView))
       spark.sessionState.catalog.alterTable(tamperedTable)
-      val message = intercept[AnalysisException] {
-        sql("SELECT * FROM v")
-      }.getMessage
-      assert(message.contains(s"Invalid view text: $dropView." +
-        s" The view ${table.qualifiedName} may have been tampered with"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM v")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1333",
+        parameters = Map("viewText" -> "DROP VIEW v", "tableName" -> "spark_catalog.default.v")
+      )
     }
   }
 
