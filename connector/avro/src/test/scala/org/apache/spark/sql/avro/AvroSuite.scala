@@ -752,7 +752,7 @@ abstract class AvroSuite
                 errorClass = "AVRO_INCORRECT_TYPE",
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
-                  "avroType" -> "interval day to second",
+                  "avroType" -> "interval year to month",
                   "sqlType" -> "date",
                   "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
                 matchPVals = true
