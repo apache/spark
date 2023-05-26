@@ -195,8 +195,8 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnspecifiedFrame)).as("window")),
     errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
     messageParameters = Map("windowExpr" ->
-      s""""
-         |count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
+      s"""
+         |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
          | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
          |""".stripMargin.replaceAll("\n", "")))
 
