@@ -21,6 +21,7 @@ import os
 
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
+from pyspark import SparkFiles
 from pyspark.sql.functions import udf
 
 if should_test_connect:
@@ -48,7 +49,7 @@ class ArtifactTests(ReusedConnectTestCase):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         response = self.artifact_manager._retrieve_responses(
-            self.artifact_manager._create_requests(small_jar_path, pyfile=False)
+            self.artifact_manager._create_requests(small_jar_path, pyfile=False, archive=False)
         )
         self.assertTrue(response.artifacts[0].name.endswith(f"{file_name}.jar"))
 
@@ -57,7 +58,9 @@ class ArtifactTests(ReusedConnectTestCase):
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
-        requests = list(self.artifact_manager._create_requests(small_jar_path, pyfile=False))
+        requests = list(
+            self.artifact_manager._create_requests(small_jar_path, pyfile=False, archive=False)
+        )
         self.assertEqual(len(requests), 1)
 
         request = requests[0]
@@ -79,7 +82,9 @@ class ArtifactTests(ReusedConnectTestCase):
         large_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
-        requests = list(self.artifact_manager._create_requests(large_jar_path, pyfile=False))
+        requests = list(
+            self.artifact_manager._create_requests(large_jar_path, pyfile=False, archive=False)
+        )
         # Expected chunks = roundUp( file_size / chunk_size) = 12
         # File size of `junitLargeJar.jar` is 384581 bytes.
         large_jar_size = os.path.getsize(large_jar_path)
@@ -111,7 +116,9 @@ class ArtifactTests(ReusedConnectTestCase):
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
         requests = list(
-            self.artifact_manager._create_requests(small_jar_path, small_jar_path, pyfile=False)
+            self.artifact_manager._create_requests(
+                small_jar_path, small_jar_path, pyfile=False, archive=False
+            )
         )
         # Single request containing 2 artifacts.
         self.assertEqual(len(requests), 1)
@@ -147,7 +154,12 @@ class ArtifactTests(ReusedConnectTestCase):
 
         requests = list(
             self.artifact_manager._create_requests(
-                small_jar_path, large_jar_path, small_jar_path, small_jar_path, pyfile=False
+                small_jar_path,
+                large_jar_path,
+                small_jar_path,
+                small_jar_path,
+                pyfile=False,
+                archive=False,
             )
         )
         # There are a total of 14 requests.
@@ -236,6 +248,28 @@ class ArtifactTests(ReusedConnectTestCase):
 
             self.spark.addArtifacts(f"{package_path}.zip", pyfile=True)
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], 5)
+
+    def test_add_archive(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive_path = os.path.join(d, "my_archive")
+            os.mkdir(archive_path)
+            pyfile_path = os.path.join(archive_path, "my_file.txt")
+            with open(pyfile_path, "w") as f:
+                _ = f.write("hello world!")
+            shutil.make_archive(archive_path, "zip", d, "my_archive")
+
+            @udf("string")
+            def func(x):
+                with open(
+                    os.path.join(
+                        SparkFiles.getRootDirectory(), "my_files", "my_archive", "my_file.txt"
+                    ),
+                    "r",
+                ) as my_file:
+                    return my_file.read().strip()
+
+            self.spark.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
+            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
 
 
 if __name__ == "__main__":
