@@ -3613,11 +3613,6 @@
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1269" : {
-    "message" : [
-      "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1270" : {
     "message" : [
       "SHOW CREATE TABLE is not supported on a temporary view: <table>."
