@@ -753,7 +753,7 @@ abstract class AvroSuite
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
-                  "sqlType" -> "date",
+                  "sqlType" -> sqlType,
                   "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
                 matchPVals = true
               )
