@@ -26,27 +26,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedConnectTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedConnectTestCase.tearDownClass()
-
     def test_udf_wrong_arg(self):
         self.check_udf_wrong_arg()
 
