@@ -19,6 +19,7 @@ package org.apache.spark.sql.protobuf.utils
 
 import java.io.File
 import java.io.FileNotFoundException
+import java.nio.file.NoSuchFileException
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -231,7 +232,7 @@ private[sql] object ProtobufUtils extends Logging {
     try {
       FileUtils.readFileToByteArray(new File(filePath))
     } catch {
-      case ex: FileNotFoundException =>
+      case ex: FileNotFoundException | NoSuchFileException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
       case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
     }
