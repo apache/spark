@@ -1331,9 +1331,9 @@
       "The time travel timestamp expression <expr> is invalid."
     ],
     "subClass" : {
-      "DATA_TYPE" : {
+      "INPUT" : {
         "message" : [
-          "Must be timestamp type, but got <dataType>."
+          "Cannot be casted to the \"TIMESTAMP\" type."
         ]
       },
       "NON_DETERMINISTIC" : {

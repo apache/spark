@@ -3136,17 +3136,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("expr" -> toSQLExpr(expr)))
   }
 
-  def invalidTimestampExprForTimeTravel(
-      errorClass: String,
-      expr: Expression,
-      dataType: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = errorClass,
-      messageParameters = Map(
-        "expr" -> toSQLExpr(expr),
-        "dataType" -> toSQLType(dataType)))
-  }
-
   def timeTravelUnsupportedError(target: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1336",

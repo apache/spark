@@ -2931,19 +2931,16 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
         },
-        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.DATA_TYPE",
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
         parameters = Map(
-          "expr" -> "\"INTERVAL '1' DAY\"",
-          "dataType" -> "\"INTERVAL DAY\""))
+          "expr" -> "\"INTERVAL '1' DAY\""))
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF 'abc'").collect()
         },
-        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.DATA_TYPE",
-        parameters = Map(
-          "expr" -> "\"abc\"",
-          "dataType" -> "\"STRING\""))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+        parameters = Map("expr" -> "\"abc\""))
 
       checkError(
         exception = intercept[AnalysisException] {
