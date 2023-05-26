@@ -1574,6 +1574,11 @@
     ],
     "sqlState" : "42617"
   },
+  "PARSE_JSON_STRUCTS_FORBIDDEN" : {
+    "message" : [
+      "Parsing JSON arrays as structs is forbidden."
+    ]
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
@@ -4513,11 +4518,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2132" : {
-    "message" : [
-      "Parsing JSON arrays as structs is forbidden."
     ]
   },
   "_LEGACY_ERROR_TEMP_2133" : {
