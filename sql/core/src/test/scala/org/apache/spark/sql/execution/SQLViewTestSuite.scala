@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -25,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
@@ -398,15 +401,21 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("SPARK-37219: time travel is unsupported") {
     val viewName = createView("testView", "SELECT 1 col")
     withView(viewName) {
-      val e1 = intercept[AnalysisException](
-        sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
+      checkError(
+        exception = intercept[AnalysisException](
+          sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
+        ),
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        parameters = Map("relationId" -> toSQLId(fullyQualifiedViewName("testView")))
       )
-      assert(e1.message.contains("Cannot time travel views"))
 
-      val e2 = intercept[AnalysisException](
-        sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
+      checkError(
+        exception = intercept[AnalysisException](
+          sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
+        ),
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        parameters = Map("relationId" -> toSQLId(fullyQualifiedViewName("testView")))
       )
-      assert(e2.message.contains("Cannot time travel views"))
     }
   }
 
@@ -524,7 +533,11 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "VIEW"
   override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
   override protected def fullyQualifiedViewName(viewName: String): String =
-    s"spark_catalog.$db.$viewName"
+    conf.caseSensitiveAnalysis match {
+      case true => s"spark_catalog.$db.$viewName"
+      case false => s"spark_catalog.$db.${viewName.toLowerCase(Locale.ROOT)}"
+    }
+
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db), Some(SESSION_CATALOG_NAME))
   }

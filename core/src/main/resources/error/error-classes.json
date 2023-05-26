@@ -1326,6 +1326,28 @@
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ]
   },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
+    "message" : [
+      "The time travel timestamp expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "INPUT" : {
+        "message" : [
+          "Cannot be casted to the \"TIMESTAMP\" type."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Must be deterministic."
+        ]
+      },
+      "UNEVALUABLE" : {
+        "message" : [
+          "Must be evaluable."
+        ]
+      }
+    }
+  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
@@ -2137,6 +2159,11 @@
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
+        ]
+      },
+      "TIME_TRAVEL" : {
+        "message" : [
+          "Time travel on the relation: <relationId>."
         ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
@@ -3613,11 +3640,6 @@
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1269" : {
-    "message" : [
-      "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1270" : {
     "message" : [
       "SHOW CREATE TABLE is not supported on a temporary view: <table>."
@@ -3914,11 +3936,6 @@
   "_LEGACY_ERROR_TEMP_1335" : {
     "message" : [
       "<expr> is not a valid timestamp expression for time travel."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1336" : {
-    "message" : [
-      "Cannot time travel <target>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1337" : {

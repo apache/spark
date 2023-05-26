@@ -2630,8 +2630,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1269",
-      messageParameters = Map("tableIdentWithDB" -> tableIdentWithDB))
+      errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+      messageParameters = Map("name" -> toSQLId(tableIdentWithDB)))
   }
 
   def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
@@ -3130,16 +3130,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def invalidTimestampExprForTimeTravel(expr: Expression): Throwable = {
+  def invalidTimestampExprForTimeTravel(errorClass: String, expr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1335",
-      messageParameters = Map("expr" -> expr.sql))
+      errorClass = errorClass,
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
   }
 
-  def timeTravelUnsupportedError(target: String): Throwable = {
+  def timeTravelUnsupportedError(relationId: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1336",
-      messageParameters = Map("target" -> target))
+      errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      messageParameters = Map("relationId" -> relationId))
   }
 
   def tableNotSupportTimeTravelError(tableName: Identifier): Throwable = {
