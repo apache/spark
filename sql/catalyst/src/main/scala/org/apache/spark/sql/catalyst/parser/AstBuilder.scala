@@ -4795,10 +4795,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     RenamePartitions(
-       createUnresolvedTable(
-          ctx.identifierReference,
-          "ALTER TABLE ... RENAME TO PARTITION",
-          alterTableTypeMismatchHint),
+      createUnresolvedTable(
+        ctx.identifierReference,
+        "ALTER TABLE ... RENAME TO PARTITION",
+        alterTableTypeMismatchHint),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.to)))
   }
