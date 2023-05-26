@@ -264,5 +264,30 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("SPARK-43801: Support unwrap date type to string type in UnwrapCastInBinaryComparison") {
+    val dt1 = "2023-01-01"
+    val dt2 = "2023-01-02"
+
+    withTable(t) {
+      Seq(dt1, dt2).toDF("dt").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(
+        df.where("dt = date'2023-01-01'"), Seq(dt1).map(Row(_)))
+      checkAnswer(
+        df.where("dt = date_add('2023-01-01', 1)"), Seq(dt2).map(Row(_)))
+      checkAnswer(
+        df.where("date'2023-01-01' = dt"), Seq(dt1).map(Row(_)))
+      checkAnswer(
+        df.where("dt >= date'2023-01-01'"), Seq(dt1, dt2).map(Row(_)))
+      checkAnswer(
+        df.where("dt > date'2023-01-01'"), Seq(dt2).map(Row(_)))
+      checkAnswer(
+        df.where("dt <= date'2023-01-02'"), Seq(dt1, dt2).map(Row(_)))
+      checkAnswer(
+        df.where("dt < date'2023-01-02'"), Seq(dt1).map(Row(_)))
+    }
+  }
+
   private def decimal(v: BigDecimal): Decimal = Decimal(v, 5, 2)
 }

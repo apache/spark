@@ -138,6 +138,11 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
       Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
+    case be @ BinaryComparison(
+      Cast(fromExp, _: DateType, _, _), date @ Literal(value, DateType))
+        if fromExp.dataType == StringType && value != null
+          => Some(unwrapDateToString(be, fromExp, date))
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
@@ -325,6 +330,28 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThanOrEqual =>
         LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case _ => exp
+    }
+  }
+
+  // cast(dt as date) op date -> dt op cast(date as dt)
+  private def unwrapDateToString(
+                                     exp: BinaryComparison,
+                                     fromExp: Expression,
+                                     date: Literal): Expression = {
+    exp match {
+      case _: GreaterThan =>
+        GreaterThan(fromExp, Literal.create(date.toString, StringType))
+      case _: GreaterThanOrEqual =>
+        GreaterThanOrEqual(fromExp, Literal.create(date.toString, StringType))
+      case _: LessThan =>
+        LessThan(fromExp, Literal.create(date.toString, StringType))
+      case _: LessThanOrEqual =>
+        LessThanOrEqual(fromExp, Literal.create(date.toString, StringType))
+      case _: EqualTo =>
+        EqualTo(fromExp, Literal.create(date.toString, StringType))
+      case _: EqualNullSafe =>
+        EqualNullSafe(fromExp, Literal.create(date.toString, StringType))
       case _ => exp
     }
   }

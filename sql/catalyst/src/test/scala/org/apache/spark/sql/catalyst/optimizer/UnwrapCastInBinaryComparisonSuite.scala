@@ -41,13 +41,14 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   val testRelation: LocalRelation = LocalRelation($"a".short, $"b".float,
-    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ)
+    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ, $"g".string)
   val f: BoundReference = $"a".short.canBeNull.at(0)
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
   val f4: BoundReference = $"d".boolean.canBeNull.at(3)
   val f5: BoundReference = $"e".timestamp.notNull.at(4)
   val f6: BoundReference = $"f".timestampNTZ.canBeNull.at(5)
+  val f7: BoundReference = $"g".string.notNull.at(6)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -403,6 +404,17 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       castDate(f5) > nullLit || castDate(f6) > nullLit)
   }
 
+  test("SPARK-43801: Support unwrap date type to string type in UnwrapCastInBinaryComparison") {
+    val dateLit = Literal.create(LocalDate.of(2023, 1, 1), DateType)
+
+    assertEquivalent(castDate(f7) > dateLit, f7 > dateLit.toString)
+    assertEquivalent(castDate(f7) >= dateLit, f7 >= dateLit.toString)
+    assertEquivalent(castDate(f7) < dateLit, f7 < dateLit.toString)
+    assertEquivalent(castDate(f7) <= dateLit, f7 <= dateLit.toString)
+    assertEquivalent(castDate(f7) === dateLit, f7 === dateLit.toString)
+    assertEquivalent(castDate(f7) <=> dateLit, f7 <=> dateLit.toString)
+  }
+
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
   private val ts2 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 999998000)
   private val ts3 = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
@@ -429,16 +441,18 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     if (evaluate) {
       Seq(
-        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1),
-        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2),
-        (null, Float.NaN, decimal2(12345.6789), null, null, null),
-        (null, null, null, null, null, null),
-        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3),
-        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4),
-        (0.toShort, Float.MaxValue, decimal2(0), null, null, null),
-        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null)
+        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1, "2023-01-01"),
+        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2, "2023-01-01"),
+        (null, Float.NaN, decimal2(12345.6789), null, null, null, "2023-01-01"),
+        (null, null, null, null, null, null, "2023-01-01"),
+        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3,
+          "2023-01-01"),
+        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4,
+          "2023-01-01"),
+        (0.toShort, Float.MaxValue, decimal2(0), null, null, null, "2023-01-01"),
+        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null, "2023-01-01")
       ).foreach(v => {
-        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6)
+        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6, v._7)
         checkEvaluation(e1, e2.eval(row), row)
       })
     }
