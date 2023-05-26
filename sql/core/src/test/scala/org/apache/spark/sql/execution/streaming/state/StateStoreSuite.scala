@@ -1219,7 +1219,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("reports memory usage") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+    // RocksDB metrics is only guaranteed to update when snapshot is created, so we set
+    // minDeltasForSnapshot = 1 to enable snapshot generation here.
+    tryWithProviderResource(newStoreProvider(minDeltasForSnapshot = 1,
+      numOfVersToRetainInMemory = 1)) { provider =>
       val store = provider.getStore(0)
       val noDataMemoryUsed = store.metrics.memoryUsedBytes
       put(store, "a", 0, 1)

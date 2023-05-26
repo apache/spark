@@ -125,21 +125,22 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(metricPair.isDefined)
       metricPair.get._2
     }
-
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      val store = provider.getStore(0)
-      // Verify state after updating
-      put(store, "a", 0, 1)
-      assert(get(store, "a", 0) === Some(1))
-      assert(store.commit() === 1)
-      provider.doMaintenance()
-      assert(store.hasCommitted)
-      val storeMetrics = store.metrics
-      assert(storeMetrics.numKeys === 1)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
-      assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider()) { provider =>
+          val store = provider.getStore(0)
+          // Verify state after updating
+          put(store, "a", 0, 1)
+          assert(get(store, "a", 0) === Some(1))
+          assert(store.commit() === 1)
+          provider.doMaintenance()
+          assert(store.hasCommitted)
+          val storeMetrics = store.metrics
+          assert(storeMetrics.numKeys === 1)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
+          assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
+      }
     }
   }
 
@@ -157,11 +158,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   def newStoreProvider(
       storeId: StateStoreId,
-      numColsPrefixKey: Int): RocksDBStateStoreProvider = {
+      numColsPrefixKey: Int,
+      sqlConf: Option[SQLConf] = None): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
-      new StateStoreConf, new Configuration)
+      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), new Configuration)
     provider
   }
 
@@ -181,11 +183,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   override def newStoreProvider(
     minDeltasForSnapshot: Int,
-    numOfVersToRetainInMemory: Int): RocksDBStateStoreProvider = newStoreProvider()
+    numOfVersToRetainInMemory: Int): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), 0,
+      Some(getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)))
+  }
 
   override def getDefaultSQLConf(
     minDeltasForSnapshot: Int,
-    numOfVersToRetainInMemory: Int): SQLConf = SQLConf.get
+    numOfVersToRetainInMemory: Int): SQLConf = {
+    val sqlConf = SQLConf.get.clone()
+    sqlConf.setConfString(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, minDeltasForSnapshot.toString)
+    sqlConf
+  }
 
   override def testQuietly(name: String)(f: => Unit): Unit = {
     test(name) {
