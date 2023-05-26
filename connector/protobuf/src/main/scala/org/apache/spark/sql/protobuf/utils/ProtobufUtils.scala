@@ -232,7 +232,9 @@ private[sql] object ProtobufUtils extends Logging {
     try {
       FileUtils.readFileToByteArray(new File(filePath))
     } catch {
-      case ex: FileNotFoundException | NoSuchFileException =>
+      case ex: FileNotFoundException =>
+        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+      case ex: NoSuchFileException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
       case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
     }
