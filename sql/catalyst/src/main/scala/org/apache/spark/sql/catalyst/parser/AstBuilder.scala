@@ -4777,9 +4777,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
     AddPartitions(
       createUnresolvedTable(
-          ctx.identifierReference,
-          "ALTER TABLE ... ADD PARTITION ...",
-          alterTableTypeMismatchHint),
+        ctx.identifierReference,
+        "ALTER TABLE ... ADD PARTITION ...",
+        alterTableTypeMismatchHint),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
