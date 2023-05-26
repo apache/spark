@@ -4747,9 +4747,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     RecoverPartitions(
       createUnresolvedTable(
-          ctx.identifierReference,
-          "ALTER TABLE ... RECOVER PARTITIONS",
-          alterTableTypeMismatchHint))
+        ctx.identifierReference,
+        "ALTER TABLE ... RECOVER PARTITIONS",
+        alterTableTypeMismatchHint))
   }
 
   /**
