@@ -939,10 +939,10 @@ class DDLParserSuite extends AnalysisTest {
       checkError(
         exception = intercept[AnalysisException](
           ConstantFolding(analyzer.execute(parsePlan(s"$prefix ('optKey' = $option)")))),
-        errorClass = "INVALID_SQL_SYNTAX",
+        errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
         parameters = Map(
-          "inputString" ->
-            "option or property key optKey is invalid; only constant expressions are supported"))
+          "key" -> "optKey",
+          "supported" -> "constant expressions"))
     }
   }
 
@@ -2634,7 +2634,7 @@ class DDLParserSuite extends AnalysisTest {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty, None, None, None, false), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
@@ -2647,7 +2647,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
       "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty, None, None, None, false), false))
     // These ALTER TABLE statements should parse successfully.
     comparePlans(
@@ -2803,12 +2803,12 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty, None, None, None, false), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty, None, None, None, false), false))
     // Two generation expressions
     checkError(

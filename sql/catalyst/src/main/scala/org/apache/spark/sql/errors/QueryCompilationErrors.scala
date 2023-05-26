@@ -3513,17 +3513,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def optionMustBeLiteralString(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       messageParameters = Map(
-        "inputString" ->
-          s"option or property key $key is invalid; only literal strings are supported"))
+        "key" -> key,
+        "supported" -> "literal strings"))
   }
 
   def optionMustBeConstant(key: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
       messageParameters = Map(
-        "inputString" ->
-          s"option or property key $key is invalid; only constant expressions are supported"))
+        "key" -> key,
+        "supported" -> "constant expressions"))
   }
 }
