@@ -4987,9 +4987,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitCommentTable(ctx: CommentTableContext): LogicalPlan = withOrigin(ctx) {
     val comment = visitComment(ctx.comment)
-      CommentOnTable(
-        createUnresolvedTable(ctx.identifierReference, "COMMENT ON TABLE"),
-        comment)
+    CommentOnTable(createUnresolvedTable(ctx.identifierReference, "COMMENT ON TABLE"), comment)
   }
 
   override def visitComment (ctx: CommentContext): String = {
