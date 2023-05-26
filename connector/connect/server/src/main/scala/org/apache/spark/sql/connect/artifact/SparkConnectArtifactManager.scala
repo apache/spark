@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.connect.artifact
 
+import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -99,16 +101,17 @@ class SparkConnectArtifactManager private[connect] {
   private[connect] def addArtifact(
       sessionHolder: SessionHolder,
       remoteRelativePath: Path,
-      serverLocalStagingPath: Path): Unit = {
+      serverLocalStagingPath: Path,
+      fragment: Option[String]): Unit = {
     require(!remoteRelativePath.isAbsolute)
-    if (remoteRelativePath.startsWith("cache/")) {
+    if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
         val blockManager = sessionHolder.session.sparkContext.env.blockManager
         val blockId = CacheId(
           userId = sessionHolder.userId,
           sessionId = sessionHolder.sessionId,
-          hash = remoteRelativePath.toString.stripPrefix("cache/"))
+          hash = remoteRelativePath.toString.stripPrefix(s"cache${File.separator}"))
         val updater = blockManager.TempFileBasedBlockStoreUpdater(
           blockId = blockId,
           level = StorageLevel.MEMORY_AND_DISK_SER,
@@ -118,9 +121,10 @@ class SparkConnectArtifactManager private[connect] {
           tellMaster = false)
         updater.save()
       }(catchBlock = { tmpFile.delete() })
-    } else if (remoteRelativePath.startsWith("classes/")) {
+    } else if (remoteRelativePath.startsWith(s"classes${File.separator}")) {
       // Move class files to common location (shared among all users)
-      val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))
+      val target = classArtifactDir.resolve(
+        remoteRelativePath.toString.stripPrefix(s"classes${File.separator}"))
       Files.createDirectories(target.getParent)
       // Allow overwriting class files to capture updates to classes.
       Files.move(serverLocalStagingPath, target, StandardCopyOption.REPLACE_EXISTING)
@@ -135,17 +139,21 @@ class SparkConnectArtifactManager private[connect] {
             s"Jars cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
-      if (remoteRelativePath.startsWith("jars/")) {
+      if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
         // Adding Jars to the underlying spark context (visible to all users)
         sessionHolder.session.sessionState.resourceLoader.addJar(target.toString)
         jarsList.add(target)
-      } else if (remoteRelativePath.startsWith("pyfiles/")) {
+      } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         sessionHolder.session.sparkContext.addFile(target.toString)
         val stringRemotePath = remoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
           pythonIncludeList.add(target.getFileName.toString)
         }
+      } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
+        val canonicalUri =
+          fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
+        sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
       }
     }
   }

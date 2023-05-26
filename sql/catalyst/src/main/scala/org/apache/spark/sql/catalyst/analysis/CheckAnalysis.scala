@@ -211,13 +211,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case t: SupportsPartitionManagement =>
               if (t.partitionSchema.isEmpty) {
                 r.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2404",
-                  messageParameters = Map("name" -> r.name))
+                  errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+                  messageParameters = Map("name" -> toSQLId(r.name)))
               }
             case _ =>
               r.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2405",
-                messageParameters = Map("name" -> r.name))
+                errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+                messageParameters = Map("name" -> toSQLId(r.name)))
           }
           case _ =>
         }

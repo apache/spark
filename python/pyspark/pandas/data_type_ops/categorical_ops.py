@@ -27,7 +27,8 @@ from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import _sanitize_list_like, DataTypeOps
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
-from pyspark.sql.column import Column
+from pyspark.sql.column import Column as PySparkColumn
+from pyspark.sql.utils import is_remote
 
 
 class CategoricalOps(DataTypeOps):
@@ -65,33 +66,73 @@ class CategoricalOps(DataTypeOps):
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__eq__, is_equality_comparison=True)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return _compare(
+            left, right, Column.__eq__, is_equality_comparison=True  # type: ignore[arg-type]
+        )
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__ne__, is_equality_comparison=True)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return _compare(
+            left, right, Column.__ne__, is_equality_comparison=True  # type: ignore[arg-type]
+        )
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__lt__)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return _compare(left, right, Column.__lt__)  # type: ignore[arg-type]
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__le__)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return _compare(left, right, Column.__le__)  # type: ignore[arg-type]
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__gt__)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return _compare(left, right, Column.__gt__)  # type: ignore[arg-type]
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__ge__)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return _compare(left, right, Column.__ge__)  # type: ignore[arg-type]
 
 
 def _compare(
     left: IndexOpsLike,
     right: Any,
-    f: Callable[..., Column],
+    f: Callable[..., PySparkColumn],
     *,
     is_equality_comparison: bool = False,
 ) -> SeriesOrIndex:
