@@ -4962,7 +4962,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         withIdentClause(ctx.ns, UnresolvedNamespace(_)),
         userScope, systemScope, pattern)
     } else if (legacy.isDefined) {
-        ShowFunctions(UnresolvedNamespace(legacy.get.dropRight(1)), userScope, systemScope, pattern)
+      ShowFunctions(UnresolvedNamespace(legacy.get.dropRight(1)), userScope, systemScope, pattern)
     } else {
         ShowFunctions(UnresolvedNamespace(Nil), userScope, systemScope, pattern)
     }
