@@ -285,11 +285,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case c: Cast if !c.resolved =>
-            c.failAnalysis(
-              errorClass = "CAST_IS_UNRESOLVED",
-              messageParameters = Map(
-                "srcType" -> toSQLType(c.child.dataType),
-                "targetType" -> toSQLType(c.dataType)))
+            throw SparkException.internalError(
+              msg = s"Found the unresolved Cast: ${c.simpleString(SQLConf.get.maxToStringFields)}",
+              context = c.origin.getQueryContext,
+              summary = c.origin.context.summary)
           case e: RuntimeReplaceable if !e.replacement.resolved =>
             throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
               "\nReplacement is unresolved: " + e.replacement)
@@ -305,12 +304,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             val w = e.children.find(_.isInstanceOf[WindowFunction]).get
             e.failAnalysis(
               errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
-              messageParameters = Map("w" -> toSQLExpr(w)))
+              messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             w.failAnalysis(
               errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-              messageParameters = Map("w" -> toSQLExpr(w)))
+              messageParameters = Map("windowExpr" -> toSQLExpr(w)))
 
           case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
@@ -318,8 +317,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             w.failAnalysis(
               errorClass = "WINDOW_FUNCTION_AND_FRAME_MISMATCH",
               messageParameters = Map(
-                "wf" -> toSQLExpr(wf),
-                "w" -> toSQLExpr(w)))
+                "funcName" -> toSQLExpr(wf),
+                "windowExpr" -> toSQLExpr(w)))
 
           case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window

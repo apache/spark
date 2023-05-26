@@ -1015,19 +1015,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(
       inputPlan = testRelation2.select(RowNumber()),
       expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
-      expectedMessageParameters = Map("w" -> "\"row_number()\"")
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
     )
 
     assertAnalysisErrorClass(
       inputPlan = testRelation2.select(Sum(RowNumber())),
       expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
-      expectedMessageParameters = Map("w" -> "\"row_number()\"")
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
     )
 
     assertAnalysisErrorClass(
       inputPlan = testRelation2.select(RowNumber() + 1),
       expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
-      expectedMessageParameters = Map("w" -> "\"row_number()\"")
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
     )
   }
 
