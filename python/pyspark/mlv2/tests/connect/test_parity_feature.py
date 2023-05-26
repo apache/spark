@@ -14,19 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import unittest
-
-from pyspark.pandas.tests.test_dataframe import DataFrameTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.sql import SparkSession
+from pyspark.mlv2.tests.test_feature import FeatureTestsMixin
 
 
-class DataFrameParityTests(DataFrameTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    pass
+class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
+    def setUp(self) -> None:
+        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
+
+    def tearDown(self) -> None:
+        self.spark.stop()
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.mlv2.tests.connect.test_parity_feature import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

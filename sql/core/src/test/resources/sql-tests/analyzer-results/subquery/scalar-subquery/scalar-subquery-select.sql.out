@@ -1005,3 +1005,35 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
    +- View (`t2`, [c1#x,c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline,Some(false))
+
+
+-- !query
+WITH T AS (SELECT 1 AS a)
+SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
+FROM (SELECT null as col) as foo
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias T
+:     +- Project [1 AS a#x]
+:        +- OneRowRelation
++- Project [scalar-subquery#x [col#x && col#x] AS scalarsubquery(col, col)#xL]
+   :  +- Aggregate [sum(1) AS sum(1)#xL]
+   :     +- Filter ((a#x = cast(outer(col#x) as int)) OR (upper(cast(outer(col#x) as string)) = Y))
+   :        +- SubqueryAlias T
+   :           +- CTERelationRef xxxx, true, [a#x]
+   +- SubqueryAlias foo
+      +- Project [null AS col#x]
+         +- OneRowRelation
+
+
+-- !query
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline,Some(true))
