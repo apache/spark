@@ -1578,7 +1578,7 @@
     "message" : [
       "Parsing JSON arrays as structs is forbidden."
     ],
-    "sqlState": "00T"
+    "sqlState": "2203G"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
