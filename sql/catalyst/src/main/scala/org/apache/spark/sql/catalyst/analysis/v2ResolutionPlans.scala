@@ -127,23 +127,22 @@ case class UnresolvedFunctionName(
     commandName: String,
     requirePersistent: Boolean,
     funcTypeMismatchHint: Option[String],
-    possibleQualifiedName: Option[Seq[String]] = None)
-  extends LeafNode {
+    possibleQualifiedName: Option[Seq[String]] = None) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
 
-abstract class UnresolvedIdentifierOrClause extends LeafNode
 /**
  * Holds the name of a table/view/function identifier that we need to determine the catalog. It will
  * be resolved to [[ResolvedIdentifier]] during analysis.
  */
 case class UnresolvedIdentifier(nameParts: Seq[String], allowTemp: Boolean = false)
-  extends UnresolvedIdentifierOrClause {
+  extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
+
 
 /**
  * A resolved leaf node whose statistics has no meaning.
