@@ -1470,7 +1470,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           case other =>
             throw InvalidPlanInput(
               s"The valid type for the 3rd arg in $functionName " +
-              s"is binary or map, but got $other")
+                s"is binary or map, but got $other")
         }
       } else if (argumentsCount == 4) {
         val fileDescSetOpt = children(2) match {

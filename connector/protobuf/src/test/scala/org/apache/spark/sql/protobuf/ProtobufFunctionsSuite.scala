@@ -1042,6 +1042,10 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           functions.from_protobuf($"value", "SomeMessage", invalidDescPath)
         ).collect()
     }
+    if (ex.getErrorClass != "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND") {
+      // XXX
+      throw ex.getCause
+    }
     checkError(
       ex,
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
