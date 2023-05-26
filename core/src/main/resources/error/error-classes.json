@@ -5411,26 +5411,6 @@
       "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
-  "CAST_IS_UNRESOLVED" : {
-    "message" : [
-      "invalid cast from <srcType> to <targetType>."
-    ]
-  },
-  "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
-    "message" : [
-      "Window function <w> requires an OVER clause."
-    ]
-  },
-  "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
-    "message" : [
-      "Distinct window functions are not supported: <w>."
-    ]
-  },
-  "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
-    "message" : [
-      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2411" : {
     "message" : [
       "Cannot specify order by or frame for '<aggFunc>'."
