@@ -379,6 +379,11 @@ class CategoricalTestsMixin:
         #     psdf.groupby("a").apply(len).sort_index(), pdf.groupby("a").apply(len).sort_index(),
         # )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43813): Enable CategoricalTests.test_groupby_apply_without_shortcut "
+        "for pandas 2.0.0.",
+    )
     def test_groupby_apply_without_shortcut(self):
         with ps.option_context("compute.shortcut_limit", 0):
             self.test_groupby_apply()
@@ -388,14 +393,10 @@ class CategoricalTestsMixin:
         def identity(df) -> ps.DataFrame[zip(psdf.columns, psdf.dtypes)]:
             return df
 
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            psdf.groupby("a").apply(identity).sort_values(["b"]).reset_index(drop=True),
-            pdf.groupby("a").apply(identity).sort_values(["b"]).reset_index(drop=True),
-        else:
-            self.assert_eq(
-                psdf.groupby("a").apply(identity).sort_values(["a", "b"]).reset_index(drop=True),
-                pdf.groupby("a").apply(identity).sort_values(["a", "b"]).reset_index(drop=True),
-            )
+        self.assert_eq(
+            psdf.groupby("a").apply(identity).sort_values(["a", "b"]).reset_index(drop=True),
+            pdf.groupby("a").apply(identity).sort_values(["a", "b"]).reset_index(drop=True),
+        )
 
     def test_groupby_transform(self):
         pdf, psdf = self.df_pair

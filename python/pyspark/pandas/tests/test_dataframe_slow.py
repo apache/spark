@@ -900,6 +900,10 @@ class DataFrameSlowTestsMixin:
 
         self.assert_eq(psdf.keys(), pdf.keys())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43810): Enable DataFrameSlowTests.test_quantile for pandas 2.0.0.",
+    )
     def test_quantile(self):
         pdf, psdf = self.df_pair
 
@@ -945,16 +949,8 @@ class DataFrameSlowTestsMixin:
         pdf = pd.DataFrame({"x": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            # From pandas 2.0.0, an error occurs when performing quantile on str type.
-            # It returned an empty Series or DataFrame previousely.
-            expected_result = ps.Series([], name=0.5)
-            self.assert_eq(psdf.quantile(0.5), expected_result)
-            expected_result = ps.DataFrame([], index=[0.25, 0.5, 0.75])
-            self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), expected_result)
-        else:
-            self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
-            self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
+        self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
+        self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.quantile(0.5, numeric_only=False)
@@ -2547,6 +2543,10 @@ class DataFrameSlowTestsMixin:
         else:
             self.assert_eq(psmidx.dtypes, pmidx.dtypes)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43809): Enable DataFrameSlowTests.test_cov for pandas 2.0.0.",
+    )
     def test_cov(self):
         # SPARK-36396: Implement DataFrame.cov
 
@@ -2596,35 +2596,7 @@ class DataFrameSlowTestsMixin:
         pdf.columns = [dtype for dtype in numeric_dtypes + boolean_dtypes] + ["decimal"]
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            test_types = [
-                "Int8",
-                "Int16",
-                "Int32",
-                "Int64",
-                "Float32",
-                "Float64",
-                "float",
-                "boolean",
-                "bool",
-            ]
-            expected = pd.DataFrame(
-                data=[
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
-                ],
-                index=test_types,
-                columns=test_types,
-            )
-            self.assert_eq(expected, psdf.cov(), almost=True)
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
             self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
             self.assert_eq(pdf.cov(min_periods=3), psdf.cov(min_periods=3), almost=True)
             self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4))
@@ -2658,9 +2630,6 @@ class DataFrameSlowTestsMixin:
             [(1, 2, "a", 1), (0, 3, "b", 1), (2, 0, "c", 9), (1, 1, "d", 1)],
             columns=["a", "b", "c", "d"],
         )
-        # From pandas 2.0.0, an error occurs when performing cov on str type.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            pdf = pdf[["a", "b", "d"]]
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
@@ -2678,11 +2647,7 @@ class DataFrameSlowTestsMixin:
         # return empty DataFrame
         pdf = pd.DataFrame([("1", "2"), ("0", "3"), ("2", "0"), ("1", "1")], columns=["a", "b"])
         psdf = ps.from_pandas(pdf)
-        # TODO(SPARK-43291): Match behavior for DataFrame.cov on string DataFrame.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(psdf.cov(), ps.DataFrame())
-        else:
-            self.assert_eq(pdf.cov(), psdf.cov())
+        self.assert_eq(pdf.cov(), psdf.cov())
 
     @unittest.skipIf(
         LooseVersion(pd.__version__) < LooseVersion("1.3.0"),

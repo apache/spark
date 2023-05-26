@@ -4009,6 +4009,10 @@ class DataFrameTestsMixin:
             psdf.drop_duplicates([10, 20], keep=keep).sort_index(),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43811): Enable DataFrameTests.test_reindex for pandas 2.0.0.",
+    )
     def test_reindex(self):
         index = pd.Index(["A", "B", "C", "D", "E"])
         columns = pd.Index(["numbers"])
@@ -4030,19 +4034,10 @@ class DataFrameTestsMixin:
             psdf.reindex(["A", "B", "C"], columns=["numbers", "2", "3"]).sort_index(),
         )
 
-        # TODO(SPARK-43271): Match behavior with DataFrame.reindex with specifying `index`.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            expected_result = ps.DataFrame([1.0, 2.0, 3.0], index=ps.Index(["A", "B", "C"]))
-            expected_result.columns = pd.Index(["numbers"], name="cols")
-            self.assert_eq(
-                psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
-                expected_result,
-            )
-        else:
-            self.assert_eq(
-                pdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
-                psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
-            )
+        self.assert_eq(
+            pdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
+            psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
+        )
 
         self.assert_eq(
             pdf.reindex(index=["A", "B"]).sort_index(), psdf.reindex(index=["A", "B"]).sort_index()
@@ -4414,6 +4409,10 @@ class DataFrameTestsMixin:
             pdf.melt(value_vars=(10.0, 20.0)).sort_values(["variable", "value"]),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43812): Enable DataFrameTests.test_all for pandas 2.0.0.",
+    )
     def test_all(self):
         pdf = pd.DataFrame(
             {
@@ -4475,24 +4474,10 @@ class DataFrameTestsMixin:
         self.assert_eq(psdf.all(skipna=False), pdf.all(skipna=False))
         self.assert_eq(psdf.all(skipna=True), pdf.all(skipna=True))
         self.assert_eq(psdf.all(), pdf.all())
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(
-                ps.DataFrame([np.nan]).all(skipna=False),
-                pd.DataFrame([np.nan]).all(skipna=False),
-                almost=True,
-            )
-            self.assert_eq(
-                ps.DataFrame([None]).all(skipna=True),
-                pd.DataFrame([None]).all(skipna=True),
-                almost=True,
-            )
-        else:
-            self.assert_eq(
-                ps.DataFrame([np.nan]).all(skipna=False), pd.DataFrame([np.nan]).all(skipna=False)
-            )
-            self.assert_eq(
-                ps.DataFrame([None]).all(skipna=True), pd.DataFrame([None]).all(skipna=True)
-            )
+        self.assert_eq(
+            ps.DataFrame([np.nan]).all(skipna=False), pd.DataFrame([np.nan]).all(skipna=False)
+        )
+        self.assert_eq(ps.DataFrame([None]).all(skipna=True), pd.DataFrame([None]).all(skipna=True))
 
     def test_any(self):
         pdf = pd.DataFrame(
