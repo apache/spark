@@ -588,7 +588,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_sketch_agg(columnName: String, lgConfigK: Int): Column =
-    Column.fn("hll_sketch_agg", Column(columnName), lit(lgConfigK))
+    hll_sketch_agg(Column(columnName), lgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
@@ -608,7 +608,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_sketch_agg(columnName: String): Column =
-    Column.fn("hll_sketch_agg", Column(columnName))
+    hll_sketch_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -632,7 +632,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_union_agg(columnName: String, allowDifferentLgConfigK: Boolean): Column =
-    Column.fn("hll_union_agg", Column(columnName), lit(allowDifferentLgConfigK))
+    hll_union_agg(Column(columnName), allowDifferentLgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -653,8 +653,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def hll_union_agg(columnName: String): Column =
-    Column.fn("hll_union_agg", Column(columnName))
+  def hll_union_agg(columnName: String): Column = hll_union_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
