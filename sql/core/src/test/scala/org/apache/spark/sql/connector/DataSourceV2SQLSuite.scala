@@ -2977,17 +2977,17 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1336",
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         sqlState = None,
-        parameters = Map("target" -> "path-based tables"))
+        parameters = Map("relationId" -> "`parquet`.`/the/path`"))
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1336",
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         sqlState = None,
-        parameters = Map("target" -> "subqueries from WITH clause"))
+        parameters = Map("relationId" -> "`x`"))
 
       val subquery1 = "SELECT 1 FROM non_exist"
       checkError(
