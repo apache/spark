@@ -24,7 +24,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import SparkContext
-from pyspark.sql import Column as PySparkColumn, functions as F
+from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     LongType,
@@ -141,7 +141,7 @@ class DatetimeOps(DataTypeOps):
         else:
             return _as_other_type(index_ops, dtype, spark_type)
 
-    def _cast_spark_column_timestamp_to_long(self, scol: PySparkColumn) -> PySparkColumn:
+    def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
         return scol.cast(LongType())
 
 
@@ -151,9 +151,9 @@ class DatetimeNTZOps(DatetimeOps):
     TimestampNTZType.
     """
 
-    def _cast_spark_column_timestamp_to_long(self, scol: PySparkColumn) -> PySparkColumn:
+    def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
         jvm = SparkContext._active_spark_context._jvm
-        return PySparkColumn(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
+        return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
