@@ -695,109 +695,21 @@ Project [chr(cast(167 as bigint)) AS chr(167)#x, chr(cast(247 as bigint)) AS chr
 
 
 -- !query
-create table num_data (id int, val decimal(38,10)) using parquet
+select to_varchar(date'26-May-2023', 'yyyy.mm.dd')
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`num_data`, false
-
-
--- !query
-insert into num_data values (0, 0)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (1, 0)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (2, -34338492.215397047)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (3, 4.31)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (4, 7799461.4119)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (5, 16397.038491)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (6, 93901.57763026)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (7, -83028485)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (8, 74881)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-insert into num_data values (9, -24926804.045047420)
--- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/num_data, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/num_data], Append, `spark_catalog`.`default`.`num_data`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/num_data), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as decimal(38,10)) AS val#x]
-   +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-select * from num_data
--- !query analysis
-Project [id#x, val#x]
-+- SubqueryAlias spark_catalog.default.num_data
-   +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
-
-
--- !query
-select '' as to_varchar_3, to_varchar(val, '9999999999999999.999999999999999PR'), val
-from num_data
--- !query analysis
-Project [ AS to_varchar_3#x, to_char(val#x, 9999999999999999.999999999999999PR) AS to_char(val, 9999999999999999.999999999999999PR)#x, val#x]
-+- SubqueryAlias spark_catalog.default.num_data
-   +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
-
-
--- !query
-drop table num_data
--- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_data`, false, false, false
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'26-May-2023'",
+    "valueType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "date'26-May-2023'"
+  } ]
+}

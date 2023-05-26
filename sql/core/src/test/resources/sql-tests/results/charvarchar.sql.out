@@ -1203,131 +1203,23 @@ struct<chr(167):string,chr(247):string,chr(215):string>
 
 
 -- !query
-create table num_data (id int, val decimal(38,10)) using parquet
+select to_varchar(date'26-May-2023', 'yyyy.mm.dd')
 -- !query schema
 struct<>
 -- !query output
-
-
-
--- !query
-insert into num_data values (0, 0)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (1, 0)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (2, -34338492.215397047)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (3, 4.31)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (4, 7799461.4119)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (5, 16397.038491)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (6, 93901.57763026)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (7, -83028485)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (8, 74881)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into num_data values (9, -24926804.045047420)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select * from num_data
--- !query schema
-struct<id:int,val:decimal(38,10)>
--- !query output
-0	0.0000000000
-1	0.0000000000
-2	-34338492.2153970470
-3	4.3100000000
-4	7799461.4119000000
-5	16397.0384910000
-6	93901.5776302600
-7	-83028485.0000000000
-8	74881.0000000000
-9	-24926804.0450474200
-
-
--- !query
-select '' as to_varchar_3, to_varchar(val, '9999999999999999.999999999999999PR'), val
-from num_data
--- !query schema
-struct<to_varchar_3:string,to_char(val, 9999999999999999.999999999999999PR):string,val:decimal(38,10)>
--- !query output
-	               0.000000000000000  	0.0000000000
-	               0.000000000000000  	0.0000000000
-	               4.310000000000000  	4.3100000000
-	           16397.038491000000000  	16397.0384910000
-	           74881.000000000000000  	74881.0000000000
-	           93901.577630260000000  	93901.5776302600
-	         7799461.411900000000000  	7799461.4119000000
-	        <24926804.045047420000000>	-24926804.0450474200
-	        <34338492.215397047000000>	-34338492.2153970470
-	        <83028485.000000000000000>	-83028485.0000000000
-
-
--- !query
-drop table num_data
--- !query schema
-struct<>
--- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'26-May-2023'",
+    "valueType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "date'26-May-2023'"
+  } ]
+}
