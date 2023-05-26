@@ -6634,7 +6634,8 @@ def levenshtein(
         return _invoke_function_over_columns("levenshtein", left, right)
     else:
         return _invoke_function(
-            "levenshtein", _to_java_column(left), _to_java_column(right), threshold)
+            "levenshtein", _to_java_column(left), _to_java_column(right), threshold
+        )
 
 
 @try_remote_functions
