@@ -607,8 +607,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def hll_sketch_agg(columnName: String): Column =
-    hll_sketch_agg(Column(columnName))
+  def hll_sketch_agg(columnName: String): Column = hll_sketch_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
