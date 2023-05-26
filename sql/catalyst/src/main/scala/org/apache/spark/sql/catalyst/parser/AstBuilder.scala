@@ -2148,7 +2148,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitIdentifierClause(ctx: IdentifierClauseContext): Expression = withOrigin(ctx) {
     // Create the function call.
-    val expr : Expression = expression(ctx.expression())
+    val expr: Expression = expression(ctx.expression())
     UnresolvedAttributeIdentifierClause(expr)
   }
 
