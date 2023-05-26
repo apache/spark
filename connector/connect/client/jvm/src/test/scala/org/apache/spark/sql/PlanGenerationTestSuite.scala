@@ -1361,6 +1361,10 @@ class PlanGenerationTestSuite
     fn.levenshtein(fn.col("g"), lit("bob"))
   }
 
+  functionTest("levenshtein with threshold") {
+    fn.levenshtein(fn.col("g"), lit("bob"), 2)
+  }
+
   functionTest("locate") {
     fn.locate("jar", fn.col("g"))
   }
