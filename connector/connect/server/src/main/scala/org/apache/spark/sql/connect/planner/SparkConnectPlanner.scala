@@ -1120,6 +1120,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
 
         streamDF.queryExecution.analyzed
+
+      case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
     }
   }
 
