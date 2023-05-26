@@ -900,35 +900,46 @@ class DDLParserSuite extends AnalysisTest {
       val folded = ConstantFolding(analyzed)
       folded
     }
-    def expectedTable(option: Expression): LogicalPlan = {
+    def expectedTableExprOption(option: Expression): LogicalPlan = {
+      expectedTableStringOption(option.toString)
+    }
+    def expectedTableStringOption(option: String): LogicalPlan = {
       CreateTable(
         ResolvedIdentifier(
           analyzer.currentCatalog,
           Identifier.of(Array("default"), "t")),
         schema, Seq.empty[Transform],
         LogicalTableSpec(
-          Map.empty[String, String], Some("json"), Map("k" -> option.toString), None, None,
+          Map.empty[String, String], Some("json"), Map("k" -> option), None, None,
           None, false),
         false)
     }
     comparePlans(inputPlan("'k' = 1 + 2"),
-      expectedTable(Literal(3)))
+      expectedTableExprOption(Literal(3)))
     comparePlans(inputPlan("'k' = 'a' || 'b'"),
-      expectedTable(Literal("ab")))
+      expectedTableExprOption(Literal("ab")))
     comparePlans(inputPlan("'k' = true or false"),
-      expectedTable(Literal(true)))
+      expectedTableExprOption(Literal(true)))
+    comparePlans(inputPlan("'k' = null"),
+      expectedTableExprOption(Literal(null)))
+    comparePlans(inputPlan("'k' = cast(array('9', '9') as array<byte>)"),
+      expectedTableStringOption("[9,9]"))
+    comparePlans(inputPlan("'k' = cast(map('9', '9') as map<string, string>)"),
+      expectedTableStringOption("map(keys: [9], values: [9])"))
+    comparePlans(inputPlan("'k' = cast('11 23:4:0' as interval day to second)"),
+      expectedTableStringOption("INTERVAL '11 23:04:00' DAY TO SECOND"))
     comparePlans(inputPlan("'k' = date_diff(current_date(), current_date())"),
-      expectedTable(Literal(0)))
+      expectedTableExprOption(Literal(0)))
     comparePlans(inputPlan("'k' = date_sub(date'2022-02-02', 1)"),
-      expectedTable(Literal(Date.valueOf("2022-02-01"))))
+      expectedTableExprOption(Literal(Date.valueOf("2022-02-01"))))
     comparePlans(inputPlan("'k' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')"),
-      expectedTable(Literal(Timestamp.valueOf("2022-02-28 00:00:00.000005"))))
+      expectedTableExprOption(Literal(Timestamp.valueOf("2022-02-28 00:00:00.000005"))))
     comparePlans(inputPlan("'k' = round(cast(2.25 as decimal(5, 3)), 1)"),
-      expectedTable(Literal(Decimal(BigDecimal(23, 1), precision = 4, scale = 1))))
+      expectedTableExprOption(Literal(Decimal(BigDecimal(23, 1), precision = 4, scale = 1))))
     // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
     // too narrow to contain the result of the cast.
     comparePlans(inputPlan("'k' = round(cast(2.25 as decimal(3, 3)), 1)"),
-      expectedTable(Literal(null, DecimalType(2, 1))))
+      expectedTableExprOption(Literal(null, DecimalType(2, 1))))
     // Test some cases where the provided option value is a non-constant or invalid expression.
     Seq(
       " 1 + 2 + unresolvedAttribute",

@@ -34,18 +34,19 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 case class ResolveTableSpec(resolveOption: Expression => Expression) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsAnyPattern(COMMAND), ruleId) {
-      case t @ CreateTable(_, _, _, u: UnresolvedTableSpec, _) =>
-        t.copy(tableSpec = resolveTableSpec(u))
-      case t @ CreateTableAsSelect(_, _, _, u: UnresolvedTableSpec, _, _, _) =>
-        t.copy(tableSpec = resolveTableSpec(u))
-      case t @ ReplaceTable(_, _, _, u: UnresolvedTableSpec, _) =>
-        t.copy(tableSpec = resolveTableSpec(u))
-      case t @ ReplaceTableAsSelect(_, _, _, u: UnresolvedTableSpec, _, _, _) =>
-        t.copy(tableSpec = resolveTableSpec(u))
+      case t: CreateTable if t.tableSpec.isInstanceOf[UnresolvedTableSpec] =>
+        t.copy(tableSpec = resolveTableSpec(t.tableSpec))
+      case t: CreateTableAsSelect if t.tableSpec.isInstanceOf[UnresolvedTableSpec] =>
+        t.copy(tableSpec = resolveTableSpec(t.tableSpec))
+      case t: ReplaceTable if t.tableSpec.isInstanceOf[UnresolvedTableSpec] =>
+        t.copy(tableSpec = resolveTableSpec(t.tableSpec))
+      case t: ReplaceTableAsSelect if t.tableSpec.isInstanceOf[UnresolvedTableSpec] =>
+        t.copy(tableSpec = resolveTableSpec(t.tableSpec))
     }
   }
 
-  private def resolveTableSpec(u: UnresolvedTableSpec): TableSpec = {
+  private def resolveTableSpec(t: TableSpec): TableSpec = {
+    val u = t.asInstanceOf[UnresolvedTableSpec]
     val newOptions: Map[String, String] = u.optionsExpressions.map {
       case (key: String, null) =>
         (key, null)

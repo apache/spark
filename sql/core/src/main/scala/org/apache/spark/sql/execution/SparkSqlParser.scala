@@ -20,9 +20,12 @@ package org.apache.spark.sql.execution
 import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
+
 import scala.collection.JavaConverters._
+
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
+
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
