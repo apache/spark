@@ -1203,23 +1203,24 @@ struct<chr(167):string,chr(247):string,chr(215):string>
 
 
 -- !query
-select to_varchar(date'26-May-2023', 'yyyy.mm.dd')
+SELECT to_varchar(78.12, '$99.99')
 -- !query schema
-struct<>
+struct<to_char(78.12, $99.99):string>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42604",
-  "messageParameters" : {
-    "value" : "'26-May-2023'",
-    "valueType" : "\"DATE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 35,
-    "fragment" : "date'26-May-2023'"
-  } ]
-}
+$78.12
+
+
+-- !query
+SELECT to_varchar(111.11, '99.9')
+-- !query schema
+struct<to_char(111.11, 99.9):string>
+-- !query output
+##.#
+
+
+-- !query
+SELECT to_varchar(12454.8, '99,999.9S')
+-- !query schema
+struct<to_char(12454.8, 99,999.9S):string>
+-- !query output
+12,454.8+

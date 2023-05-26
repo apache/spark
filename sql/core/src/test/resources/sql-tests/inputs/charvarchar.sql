@@ -121,4 +121,6 @@ select chr(167), chr(247), chr(215);
 -- [SPARK-43815] Add to_varchar alias for to_char
 -- TO_VARCHAR()
 -- Alias of TO_CHAR()
-select to_varchar(date'26-May-2023', 'yyyy.mm.dd');
+SELECT to_varchar(78.12, '$99.99');
+SELECT to_varchar(111.11, '99.9');
+SELECT to_varchar(12454.8, '99,999.9S');
