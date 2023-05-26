@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLiteral
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -67,7 +67,7 @@ object TableOutputResolver {
       val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
       val queryOutputCols = if (fillDefaultValue) {
         query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLiteral(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf)
         }
       } else {
         query.output
@@ -185,7 +185,7 @@ object TableOutputResolver {
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
         val defaultExpr = if (fillDefaultValue) {
-          getDefaultValueExprOrNullLiteral(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf)
         } else {
           None
         }

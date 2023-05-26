@@ -850,6 +850,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       (1 to 10).map(i => Row(i, null))
     )
 
+    sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i, null))
+    )
+
     sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
     checkAnswer(
       sql("SELECT a, b FROM jsonTable"),
@@ -1190,6 +1196,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK- 38795 INSERT INTO with user specified columns and defaults: negative tests") {
+    val missingColError = "Cannot find data for output column "
     // The missing columns in these INSERT INTO commands do not have explicit default values.
     withTable("t") {
       sql("create table t(i boolean, s bigint, q int default 43) using parquet")
@@ -1206,37 +1213,37 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(i boolean, s bigint) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t (i) values (true)")
-        }.getMessage.contains("Cannot find data for output column 's'"))
+        }.getMessage.contains(missingColError + "'s'"))
       }
       withTable("t") {
         sql("create table t(i boolean default true, s bigint) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t (i) values (default)")
-        }.getMessage.contains("Cannot find data for output column 's'"))
+        }.getMessage.contains(missingColError + "'s'"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42) using parquet")
         assert(intercept[AnalysisException] {
           sql("insert into t (s) values (default)")
-        }.getMessage.contains("Cannot find data for output column 'i'"))
+        }.getMessage.contains(missingColError + "'i'"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
         assert(intercept[AnalysisException] {
           sql("insert into t partition(i='true') (s) values(5)")
-        }.getMessage.contains("Cannot find data for output column 'q'"))
+        }.getMessage.contains(missingColError + "'q'"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
         assert(intercept[AnalysisException] {
           sql("insert into t partition(i='false') (q) select 43")
-        }.getMessage.contains("Cannot find data for output column 's'"))
+        }.getMessage.contains(missingColError + "'s'"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
         assert(intercept[AnalysisException] {
           sql("insert into t partition(i='false') (q) select default")
-        }.getMessage.contains("Cannot find data for output column 's'"))
+        }.getMessage.contains(missingColError + "'s'"))
       }
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required

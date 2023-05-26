@@ -188,7 +188,7 @@ object ResolveDefaultColumns {
       case attr: AttributeReference =>
         value match {
           case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-            getDefaultValueExpr(attr).getOrElse(Literal(null, attr.dataType))
+            getDefaultValueExprOrNullLit(attr)
           case other if containsExplicitDefaultColumn(other) =>
             throw QueryCompilationErrors
               .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
@@ -198,11 +198,7 @@ object ResolveDefaultColumns {
     }
   }
 
-  /**
-   * Generates the expression of the default value for the given field. If there is no
-   * user-specified default value for this field, returns None.
-   */
-  def getDefaultValueExpr(field: StructField): Option[Expression] = {
+  private def getDefaultValueExprOpt(field: StructField): Option[Expression] = {
     if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
       Some(analyze(field, "INSERT"))
     } else {
@@ -211,32 +207,36 @@ object ResolveDefaultColumns {
   }
 
   /**
-   * Generates the expression of the default value for the given column. If there is no
-   * user-specified default value for this field, returns None.
+   * Generates the expression of the default value for the given field. If there is no
+   * user-specified default value for this field, returns null literal.
    */
-  def getDefaultValueExpr(attr: Attribute): Option[Expression] = {
-    if (attr.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-      val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
-      Some(analyze(field, "INSERT"))
-    } else {
-      None
-    }
+  def getDefaultValueExprOrNullLit(field: StructField): Expression = {
+    getDefaultValueExprOpt(field).getOrElse(Literal(null, field.dataType))
   }
 
   /**
    * Generates the expression of the default value for the given column. If there is no
-   * user-specified default value for this column, returns a null literal.
+   * user-specified default value for this field, returns null literal.
    */
-  def getDefaultValueExprOrNullLiteral(attr: Attribute, conf: SQLConf): Option[NamedExpression] = {
-    val defaultExprOpt = if (attr.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-      val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
-      Some(analyze(field, "INSERT"))
-    } else if (conf.useNullsForMissingDefaultColumnValues) {
-      Some(Literal(null, attr.dataType))
-    } else {
-      None
-    }
-    defaultExprOpt.map(expr => Alias(expr, attr.name)())
+  def getDefaultValueExprOrNullLit(attr: Attribute): Expression = {
+    val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+    getDefaultValueExprOrNullLit(field)
+  }
+
+  /**
+   * Generates the aliased expression of the default value for the given column. If there is no
+   * user-specified default value for this column, returns a null literal or None w.r.t. the config
+   * `USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES`.
+   */
+  def getDefaultValueExprOrNullLit(attr: Attribute, conf: SQLConf): Option[NamedExpression] = {
+    val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+    getDefaultValueExprOpt(field).orElse {
+      if (conf.useNullsForMissingDefaultColumnValues) {
+        Some(Literal(null, attr.dataType))
+      } else {
+        None
+      }
+    }.map(expr => Alias(expr, attr.name)())
   }
 
   /**

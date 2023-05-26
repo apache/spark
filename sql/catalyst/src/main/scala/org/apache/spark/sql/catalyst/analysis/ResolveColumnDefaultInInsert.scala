@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExpr, isExplicitDefaultColumn}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExprOrNullLit, isExplicitDefaultColumn}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructField
@@ -113,8 +113,7 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
           p.projectList.length <= expectedQuerySchema.length =>
         val newProjectList = p.projectList.zipWithIndex.map {
           case (u: UnresolvedAttribute, i) if isExplicitDefaultColumn(u) =>
-            val field = expectedQuerySchema(i)
-            Alias(getDefaultValueExpr(field).getOrElse(Literal(null, field.dataType)), u.name)()
+            Alias(getDefaultValueExprOrNullLit(expectedQuerySchema(i)), u.name)()
           case (other, _) if containsExplicitDefaultColumn(other) =>
             throw QueryCompilationErrors
               .defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
@@ -134,8 +133,7 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
         val newRows = inlineTable.rows.map { exprs =>
           exprs.zipWithIndex.map {
             case (u: UnresolvedAttribute, i) if isExplicitDefaultColumn(u) =>
-              val field = expectedQuerySchema(i)
-              getDefaultValueExpr(field).getOrElse(Literal(null, field.dataType))
+              getDefaultValueExprOrNullLit(expectedQuerySchema(i))
             case (other, _) if containsExplicitDefaultColumn(other) =>
               throw QueryCompilationErrors
                 .defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
