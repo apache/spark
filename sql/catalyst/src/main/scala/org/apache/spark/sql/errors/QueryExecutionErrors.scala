@@ -1418,7 +1418,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotParseJsonArraysAsStructsError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "PARSE_JSON_STRUCTS_FORBIDDEN",
+      errorClass = "INTERNAL_ERROR_PARSE_JSON_STRUCTS",
       messageParameters = Map.empty)
   }
 

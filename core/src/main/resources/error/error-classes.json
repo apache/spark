@@ -875,6 +875,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_PARSE_JSON_STRUCTS" : {
+    "message" : [
+      "Parsing JSON arrays as structs is not allowed."
+    ],
+    "sqlState": "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -1573,12 +1579,6 @@
       "Syntax error, unexpected empty statement."
     ],
     "sqlState" : "42617"
-  },
-  "PARSE_JSON_STRUCTS_FORBIDDEN" : {
-    "message" : [
-      "Parsing JSON arrays as structs is not allowed."
-    ],
-    "sqlState": "2203G"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
