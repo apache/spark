@@ -285,11 +285,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case c: Cast if !c.resolved =>
-            c.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2406",
-              messageParameters = Map(
-                "srcType" -> c.child.dataType.catalogString,
-                "targetType" -> c.dataType.catalogString))
+            throw SparkException.internalError(
+              msg = s"Found the unresolved Cast: ${c.simpleString(SQLConf.get.maxToStringFields)}",
+              context = c.origin.getQueryContext,
+              summary = c.origin.context.summary)
           case e: RuntimeReplaceable if !e.replacement.resolved =>
             throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
               "\nReplacement is unresolved: " + e.replacement)
@@ -297,28 +296,29 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case g: Grouping =>
             g.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_2445", messageParameters = Map.empty)
           case g: GroupingID =>
-            g.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_2407", messageParameters = Map.empty)
+            g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
               !e.isInstanceOf[WindowExpression] && e.resolved =>
             val w = e.children.find(_.isInstanceOf[WindowFunction]).get
             e.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2408",
-              messageParameters = Map("w" -> w.toString))
+              errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+              messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             w.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2409",
-              messageParameters = Map("w" -> w.toString))
+              errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+              messageParameters = Map("windowExpr" -> toSQLExpr(w)))
 
           case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
              if order.isEmpty || !frame.isOffset =>
             w.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2410",
+              errorClass = "WINDOW_FUNCTION_AND_FRAME_MISMATCH",
               messageParameters = Map(
-                "wf" -> wf.prettyName,
-                "w" -> w.toString))
+                "funcName" -> toSQLExpr(wf),
+                "windowExpr" -> toSQLExpr(w)))
 
           case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
