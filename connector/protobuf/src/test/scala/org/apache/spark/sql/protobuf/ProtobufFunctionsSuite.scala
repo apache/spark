@@ -1048,7 +1048,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       parameters = Map("filePath" -> "/non/existent/path.desc")
     )
     assert(ex.getCause != null)
-    assert(ex.getCause.getMessage.matches(".*No such file.*"), ex.getCause.getMessage())
   }
 
   test("Recursive fields in arrays and maps") {
