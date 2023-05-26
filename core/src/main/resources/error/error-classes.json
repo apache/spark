@@ -1491,6 +1491,29 @@
       }
     }
   },
+  "NOT_A_CONSTANT_STRING" : {
+    "message" : [
+      "The expression <expr> used for the routine or clause <name> must be a constant STRING which is NOT NULL."
+    ],
+    "subClass" : {
+      "NOT_CONSTANT" : {
+        "message" : [
+          "To be considered constant the expression must not depend on any columns, contain a subquery, or invoke a non deterministic function such as rand()."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "The expression evaluates to NULL."
+        ]
+      },
+      "WRONG_TYPE" : {
+        "message" : [
+          "The data type of the expression is <dataType>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
