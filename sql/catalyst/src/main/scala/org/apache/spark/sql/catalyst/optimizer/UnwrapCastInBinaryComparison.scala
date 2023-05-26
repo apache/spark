@@ -334,7 +334,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
-  // cast(dt as date) op date -> dt op cast(date as dt)
+  /**
+   * Move the cast to the literal side, for exmaple CAST(dt AS DATE) > DATE '2023-01-01' where
+   * dt is an expression of StringType.
+   */
   private def unwrapDateToString(
                                      exp: BinaryComparison,
                                      fromExp: Expression,
