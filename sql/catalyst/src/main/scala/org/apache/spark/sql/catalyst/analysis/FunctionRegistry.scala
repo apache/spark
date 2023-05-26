@@ -531,7 +531,7 @@ object FunctionRegistry {
     expression[ToNumber]("to_number"),
     expression[TryToNumber]("try_to_number"),
     expression[ToCharacter]("to_char"),
-    expression[ToCharacter]("to_varchar", setAlias = true, Some("3.4.0")),
+    expression[ToCharacter]("to_varchar", setAlias = true, Some("3.5.0")),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),

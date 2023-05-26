@@ -884,7 +884,7 @@ SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999'), val 
 -- SELECT '' AS to_char_35, to_char('100'::numeric, 'f"ool\"999');
 -- SELECT '' AS to_char_36, to_char('100'::numeric, 'f"ool\\"999');
 
--- [SPARK-43815] Add support for additional SQL functions
+-- [SPARK-43815] Add to_varchar alias for to_char
 -- TO_VARCHAR()
 -- Alias of TO_CHAR()
 SELECT '' AS to_varchar_3, to_varchar(val, '9999999999999999.999999999999999PR'), val
