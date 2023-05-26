@@ -4508,15 +4508,6 @@ Project [ AS to_char_10#x, to_char(val#x, S0999999999999999.999999999999999) AS 
 
 
 -- !query
-SELECT '' AS to_varchar_3, to_varchar(val, '9999999999999999.999999999999999PR'), val
-FROM num_data
--- !query analysis
-Project [ AS to_varchar_3#x, to_char(val#x, 9999999999999999.999999999999999PR) AS to_char(val, 9999999999999999.999999999999999PR)#x, val#x]
-+- SubqueryAlias spark_catalog.default.num_data
-   +- Relation spark_catalog.default.num_data[id#x,val#x] parquet
-
-
--- !query
 SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999')
 -- !query analysis
 Project [ AS to_number_1#x, to_number(-34,338,492, 99G999G999) AS to_number(-34,338,492, 99G999G999)#x]

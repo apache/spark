@@ -1,0 +1,257 @@
+diff --git a/sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4 b/sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4
+index eb592486e123bd..a9315c92be29ab 100644
+--- a/sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4
++++ b/sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4
+@@ -1236,7 +1236,7 @@ primaryExpression
+     | qualifiedName DOT ASTERISK                                                               #star
+     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
+     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
+-    | functionName LEFT_PAREN (setQuantifier? argument+=expression (COMMA argument+=expression)*)? RIGHT_PAREN
++    | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument (COMMA argument+=functionArgument)*)? RIGHT_PAREN
+        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
+        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
+     | LEFT_BRACE FN functionName LEFT_PAREN (argument+=expression (COMMA argument+=expression)*)? RIGHT_PAREN RIGHT_BRACE      #odbcFunctionCall
+diff --git a/sql/catalyst/src/main/scala/com/databricks/sql/catalyst/plans/logical/NamedArgumentFunction.scala b/sql/catalyst/src/main/scala/com/databricks/sql/catalyst/plans/logical/NamedArgumentFunction.scala
+index b9a157e882e00b..be716e04f747af 100644
+--- a/sql/catalyst/src/main/scala/com/databricks/sql/catalyst/plans/logical/NamedArgumentFunction.scala
++++ b/sql/catalyst/src/main/scala/com/databricks/sql/catalyst/plans/logical/NamedArgumentFunction.scala
+@@ -22,13 +22,96 @@ package com.databricks.sql.catalyst.plans.logical
+ import java.util.Locale
+ 
+ import scala.collection.mutable
++import scala.reflect.ClassTag
++import scala.reflect.runtime.universe._
+ 
+ import com.databricks.sql.catalyst.expressions.NamedArgumentExpression
+ 
++import org.apache.spark.sql.AnalysisException
++import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistryBase}
+ import org.apache.spark.sql.catalyst.expressions.Expression
+ import org.apache.spark.sql.errors.QueryCompilationErrors.{duplicateRoutineParameterAssignment, unexpectedPositionalArgument}
+ import org.apache.spark.sql.types._
+ 
++case class Parameter(
++    name: String,
++//    dataType: AbstractDataType,
++    required: Boolean = true,
++    default: Option[Expression] = None
++)
++
++
++abstract class ExpressionBuilderWithNamedParameters[T <: Expression : ClassTag : TypeTag]
++    extends ExpressionBuilder {
++  // TODO: this assumes there is only one constructor for each expression?
++
++  // TODO: how to handle those with var args?
++  // def printAll(prefix: String, args: String*): Unit = {
++  //  args.foreach(arg => println(prefix + arg))
++  // }
++  //
++  // printAll(prefix = "Prefix: ", args = Seq("a", "b"): _*)
++
++
++  // Note: T must have a constructor that accepts full list of parameters
++  def parameters: Seq[Parameter]
++
++  def validateParameters: Unit = {
++    assert(
++      scala.reflect.classTag[T].runtimeClass.getConstructors
++        .map(_.getParameterCount)
++        .contains(parameters.size),
++      s"Class ${typeOf[T].typeSymbol.name.toString} doesn't have a constructor that can take the " +
++        s"full list of parameters $parameters"
++    )
++  }
++
++  validateParameters
++
++  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
++    val rearrangedArgs = ExpressionBuilderWithNamedParameters.rearrangeArguments(
++      parameters, expressions)
++    val (_, builder) = FunctionRegistryBase.build[T](funcName, None)
++    builder(rearrangedArgs)
++  }
++}
++
++object ExpressionBuilderWithNamedParameters {
++  def rearrangeArguments(parameters: Seq[Parameter], args: Seq[Expression]): Seq[Expression] = {
++    // TODO: it should also handle the case when there is only one args of type Seq[Expression]
++    if (!args.exists(_.isInstanceOf[NamedArgumentExpression])) {
++      args
++      // TODO: check?
++    } else {
++      // Right now we assume all the parameters are required
++      val firstNamedArgIdx = args.indexWhere(_.isInstanceOf[NamedArgumentExpression])
++      val (positionalArgs, namedArgs) = args.splitAt(firstNamedArgIdx)
++      val namedArgMap = namedArgs.map {
++        case na: NamedArgumentExpression =>
++          na.key -> na.value
++        case _ =>
++          throw new AnalysisException(
++            "Have an unnamed argument after the first occurrence of a named argument")
++      }.toMap
++      val namedParameters = parameters.drop(positionalArgs.size)
++      val rearrangedNamedArgs = namedParameters.map { param =>
++        namedArgMap.getOrElse(
++          param.name,
++          if (param.required) {
++            throw new AnalysisException(s"Missing a required parameter ${param.name}")
++          } else if (param.default.isEmpty) {
++            throw new AnalysisException(
++              s"Parameter ${param.name} does not have a specified value or a default value")
++          } else {
++            param.default.get
++          }
++        )
++      }
++      positionalArgs ++ rearrangedNamedArgs
++    }
++  }
++}
++
+ /**
+  * A trait to define a named argument function:
+  * Usage: _FUNC_(arg0, arg1, arg2, arg5 => value5, arg8 => value8)
+diff --git a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/FunctionRegistry.scala b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/FunctionRegistry.scala
+index 90de87ae4d9a6f..c077b656e64b79 100644
+--- a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/FunctionRegistry.scala
++++ b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/FunctionRegistry.scala
+@@ -443,7 +443,7 @@ object FunctionRegistry {
+   // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
+   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
+     // misc non-aggregate functions
+-    expression[Abs]("abs"),
++    expressionBuilder("abs", AbsExpressionBuilderWithNamedArgument),
+     expression[Coalesce]("coalesce"),
+     expression[Explode]("explode"),
+     expressionGeneratorOuter[Explode]("explode_outer"),
+@@ -619,7 +619,8 @@ object FunctionRegistry {
+     expression[StringDecode]("stringdecode", true),
+     // END-EDGE
+     expression[Elt]("elt"),
+-    expression[Encode]("encode"),
++    expressionBuilder("encode", EncodeExpressionBuilderWithNamedParameters),
++//    expression[Encode]("encode"),
+     expression[FindInSet]("find_in_set"),
+     expression[FormatNumber]("format_number"),
+     expression[FormatString]("format_string"),
+diff --git a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala
+index 66f7e06ae48f93..1a556d676ba5c0 100644
+--- a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala
++++ b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala
+@@ -22,10 +22,11 @@ import scala.math.{max, min}
+ import com.databricks.spark.util.{AnsiBehaviorChangeLogging, BehaviorChangeLogging}
+ import com.databricks.spark.util.AnsiBehaviorChangeErrorCondition.DIVIDE_BY_ZERO
+ import com.databricks.sql.BehaviorChangeConf.{SC102721_ANSI_CHANGE_LOGGING, SC79064_ABS_OUTSIDE_RANGE_ENABLED}
++import com.databricks.sql.catalyst.plans.logical.{ExpressionBuilderWithNamedParameters, Parameter}
+ import com.databricks.sql.expressions.{KnownNotZero, NumericLiteral}
+ 
+ import org.apache.spark.sql.catalyst.InternalRow
+-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
++import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, FunctionRegistryBase, TypeCheckResult, TypeCoercion}
+ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
+ import org.apache.spark.sql.catalyst.expressions.codegen._
+@@ -266,6 +267,21 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
+   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
+ }
+ 
++@ExpressionDescription(
++  usage = "_FUNC_(expr) - Returns the absolute value of the numeric or interval value.",
++  examples = """
++    Examples:
++      > SELECT _FUNC_(-1);
++       1
++      > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
++       1-1
++  """,
++  since = "1.2.0",
++  group = "math_funcs")
++object AbsExpressionBuilderWithNamedArgument extends ExpressionBuilderWithNamedParameters[Abs] {
++  override def parameters: Seq[Parameter] = Seq(Parameter("param"))
++}
++
+ abstract class BinaryArithmetic extends BinaryOperator
+   with NullIntolerant with SupportQueryContext {
+ 
+diff --git a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/stringExpressions.scala b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/stringExpressions.scala
+index 728ff511b2ba24..c184cd5715abbc 100755
+--- a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/stringExpressions.scala
++++ b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/stringExpressions.scala
+@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
+ import com.databricks.spark.util.AnsiBehaviorChangeErrorCondition.INVALID_ARRAY_INDEX
+ import com.databricks.spark.util.AnsiBehaviorChangeLogging
+ import com.databricks.sql.BehaviorChangeConf.SC102721_ANSI_CHANGE_LOGGING
++import com.databricks.sql.catalyst.plans.logical.{ExpressionBuilderWithNamedParameters, Parameter}
+ 
+ import org.apache.spark.sql.catalyst.InternalRow
+ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
+@@ -2619,6 +2620,11 @@ case class Encode(value: Expression, charset: Expression)
+     newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
+ }
+ 
++object EncodeExpressionBuilderWithNamedParameters
++    extends ExpressionBuilderWithNamedParameters[Encode] {
++  override def parameters: Seq[Parameter] = Seq(Parameter("value"), Parameter("charset"))
++}
++
+ /**
+  * Converts the input expression to a binary value based on the supplied format.
+  */
+diff --git a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/AstBuilder.scala b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/AstBuilder.scala
+index 5c47e8f35a3060..656c8f8502c439 100644
+--- a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/AstBuilder.scala
++++ b/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/AstBuilder.scala
+@@ -2437,7 +2437,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
+     val name = ctx.functionName.getText
+     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
+     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
+-    val arguments = ctx.argument.asScala.map(expression).toSeq match {
++    val arguments = ctx.argument.asScala.map { arg =>
++      if (arg.namedArgumentExpression != null) {
++        // TODO: not only could be a strictIdentifier, but also a strictNonReserved
++        // TODO: handle any quotes / backtick?
++        NamedArgumentExpression(
++          arg.namedArgumentExpression.key.strictIdentifier.getText,
++          expression(arg.namedArgumentExpression.value))
++      } else {
++        expression(arg.expression)
++      }
++    }.toSeq match {
+       case Seq(UnresolvedStar(None))
+         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
+         // Transform COUNT(*) into COUNT(1).
+diff --git a/sql/core/src/test/scala/org/apache/spark/sql/SQLQuerySuite.scala b/sql/core/src/test/scala/org/apache/spark/sql/SQLQuerySuite.scala
+index 720f837b948e1c..ad11e4d28b76b7 100644
+--- a/sql/core/src/test/scala/org/apache/spark/sql/SQLQuerySuite.scala
++++ b/sql/core/src/test/scala/org/apache/spark/sql/SQLQuerySuite.scala
+@@ -70,7 +70,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
+     {
+   import testImplicits._
+ 
+-  setupTestData()
++//  setupTestData()
+ 
+   test("SC-109332: Return null on Decimal overflow") {
+     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+@@ -5655,6 +5655,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
+         |SELECT * FROM z
+         |""".stripMargin).collect()
+   }
++
++  test("temp for built in functions") {
++    sql("select abs(-1)").collect()
++    sql("select abs(param => -1)").collect()
++
++    val encodeQuery1 = "select encode('abc', 'utf-8')"
++    val encodeQuery2 = "select encode(value => 'abc', charset => 'utf-8')"
++    val encodeQuery3 = "select encode(charset => 'utf-8', value => 'abc')"
++    val encodeQuery4 = "select encode('abc', charset => 'utf-8')"
++
++    sql(encodeQuery1).collect.sameElements(sql(encodeQuery2).collect())
++    sql(encodeQuery1).collect.sameElements(sql(encodeQuery3).collect())
++    sql(encodeQuery1).collect.sameElements(sql(encodeQuery4).collect())
++  }
+ }
+ 
+ case class Foo(bar: Option[String])

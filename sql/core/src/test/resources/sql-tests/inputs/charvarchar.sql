@@ -117,3 +117,26 @@ drop table char_tbl4;
 -- ascii value for Latin-1 Supplement characters
 select ascii('§'), ascii('÷'), ascii('×10');
 select chr(167), chr(247), chr(215);
+
+-- [SPARK-43815] Add to_varchar alias for to_char
+-- TO_VARCHAR()
+-- Alias of TO_CHAR()
+create table num_data (id int, val decimal(38,10)) using parquet;
+
+insert into num_data values (0, 0);
+insert into num_data values (1, 0);
+insert into num_data values (2, -34338492.215397047);
+insert into num_data values (3, 4.31);
+insert into num_data values (4, 7799461.4119);
+insert into num_data values (5, 16397.038491);
+insert into num_data values (6, 93901.57763026);
+insert into num_data values (7, -83028485);
+insert into num_data values (8, 74881);
+insert into num_data values (9, -24926804.045047420);
+
+select * from num_data;
+
+select '' as to_varchar_3, to_varchar(val, '9999999999999999.999999999999999PR'), val
+from num_data;
+
+drop table num_data;
