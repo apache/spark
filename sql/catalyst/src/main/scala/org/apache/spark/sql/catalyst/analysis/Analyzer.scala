@@ -1115,6 +1115,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case _ => write
         }
 
+      case PlanWithUnresolvedIdentifier(expr, builder) if expr.resolved =>
+         builder(IdentifierClauseUtil.evalIdentifierClause(expr))
+
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews).getOrElse(u)
 
@@ -2067,7 +2070,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES,
+        UNRESOLVED_IDENTIFIER_CLAUSE), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
@@ -2128,9 +2132,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case q: LogicalPlan =>
         q.transformExpressionsWithPruning(
-          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
+          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_IDENTIFIER_CLAUSE),
+          ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
-              if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
+            if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
@@ -2145,6 +2150,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 u.origin)
             }
           }
+
+          // Resolve IDENTIFIER clause.
+          case u@UnresolvedAttributeIdentifierClause(expr) if expr.resolved =>
+            UnresolvedAttribute(IdentifierClauseUtil.evalIdentifierClause(expr))
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
@@ -2167,6 +2176,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 resolveV2Function(catalog.asFunctionCatalog, ident, arguments, u)
               }
             }
+          }
+          case u@UnresolvedFunctionIdentifierClause(identExpr, arguments, isDistinct,
+          filter, ignoreNulls)  if identExpr.resolved => withPosition(u) {
+            val nameParts = IdentifierClauseUtil.evalIdentifierClause(identExpr)
+            UnresolvedFunction(nameParts, arguments, isDistinct, filter, ignoreNulls)
           }
         }
     }

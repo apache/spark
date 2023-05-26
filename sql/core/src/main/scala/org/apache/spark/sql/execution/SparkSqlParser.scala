@@ -253,8 +253,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetNamespaceCommand]] logical command.
    */
   override def visitUseNamespace(ctx: UseNamespaceContext): LogicalPlan = withOrigin(ctx) {
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    SetNamespaceCommand(nameParts)
+    withIdentClause(ctx.identifierReference, SetNamespaceCommand(_))
   }
 
   /**
@@ -306,7 +305,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * it is deprecated.
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
-    val (ident, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    val (identCtx, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
 
     if (!temp || ctx.query != null) {
       super.visitCreateTable(ctx)
@@ -328,22 +327,24 @@ class SparkSqlAstBuilder extends AstBuilder {
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
 
-      val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-      val optionsList: Map[String, String] =
-        options.map { case (key, value) =>
-          val newValue: String =
-            if (value == null) {
-              null
-            } else value match {
-              case Literal(_, _: StringType) => value.toString
-              case _ => throw QueryCompilationErrors.optionMustBeLiteralString(key)
-            }
-          (key, newValue)
-        }
-      val optionsWithLocation =
-        location.map(l => optionsList + ("path" -> l)).getOrElse(optionsList)
-      CreateTempViewUsing(table, schema, replace = false, global = false, provider,
-        optionsWithLocation)
+      withIdentClause(identCtx, ident => {
+        val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
+        val optionsList: Map[String, String] =
+          options.map { case (key, value) =>
+            val newValue: String =
+              if (value == null) {
+                null
+              } else value match {
+                case Literal(_, _: StringType) => value.toString
+                case _ => throw QueryCompilationErrors.optionMustBeLiteralString(key)
+              }
+            (key, newValue)
+          }
+        val optionsWithLocation =
+          location.map(l => optionsList + ("path" -> l)).getOrElse(optionsList)
+        CreateTempViewUsing(table, schema, replace = false, global = false, provider,
+          optionsWithLocation)
+      })
     }
   }
 
@@ -502,7 +503,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       assert(Option(originalText).isDefined,
         "'originalText' must be provided to create permanent view")
       CreateView(
-        UnresolvedIdentifier(visitMultipartIdentifier(ctx.multipartIdentifier)),
+        withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
         userSpecifiedColumns,
         visitCommentSpecList(ctx.commentSpec()),
         properties,
@@ -517,23 +518,25 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      val tableIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier).asTableIdentifier
-      if (tableIdentifier.database.isDefined) {
-        // Temporary view names should NOT contain database prefix like "database.table"
-        throw QueryParsingErrors
-          .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
-      }
+      withIdentClause(ctx.identifierReference(), ident => {
+        val tableIdentifier = ident.asTableIdentifier
+        if (tableIdentifier.database.isDefined) {
+          // Temporary view names should NOT contain database prefix like "database.table"
+          throw QueryParsingErrors
+            .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
+        }
 
-      CreateViewCommand(
-        tableIdentifier,
-        userSpecifiedColumns,
-        visitCommentSpecList(ctx.commentSpec()),
-        properties,
-        Option(source(ctx.query)),
-        plan(ctx.query),
-        ctx.EXISTS != null,
-        ctx.REPLACE != null,
-        viewType = viewType)
+        CreateViewCommand(
+          tableIdentifier,
+          userSpecifiedColumns,
+          visitCommentSpecList(ctx.commentSpec()),
+          properties,
+          Option(source(ctx.query)),
+          plan(ctx.query),
+          ctx.EXISTS != null,
+          ctx.REPLACE != null,
+          viewType = viewType)
+      })
     }
   }
 
@@ -562,34 +565,35 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
     }
 
-    val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    if (ctx.TEMPORARY == null) {
-      CreateFunction(
-        UnresolvedIdentifier(functionIdentifier),
-        string(visitStringLit(ctx.className)),
-        resources.toSeq,
-        ctx.EXISTS != null,
-        ctx.REPLACE != null)
-    } else {
-      // Disallow to define a temporary function with `IF NOT EXISTS`
-      if (ctx.EXISTS != null) {
-        throw QueryParsingErrors.defineTempFuncWithIfNotExistsError(ctx)
-      }
+    withIdentClause(ctx.identifierReference(), functionIdentifier => {
+      if (ctx.TEMPORARY == null) {
+        CreateFunction(
+          UnresolvedIdentifier(functionIdentifier),
+          string(visitStringLit(ctx.className)),
+          resources.toSeq,
+          ctx.EXISTS != null,
+          ctx.REPLACE != null)
+      } else {
+        // Disallow to define a temporary function with `IF NOT EXISTS`
+        if (ctx.EXISTS != null) {
+          throw QueryParsingErrors.defineTempFuncWithIfNotExistsError(ctx)
+        }
 
-      if (functionIdentifier.length > 2) {
-        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
-      } else if (functionIdentifier.length == 2) {
-        // Temporary function names should not contain database prefix like "database.function"
-        throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
+        if (functionIdentifier.length > 2) {
+          throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
+        } else if (functionIdentifier.length == 2) {
+          // Temporary function names should not contain database prefix like "database.function"
+          throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
+        }
+        CreateFunctionCommand(
+          FunctionIdentifier(functionIdentifier.last),
+          string(visitStringLit(ctx.className)),
+          resources.toSeq,
+          true,
+          ctx.EXISTS != null,
+          ctx.REPLACE != null)
       }
-      CreateFunctionCommand(
-        FunctionIdentifier(functionIdentifier.last),
-        string(visitStringLit(ctx.className)),
-        resources.toSeq,
-        true,
-        ctx.EXISTS != null,
-        ctx.REPLACE != null)
-    }
+    })
   }
 
   /**
@@ -601,26 +605,27 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val isTemp = ctx.TEMPORARY != null
-    if (isTemp) {
-      if (functionName.length > 1) {
-        throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
+    withIdentClause(ctx.identifierReference(), functionName => {
+      val isTemp = ctx.TEMPORARY != null
+      if (isTemp) {
+        if (functionName.length > 1) {
+          throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
+        }
+        DropFunctionCommand(
+          identifier = FunctionIdentifier(functionName.head),
+          ifExists = ctx.EXISTS != null,
+          isTemp = true)
+      } else {
+        val hintStr = "Please use fully qualified identifier to drop the persistent function."
+        DropFunction(
+          UnresolvedFunctionName(
+            functionName,
+            "DROP FUNCTION",
+            requirePersistent = true,
+            funcTypeMismatchHint = Some(hintStr)),
+          ctx.EXISTS != null)
       }
-      DropFunctionCommand(
-        identifier = FunctionIdentifier(functionName.head),
-        ifExists = ctx.EXISTS != null,
-        isTemp = true)
-    } else {
-      val hintStr = "Please use fully qualified identifier to drop the persistent function."
-      DropFunction(
-        UnresolvedFunctionName(
-          functionName,
-          "DROP FUNCTION",
-          requirePersistent = true,
-          funcTypeMismatchHint = Some(hintStr)),
-        ctx.EXISTS != null)
-    }
+    })
   }
 
   private def toStorageFormat(
