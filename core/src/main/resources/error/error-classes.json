@@ -1326,6 +1326,28 @@
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ]
   },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
+    "message" : [
+      "The time travel timestamp expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "INPUT" : {
+        "message" : [
+          "Cannot be casted to the \"TIMESTAMP\" type."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Must be deterministic."
+        ]
+      },
+      "UNEVALUABLE" : {
+        "message" : [
+          "Must be evaluable."
+        ]
+      }
+    }
+  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
