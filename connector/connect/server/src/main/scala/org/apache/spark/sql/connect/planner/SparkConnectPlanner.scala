@@ -51,6 +51,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connect.SparkConnectChecker
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -87,6 +88,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
+    SparkConnectChecker.checkRelation(rel)
     val plan = rel.getRelTypeCase match {
       // DataFrame API
       case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -1079,11 +1081,6 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         localMap.foreach { case (key, value) => reader.option(key, value) }
         if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
-          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
-            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
-            throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
-          }
-
           val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
           val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
           val options = new JDBCOptions(url, table, localMap)
@@ -1093,7 +1090,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           }
           val relation = JDBCRelation(parts, options)(session)
           LogicalRelation(relation)
-        } else if (rel.getDataSource.getPredicatesCount == 0) {
+        } else {
           if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
             reader.schema(parseSchema(rel.getDataSource.getSchema))
           }
@@ -1104,9 +1101,6 @@ class SparkConnectPlanner(val session: SparkSession) {
           } else {
             reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
           }
-        } else {
-          throw InvalidPlanInput(
-            s"Predicates are not supported for ${rel.getDataSource.getFormat} data sources.")
         }
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if rel.getIsStreaming =>
@@ -1119,16 +1113,13 @@ class SparkConnectPlanner(val session: SparkSession) {
         if (streamSource.getSchema.nonEmpty) {
           reader.schema(parseSchema(streamSource.getSchema))
         }
-        val streamDF = streamSource.getPathsCount match {
-          case 0 => reader.load()
-          case 1 => reader.load(streamSource.getPaths(0))
-          case _ =>
-            throw InvalidPlanInput(s"Multiple paths are not supported for streaming source")
+        val streamDF = if (streamSource.getPathsCount == 0) {
+          reader.load()
+        } else {
+          reader.load(streamSource.getPaths(0))
         }
 
         streamDF.queryExecution.analyzed
-
-      case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
     }
   }
 
