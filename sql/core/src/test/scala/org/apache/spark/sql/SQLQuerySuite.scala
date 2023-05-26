@@ -103,8 +103,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         "routineName" -> "`abcadf`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
+        fragment = "abcadf",
+        start = 18,
         stop = 23))
   }
 
