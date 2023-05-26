@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.resolveColumnDefaultInAssignmentValue
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A virtual rule to resolve [[UnresolvedAttribute]] in [[UpdateTable]]. It's only used by the real
@@ -47,7 +48,11 @@ case object ResolveReferencesInUpdate extends SQLConfHelper with ColumnResolutio
         case c if !c.resolved =>
           val resolved = resolveExprInAssignment(c, u)
           if (conf.enableDefaultColumns) {
-            resolveColumnDefaultInAssignmentValue(resolvedKey, resolved)
+            resolveColumnDefaultInAssignmentValue(
+              resolvedKey,
+              resolved,
+              QueryCompilationErrors
+                .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause())
           } else {
             resolved
           }

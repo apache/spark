@@ -1758,7 +1758,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
             val resolvedExpr = resolveExprInAssignment(c, resolvePlan)
             val withDefaultResolved = if (conf.enableDefaultColumns) {
-              resolveColumnDefaultInAssignmentValue(resolvedKey, resolvedExpr)
+              resolveColumnDefaultInAssignmentValue(
+                resolvedKey,
+                resolvedExpr,
+                QueryCompilationErrors
+                  .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates())
             } else {
               resolvedExpr
             }

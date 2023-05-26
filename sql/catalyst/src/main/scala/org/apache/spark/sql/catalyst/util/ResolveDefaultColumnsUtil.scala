@@ -183,15 +183,17 @@ object ResolveDefaultColumns {
    * The column "DEFAULT" will be resolved to the default value expression defined for the column of
    * the assignment key.
    */
-  def resolveColumnDefaultInAssignmentValue(key: Expression, value: Expression): Expression = {
+  def resolveColumnDefaultInAssignmentValue(
+      key: Expression,
+      value: Expression,
+      invalidColumnDefaultException: Throwable): Expression = {
     key match {
       case attr: AttributeReference =>
         value match {
           case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
             getDefaultValueExprOrNullLit(attr)
           case other if containsExplicitDefaultColumn(other) =>
-            throw QueryCompilationErrors
-              .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
+            throw invalidColumnDefaultException
           case other => other
         }
       case _ => value
