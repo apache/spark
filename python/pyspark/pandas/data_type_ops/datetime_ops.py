@@ -33,7 +33,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     NumericType,
 )
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import pyspark_column_op
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
@@ -110,52 +110,20 @@ class DatetimeOps(DataTypeOps):
             raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__lt__)(left, right)  # type: ignore[arg-type]
+        return pyspark_column_op("__lt__")(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__le__)(left, right)  # type: ignore[arg-type]
+        return pyspark_column_op("__le__")(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__ge__)(left, right)  # type: ignore[arg-type]
+        return pyspark_column_op("__ge__")(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__gt__)(left, right)  # type: ignore[arg-type]
+        return pyspark_column_op("__gt__")(left, right)
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
