@@ -1576,7 +1576,7 @@
   },
   "PARSE_JSON_STRUCTS_FORBIDDEN" : {
     "message" : [
-      "Parsing JSON arrays as structs is forbidden."
+      "Parsing JSON arrays as structs is not allowed."
     ],
     "sqlState": "2203G"
   },
