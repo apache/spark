@@ -209,6 +209,14 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  StreamingForeachWriter foreach_writer = 13;
+}
+
+message StreamingForeachWriter {
+  oneof writer {
+    PythonUDF python_writer = 1;
+  }
 }
 
 message WriteStreamOperationStartResult {
@@ -330,7 +338,7 @@ message StreamingQueryManagerCommand {
     // active() API, returns a list of active queries.
     bool active = 1;
     // get() API, returns the StreamingQuery identified by id.
-    string get = 2;
+    string get_query = 2;
     // awaitAnyTermination() API, wait until any query terminates or timeout.
     AwaitAnyTerminationCommand await_any_termination = 3;
     // resetTerminated() API.
@@ -360,7 +368,7 @@ message StreamingQueryManagerCommandResult {
     // (Required) The id and runId of this query.
     StreamingQueryInstanceId id = 1;
     // (Optional) The name of this query.
-    string name = 2;
+    optional string name = 2;
   }
 
   message AwaitAnyTerminationResult {

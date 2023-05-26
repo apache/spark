@@ -747,10 +747,8 @@ object RegExpReplace {
 
 object RegExpExtractBase {
   def checkGroupIndex(prettyName: String, groupCount: Int, groupIndex: Int): Unit = {
-    if (groupIndex < 0) {
-      throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
-    } else if (groupCount < groupIndex) {
-      throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
+    if (groupIndex < 0 || groupCount < groupIndex) {
+      throw QueryExecutionErrors.invalidRegexGroupIndexError(
         prettyName, groupCount, groupIndex)
     }
   }

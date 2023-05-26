@@ -407,13 +407,20 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type))
+        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
-        spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
+        spark_type = MapType(
+            from_arrow_type(at.key_type, prefer_timestamp_ntz),
+            from_arrow_type(at.item_type, prefer_timestamp_ntz),
+        )
     elif types.is_struct(at):
         return StructType(
             [
-                StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+                StructField(
+                    field.name,
+                    from_arrow_type(field.type, prefer_timestamp_ntz),
+                    nullable=field.nullable,
+                )
                 for field in at
             ]
         )
@@ -424,11 +431,15 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
+def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
-            StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+            StructField(
+                field.name,
+                from_arrow_type(field.type, prefer_timestamp_ntz),
+                nullable=field.nullable,
+            )
             for field in arrow_schema
         ]
     )

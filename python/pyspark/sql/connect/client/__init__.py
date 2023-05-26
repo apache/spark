@@ -14,24 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.pandas.tests.test_dataframe import DataFrameTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.sql.connect.utils import check_dependencies
 
+check_dependencies(__name__)
 
-class DataFrameParityTests(DataFrameTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    pass
-
-
-if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe import *  # noqa: F401
-
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+from pyspark.sql.connect.client.core import *  # noqa: F401,F403

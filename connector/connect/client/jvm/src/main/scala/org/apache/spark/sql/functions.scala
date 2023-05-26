@@ -106,6 +106,37 @@ object functions {
       case _ => createLiteral(toLiteralProtoBuilder(literal))
     }
   }
+
+  /**
+   * Creates a [[Column]] of literal value.
+   *
+   * An alias of `typedlit`, and it is encouraged to use `typedlit` directly.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def typedLit[T: TypeTag](literal: T): Column = typedlit(literal)
+
+  /**
+   * Creates a [[Column]] of literal value.
+   *
+   * The passed in object is returned directly if it is already a [[Column]]. If the object is a
+   * Scala Symbol, it is converted into a [[Column]] also. Otherwise, a new [[Column]] is created
+   * to represent the literal value. The difference between this function and [[lit]] is that this
+   * function can handle parameterized scala types e.g.: List, Seq and Map.
+   *
+   * @note
+   *   `typedlit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
+   *   Scala types are not used.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def typedlit[T: TypeTag](literal: T): Column = literal match {
+    case c: Column => c
+    case s: Symbol => new Column(s.name)
+    case _ => createLiteral(create(literal))
+  }
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Sort functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2864,6 +2895,17 @@ object functions {
    * @since 3.4.0
    */
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
+
+  /**
+   * Computes the Levenshtein distance of the two given string columns if it's less than or equal
+   * to a given threshold.
+   * @return
+   *   result distance, or -1
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def levenshtein(l: Column, r: Column, threshold: Int): Column =
+    Column.fn("levenshtein", l, r, lit(threshold))
 
   /**
    * Locate the position of the first occurrence of substr.

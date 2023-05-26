@@ -21,11 +21,13 @@ import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
 
@@ -37,6 +39,7 @@ case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
   extends QueryTest
+  with QueryErrorsBase
   with SharedSparkSession {
   import testImplicits._
 
@@ -411,8 +414,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`",
-        "proposal" ->
-          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`aa`"),
+        "proposal" -> "`aa`, `m`"),
       context = ExpectedContext(
         fragment = "a",
         start = 9,
@@ -427,8 +429,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`",
-        "proposal" ->
-          "`__auto_generated_subquery_name`.`m`, `__auto_generated_subquery_name`.`a.a`"),
+        "proposal" -> "`m`, `a.a`"),
       context = ExpectedContext(
         fragment = "a",
         start = 9,
@@ -491,6 +492,33 @@ class QueryCompilationErrorsSuite
           stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
+
+  test("AMBIGUOUS_ALIAS_IN_NESTED_CTE: Nested CTEs with same name and " +
+    "ctePrecedencePolicy = EXCEPTION") {
+    withTable("t") {
+      withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "EXCEPTION") {
+        val query =
+          """
+            |WITH
+            |    t AS (SELECT 1),
+            |    t2 AS (
+            |        WITH t AS (SELECT 2)
+            |        SELECT * FROM t)
+            |SELECT * FROM t2;
+            |""".stripMargin
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query)
+          },
+          errorClass = "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+          parameters = Map(
+            "name" -> "`t`",
+            "config" -> toSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key),
+            "docroot" -> SPARK_DOC_ROOT))
+      }
     }
   }
 
@@ -783,6 +811,78 @@ class QueryCompilationErrorsSuite
       errorClass = "INVALID_EXTRACT_FIELD_TYPE",
       sqlState = "42000",
       parameters = Map("extraction" -> "\"array(test)\""))
+  }
+
+  test("CREATE NAMESPACE with LOCATION for JDBC catalog should throw an error") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
+          },
+          errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
+          sqlState = "46110",
+          parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
+      }
+    }
+  }
+
+  test("ALTER NAMESPACE with property other than COMMENT " +
+    "for JDBC catalog should throw an exception") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+        val namespace = "h2.test_namespace"
+        withNamespace(namespace) {
+          sql(s"CREATE NAMESPACE $namespace")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
+            },
+            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            sqlState = "46110",
+            parameters = Map(
+              "cmd" -> toSQLStmt("SET NAMESPACE"),
+              "property" -> toSQLConf("location")))
+
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
+            },
+            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            sqlState = "46110",
+            parameters = Map(
+              "cmd" -> toSQLStmt("SET NAMESPACE"),
+              "property" -> toSQLConf("a")))
+        }
+      }
+    }
+  }
+
+  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
+    val tableName = "test_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
+        },
+        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
+        parameters = Map(
+          "properties" -> "`test_prop1`, `test_prop2`",
+          "table" -> "`spark_catalog`.`default`.`test_table`")
+      )
+    }
   }
 }
 

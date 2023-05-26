@@ -48,7 +48,8 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 object SparkConnectServerUtils {
 
   // Server port
-  private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  private[spark] val port: Int =
+    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
 
@@ -116,6 +117,10 @@ object SparkConnectServerUtils {
             "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
             "2. Test with sbt: run test with `-Phive` profile")
         // scalastyle:on println
+        // SPARK-43647: Proactively cleaning the `classes` and `test-classes` dir of hive
+        // module to avoid unexpected loading of `DataSourceRegister` in hive module during
+        // testing without `-Phive` profile.
+        IntegrationTestUtils.cleanUpHiveClassesDirIfNeeded()
         "in-memory"
       }
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
@@ -167,8 +172,10 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
-    spark =
-      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
+    spark = SparkSession
+      .builder()
+      .client(SparkConnectClient.builder().port(serverPort).build())
+      .create()
 
     // Retry and wait for the server to start
     val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min

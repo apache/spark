@@ -25,31 +25,31 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class NullOpsParityTests(
     NullOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43684): Fix NullOps.eq to work with Spark Connect Column.")
     def test_eq(self):
         super().test_eq()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43680): Fix NullOps.ge to work with Spark Connect Column.")
     def test_ge(self):
         super().test_ge()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43681): Fix NullOps.gt to work with Spark Connect Column.")
     def test_gt(self):
         super().test_gt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43682): Fix NullOps.le to work with Spark Connect Column.")
     def test_le(self):
         super().test_le()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43683): Fix NullOps.lt to work with Spark Connect Column.")
     def test_lt(self):
         super().test_lt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43685): Fix NullOps.ne to work with Spark Connect Column.")
     def test_ne(self):
         super().test_ne()
 

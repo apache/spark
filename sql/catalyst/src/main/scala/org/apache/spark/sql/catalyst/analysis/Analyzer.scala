@@ -322,6 +322,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
+      RewriteUpdateTable ::
       typeCoercionRules ++
       Seq(
         ResolveWithCTE,
@@ -1168,8 +1169,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
         }
         if (isTimeTravel) {
-          val target = if (tempViewPlan.isStreaming) "streams" else "views"
-          throw QueryCompilationErrors.timeTravelUnsupportedError(target)
+          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
         }
         tempViewPlan
       }
@@ -3365,7 +3365,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       i.userSpecifiedCols.map { col =>
         i.table.resolve(Seq(col), resolver).getOrElse {
           val candidates = i.table.output.map(_.qualifiedName)
-          val orderedCandidates = StringUtils.orderStringsBySimilarity(col, candidates)
+          val orderedCandidates = StringUtils.orderSuggestedIdentifiersBySimilarity(col, candidates)
           throw QueryCompilationErrors
             .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
         }
@@ -3432,18 +3432,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // the output list looks like: join keys, columns from left, columns from right
     val (projectList, hiddenList) = joinType match {
       case LeftOuter =>
-        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)), rightKeys)
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)),
+          rightKeys.map(_.withNullability(true)))
       case LeftExistence(_) =>
         (leftKeys ++ lUniqueOutput, Seq.empty)
       case RightOuter =>
-        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput, leftKeys)
+        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput,
+          leftKeys.map(_.withNullability(true)))
       case FullOuter =>
         // in full outer join, joinCols should be non-null if there is.
         val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
         (joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true)),
-          leftKeys ++ rightKeys)
+          leftKeys.map(_.withNullability(true)) ++
+          rightKeys.map(_.withNullability(true)))
       case _ : InnerLike =>
         (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
