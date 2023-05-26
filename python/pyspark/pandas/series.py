@@ -3605,7 +3605,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s3 = ps.Series([4, 5, 6], index=[3,4,5])
 
         >>> s1.append(s2)  # doctest: +SKIP
-        # TODO(SPARK-43465): Enable SeriesTests.test_append for pandas 2.0.0.
         0    1
         1    2
         2    3
@@ -3615,7 +3614,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
 
         >>> s1.append(s3)  # doctest: +SKIP
-        # TODO(SPARK-43465): Enable SeriesTests.test_append for pandas 2.0.0.
         0    1
         1    2
         2    3
@@ -3627,7 +3625,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         With ignore_index set to True:
 
         >>> s1.append(s2, ignore_index=True)  # doctest: +SKIP
-        # TODO(SPARK-43465): Enable SeriesTests.test_append for pandas 2.0.0.
         0    1
         1    2
         2    3
@@ -6880,7 +6877,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
 
         >>> psser.between_time('0:15', '0:45')  # doctest: +SKIP
-        # TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.
         2018-04-10 00:20:00    2
         2018-04-11 00:40:00    3
         dtype: int64
