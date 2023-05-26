@@ -958,7 +958,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 }
 
 class RocksDBStateStoreStreamingAggregationSuite
-  extends StreamingAggregationSuite with RocksDBStateStoreTest  {
+  extends StreamingAggregationSuite with RocksDBStateStoreTest {
   import testImplicits._
 
   def snapshotVersionsPresent(dir: File): Seq[Long] = {
@@ -979,7 +979,7 @@ class RocksDBStateStoreStreamingAggregationSuite
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     checkpointDir.delete()
 
-    val rocksDBStateDir = new File(checkpointDir.getAbsolutePath, "/state/0/0")
+    val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
     val inputData = MemoryStream[Int]
     val aggregated =
       inputData.toDF()
@@ -997,8 +997,8 @@ class RocksDBStateStoreStreamingAggregationSuite
       CheckLastBatch((3, 2), (2, 1)),
       StopStream
     )
-    assert(changelogVersionsPresent(rocksDBStateDir).isEmpty)
-    assert(snapshotVersionsPresent(rocksDBStateDir) == List(1L, 2L))
+    assert(changelogVersionsPresent(dirForPartition0).isEmpty)
+    assert(snapshotVersionsPresent(dirForPartition0) == List(1L, 2L))
 
     // Run the stream with changelog checkpointing enabled.
     testStream(aggregated, Update)(
@@ -1010,6 +1010,16 @@ class RocksDBStateStoreStreamingAggregationSuite
       AddData(inputData, 4, 4, 4, 4),
       CheckLastBatch((4, 4))
     )
-    assert(changelogVersionsPresent(rocksDBStateDir) == List(3L, 4L))
+    assert(changelogVersionsPresent(dirForPartition0) == List(3L, 4L))
+
+    // Run the stream with changelog checkpointing disabled.
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(rocksdbChangelogCheckpointingConfKey -> "false")),
+      AddData(inputData, 4),
+      CheckLastBatch((4, 5))
+    )
+    assert(changelogVersionsPresent(dirForPartition0) == List(3L, 4L))
+    assert(snapshotVersionsPresent(dirForPartition0).contains(5L))
   }
 }

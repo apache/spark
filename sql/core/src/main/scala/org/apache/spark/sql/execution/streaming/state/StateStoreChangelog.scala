@@ -130,9 +130,9 @@ class StateStoreChangelogReader(
   } catch {
     case f: FileNotFoundException =>
       throw new IllegalStateException(
-        s"Error reading streaming state file of $this: $fileToRead does not exist. " +
-          s"If the stream job is restarted with a new or updated state operation, please" +
-          s" create a new checkpoint location or clear the existing checkpoint location.", f)
+        s"Error reading streaming state file of $fileToRead does not exist. " +
+          "If the stream job is restarted with a new or updated state operation, please" +
+          " create a new checkpoint location or clear the existing checkpoint location.", f)
   }
   private val input: DataInputStream = decompressStream(sourceStream)
   // A buffer that hold the next record to return.
@@ -161,7 +161,7 @@ class StateStoreChangelogReader(
         eof = true
       } else if (keySize < 0) {
         throw new IOException(
-          s"Error reading streaming state file $fileToRead of $this: key size cannot be $keySize")
+          s"Error reading streaming state file $fileToRead: key size cannot be $keySize")
       } else {
         // TODO: reuse the key buffer and value buffer across records.
         val keyBuffer = new Array[Byte](keySize)

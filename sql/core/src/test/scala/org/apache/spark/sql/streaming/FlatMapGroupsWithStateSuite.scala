@@ -1103,4 +1103,4 @@ object FlatMapGroupsWithStateSuite {
 }
 
 class RocksDBStateStoreFlatMapGroupsWithStateSuite
-  extends FlatMapGroupsWithStateSuite with RocksDBStateStoreTest {}
+  extends FlatMapGroupsWithStateSuite with RocksDBStateStoreTest

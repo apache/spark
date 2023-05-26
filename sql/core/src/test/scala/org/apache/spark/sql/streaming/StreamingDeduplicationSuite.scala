@@ -485,4 +485,4 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 }
 
 class RocksDBStateStoreStreamingDeduplicationSuite
-  extends StreamingDeduplicationSuite with RocksDBStateStoreTest  {}
+  extends StreamingDeduplicationSuite with RocksDBStateStoreTest
