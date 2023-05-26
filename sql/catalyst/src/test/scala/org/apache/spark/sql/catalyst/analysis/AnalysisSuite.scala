@@ -1012,14 +1012,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
-    assertAnalysisError(testRelation2.select(RowNumber()),
-      Seq("Window function row_number() requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(RowNumber()),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
+    )
 
-    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
-      Seq("Window function row_number() requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(Sum(RowNumber())),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
+    )
 
-    assertAnalysisError(testRelation2.select(RowNumber() + 1),
-      Seq("Window function row_number() requires an OVER clause."))
+    assertAnalysisErrorClass(
+      inputPlan = testRelation2.select(RowNumber() + 1),
+      expectedErrorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      expectedMessageParameters = Map("funcName" -> "\"row_number()\"")
+    )
   }
 
   test("SPARK-32237: Hint in CTE") {
@@ -1176,15 +1185,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |    ORDER BY grouping__id > 0
       """.stripMargin), false)
 
-    assertAnalysisError(parsePlan(
-      """
-        |SELECT grouping__id FROM (
-        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
-        |    GROUP BY a, b
-        |)
-      """.stripMargin),
-      Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
-      false)
+    assertAnalysisErrorClass(
+      parsePlan(
+        """
+          |SELECT grouping__id FROM (
+          |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+          |    GROUP BY a, b
+          |)
+        """.stripMargin),
+      "UNSUPPORTED_GROUPING_EXPRESSION",
+      Map.empty,
+      Array(ExpectedContext("grouping__id", 53, 64))
+    )
   }
 
   test("SPARK-36275: Resolve aggregate functions should work with nested fields") {

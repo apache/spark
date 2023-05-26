@@ -184,7 +184,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
     messageParameters = Map("sqlExpr" -> "\"0\""))
 
-  errorTest(
+  errorClassTest(
     "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
@@ -193,7 +193,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    "Distinct window functions are not supported" :: Nil)
+    errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+    messageParameters = Map("windowExpr" ->
+      s"""
+         |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
+         | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+         |""".stripMargin.replaceAll("\n", "")))
 
   errorTest(
     "window aggregate function with filter predicate",

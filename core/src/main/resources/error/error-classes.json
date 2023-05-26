@@ -573,6 +573,11 @@
     ],
     "sqlState" : "42704"
   },
+  "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
+    "message" : [
+      "Distinct window functions are not supported: <windowExpr>."
+    ]
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
@@ -2330,6 +2335,16 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
+    "message" : [
+      "<funcName> function can only be evaluated in an ordered row-based window frame with a single offset: <windowExpr>."
+    ]
+  },
+  "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
+    "message" : [
+      "Window function <funcName> requires an OVER clause."
+    ]
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
@@ -5406,31 +5421,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2406" : {
-    "message" : [
-      "invalid cast from <srcType> to <targetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2407" : {
-    "message" : [
-      "grouping_id() can only be used with GroupingSets/Cube/Rollup."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2408" : {
-    "message" : [
-      "Window function <w> requires an OVER clause."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2409" : {
-    "message" : [
-      "Distinct window functions are not supported: <w>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2410" : {
-    "message" : [
-      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2411" : {
