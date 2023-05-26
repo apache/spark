@@ -2049,7 +2049,8 @@ case class ParseToDate(
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
-    Cast(GetTimestamp(left, f, TimestampType, timeZoneId, ansiEnabled), DateType, timeZoneId)
+    Cast(GetTimestamp(left, f, TimestampType, timeZoneId, ansiEnabled), DateType, timeZoneId,
+      EvalMode.fromBoolean(ansiEnabled))
   }.getOrElse(Cast(left, DateType, timeZoneId,
     EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
 
