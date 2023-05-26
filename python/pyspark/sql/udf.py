@@ -175,11 +175,6 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
     def vectorized_udf(*args: pd.Series) -> pd.Series:
-        if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
-            raise PySparkNotImplementedError(
-                error_class="UNSUPPORTED_WITH_ARROW_OPTIMIZATION",
-                message_parameters={"feature": "Struct input type"},
-            )
         return pd.Series(result_func(f(*a)) for a in zip(*args))
 
     # Regular UDFs can take callable instances too.
