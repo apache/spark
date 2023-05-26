@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArr
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -121,20 +122,6 @@ private[sql] class AvroDeserializer(
     val realDataType = SchemaConverters.toSqlType(avroType).dataType
     val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA
     val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
-    def incorrectTypeException(provided: DataType): IncompatibleSchemaException = {
-      new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
-        s"${realDataType.catalogString}, however you're trying to read the field as " +
-        s"${provided.catalogString}, which would lead to an incorrect answer. To allow reading " +
-        s"this field, enable the SQL configuration: `${confKey.key}`.")
-    }
-
-    def lowerPrecisionException(provided: DataType): IncompatibleSchemaException = {
-      new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
-        s"${realDataType.catalogString}, however you're trying to read the field as " +
-        s"${provided.catalogString}, which leads to data being read as null. Please provide" +
-        s" a wider decimal type to get the correct result. To allow reading null to " +
-        s"this field, enable the SQL configuration: `${confKey.key}`.")
-    }
 
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
@@ -149,27 +136,33 @@ private[sql] class AvroDeserializer(
 
       case (LONG, dt: TimestampType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw incorrectTypeException(dt)
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (LONG, dt: TimestampNTZType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw incorrectTypeException(dt)
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (LONG, dt: DateType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
-        throw incorrectTypeException(dt)
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (INT, dt: TimestampType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
-        throw incorrectTypeException(dt)
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (INT, dt: TimestampNTZType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
-        throw incorrectTypeException(dt)
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (INT, dt: DateType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[YearMonthIntervalType] =>
-        throw incorrectTypeException(dt)
+        throw QueryCompilationErrors.avroIncorrectTypeError(toFieldStr(avroPath),
+          toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
 
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
@@ -251,7 +244,8 @@ private[sql] class AvroDeserializer(
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
-          throw lowerPrecisionException(dt)
+          throw QueryCompilationErrors.avroLowerPrecisionError(toFieldStr(avroPath),
+            toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
         }
         (updater, ordinal, value) =>
           val bigDecimal =
@@ -263,7 +257,8 @@ private[sql] class AvroDeserializer(
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
         if (preventReadingIncorrectType &&
           d.getPrecision - d.getScale > dt.precision - dt.scale) {
-          throw lowerPrecisionException(dt)
+          throw QueryCompilationErrors.avroLowerPrecisionError(toFieldStr(avroPath),
+            toFieldStr(catalystPath), realDataType.catalogString, dt.catalogString, confKey.key)
         }
         (updater, ordinal, value) =>
           val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)

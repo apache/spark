@@ -651,8 +651,17 @@ abstract class AvroSuite
           spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
         }
         ExceptionUtils.getRootCause(e) match {
-          case ex: IncompatibleSchemaException =>
-            assert(ex.getMessage.contains(confKey))
+          case ex: AnalysisException =>
+            checkError(
+              exception = ex,
+              errorClass = "AVRO_LOWER_PRECISION",
+              parameters = Map("avroPath" -> "field 'a'",
+                "sqlPath" -> "field 'a'",
+                "avroType" -> "decimal\\(12,10\\)",
+                "sqlType" -> "decimal\\(4,3\\)",
+                "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
+              matchPVals = true
+            )
           case other =>
             fail(s"Received unexpected exception", other)
         }
@@ -687,13 +696,23 @@ abstract class AvroSuite
       df.write.format("avro").save(path.getCanonicalPath)
 
       withSQLConf(confKey -> "false") {
-        Seq("Date", "Timestamp", "Timestamp_NTZ").foreach { sqlType =>
+        Seq("date", "timestamp", "timestamp_ntz").foreach { sqlType =>
           val e = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
+
           ExceptionUtils.getRootCause(e) match {
-            case ex: IncompatibleSchemaException =>
-              assert(ex.getMessage.contains(confKey))
+            case ex: AnalysisException =>
+              checkError(
+                exception = ex,
+                errorClass = "AVRO_INCORRECT_TYPE",
+                parameters = Map("avroPath" -> "field 'a'",
+                  "sqlPath" -> "field 'a'",
+                  "avroType" -> "interval day to second",
+                  "sqlType" -> sqlType,
+                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
+                matchPVals = true
+              )
             case other =>
               fail(s"Received unexpected exception", other)
           }
@@ -721,13 +740,23 @@ abstract class AvroSuite
       df.write.format("avro").save(path.getCanonicalPath)
 
       withSQLConf(confKey -> "false") {
-        Seq("Date", "Timestamp", "Timestamp_NTZ").foreach { sqlType =>
+        Seq("date", "timestamp", "timestamp_ntz").foreach { sqlType =>
           val e = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
+
           ExceptionUtils.getRootCause(e) match {
-            case ex: IncompatibleSchemaException =>
-              assert(ex.getMessage.contains(confKey))
+            case ex: AnalysisException =>
+              checkError(
+                exception = ex,
+                errorClass = "AVRO_INCORRECT_TYPE",
+                parameters = Map("avroPath" -> "field 'a'",
+                  "sqlPath" -> "field 'a'",
+                  "avroType" -> "interval day to second",
+                  "sqlType" -> "date",
+                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
+                matchPVals = true
+              )
             case other =>
               fail(s"Received unexpected exception", other)
           }
