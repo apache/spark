@@ -495,6 +495,33 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("AMBIGUOUS_ALIAS_IN_NESTED_CTE: Nested CTEs with same name and " +
+    "ctePrecedencePolicy = EXCEPTION") {
+    withTable("t") {
+      withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "EXCEPTION") {
+        val query =
+          """
+            |WITH
+            |    t AS (SELECT 1),
+            |    t2 AS (
+            |        WITH t AS (SELECT 2)
+            |        SELECT * FROM t)
+            |SELECT * FROM t2;
+            |""".stripMargin
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query)
+          },
+          errorClass = "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+          parameters = Map(
+            "name" -> "`t`",
+            "config" -> toSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key),
+            "docroot" -> SPARK_DOC_ROOT))
+      }
+    }
+  }
+
   test("AMBIGUOUS_COLUMN_OR_FIELD: alter column matching multi fields in the struct") {
     withTable("t") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {

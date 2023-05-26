@@ -65,7 +65,9 @@ trait ColumnResolutionHelper extends Logging {
             (AttributeSet(newExprs) -- u.outputSet).intersect(newChild.outputSet)
           u match {
             case p: Project =>
-              (newExprs, Project(p.projectList ++ missingAttrs, newChild))
+              val newProject = Project(p.projectList ++ missingAttrs, newChild)
+              newProject.copyTagsFrom(p)
+              (newExprs, newProject)
 
             case a @ Aggregate(groupExprs, aggExprs, child) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {

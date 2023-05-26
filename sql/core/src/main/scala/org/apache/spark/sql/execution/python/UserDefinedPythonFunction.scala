@@ -42,9 +42,16 @@ case class UserDefinedPythonFunction(
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    builder(exprs.map(_.expr)) match {
+    fromUDFExpr(builder(exprs.map(_.expr)))
+  }
+
+  /**
+   * Returns a [[Column]] that will evaluate the UDF expression with the given input.
+   */
+  def fromUDFExpr(expr: Expression): Column = {
+    expr match {
       case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
-      case udf => Column(udf)
+      case _ => Column(expr)
     }
   }
 }

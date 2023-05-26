@@ -144,7 +144,7 @@ def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
     """
-    return "SPARK_REMOTE" in os.environ
+    return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
 
 def try_remote_functions(f: FuncT) -> FuncT:

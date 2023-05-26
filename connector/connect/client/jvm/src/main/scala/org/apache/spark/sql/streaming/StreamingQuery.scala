@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -204,14 +205,14 @@ class RemoteStreamingQuery(
 
   override def recentProgress: Array[StreamingQueryProgress] = {
     executeQueryCmd(_.setRecentProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala
-      .map(json => new StreamingQueryProgress(json))
+      .map(StreamingQueryProgress.fromJson)
       .toArray
   }
 
   override def lastProgress: StreamingQueryProgress = {
     executeQueryCmd(
       _.setLastProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala.headOption
-      .map(json => new StreamingQueryProgress(json))
+      .map(StreamingQueryProgress.fromJson)
       .orNull
   }
 
@@ -296,5 +297,21 @@ object RemoteStreamingQuery {
       runId = UUID.fromString(result.getQueryId.getRunId),
       name = if (result.getName.isEmpty) null else result.getName,
       sparkSession = sparkSession)
+  }
+
+  def fromStreamingQueryInstanceResponse(
+      sparkSession: SparkSession,
+      q: StreamingQueryInstance): RemoteStreamingQuery = {
+
+    val name = if (q.hasName) {
+      q.getName
+    } else {
+      null
+    }
+    new RemoteStreamingQuery(
+      UUID.fromString(q.getId.getId),
+      UUID.fromString(q.getId.getRunId),
+      name,
+      sparkSession)
   }
 }

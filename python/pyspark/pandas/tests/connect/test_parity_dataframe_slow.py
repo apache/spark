@@ -29,75 +29,87 @@ class DataFrameSlowParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
+    )
     def test_at_time(self):
         super().test_at_time()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_backfill(self):
         super().test_backfill()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
+    )
     def test_between_time(self):
         super().test_between_time()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_bfill(self):
         super().test_bfill()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cache(self):
-        super().test_cache()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
+    )
     def test_cov(self):
         super().test_cov()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_diff(self):
         super().test_diff()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43615): Enable DataFrameSlowParityTests.test_eval.")
     def test_eval(self):
         super().test_eval()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_ffill(self):
         super().test_ffill()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.mode in Spark Connect."
+    )
     def test_mode(self):
         super().test_mode()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_pad(self):
         super().test_pad()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_pct_change(self):
         super().test_pct_change()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_persist(self):
-        super().test_persist()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
+    )
     def test_product(self):
         super().test_product()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43618): Fix pyspark.sq.column._unary_op to work with Spark Connect.")
     def test_rank(self):
         super().test_rank()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_shift(self):
         super().test_shift()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_style(self):
-        super().test_style()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43619): Enable DataFrameSlowParityTests.test_udt.")
     def test_udt(self):
         super().test_udt()
 

@@ -74,7 +74,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client import Retrying
+    from pyspark.sql.connect.client.core import Retrying
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -1815,14 +1815,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         spark2 = RemoteSparkSession(connection="sc://localhost")
         df2 = spark2.range(10).limit(3)
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e1:
             df.union(df2).collect()
+        self.check_error(
+            exception=e1.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e2:
             df.unionByName(df2).collect()
+        self.check_error(
+            exception=e2.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e3:
             df.join(df2).collect()
+        self.check_error(
+            exception=e3.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
     def test_extended_hint_types(self):
         cdf = self.connect.range(100).toDF("id")
@@ -3271,6 +3286,23 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
         )
         spark.stop()
+
+    def test_can_create_multiple_sessions_to_different_remotes(self):
+        self.assertIsNotNone(self.spark._client)
+        # Creates a new remote session.
+        other = PySparkSession.builder.remote("sc://other.remote:114/").create()
+        self.assertNotEquals(self.spark, other)
+
+        # Reuses an active session that was previously created.
+        same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
+        self.assertEquals(self.spark, same)
+        same.stop()
+
+        # Make sure the environment is clean.
+        self.spark.stop()
+        with self.assertRaises(RuntimeError) as e:
+            PySparkSession.builder.create()
+            self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

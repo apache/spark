@@ -21,7 +21,12 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import (
+    from_arrow_type,
+    to_arrow_type,
+    _create_converter_from_pandas,
+    _create_converter_to_pandas,
+)
 from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
 
 
@@ -168,23 +173,21 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._safecheck = safecheck
 
     def arrow_to_pandas(self, arrow_column):
-        from pyspark.sql.pandas.types import (
-            _check_series_localize_timestamps,
-            _convert_map_items_to_dict,
-        )
-        import pyarrow
-
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
+        # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
         s = arrow_column.to_pandas(date_as_object=True)
 
-        if pyarrow.types.is_timestamp(arrow_column.type) and arrow_column.type.tz is not None:
-            return _check_series_localize_timestamps(s, self._timezone)
-        elif pyarrow.types.is_map(arrow_column.type):
-            return _convert_map_items_to_dict(s)
-        else:
-            return s
+        # TODO(SPARK-43579): cache the converter for reuse
+        converter = _create_converter_to_pandas(
+            data_type=from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
+            nullable=True,
+            timezone=self._timezone,
+            struct_in_pandas="dict",
+            error_on_duplicated_field_names=True,
+        )
+        return converter(s)
 
     def _create_array(self, series, arrow_type):
         """
@@ -202,27 +205,23 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pyarrow.Array
         """
         import pyarrow as pa
-        from pyspark.sql.pandas.types import (
-            _check_series_convert_timestamps_internal,
-            _convert_dict_to_map_items,
-        )
         from pandas.api.types import is_categorical_dtype
+
+        if is_categorical_dtype(series.dtype):
+            series = series.astype(series.dtypes.categories.dtype)
+
+        if arrow_type is not None:
+            spark_type = from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
+            # TODO(SPARK-43579): cache the converter for reuse
+            conv = _create_converter_from_pandas(
+                spark_type, timezone=self._timezone, error_on_duplicated_field_names=False
+            )
+            series = conv(series)
 
         if hasattr(series.array, "__arrow_array__"):
             mask = None
         else:
             mask = series.isnull()
-        # Ensure timestamp series are in expected form for Spark internal representation
-        if (
-            arrow_type is not None
-            and pa.types.is_timestamp(arrow_type)
-            and arrow_type.tz is not None
-        ):
-            series = _check_series_convert_timestamps_internal(series, self._timezone)
-        elif arrow_type is not None and pa.types.is_map(arrow_type):
-            series = _convert_dict_to_map_items(series)
-        elif arrow_type is None and is_categorical_dtype(series.dtype):
-            series = series.astype(series.dtypes.categories.dtype)
         try:
             return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=self._safecheck)
         except TypeError as e:
