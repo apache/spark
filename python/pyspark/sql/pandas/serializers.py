@@ -20,6 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.rdd import PythonEvalType
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import (
     from_arrow_type,
@@ -172,7 +173,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._timezone = timezone
         self._safecheck = safecheck
 
-    def arrow_to_pandas(self, arrow_column):
+    def arrow_to_pandas(self, arrow_column, struct_in_pandas="dict"):
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
@@ -184,7 +185,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             data_type=from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
             nullable=True,
             timezone=self._timezone,
-            struct_in_pandas="dict",
+            struct_in_pandas=struct_in_pandas,
             error_on_duplicated_field_names=True,
         )
         return converter(s)
@@ -298,26 +299,40 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     Serializer used by Python worker to evaluate Pandas UDFs
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        df_for_struct=False,
+        eval_type=PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    ):
         super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
+        self._eval_type = eval_type
 
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
+
+        struct_in_pandas = (
+            "row" if self._eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
+        )
 
         if self._df_for_struct and types.is_struct(arrow_column.type):
             import pandas as pd
 
             series = [
                 super(ArrowStreamPandasUDFSerializer, self)
-                .arrow_to_pandas(column)
+                .arrow_to_pandas(column, struct_in_pandas)
                 .rename(field.name)
                 for column, field in zip(arrow_column.flatten(), arrow_column.type)
             ]
             s = pd.concat(series, axis=1)
         else:
-            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
+            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
+                arrow_column, struct_in_pandas
+            )
         return s
 
     def _create_batch(self, series):
