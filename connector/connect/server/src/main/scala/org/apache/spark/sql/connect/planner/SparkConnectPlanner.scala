@@ -182,8 +182,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
     catalog.getCatTypeCase match {
-      case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
-        transformCurrentDatabase(catalog.getCurrentDatabase)
+      case proto.Catalog.CatTypeCase.CURRENT_DATABASE => transformCurrentDatabase()
       case proto.Catalog.CatTypeCase.SET_CURRENT_DATABASE =>
         transformSetCurrentDatabase(catalog.getSetCurrentDatabase)
       case proto.Catalog.CatTypeCase.LIST_DATABASES =>
@@ -213,13 +212,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
       case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
         transformUncacheTable(catalog.getUncacheTable)
-      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache(catalog.getClearCache)
+      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache()
       case proto.Catalog.CatTypeCase.REFRESH_TABLE =>
         transformRefreshTable(catalog.getRefreshTable)
       case proto.Catalog.CatTypeCase.REFRESH_BY_PATH =>
         transformRefreshByPath(catalog.getRefreshByPath)
       case proto.Catalog.CatTypeCase.CURRENT_CATALOG =>
-        transformCurrentCatalog(catalog.getCurrentCatalog)
+        transformCurrentCatalog()
       case proto.Catalog.CatTypeCase.SET_CURRENT_CATALOG =>
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
@@ -2111,7 +2110,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           sessionId,
           responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
-        handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
+        handleGetResourcesCommand(sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -2659,7 +2658,6 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   def handleGetResourcesCommand(
-      command: proto.GetResourcesCommand,
       sessionId: String,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     responseObserver.onNext(
@@ -2687,7 +2685,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     output = AttributeReference("value", StringType, false)() :: Nil,
     data = Seq.empty)
 
-  private def transformCurrentDatabase(getCurrentDatabase: proto.CurrentDatabase): LogicalPlan = {
+  private def transformCurrentDatabase(): LogicalPlan = {
     session.createDataset(session.catalog.currentDatabase :: Nil)(Encoders.STRING).logicalPlan
   }
 
@@ -2918,7 +2916,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     emptyLocalRelation
   }
 
-  private def transformClearCache(getClearCache: proto.ClearCache): LogicalPlan = {
+  private def transformClearCache(): LogicalPlan = {
     session.catalog.clearCache()
     emptyLocalRelation
   }
@@ -2933,7 +2931,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     emptyLocalRelation
   }
 
-  private def transformCurrentCatalog(getCurrentCatalog: proto.CurrentCatalog): LogicalPlan = {
+  private def transformCurrentCatalog(): LogicalPlan = {
     session.createDataset(session.catalog.currentCatalog() :: Nil)(Encoders.STRING).logicalPlan
   }
 
