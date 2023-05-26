@@ -1169,8 +1169,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
         }
         if (isTimeTravel) {
-          val target = if (tempViewPlan.isStreaming) "streams" else "views"
-          throw QueryCompilationErrors.timeTravelUnsupportedError(target)
+          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
         }
         tempViewPlan
       }
