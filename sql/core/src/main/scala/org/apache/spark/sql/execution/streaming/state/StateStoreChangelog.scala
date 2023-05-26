@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.util.NextIterator
 
 /**
  * Write changes to the key value state store instance to a changelog file.
@@ -118,7 +119,7 @@ class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-  extends Iterator[ByteArrayPair] with Logging {
+  extends NextIterator[(Array[Byte], Array[Byte])] with Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
@@ -135,47 +136,31 @@ class StateStoreChangelogReader(
           " create a new checkpoint location or clear the existing checkpoint location.", f)
   }
   private val input: DataInputStream = decompressStream(sourceStream)
-  // A buffer that hold the next record to return.
-  private var byteArrayPair: ByteArrayPair = null
-  private var eof = false
-
-  override def hasNext: Boolean = {
-    maybeReadNext()
-    byteArrayPair != null
-  }
-
-  override def next(): ByteArrayPair = {
-    maybeReadNext()
-    val nextByteArrayPair = byteArrayPair
-    byteArrayPair = null
-    nextByteArrayPair
-  }
 
   def close(): Unit = { if (input != null) input.close() }
 
-  private def maybeReadNext(): Unit = {
-    if (!eof && byteArrayPair == null) {
-      val keySize = input.readInt()
-      // A -1 key size mean end of file.
-      if (keySize == -1) {
-        eof = true
-      } else if (keySize < 0) {
-        throw new IOException(
-          s"Error reading streaming state file $fileToRead: key size cannot be $keySize")
+  override def getNext(): (Array[Byte], Array[Byte]) = {
+    val keySize = input.readInt()
+    // A -1 key size mean end of file.
+    if (keySize == -1) {
+      finished = true
+      null
+    } else if (keySize < 0) {
+      throw new IOException(
+        s"Error reading streaming state file $fileToRead: key size cannot be $keySize")
+    } else {
+      // TODO: reuse the key buffer and value buffer across records.
+      val keyBuffer = new Array[Byte](keySize)
+      ByteStreams.readFully(input, keyBuffer, 0, keySize)
+      val valueSize = input.readInt()
+      if (valueSize < 0) {
+        // A deletion record
+        (keyBuffer, null)
       } else {
-        // TODO: reuse the key buffer and value buffer across records.
-        val keyBuffer = new Array[Byte](keySize)
-        ByteStreams.readFully(input, keyBuffer, 0, keySize)
-        val valueSize = input.readInt()
-        if (valueSize < 0) {
-          // A deletion record
-          byteArrayPair = new ByteArrayPair(keyBuffer, null)
-        } else {
-          val valueBuffer = new Array[Byte](valueSize)
-          ByteStreams.readFully(input, valueBuffer, 0, valueSize)
-          // A put record.
-          byteArrayPair = new ByteArrayPair(keyBuffer, valueBuffer)
-        }
+        val valueBuffer = new Array[Byte](valueSize)
+        ByteStreams.readFully(input, valueBuffer, 0, valueSize)
+        // A put record.
+        (keyBuffer, valueBuffer)
       }
     }
   }

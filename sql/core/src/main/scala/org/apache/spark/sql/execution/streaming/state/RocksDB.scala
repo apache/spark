@@ -194,12 +194,11 @@ class RocksDB(
       var changelogReader: StateStoreChangelogReader = null
       try {
         changelogReader = fileManager.getChangelogReader(v)
-        while (changelogReader.hasNext) {
-          val byteArrayPair = changelogReader.next()
-          if (byteArrayPair.value != null) {
-            put(byteArrayPair.key, byteArrayPair.value)
+        changelogReader.foreach { case (key, value) =>
+          if (value != null) {
+            put(key, value)
           } else {
-            remove(byteArrayPair.key)
+            remove(key)
           }
         }
       } finally {

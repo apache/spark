@@ -405,11 +405,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1)
     val entries = changelogReader.toSeq
-    val expectedEntries = (1 to 5).map(i => new ByteArrayPair(i.toString, i.toString)) ++
-      (2 to 4).map(j => new ByteArrayPair(j.toString, null))
+    val expectedEntries = (1 to 5).map(i => (i.toString.getBytes, i.toString.getBytes)) ++
+      (2 to 4).map(j => (j.toString.getBytes, null))
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
-      case (e1, e2) => assert(e1.key === e2.key && e1.value === e2.value)
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2)
     }
   }
 
