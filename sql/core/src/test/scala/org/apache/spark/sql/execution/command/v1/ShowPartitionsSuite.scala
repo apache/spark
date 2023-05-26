@@ -130,8 +130,8 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1269",
-        parameters = Map("tableIdentWithDB" -> tableName))
+        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        parameters = Map("name" -> tableName))
     }
   }
 
