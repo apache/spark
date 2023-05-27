@@ -183,7 +183,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             createView("v1", s"SELECT * FROM $viewName2", replace = true)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1281",
+          errorClass = "RECURSIVE_VIEW",
           parameters = Map(
             "viewIdent" -> tableIdentQuotedString("v1"),
             "newPath" -> (s"${tableIdentQuotedString("v1")} " +
@@ -204,7 +204,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1281",
+          errorClass = "RECURSIVE_VIEW",
           parameters = Map(
             "viewIdent" -> tableIdentQuotedString("v1"),
             "newPath" -> (s"${tableIdentQuotedString("v1")} " +
@@ -581,7 +581,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1282",
+        errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
         parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "count(1)")
       )
       sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
@@ -595,7 +595,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1282",
+        errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
         parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "(a + b)")
       )
       sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
@@ -610,7 +610,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1282",
+        errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
         parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "count(1)")
       )
     }

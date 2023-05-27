@@ -269,6 +269,11 @@
     ],
     "sqlState" : "22018"
   },
+  "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
+    "message" : [
+      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
+    ]
+  },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -1711,6 +1716,11 @@
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+    ]
+  },
+  "RECURSIVE_VIEW" : {
+    "message" : [
+      "Recursive view <viewIdent> detected (cycle: <newPath>)."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
@@ -3731,16 +3741,6 @@
   "_LEGACY_ERROR_TEMP_1280" : {
     "message" : [
       "It is not allowed to create a persisted view from the Dataset API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1281" : {
-    "message" : [
-      "Recursive view <viewIdent> detected (cycle: <newPath>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1282" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1285" : {

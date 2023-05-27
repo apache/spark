@@ -2719,9 +2719,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       viewIdent: TableIdentifier,
       newPath: Seq[TableIdentifier]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1281",
+      errorClass = "RECURSIVE_VIEW",
       messageParameters = Map(
-        "viewIdent" -> viewIdent.toString,
+        "viewIdent" -> toSQLId(viewIdent.nameParts),
         "newPath" -> newPath.mkString(" -> ")))
   }
 
@@ -2729,7 +2729,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: TableIdentifier,
       attrName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1282",
+      errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
       messageParameters = Map(
         "name" -> name.toString,
         "attrName" -> attrName))
