@@ -377,11 +377,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "type" -> toSQLType(f.condition.dataType)))
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
-            throw SparkException.internalError(
-              msg = s"join condition '${toSQLExpr(condition)}' " +
-                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
-              context = j.origin.getQueryContext,
-              summary = j.origin.context.summary)
+            j.failAnalysis(
+              errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+              messageParameters = Map(
+                "joinCondition" -> toSQLExpr(condition),
+                "conditionType" -> toSQLType(condition.dataType)))
 
           case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
               if condition.dataType != BooleanType =>

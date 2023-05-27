@@ -361,10 +361,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
     messageParameters = Map("sqlExpr" -> "\"1\"", "filter" -> "\"1\"", "type" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "non-boolean join conditions",
     testRelation.join(testRelation, condition = Some(Literal(1))),
-    "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+    errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+    messageParameters = Map("joinCondition" -> "\"1\"", "conditionType" -> "\"INT\""))
 
   errorClassTest(
     "missing group by",

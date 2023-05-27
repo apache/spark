@@ -617,6 +617,11 @@
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
+  "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
+    "message" : [
+      "Event time must be defined on a window or a timestamp, but <eventName> is of type <eventType>."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
@@ -1371,6 +1376,11 @@
     ],
     "sqlState" : "42903"
   },
+  "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
+    "message" : [
+      "Cannot specify order by or frame for '<aggFunc>'."
+    ]
+  },
   "INVALID_WRITE_DISTRIBUTION" : {
     "message" : [
       "The requested write distribution is invalid."
@@ -1392,6 +1402,11 @@
         ]
       }
     }
+  },
+  "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
+    "message" : [
+      "join condition '<joinCondition>' of type <conditionType> is not a boolean."
+    ]
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -1779,6 +1794,11 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "SEED_EXPRESSION_IS_UNRESOLVED" : {
+    "message" : [
+      "Input argument to <argName> must be a constant."
+    ]
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
@@ -5444,21 +5464,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
-    "message" : [
-      "Cannot specify order by or frame for '<aggFunc>'."
-    ]
-  },
-  "SEED_EXPRESSION_IS_UNRESOLVED" : {
-    "message" : [
-      "Input argument to <argName> must be a constant."
-    ]
-  },
-  "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
-    "message" : [
-      "Event time must be defined on a window or a timestamp, but <eventName> is of type <eventType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2418" : {
