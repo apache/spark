@@ -329,8 +329,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
                 agg.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2411",
-                  messageParameters = Map("aggFunc" -> agg.aggregateFunction.prettyName))
+                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
               case other =>
@@ -344,8 +344,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             e.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2413",
-              messageParameters = Map("argName" -> e.prettyName))
+              errorClass = "SEED_EXPRESSION_IS_UNRESOLVED",
+              messageParameters = Map("argName" -> toSQLExpr(e)))
 
           case p: Parameter =>
             p.failAnalysis(
@@ -363,10 +363,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case _: TimestampType =>
               case _ =>
                 etw.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2414",
+                  errorClass = "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE",
                   messageParameters = Map(
-                    "evName" -> etw.eventTime.name,
-                    "evType" -> etw.eventTime.dataType.catalogString))
+                    "eventName" -> toSQLId(etw.eventTime.name),
+                    "eventType" -> toSQLType(etw.eventTime.dataType)))
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
@@ -377,19 +377,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "type" -> toSQLType(f.condition.dataType)))
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2416",
-              messageParameters = Map(
-                "join" -> condition.sql,
-                "type" -> condition.dataType.catalogString))
+            throw SparkException.internalError(
+              msg = s"join condition '${toSQLExpr(condition)}' " +
+                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
               if condition.dataType != BooleanType =>
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2417",
-              messageParameters = Map(
-                "condition" -> condition.sql,
-                "dataType" -> condition.dataType.catalogString))
+            throw SparkException.internalError(
+              msg = s"join condition '${toSQLExpr(condition)}' " +
+                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
             if (!toleranceAssertion.foldable) {

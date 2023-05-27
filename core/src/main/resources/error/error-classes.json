@@ -5446,29 +5446,19 @@
       "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2411" : {
+  "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
     "message" : [
       "Cannot specify order by or frame for '<aggFunc>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2413" : {
+  "SEED_EXPRESSION_IS_UNRESOLVED" : {
     "message" : [
       "Input argument to <argName> must be a constant."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2414" : {
+  "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
-      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2416" : {
-    "message" : [
-      "join condition '<join>' of type <type> is not a boolean."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2417" : {
-    "message" : [
-      "join condition '<condition>' of type <dataType> is not a boolean."
+      "Event time must be defined on a window or a timestamp, but <eventName> is of type <eventType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2418" : {

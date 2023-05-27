@@ -964,10 +964,15 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
-    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
-      val plan = Project(Seq(r.as("r")), testRelation)
-      assertAnalysisError(plan,
-        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    Seq((Rand("a".attr), "\"rand(a)\""), (Randn("a".attr), "\"randn(a)\"")).foreach {
+      case (r, expectedArgName) =>
+        val plan = Project(Seq(r.as("r")), testRelation)
+        assertAnalysisErrorClass(plan,
+          expectedErrorClass = "SEED_EXPRESSION_IS_UNRESOLVED",
+          expectedMessageParameters = Map(
+            "argName" -> expectedArgName),
+          caseSensitive = false
+        )
     }
     Seq(
       Rand(1.0) -> ("\"rand(1.0)\"", "\"1.0\"", "\"DOUBLE\""),
