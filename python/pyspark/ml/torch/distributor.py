@@ -814,7 +814,7 @@ class TorchDistributor(Distributor):
     ) -> str:
         code = textwrap.dedent(
             f"""
-                    import cloudpickle
+                    from pyspark import cloudpickle
                     import os
 
                     if __name__ == "__main__":
