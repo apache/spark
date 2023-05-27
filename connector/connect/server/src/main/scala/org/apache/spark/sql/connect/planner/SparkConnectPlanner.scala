@@ -1451,32 +1451,33 @@ class SparkConnectPlanner(val session: SparkSession) {
     def extractArgsOfProtobufFunction(
         functionName: String,
         argumentsCount: Int,
-        children: Seq[Expression]): (String, Option[String], Map[String, String]) = {
+        children: Seq[Expression]): (String, Option[Array[Byte]], Map[String, String]) = {
       val messageClassName = children(1) match {
         case Literal(s, StringType) if s != null => s.toString
         case other =>
           throw InvalidPlanInput(
             s"MessageClassName in $functionName should be a literal string, but got $other")
       }
-      val (descFilePathOpt, options) = if (argumentsCount == 2) {
+      val (binaryFileDescSetOpt, options) = if (argumentsCount == 2) {
         (None, Map.empty[String, String])
       } else if (argumentsCount == 3) {
         children(2) match {
-          case Literal(s, StringType) if s != null =>
-            (Some(s.toString), Map.empty[String, String])
+          case Literal(b, BinaryType) if b != null =>
+            (Some(b.asInstanceOf[Array[Byte]]), Map.empty[String, String])
           case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
             (None, ExprUtils.convertToMapData(CreateMap(arguments)))
           case other =>
             throw InvalidPlanInput(
-              s"The valid type for the 3rd arg in $functionName is string or map, but got $other")
+              s"The valid type for the 3rd arg in $functionName " +
+                s"is binary or map, but got $other")
         }
       } else if (argumentsCount == 4) {
-        val filePathOpt = children(2) match {
-          case Literal(s, StringType) if s != null =>
-            Some(s.toString)
+        val fileDescSetOpt = children(2) match {
+          case Literal(b, BinaryType) if b != null =>
+            Some(b.asInstanceOf[Array[Byte]])
           case other =>
             throw InvalidPlanInput(
-              s"DescFilePath in $functionName should be a literal string, but got $other")
+              s"DescFilePath in $functionName should be a literal binary, but got $other")
         }
         val map = children(3) match {
           case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
@@ -1485,12 +1486,12 @@ class SparkConnectPlanner(val session: SparkSession) {
             throw InvalidPlanInput(
               s"Options in $functionName should be created by map, but got $other")
         }
-        (filePathOpt, map)
+        (fileDescSetOpt, map)
       } else {
         throw InvalidPlanInput(
           s"$functionName requires 2 ~ 4 arguments, but got $argumentsCount ones!")
       }
-      (messageClassName, descFilePathOpt, options)
+      (messageClassName, binaryFileDescSetOpt, options)
     }
 
     fun.getFunctionName match {
@@ -1648,15 +1649,17 @@ class SparkConnectPlanner(val session: SparkSession) {
       // Protobuf-specific functions
       case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val (messageClassName, descFilePathOpt, options) =
+        val (messageClassName, binaryFileDescSetOpt, options) =
           extractArgsOfProtobufFunction("from_protobuf", fun.getArgumentsCount, children)
-        Some(ProtobufDataToCatalyst(children.head, messageClassName, descFilePathOpt, options))
+        Some(
+          ProtobufDataToCatalyst(children.head, messageClassName, binaryFileDescSetOpt, options))
 
       case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val (messageClassName, descFilePathOpt, options) =
+        val (messageClassName, binaryFileDescSetOpt, options) =
           extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
-        Some(CatalystDataToProtobuf(children.head, messageClassName, descFilePathOpt, options))
+        Some(
+          CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
 
       case _ => None
     }
