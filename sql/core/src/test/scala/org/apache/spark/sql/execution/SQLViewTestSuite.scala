@@ -582,7 +582,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
         },
         errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
-        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "count(1)")
+        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attr" -> "\"count(1)\"")
       )
       sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
       checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
@@ -596,7 +596,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
         },
         errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
-        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "(a + b)")
+        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attr" -> "\"(a + b)\"")
       )
       sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
       checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
@@ -611,7 +611,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
         },
         errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
-        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attrName" -> "count(1)")
+        parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "attr" -> "\"count(1)\"")
       )
     }
   }

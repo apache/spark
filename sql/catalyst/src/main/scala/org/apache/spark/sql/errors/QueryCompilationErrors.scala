@@ -2722,17 +2722,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "RECURSIVE_VIEW",
       messageParameters = Map(
         "viewIdent" -> toSQLId(viewIdent.nameParts),
-        "newPath" -> newPath.mkString(" -> ")))
+        "newPath" -> newPath.map(p => toSQLId(p.nameParts)).mkString(" -> ")))
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
       name: TableIdentifier,
-      attrName: String): Throwable = {
+      attr: Attribute): Throwable = {
     new AnalysisException(
       errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
       messageParameters = Map(
-        "name" -> name.toString,
-        "attrName" -> attrName))
+        "name" -> toSQLId(name.nameParts),
+        "attr" -> toSQLExpr(attr)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempViewError(
