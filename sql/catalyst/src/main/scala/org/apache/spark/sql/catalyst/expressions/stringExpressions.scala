@@ -2356,14 +2356,13 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
     nullSafeCodeGen(ctx, ev, child => {
       val maybeValidateInputCode = if (failOnError) {
         val unbase64 = UnBase64.getClass.getName.stripSuffix("$")
-        val format = UTF8String.fromString("BASE64");
         val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
         s"""
            |if (!$unbase64.isValidBase64($child)) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
            |    $child,
-           |    $format,
+           |    UTF8String.fromString("BASE64"),
            |    "try_to_binary");
            |}
        """.stripMargin
