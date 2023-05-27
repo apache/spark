@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.connect.client.util.IntegrationTestUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
@@ -2255,10 +2256,8 @@ class PlanGenerationTestSuite
   //  1. cd connector/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = java.nio.file.Paths
-    .get("../", "common", "src", "test", "resources", "protobuf-tests")
-    .resolve("common.desc")
-    .toString
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
+    "connect/common/src/test/resources/protobuf-tests/common.desc"
 
   test("from_protobuf messageClassName") {
     binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))

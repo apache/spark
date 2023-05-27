@@ -54,11 +54,6 @@
     ],
     "sqlState" : "42846"
   },
-  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
-    "message" : [
-      "Error constructing FileDescriptor for <descFilePath>."
-    ]
-  },
   "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
@@ -132,7 +127,7 @@
   },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
-      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object."
+      "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
