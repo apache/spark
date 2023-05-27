@@ -37,13 +37,17 @@ def from_protobuf(
     messageName: str,
     descFilePath: Optional[str] = None,
     options: Optional[Dict[str, str]] = None,
+    binaryDescriptorSet: Optional[bytes] = None,
 ) -> Column:
     """
     Converts a binary column of Protobuf format into its corresponding catalyst value.
-    The Protobuf definition is provided in one of these two ways:
+    The Protobuf definition is provided in one of these ways:
 
        - Protobuf descriptor file: E.g. a descriptor file created with
           `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
+       - Protobuf descriptor as binary: Rather than file path as in previous option,
+         we can provide the binary content of the file. This allows flexibility in how the
+         descriptor set is created and fetched.
        - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
          Specifically, `com.google.protobuf.*` should be shaded to
          `org.sparkproject.spark_protobuf.protobuf.*`.
@@ -61,9 +65,11 @@ def from_protobuf(
         The Protobuf class name when descFilePath parameter is not set.
         E.g. `com.example.protos.ExampleEvent`.
     descFilePath : str, optional
-        The protobuf descriptor file.
+        The Protobuf descriptor file.
     options : dict, optional
         options to control how the protobuf record is parsed.
+    binaryDescriptorSet: bytes, optional
+        The Protobuf `FileDescriptorSet` serialized as binary.
 
     Notes
     -----
@@ -92,14 +98,23 @@ def from_protobuf(
     ...         proto_df = df.select(
     ...             to_protobuf(df.value, message_name, desc_file_path).alias("value"))
     ...         proto_df.show(truncate=False)
-    ...         proto_df = proto_df.select(
+    ...         proto_df_1 = proto_df.select( # With file name for descriptor
     ...             from_protobuf(proto_df.value, message_name, desc_file_path).alias("value"))
-    ...         proto_df.show(truncate=False)
+    ...         proto_df_1.show(truncate=False)
+    ...         proto_df_2 = proto_df.select( # With binary for descriptor
+    ...             from_protobuf(proto_df.value, message_name, binaryDescriptorSet = bytearray.fromhex(desc_hex))
+    ...             .alias("value"))
+    ...         proto_df_2.show(truncate=False)
     +----------------------------------------+
     |value                                   |
     +----------------------------------------+
     |[08 02 12 05 41 6C 69 63 65 18 90 D5 06]|
     +----------------------------------------+
+    +------------------+
+    |value             |
+    +------------------+
+    |{2, Alice, 109200}|
+    +------------------+
     +------------------+
     |value             |
     +------------------+
@@ -122,9 +137,13 @@ def from_protobuf(
 
     sc = get_active_spark_context()
     try:
-        if descFilePath is not None:
+        if descFilePath is not None or binaryDescriptorSet is not None:
+            if binaryDescriptorSet is not None:
+                binary_proto = binaryDescriptorSet
+            else:
+                binary_proto = _read_descriptor_set_file(descFilePath)
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
-                _to_java_column(data), messageName, descFilePath, options or {}
+                _to_java_column(data), messageName, binary_proto, options or {}
             )
         else:
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
@@ -142,13 +161,17 @@ def to_protobuf(
     messageName: str,
     descFilePath: Optional[str] = None,
     options: Optional[Dict[str, str]] = None,
+    binaryDescriptorSet: Optional[bytes] = None
 ) -> Column:
     """
     Converts a column into binary of protobuf format. The Protobuf definition is provided in one
-    of these two ways:
+    of these ways:
 
        - Protobuf descriptor file: E.g. a descriptor file created with
           `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
+       - Protobuf descriptor as binary: Rather than file path as in previous option,
+         we can provide the binary content of the file. This allows flexibility in how the
+         descriptor set is created and fetched.
        - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
          Specifically, `com.google.protobuf.*` should be shaded to
          `org.sparkproject.spark_protobuf.protobuf.*`.
@@ -168,6 +191,8 @@ def to_protobuf(
     descFilePath : str, optional
         the Protobuf descriptor file.
     options : dict, optional
+    binaryDescriptorSet: bytes, optional
+        The Protobuf `FileDescriptorSet` serialized as binary.
 
     Notes
     -----
@@ -193,9 +218,18 @@ def to_protobuf(
     ...         _ = f.write(bytearray.fromhex(desc_hex))
     ...         f.flush()
     ...         message_name = 'SimpleMessage'
-    ...         proto_df = df.select(
+    ...         proto_df = df.select( # With file name for descriptor
     ...             to_protobuf(df.value, message_name, desc_file_path).alias("suite"))
     ...         proto_df.show(truncate=False)
+    ...         proto_df_2 = df.select( # With binary for descriptor
+    ...             to_protobuf(df.value, message_name, binaryDescriptorSet=bytearray.fromhex(desc_hex))
+    ...             .alias("suite"))
+    ...         proto_df_2.show(truncate=False)
+    +-------------------------------------------+
+    |suite                                      |
+    +-------------------------------------------+
+    |[08 02 12 05 41 6C 69 63 65 18 9C 91 9F 06]|
+    +-------------------------------------------+
     +-------------------------------------------+
     |suite                                      |
     +-------------------------------------------+
@@ -216,9 +250,13 @@ def to_protobuf(
 
     sc = get_active_spark_context()
     try:
-        if descFilePath is not None:
+        if descFilePath is not None or binaryDescriptorSet is not None:
+            if binaryDescriptorSet is not None:
+                binary_proto = binaryDescriptorSet
+            else:
+                binary_proto = _read_descriptor_set_file(descFilePath)
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName, descFilePath, options or {}
+                _to_java_column(data), messageName, binary_proto, options or {}
             )
         else:
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
@@ -230,6 +268,12 @@ def to_protobuf(
             _print_missing_jar("Protobuf", "protobuf", "protobuf", sc.version)
         raise
     return Column(jc)
+
+
+def _read_descriptor_set_file(filePath: str) -> bytes:
+    # TODO: Throw structured Spark-SQL error similar to Scala (e.g. "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND")
+    with open(filePath, "rb") as f:
+        return f.read()
 
 
 def _test() -> None:
