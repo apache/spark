@@ -3665,7 +3665,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       options: Map[String, Expression],
       location: Option[String]): (Map[String, Expression], Option[String]) = {
     var path = location
-    val filtered = options.filter {
+    val filtered = cleanTableProperties(ctx, options).filter {
       case (key, value) if key.equalsIgnoreCase("path") =>
         val newValue: String =
           if (value == null) {
