@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordR
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.mockito.Mockito
 
 /**
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
@@ -688,7 +689,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
 
     override def close(): Unit = {}
 
-    override def getFileReader: ParquetFileReader = null
+    override def getFileReader: ParquetFileReader = Mockito.mock(classOf[ParquetFileReader])
   }
 
   private case class TestPageReadStore(

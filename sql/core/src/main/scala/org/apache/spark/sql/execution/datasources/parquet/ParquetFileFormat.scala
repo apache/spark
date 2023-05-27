@@ -270,8 +270,18 @@ class ParquetFileFormat
 
       S3FileUtils.tryOpenClose(sharedConf, filePath)
       val startTime = System.currentTimeMillis()
-      lazy val footerFileMetaData =
-        ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      var fileReader = Option.empty[ParquetFileReader]
+      val fileFooter = if (enableVectorizedReader) {
+        // When there are vectorized reads, we can avoid reading the footer twice by reading
+        // all row groups in advance and filter row groups according to filters that require
+        // push down (no need to read the footer metadata again).
+        fileReader = Option.apply(ParquetFooterReader.reader(sharedConf, file))
+        fileReader.get.getFooter
+      } else {
+        ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
+      }
+      val footerFileMetaData = fileFooter.getFileMetaData
+
       val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
         footerFileMetaData.getKeyValueMetaData.get,
         datetimeRebaseModeInRead)
@@ -324,6 +334,9 @@ class ParquetFileFormat
       // Notice: This push-down is RowGroups level, not individual records.
       if (pushed.isDefined) {
         ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
+        if (fileReader.isDefined) {
+          fileReader.get.resetBlocks(hadoopAttemptContext.getConfiguration)
+        }
       }
       val taskContext = Option(TaskContext.get())
       val firstFooterEndTime = System.currentTimeMillis()
@@ -345,7 +358,7 @@ class ParquetFileFormat
         // Instead, we use FileScanRDD's task completion listener to close this iterator.
         val iter = new RecordReaderIterator(vectorizedReader)
         try {
-          vectorizedReader.initialize(split, hadoopAttemptContext)
+          vectorizedReader.initialize(split, hadoopAttemptContext, fileReader)
           logDebug(s"Appending $partitionSchema ${file.partitionValues}")
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {
@@ -353,8 +366,9 @@ class ParquetFileFormat
           }
           val secondFooterEndTime = System.currentTimeMillis()
           if ((secondFooterEndTime - startTime) > 100) {
-            logWarning(s"Reading parquet footer cost much time: ${firstFooterEndTime - startTime} ms "
-              + s"and ${secondFooterEndTime - firstFooterEndTime} ms")
+            logWarning(s"Reading parquet footer cost much time: " +
+              s"${firstFooterEndTime - startTime} ms and" +
+              s" ${secondFooterEndTime - firstFooterEndTime} ms")
           }
           try {
             if (collectQueryMetricsEnabled) {
@@ -405,7 +419,8 @@ class ParquetFileFormat
           val footerEndTime = System.currentTimeMillis()
           if ((footerEndTime - startTime) > 100) {
             logWarning(s"Reading parquet footer may cost much time: "
-              + s"${firstFooterEndTime - startTime} ms and ${footerEndTime - firstFooterEndTime} ms")
+              + s"${firstFooterEndTime - startTime} ms and " +
+              s"${footerEndTime - firstFooterEndTime} ms")
         }
 
           if (partitionSchema.length == 0) {

@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -58,6 +59,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.sql.util.S3FileUtils;
 import org.apache.spark.util.AccumulatorV2;
+import scala.Some;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -87,17 +89,26 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException {
+          throws IOException, InterruptedException {
+    initialize(inputSplit, taskAttemptContext, Option.empty());
+  }
+
+  public void initialize(InputSplit inputSplit,
+                         TaskAttemptContext taskAttemptContext,
+                         Option<ParquetFileReader> fileReaderOption)
+      throws IOException {
     Configuration configuration = taskAttemptContext.getConfiguration();
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
-
-    ParquetReadOptions options = HadoopReadOptions
-      .builder(configuration, file)
-      .withRange(split.getStart(), split.getStart() + split.getLength())
-      .build();
-    ParquetFileReader fileReader = new ParquetFileReader(
-        HadoopInputFile.fromPath(file, configuration), options);
+    if (fileReaderOption.isEmpty()) {
+      ParquetReadOptions options = HadoopReadOptions
+              .builder(configuration, file)
+              .withRange(split.getStart(), split.getStart() + split.getLength())
+              .build();
+        fileReaderOption = Some.apply(new ParquetFileReader(
+        HadoopInputFile.fromPath(file, configuration), options));
+    }
+    ParquetFileReader fileReader = fileReaderOption.get();
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
     try {
