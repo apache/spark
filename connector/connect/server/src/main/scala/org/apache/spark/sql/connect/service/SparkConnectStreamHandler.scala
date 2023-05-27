@@ -28,7 +28,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -97,8 +97,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(sessionHolder)
-    val dataframe =
-      Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
+    val dataframe = planner.transformRelationAsDataset(request.getPlan.getRoot)
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)

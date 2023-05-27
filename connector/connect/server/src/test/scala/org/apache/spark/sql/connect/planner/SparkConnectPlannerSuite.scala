@@ -52,16 +52,20 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     override def onCompleted(): Unit = {}
   }
 
-  def transform(rel: proto.Relation): logical.LogicalPlan = {
+  protected def transformAsDataset(rel: proto.Relation): Dataset[Row] = {
+    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelationAsDataset(rel)
+  }
+
+  protected def transform(rel: proto.Relation): logical.LogicalPlan = {
     new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
   }
 
-  def transform(cmd: proto.Command): Unit = {
+  protected def transform(cmd: proto.Command): Unit = {
     new SparkConnectPlanner(SessionHolder.forTesting(spark))
       .process(cmd, "clientId", "sessionId", new MockObserver())
   }
 
-  def readRel: proto.Relation =
+  protected def readRel: proto.Relation =
     proto.Relation
       .newBuilder()
       .setRead(
@@ -81,7 +85,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
    *   the data of LocalRelation
    * @return
    */
-  def createLocalRelationProto(
+  protected def createLocalRelationProto(
       attrs: Seq[AttributeReference],
       data: Seq[InternalRow]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
@@ -457,7 +461,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
 
     val localRelation = createLocalRelationProto(schema.toAttributes, inputRows)
-    val df = Dataset.ofRows(spark, transform(localRelation))
+    val df = transformAsDataset(localRelation)
     val array = df.collect()
     assertResult(10)(array.length)
     assert(schema == df.schema)
@@ -479,7 +483,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setData(ByteString.copyFrom(data))
           .build())
       .build()
-    val df = Dataset.ofRows(spark, transform(localRelation))
+    val df = transformAsDataset(localRelation)
     assert(schema == df.schema)
     assert(df.isEmpty)
   }
@@ -571,8 +575,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .build())
         .build()
 
-    val df =
-      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    val df = transformAsDataset(proto.Relation.newBuilder.setProject(project).build())
     val array = df.collect()
     assert(array.length == 3)
     assert(array(0).toString == InternalRow(1, "spark", 1, "spark").toString)
@@ -612,8 +615,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .build())
         .build()
 
-    val df =
-      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    val df = transformAsDataset(proto.Relation.newBuilder.setProject(project).build())
     assertResult(df.schema)(
       StructType(Seq(StructField("c", IntegerType), StructField("d", IntegerType))))
 
@@ -644,8 +646,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .build())
         .build()
 
-    val df =
-      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setProject(project).build()))
+    val df = transformAsDataset(proto.Relation.newBuilder.setProject(project).build())
     assert(df.schema.fields.toSeq.map(_.name) == Seq("id"))
   }
 
@@ -658,7 +659,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val df = transformAsDataset(
       proto.Relation
         .newBuilder()
         .setHint(proto.Hint
@@ -667,8 +668,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setName("REPARTITION")
           .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(10000)).build()))
         .build())
-
-    val df = Dataset.ofRows(spark, logical)
     assert(df.rdd.partitions.length == 10000)
   }
 
@@ -681,7 +680,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val df = transformAsDataset(
       proto.Relation
         .newBuilder()
         .setHint(
@@ -690,7 +689,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .setInput(input)
             .setName("illegal"))
         .build())
-    assert(10 === Dataset.ofRows(spark, logical).count())
+    assert(10 === df.count())
   }
 
   test("Hint with string attribute parameters") {
@@ -702,7 +701,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val df = transformAsDataset(
       proto.Relation
         .newBuilder()
         .setHint(proto.Hint
@@ -711,7 +710,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setName("REPARTITION")
           .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto("id")).build()))
         .build())
-    assert(10 === Dataset.ofRows(spark, logical).count())
+    assert(10 === df.count())
   }
 
   test("Hint with wrong parameters") {
@@ -723,7 +722,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val relation =
       proto.Relation
         .newBuilder()
         .setHint(proto.Hint
@@ -731,8 +730,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setInput(input)
           .setName("REPARTITION")
           .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(true)).build()))
-        .build())
-    intercept[AnalysisException](Dataset.ofRows(spark, logical))
+        .build()
+    intercept[AnalysisException](transformAsDataset(relation))
   }
 
   test("transform SortOrder") {
@@ -762,7 +761,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
                 .setExpressionString(
                   proto.Expression.ExpressionString.newBuilder().setExpression("id")))))
       .build()
-    val df = Dataset.ofRows(spark, transform(relation))
+    val df = transformAsDataset(relation)
     df.foreachPartition { p: Iterator[Row] =>
       var previousValue: Int = -1
       p.foreach { r =>
@@ -788,7 +787,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val df = transformAsDataset(
       proto.Relation
         .newBuilder()
         .setRepartitionByExpression(
@@ -801,7 +800,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
                 .setExpression("id % 2"))))
         .build())
 
-    val df = Dataset.ofRows(spark, logical)
     assert(df.rdd.partitions.length == 3)
     val valueToPartition = df
       .selectExpr("id", "spark_partition_id()")
@@ -826,7 +824,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val df = transformAsDataset(
       proto.Relation
         .newBuilder()
         .setRepartitionByExpression(
@@ -846,8 +844,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
                       .setExpressionString(
                         proto.Expression.ExpressionString.newBuilder().setExpression("id"))))))
         .build())
-
-    val df = Dataset.ofRows(spark, logical)
     assert(df.rdd.partitions.length == 3)
     df.rdd.foreachPartition { p =>
       var previousValue = -1L
@@ -870,7 +866,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setQuery("select id from range(10)")
           .build())
 
-    val logical = transform(
+    val relation =
       proto.Relation
         .newBuilder()
         .setRepartitionByExpression(
@@ -880,8 +876,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .addPartitionExprs(proto.Expression.newBuilder
               .setExpressionString(proto.Expression.ExpressionString.newBuilder
                 .setExpression("illegal"))))
-        .build())
+        .build()
 
-    intercept[AnalysisException](Dataset.ofRows(spark, logical))
+    intercept[AnalysisException](transformAsDataset(relation))
   }
 }

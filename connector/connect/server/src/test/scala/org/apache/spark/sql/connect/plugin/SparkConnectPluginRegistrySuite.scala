@@ -22,7 +22,6 @@ import com.google.protobuf
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Relation
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.common.InvalidPlanInput
@@ -173,8 +172,7 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
         "org.apache.spark.sql.connect.plugin.ExampleRelationPlugin",
       Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES.key ->
         "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin") {
-      val plan = transform(buildRelation())
-      val ds = Dataset.ofRows(spark, plan)
+      val ds = transformAsDataset(buildRelation())
       val result = ds.collect()
       assert(result.length == 10)
       assert(result(0).schema.fieldNames(0) == "martin")

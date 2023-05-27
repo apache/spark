@@ -23,7 +23,6 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -54,9 +53,7 @@ private[connect] class SparkConnectAnalyzeHandler(
 
     request.getAnalyzeCase match {
       case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
-        val schema = Dataset
-          .ofRows(session, planner.transformRelation(request.getSchema.getPlan.getRoot))
-          .schema
+        val schema = planner.transformRelationAsDataset(request.getSchema.getPlan.getRoot).schema
         builder.setSchema(
           proto.AnalyzePlanResponse.Schema
             .newBuilder()
@@ -64,9 +61,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
-        val queryExecution = Dataset
-          .ofRows(session, planner.transformRelation(request.getExplain.getPlan.getRoot))
-          .queryExecution
+        val queryExecution =
+          planner.transformRelationAsDataset(request.getExplain.getPlan.getRoot).queryExecution
         val explainString = request.getExplain.getExplainMode match {
           case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE =>
             queryExecution.explainString(SimpleMode)
@@ -87,9 +83,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
-        val schema = Dataset
-          .ofRows(session, planner.transformRelation(request.getTreeString.getPlan.getRoot))
-          .schema
+        val schema =
+          planner.transformRelationAsDataset(request.getTreeString.getPlan.getRoot).schema
         val treeString = if (request.getTreeString.hasLevel) {
           schema.treeString(request.getTreeString.getLevel)
         } else {
@@ -102,9 +97,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
-        val isLocal = Dataset
-          .ofRows(session, planner.transformRelation(request.getIsLocal.getPlan.getRoot))
-          .isLocal
+        val isLocal =
+          planner.transformRelationAsDataset(request.getIsLocal.getPlan.getRoot).isLocal
         builder.setIsLocal(
           proto.AnalyzePlanResponse.IsLocal
             .newBuilder()
@@ -112,9 +106,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
-        val isStreaming = Dataset
-          .ofRows(session, planner.transformRelation(request.getIsStreaming.getPlan.getRoot))
-          .isStreaming
+        val isStreaming =
+          planner.transformRelationAsDataset(request.getIsStreaming.getPlan.getRoot).isStreaming
         builder.setIsStreaming(
           proto.AnalyzePlanResponse.IsStreaming
             .newBuilder()
@@ -122,9 +115,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
-        val inputFiles = Dataset
-          .ofRows(session, planner.transformRelation(request.getInputFiles.getPlan.getRoot))
-          .inputFiles
+        val inputFiles =
+          planner.transformRelationAsDataset(request.getInputFiles.getPlan.getRoot).inputFiles
         builder.setInputFiles(
           proto.AnalyzePlanResponse.InputFiles
             .newBuilder()
@@ -147,29 +139,27 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
-        val target = Dataset.ofRows(
-          session,
-          planner.transformRelation(request.getSameSemantics.getTargetPlan.getRoot))
-        val other = Dataset.ofRows(
-          session,
-          planner.transformRelation(request.getSameSemantics.getOtherPlan.getRoot))
+        val target =
+          planner.transformRelationAsDataset(request.getSameSemantics.getTargetPlan.getRoot)
+        val other =
+          planner.transformRelationAsDataset(request.getSameSemantics.getOtherPlan.getRoot)
         builder.setSameSemantics(
           proto.AnalyzePlanResponse.SameSemantics
             .newBuilder()
             .setResult(target.sameSemantics(other)))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
-        val semanticHash = Dataset
-          .ofRows(session, planner.transformRelation(request.getSemanticHash.getPlan.getRoot))
-          .semanticHash()
+        val semanticHash =
+          planner
+            .transformRelationAsDataset(request.getSemanticHash.getPlan.getRoot)
+            .semanticHash()
         builder.setSemanticHash(
           proto.AnalyzePlanResponse.SemanticHash
             .newBuilder()
             .setResult(semanticHash))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.PERSIST =>
-        val target = Dataset
-          .ofRows(session, planner.transformRelation(request.getPersist.getRelation))
+        val target = planner.transformRelationAsDataset(request.getPersist.getRelation)
         if (request.getPersist.hasStorageLevel) {
           target.persist(
             StorageLevelProtoConverter.toStorageLevel(request.getPersist.getStorageLevel))
@@ -179,8 +169,7 @@ private[connect] class SparkConnectAnalyzeHandler(
         builder.setPersist(proto.AnalyzePlanResponse.Persist.newBuilder().build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.UNPERSIST =>
-        val target = Dataset
-          .ofRows(session, planner.transformRelation(request.getUnpersist.getRelation))
+        val target = planner.transformRelationAsDataset(request.getUnpersist.getRelation)
         if (request.getUnpersist.hasBlocking) {
           target.unpersist(request.getUnpersist.getBlocking)
         } else {
@@ -189,8 +178,7 @@ private[connect] class SparkConnectAnalyzeHandler(
         builder.setUnpersist(proto.AnalyzePlanResponse.Unpersist.newBuilder().build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.GET_STORAGE_LEVEL =>
-        val target = Dataset
-          .ofRows(session, planner.transformRelation(request.getGetStorageLevel.getRelation))
+        val target = planner.transformRelationAsDataset(request.getGetStorageLevel.getRelation)
         val storageLevel = target.storageLevel
         builder.setGetStorageLevel(
           proto.AnalyzePlanResponse.GetStorageLevel
