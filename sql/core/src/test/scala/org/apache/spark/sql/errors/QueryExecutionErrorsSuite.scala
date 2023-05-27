@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.io.{File, IOException}
 import java.net.{URI, URL}
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
@@ -743,8 +743,8 @@ class QueryExecutionErrorsSuite
             val driver: Driver = DriverRegistry.get(driverClass)
             val connection = ConnectionProvider.create(
               driver, options.parameters, options.connectionProviderName)
-            val spyConnection = spy(connection)
-            val spyMetaData = spy(connection.getMetaData)
+            val spyConnection = spy[Connection](connection)
+            val spyMetaData = spy[DatabaseMetaData](connection.getMetaData)
             when(spyConnection.getMetaData).thenReturn(spyMetaData)
             when(spyMetaData.supportsTransactions()).thenReturn(false)
 
