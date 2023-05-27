@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.io.CountingOutputStream
 import io.grpc.stub.StreamObserver
+import org.apache.hadoop.fs.{Path => FSPath}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
@@ -50,6 +51,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   private var holder: SessionHolder = _
   private def artifactManager: SparkConnectArtifactManager =
     SparkConnectArtifactManager.getOrCreateArtifactManager
+
+  val forwardToFSPrefix = "forwardToFS"
 
   override def onNext(req: AddArtifactsRequest): Unit = {
     if (this.holder == null) {
@@ -89,6 +92,26 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     artifactManager.addArtifact(holder, artifact.path, artifact.stagedPath, artifact.fragment)
   }
 
+  protected def uploadStagedArtifactToFS(artifact: StagedArtifact): Unit = {
+    try {
+      val hadoopConf = holder.session.sparkContext.hadoopConfiguration
+      assert(artifact.path.startsWith(forwardToFSPrefix))
+      val destFSPath = new FSPath(
+        Paths.get("/").resolve(artifact.path.subpath(1, artifact.path.getNameCount)).toString
+      )
+      val localPath = artifact.stagedPath
+      val fs = destFSPath.getFileSystem(hadoopConf)
+      fs.copyFromLocalFile(
+        new FSPath(localPath.toString),
+        destFSPath
+      )
+    } catch {
+      case _: java.io.IOException =>
+        // TODO: report failure in response message
+        ()
+    }
+  }
+
   /**
    * Process all the staged artifacts built in this stream.
    *
@@ -101,6 +124,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
         addStagedArtifactToArtifactManager(artifact)
+
+        if (artifact.path.startsWith(forwardToFSPrefix)) {
+          uploadStagedArtifactToFS(artifact)
+        }
       }
       artifact.summary()
     }.toSeq
