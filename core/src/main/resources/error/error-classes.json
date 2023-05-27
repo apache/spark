@@ -271,7 +271,7 @@
   },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
-      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
+      "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attrName>."
     ]
   },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
