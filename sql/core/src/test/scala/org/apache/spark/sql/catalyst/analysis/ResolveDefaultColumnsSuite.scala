@@ -17,67 +17,82 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
-import org.apache.spark.sql.connector.write.SupportsCustomSchemaWrite
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType, TimestampType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
-  val rule = ResolveDefaultColumns(null)
-  // This is the internal storage for the timestamp 2020-12-31 00:00:00.0.
-  val literal = Literal(1609401600000000L, TimestampType)
-  val table = UnresolvedInlineTable(
-    names = Seq("attr1"),
-    rows = Seq(Seq(literal)))
-  val localRelation = ResolveInlineTables(table).asInstanceOf[LocalRelation]
-
-  def asLocalRelation(result: LogicalPlan): LocalRelation = result match {
-    case r: LocalRelation => r
-    case _ => fail(s"invalid result operator type: $result")
-  }
-
-  test("SPARK-43018: Add DEFAULTs for INSERT from VALUES list with user-defined columns") {
-    // Call the 'addMissingDefaultValuesForInsertFromInlineTable' method with one user-specified
-    // column. We add a default value of NULL to the row as a result.
-    val insertTableSchemaWithoutPartitionColumns = StructType(Seq(
-      StructField("c1", TimestampType),
-      StructField("c2", TimestampType)))
-    val (result: LogicalPlan, _: Boolean) =
-      rule.addMissingDefaultValuesForInsertFromInlineTable(
-        localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 1)
-    val relation = asLocalRelation(result)
-    assert(relation.output.map(_.name) == Seq("c1", "c2"))
-    val data: Seq[Seq[Any]] = relation.data.map { row =>
-      row.toSeq(StructType(relation.output.map(col => StructField(col.name, col.dataType))))
-    }
-    assert(data == Seq(Seq(literal.value, null)))
-  }
-
-  test("SPARK-43018: Add no DEFAULTs for INSERT from VALUES list with no user-defined columns") {
-    // Call the 'addMissingDefaultValuesForInsertFromInlineTable' method with zero user-specified
-    // columns. The table is unchanged because there are no default columns to add in this case.
-    val insertTableSchemaWithoutPartitionColumns = StructType(Seq(
-      StructField("c1", TimestampType),
-      StructField("c2", TimestampType)))
-    val (result: LogicalPlan, _: Boolean) =
-      rule.addMissingDefaultValuesForInsertFromInlineTable(
-        localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 0)
-    assert(asLocalRelation(result) == localRelation)
-  }
-
-  test("SPARK-43018: INSERT timestamp values into a table with column DEFAULTs") {
+  test("column without default value defined (null as default)") {
     withTable("t") {
-      sql("create table t(id int, ts timestamp) using parquet")
-      sql("insert into t (ts) values (timestamp'2020-12-31')")
+      sql("create table t(c1 timestamp, c2 timestamp) using parquet")
+
+      // INSERT with user-defined columns
+      sql("insert into t (c2) values (timestamp'2020-12-31')")
       checkAnswer(spark.table("t"),
         sql("select null, timestamp'2020-12-31'").collect().head)
+      sql("truncate table t")
+      sql("insert into t (c1) values (timestamp'2020-12-31')")
+      checkAnswer(spark.table("t"),
+        sql("select timestamp'2020-12-31', null").collect().head)
+
+      // INSERT without user-defined columns
+      sql("truncate table t")
+      sql("insert into t values (timestamp'2020-12-31')")
+      checkAnswer(spark.table("t"),
+        sql("select timestamp'2020-12-31', null").collect().head)
     }
+  }
+
+  test("column with default value defined") {
+    withTable("t") {
+      sql("create table t(c1 timestamp DEFAULT timestamp'2020-01-01', " +
+        "c2 timestamp DEFAULT timestamp'2020-01-01') using parquet")
+
+      // INSERT with user-defined columns
+      sql("insert into t (c1) values (timestamp'2020-12-31')")
+      checkAnswer(spark.table("t"),
+        sql("select timestamp'2020-12-31', timestamp'2020-01-01'").collect().head)
+      sql("truncate table t")
+      sql("insert into t (c2) values (timestamp'2020-12-31')")
+      checkAnswer(spark.table("t"),
+        sql("select timestamp'2020-01-01', timestamp'2020-12-31'").collect().head)
+
+      // INSERT without user-defined columns
+      sql("truncate table t")
+      sql("insert into t values (timestamp'2020-12-31')")
+      checkAnswer(spark.table("t"),
+        sql("select timestamp'2020-12-31', timestamp'2020-01-01'").collect().head)
+    }
+  }
+
+  test("INSERT into partitioned tables") {
+    sql("create table t(c1 int, c2 int, c3 int, c4 int) using parquet partitioned by (c3, c4)")
+
+    // INSERT without static partitions
+    sql("insert into t values (1, 2, 3)")
+    checkAnswer(spark.table("t"), Row(1, 2, 3, null))
+
+    // INSERT without static partitions but with column list
+    sql("truncate table t")
+    sql("insert into t (c2, c1, c4) values (1, 2, 3)")
+    checkAnswer(spark.table("t"), Row(2, 1, null, 3))
+
+    // INSERT with static partitions
+    sql("truncate table t")
+    sql("insert into t partition(c3=3, c4=4) values (1)")
+    checkAnswer(spark.table("t"), Row(1, null, 3, 4))
+
+    // INSERT with static partitions and with column list
+    sql("truncate table t")
+    sql("insert into t partition(c3=3, c4=4) (c2) values (1)")
+    checkAnswer(spark.table("t"), Row(null, 1, 3, 4))
+
+    // INSERT with partial static partitions
+    sql("truncate table t")
+    sql("insert into t partition(c3=3, c4) values (1, 2)")
+    checkAnswer(spark.table("t"), Row(1, 2, 3, null))
+
+    // INSERT with partial static partitions and with column list is not allowed
+    intercept[AnalysisException](sql("insert into t partition(c3=3, c4) (c1) values (1, 4)"))
   }
 
   test("SPARK-43085: Column DEFAULT assignment for target tables with multi-part names") {
@@ -163,112 +178,5 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
             "actualType" -> "\"BOOLEAN\""))
       }
     }
-  }
-
-  /**
-   * This is a new relation type that defines the 'customSchemaForInserts' method.
-   * Its implementation drops the last table column as it represents an internal pseudocolumn.
-   */
-  case class TableWithCustomInsertSchema(output: Seq[Attribute], numMetadataColumns: Int)
-    extends Table with SupportsCustomSchemaWrite {
-    override def name: String = "t"
-    override def schema: StructType = StructType.fromAttributes(output)
-    override def capabilities(): java.util.Set[TableCapability] =
-      new java.util.HashSet[TableCapability]()
-    override def customSchemaForInserts: StructType =
-      StructType(schema.fields.dropRight(numMetadataColumns))
-  }
-
-  /** Helper method to generate a DSV2 relation using the above table type. */
-  private def relationWithCustomInsertSchema(
-      output: Seq[AttributeReference], numMetadataColumns: Int): DataSourceV2Relation = {
-    DataSourceV2Relation(
-      TableWithCustomInsertSchema(output, numMetadataColumns),
-      output,
-      catalog = None,
-      identifier = None,
-      options = CaseInsensitiveStringMap.empty)
-  }
-
-  test("SPARK-43313: Add missing default values for MERGE INSERT actions") {
-    val testRelation = SubqueryAlias(
-      "testRelation",
-      relationWithCustomInsertSchema(Seq(
-        AttributeReference(
-          "a",
-          StringType,
-          true,
-          new MetadataBuilder()
-            .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'a'")
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'a'")
-            .build())(),
-        AttributeReference(
-          "b",
-          StringType,
-          true,
-          new MetadataBuilder()
-            .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'b'")
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'b'")
-            .build())(),
-        AttributeReference(
-          "c",
-          StringType,
-          true,
-          new MetadataBuilder()
-            .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'c'")
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'c'")
-            .build())(),
-        AttributeReference(
-          "pseudocolumn",
-          StringType,
-          true,
-          new MetadataBuilder()
-            .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'pseudocolumn'")
-            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'pseudocolumn'")
-            .build())()),
-        numMetadataColumns = 1))
-    val testRelation2 =
-      SubqueryAlias(
-        "testRelation2",
-        relationWithCustomInsertSchema(Seq(
-          AttributeReference("d", StringType)(),
-          AttributeReference("e", StringType)(),
-          AttributeReference("f", StringType)()),
-        numMetadataColumns = 0))
-    val mergePlan = MergeIntoTable(
-      targetTable = testRelation,
-      sourceTable = testRelation2,
-      mergeCondition = EqualTo(testRelation.output.head, testRelation2.output.head),
-      matchedActions = Seq(DeleteAction(None)),
-      notMatchedActions = Seq(
-        InsertAction(
-          condition = None,
-          assignments = Seq(
-            Assignment(
-              key = UnresolvedAttribute("a"),
-              value = UnresolvedAttribute("DEFAULT")),
-            Assignment(
-              key = UnresolvedAttribute(Seq("testRelation", "b")),
-              value = Literal("xyz"))))),
-      notMatchedBySourceActions = Seq(DeleteAction(None)))
-    // Run the 'addMissingDefaultValuesForMergeAction' method of the 'ResolveDefaultColumns' rule
-    // on an MERGE INSERT action with two assignments, one to the target table's column 'a' and
-    // another to the target table's column 'b'.
-    val columnNamesWithDefaults = Seq("a", "b", "c")
-    val actualMergeAction =
-      rule.apply(mergePlan).asInstanceOf[MergeIntoTable].notMatchedActions.head
-    val expectedMergeAction =
-      InsertAction(
-        condition = None,
-        assignments = Seq(
-          Assignment(key = UnresolvedAttribute("a"), value = Literal("a")),
-          Assignment(key = UnresolvedAttribute(Seq("testRelation", "b")), value = Literal("xyz")),
-          Assignment(key = UnresolvedAttribute("c"), value = Literal("c"))))
-    assert(expectedMergeAction == actualMergeAction)
-    // Run the same method on another MERGE DELETE action. There is no change because this method
-    // only operates on MERGE INSERT actions.
-    assert(rule.addMissingDefaultValuesForMergeAction(
-      mergePlan.matchedActions.head, mergePlan, columnNamesWithDefaults) ==
-      mergePlan.matchedActions.head)
   }
 }
