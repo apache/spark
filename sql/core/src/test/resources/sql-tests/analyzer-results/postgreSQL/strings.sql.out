@@ -874,4 +874,5 @@ Project [btrim(cast(\000trim\000 as binary), cast( as binary)) AS btrim(\000trim
 -- !query
 DROP TABLE toasttest
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`toasttest`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.toasttest

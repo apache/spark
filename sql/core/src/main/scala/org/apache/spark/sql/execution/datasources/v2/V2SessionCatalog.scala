@@ -71,7 +71,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadTable(ident: Identifier): Table = {
-    V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    try {
+      V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    } catch {
+      case _: NoSuchDatabaseException =>
+        throw QueryCompilationErrors.noSuchTableError(ident)
+    }
   }
 
   override def loadTable(ident: Identifier, timestamp: Long): Table = {
@@ -106,6 +111,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
+  }
+
+  override def purgeTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident, purge = true)
   }
 
   // TODO: remove it when no tests calling this deprecated method.
@@ -192,12 +201,16 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def dropTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident)
+  }
+
+  private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
       if (loadTable(ident) != null) {
         catalog.dropTable(
           ident.asTableIdentifier,
           ignoreIfNotExists = true,
-          purge = true /* skip HDFS trash */)
+          purge = purge)
         true
       } else {
         false

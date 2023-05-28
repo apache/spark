@@ -166,4 +166,5 @@ Project [(10123456789012345678901234567890.123456 / 10.0) AS (101234567890123456
 -- !query
 drop table decimals_test
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`decimals_test`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.decimals_test

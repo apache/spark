@@ -170,7 +170,8 @@ SetNamespaceCommand [default]
 -- !query
 DROP TABLE s.tab
 -- !query analysis
-DropTableCommand `spark_catalog`.`s`.`tab`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), s.tab
 
 
 -- !query
@@ -210,7 +211,8 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false
 -- !query
 DROP TABLE IF EXISTS IDENTIFIER('ta' || 'b')
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tab
 
 
 -- !query
@@ -236,7 +238,8 @@ CreateDataSourceTableCommand `spark_catalog`.`identifier_clauses`.`tab`, false
 -- !query
 DROP TABLE IF EXISTS IDENTIFIER('identifier_clauses.' || 'tab')
 -- !query analysis
-DropTableCommand `spark_catalog`.`identifier_clauses`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clauses.tab
 
 
 -- !query
@@ -278,7 +281,8 @@ UncacheTable false, true
 -- !query
 DROP TABLE IF EXISTS IDENTIFIER('ta' || 'b')
 -- !query analysis
-DropTableCommand `spark_catalog`.`identifier_clauses`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clauses.tab
 
 
 -- !query
@@ -383,7 +387,8 @@ TruncateTableCommand `spark_catalog`.`default`.`tab`
 -- !query
 DROP TABLE IF EXISTS tab
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tab`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tab
 
 
 -- !query

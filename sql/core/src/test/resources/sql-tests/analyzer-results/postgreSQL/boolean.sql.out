@@ -744,22 +744,26 @@ Project [((isnul#x OR istrue#x) OR isfalse#x) AS ((isnul OR istrue) OR isfalse)#
 -- !query
 DROP TABLE  BOOLTBL1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL1
 
 
 -- !query
 DROP TABLE  BOOLTBL2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL2
 
 
 -- !query
 DROP TABLE  BOOLTBL3
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL3
 
 
 -- !query
 DROP TABLE  BOOLTBL4
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`BOOLTBL4`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.BOOLTBL4

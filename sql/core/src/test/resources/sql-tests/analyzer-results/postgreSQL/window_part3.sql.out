@@ -473,16 +473,19 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DROP TABLE empsalary
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`empsalary`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.empsalary
 
 
 -- !query
 DROP TABLE datetimes
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`datetimes`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.datetimes
 
 
 -- !query
 DROP TABLE t1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1

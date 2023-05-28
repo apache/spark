@@ -63,4 +63,5 @@ Project [col1#x, col2#x, char_length(col3#x) AS char_length(col3)#x]
 -- !query
 drop table inserttest
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`inserttest`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.inserttest

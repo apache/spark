@@ -1590,31 +1590,36 @@ Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL]
 -- !query
 DROP TABLE t1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
 
 
 -- !query
 DROP TABLE t2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
 
 
 -- !query
 DROP TABLE t3
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t3
 
 
 -- !query
 DROP TABLE J1_TBL
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`J1_TBL`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.J1_TBL
 
 
 -- !query
 DROP TABLE J2_TBL
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`J2_TBL`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.J2_TBL
 
 
 -- !query
@@ -1705,7 +1710,8 @@ Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL]
 -- !query
 DROP TABLE IF EXISTS tt3
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tt3`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tt3
 
 
 -- !query
@@ -1727,7 +1733,8 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 DROP TABLE IF EXISTS tt4
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tt4`, true, false, false
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tt4
 
 
 -- !query
@@ -3556,10 +3563,12 @@ Project [id1#x, id2#x, id1#x, id2#x]
 -- !query
 drop table j1
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`j1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.j1
 
 
 -- !query
 drop table j2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`j2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.j2

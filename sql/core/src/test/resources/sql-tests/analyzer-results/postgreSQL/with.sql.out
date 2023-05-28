@@ -161,7 +161,8 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 DROP TABLE y
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`y`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.y
 
 
 -- !query
@@ -279,7 +280,8 @@ Sort [k#x ASC NULLS FIRST], true
 -- !query
 DROP TABLE withz
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`withz`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.withz
 
 
 -- !query
@@ -467,40 +469,47 @@ Project [i#x]
 -- !query
 drop table test
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`test`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test
 
 
 -- !query
 DROP TABLE department
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`department`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.department
 
 
 -- !query
 DROP TABLE tree
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tree`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tree
 
 
 -- !query
 DROP TABLE graph
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`graph`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.graph
 
 
 -- !query
 DROP TABLE y
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`y`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.y
 
 
 -- !query
 DROP TABLE yy
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`yy`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.yy
 
 
 -- !query
 DROP TABLE parent
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`parent`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.parent

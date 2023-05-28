@@ -26,7 +26,8 @@ DescribeTableCommand `spark_catalog`.`default`.`table_with_comment`, true, [col_
 -- !query
 DROP TABLE table_with_comment
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`table_with_comment`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.table_with_comment
 
 
 -- !query
@@ -68,4 +69,5 @@ DescribeTableCommand `spark_catalog`.`default`.`table_comment`, true, [col_name#
 -- !query
 DROP TABLE table_comment
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`table_comment`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.table_comment

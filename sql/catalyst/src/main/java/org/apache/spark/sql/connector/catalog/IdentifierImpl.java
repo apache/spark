@@ -30,12 +30,12 @@ import org.apache.spark.sql.catalyst.util.package$;
  *  An {@link Identifier} implementation.
  */
 @Evolving
-class IdentifierImpl implements Identifier {
+public class IdentifierImpl implements Identifier {
 
   private String[] namespace;
   private String name;
 
-  IdentifierImpl(String[] namespace, String name) {
+  public IdentifierImpl(String[] namespace, String name) {
     Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null");
     Preconditions.checkNotNull(name, "Identifier name cannot be null");
     this.namespace = namespace;

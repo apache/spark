@@ -183,13 +183,15 @@ ShowColumnsCommand global_temp, `global_temp`.`showcolumn4`, [col_name#x]
 -- !query
 DROP TABLE showcolumn1
 -- !query analysis
-DropTableCommand `spark_catalog`.`showdb`.`showcolumn1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), showdb.showcolumn1
 
 
 -- !query
 DROP TABLE showColumn2
 -- !query analysis
-DropTableCommand `spark_catalog`.`showdb`.`showColumn2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), showdb.showColumn2
 
 
 -- !query

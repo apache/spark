@@ -31,7 +31,8 @@ DropTableCommand `spark_catalog`.`default`.`toyemp`, false, true, false
 -- !query
 DROP TABLE emp
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`emp`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.emp
 
 
 -- !query
@@ -207,7 +208,8 @@ DropTableCommand `spark_catalog`.`default`.`viewtest`, false, true, false
 -- !query
 DROP TABLE viewtest_tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`viewtest_tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.viewtest_tbl
 
 
 -- !query
@@ -1356,7 +1358,8 @@ DescribeTableCommand `spark_catalog`.`testviewschm2`.`v3`, false, [col_name#x, d
 -- !query
 drop table tt3
 -- !query analysis
-DropTableCommand `spark_catalog`.`testviewschm2`.`tt3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), testviewschm2.tt3
 
 
 -- !query
