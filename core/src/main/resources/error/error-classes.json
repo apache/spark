@@ -617,6 +617,11 @@
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
+  "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
+    "message" : [
+      "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
@@ -1371,6 +1376,11 @@
     ],
     "sqlState" : "42903"
   },
+  "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
+    "message" : [
+      "Cannot specify ORDER BY or a window frame for <aggFunc>."
+    ]
+  },
   "INVALID_WRITE_DISTRIBUTION" : {
     "message" : [
       "The requested write distribution is invalid."
@@ -1392,6 +1402,11 @@
         ]
       }
     }
+  },
+  "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
+    "message" : [
+      "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
+    ]
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -1784,6 +1799,11 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "SEED_EXPRESSION_IS_UNFOLDABLE" : {
+    "message" : [
+      "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
+    ]
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
@@ -5439,31 +5459,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2411" : {
-    "message" : [
-      "Cannot specify order by or frame for '<aggFunc>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2413" : {
-    "message" : [
-      "Input argument to <argName> must be a constant."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2414" : {
-    "message" : [
-      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2416" : {
-    "message" : [
-      "join condition '<join>' of type <type> is not a boolean."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2417" : {
-    "message" : [
-      "join condition '<condition>' of type <dataType> is not a boolean."
     ]
   },
   "_LEGACY_ERROR_TEMP_2418" : {
