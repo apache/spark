@@ -55,7 +55,9 @@ class IdentifierImpl(namespace: Array[String], name: String)
   }
 
   override def hashCode: Int = {
-    Objects.hash(name, namespace)
+    var result = Objects.hash(name)
+    result = 31 * result + namespace.toSeq.hashCode()
+    result
   }
 
 }
