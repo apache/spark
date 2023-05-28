@@ -619,7 +619,7 @@
   },
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
-      "Event time must be defined on a window or a timestamp, but <eventName> is of type <eventType>."
+      "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -1378,7 +1378,7 @@
   },
   "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
     "message" : [
-      "Cannot specify order by or frame for '<aggFunc>'."
+      "Cannot specify ORDER BY or a window frame for <aggFunc>."
     ]
   },
   "INVALID_WRITE_DISTRIBUTION" : {
@@ -1405,7 +1405,7 @@
   },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
-      "join condition '<joinCondition>' of type <conditionType> is not a boolean."
+      "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
   "LOCATION_ALREADY_EXISTS" : {
@@ -1795,9 +1795,9 @@
     ],
     "sqlState" : "22023"
   },
-  "SEED_EXPRESSION_IS_UNRESOLVED" : {
+  "SEED_EXPRESSION_IS_UNFOLDABLE" : {
     "message" : [
-      "Input argument to <argName> must be a constant."
+      "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
     ]
   },
   "SORT_BY_WITHOUT_BUCKETING" : {

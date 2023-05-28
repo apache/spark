@@ -344,8 +344,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             e.failAnalysis(
-              errorClass = "SEED_EXPRESSION_IS_UNRESOLVED",
-              messageParameters = Map("argName" -> toSQLExpr(e)))
+              errorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
+              messageParameters = Map(
+                "seedExpr" -> toSQLExpr(e.seedExpression),
+                "exprWithSeed" -> toSQLExpr(e)))
 
           case p: Parameter =>
             p.failAnalysis(

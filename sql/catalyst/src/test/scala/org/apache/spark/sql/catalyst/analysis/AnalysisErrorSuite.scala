@@ -965,13 +965,15 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
-    Seq((Rand("a".attr), "\"rand(a)\""), (Randn("a".attr), "\"randn(a)\"")).foreach {
-      case (r, expectedArgName) =>
+    Seq((Rand("a".attr), "\"rand(a)\""),
+      (Randn("a".attr), "\"randn(a)\"")).foreach {
+      case (r, expectedArg) =>
         val plan = Project(Seq(r.as("r")), testRelation)
         assertAnalysisErrorClass(plan,
-          expectedErrorClass = "SEED_EXPRESSION_IS_UNRESOLVED",
+          expectedErrorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
           expectedMessageParameters = Map(
-            "argName" -> expectedArgName),
+            "seedExpr" -> "\"a\"",
+            "exprWithSeed" -> expectedArg),
           caseSensitive = false
         )
     }
