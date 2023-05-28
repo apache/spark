@@ -161,7 +161,7 @@ def to_protobuf(
     messageName: str,
     descFilePath: Optional[str] = None,
     options: Optional[Dict[str, str]] = None,
-    binaryDescriptorSet: Optional[bytes] = None
+    binaryDescriptorSet: Optional[bytes] = None,
 ) -> Column:
     """
     Converts a column into binary of protobuf format. The Protobuf definition is provided in one
