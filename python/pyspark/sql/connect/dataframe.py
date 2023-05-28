@@ -76,7 +76,7 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
-from pyspark.sql.connect.types import from_arrow_schema
+from pyspark.sql.pandas.types import from_arrow_schema
 
 
 if TYPE_CHECKING:
