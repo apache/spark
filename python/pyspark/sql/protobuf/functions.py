@@ -138,11 +138,12 @@ def from_protobuf(
 
     sc = get_active_spark_context()
     try:
-        if descFilePath is not None or binaryDescriptorSet is not None:
-            if binaryDescriptorSet is not None:
-                binary_proto = binaryDescriptorSet
-            else:
-                binary_proto = _read_descriptor_set_file(descFilePath)
+        binary_proto = None
+        if binaryDescriptorSet is not None:
+            binary_proto = binaryDescriptorSet
+        elif descFilePath is not None:
+            binary_proto = _read_descriptor_set_file(descFilePath)
+        if binary_proto is not None:
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
                 _to_java_column(data), messageName, binary_proto, options or {}
             )
@@ -252,11 +253,12 @@ def to_protobuf(
 
     sc = get_active_spark_context()
     try:
-        if descFilePath is not None or binaryDescriptorSet is not None:
-            if binaryDescriptorSet is not None:
-                binary_proto = binaryDescriptorSet
-            else:
-                binary_proto = _read_descriptor_set_file(descFilePath)
+        binary_proto = None
+        if binaryDescriptorSet is not None:
+            binary_proto = binaryDescriptorSet
+        elif descFilePath is not None:
+            binary_proto = _read_descriptor_set_file(descFilePath)
+        if binary_proto is not None:
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
                 _to_java_column(data), messageName, binary_proto, options or {}
             )
