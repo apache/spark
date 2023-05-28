@@ -102,7 +102,8 @@ def from_protobuf(
     ...             from_protobuf(proto_df.value, message_name, desc_file_path).alias("value"))
     ...         proto_df_1.show(truncate=False)
     ...         proto_df_2 = proto_df.select( # With binary for descriptor
-    ...             from_protobuf(proto_df.value, message_name, binaryDescriptorSet = bytearray.fromhex(desc_hex))
+    ...             from_protobuf(proto_df.value, message_name,
+    ...                           binaryDescriptorSet = bytearray.fromhex(desc_hex))
     ...             .alias("value"))
     ...         proto_df_2.show(truncate=False)
     +----------------------------------------+
@@ -222,7 +223,8 @@ def to_protobuf(
     ...             to_protobuf(df.value, message_name, desc_file_path).alias("suite"))
     ...         proto_df.show(truncate=False)
     ...         proto_df_2 = df.select( # With binary for descriptor
-    ...             to_protobuf(df.value, message_name, binaryDescriptorSet=bytearray.fromhex(desc_hex))
+    ...             to_protobuf(df.value, message_name,
+    ...                         binaryDescriptorSet=bytearray.fromhex(desc_hex))
     ...             .alias("suite"))
     ...         proto_df_2.show(truncate=False)
     +-------------------------------------------+
@@ -271,7 +273,7 @@ def to_protobuf(
 
 
 def _read_descriptor_set_file(filePath: str) -> bytes:
-    # TODO: Throw structured Spark-SQL error similar to Scala (e.g. "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND")
+    # TODO: Throw structured errors like "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" etc.
     with open(filePath, "rb") as f:
         return f.read()
 
