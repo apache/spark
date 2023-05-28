@@ -301,7 +301,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             cols,
             query,
             overwrite = false,
-            ifPartitionNotExists)
+            ifPartitionNotExists,
+            byName)
         })
       case table: InsertOverwriteTableContext =>
         val (relation, cols, partition, ifPartitionNotExists, _) = visitInsertOverwriteTable(table)
