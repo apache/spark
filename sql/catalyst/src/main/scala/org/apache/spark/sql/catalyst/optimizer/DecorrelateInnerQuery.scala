@@ -249,6 +249,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
       // or a cast expression after the optimization.
       case EqualNullSafe(left: Attribute, right: Expression) if domainAttrSet.contains(left) =>
         left -> right
+      // IsNull(x) results from a constant folding, so we restore the original predicate as
+      // x <=> Null.
+      case IsNull(child: Attribute) if domainAttrSet.contains(child) =>
+        child -> Literal.create(null, child.dataType)
     }.toMap
   }
 

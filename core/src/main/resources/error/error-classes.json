@@ -5,6 +5,13 @@
     ],
     "sqlState" : "42710"
   },
+  "AMBIGUOUS_ALIAS_IN_NESTED_CTE" : {
+    "message" : [
+      "Name <name> is ambiguous in nested CTE.",
+      "Please set <config> to \"CORRECTED\" so that name defined in inner CTE takes precedence. If set it to \"LEGACY\", outer CTE definitions will take precedence.",
+      "See '<docroot>/sql-migration-guide.html#query-engine'."
+    ]
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -47,11 +54,6 @@
     ],
     "sqlState" : "42846"
   },
-  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
-    "message" : [
-      "Error constructing FileDescriptor for <descFilePath>."
-    ]
-  },
   "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
     "message" : [
       "Cannot convert Protobuf <protobufColumn> to SQL <sqlColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
@@ -62,14 +64,14 @@
       "Unable to convert <protobufType> of Protobuf to SQL type <toType>."
     ]
   },
-  "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE" : {
-    "message" : [
-      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> cannot be written since it's not defined in ENUM <enumString>."
-    ]
-  },
   "CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE" : {
     "message" : [
       "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because schema is incompatible (protobufType = <protobufType>, sqlType = <sqlType>)."
+    ]
+  },
+  "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE" : {
+    "message" : [
+      "Cannot convert SQL <sqlColumn> to Protobuf <protobufColumn> because <data> is not in defined values for enum: <enumString>."
     ]
   },
   "CANNOT_DECODE_URL" : {
@@ -125,7 +127,7 @@
   },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
-      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object."
+      "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
@@ -180,11 +182,31 @@
     ],
     "sqlState" : "22003"
   },
+  "CODEC_NOT_AVAILABLE" : {
+    "message" : [
+      "The codec <codecName> is not available. Consider to set the config <configKey> to <configVal>."
+    ]
+  },
+  "CODEC_SHORT_NAME_NOT_FOUND" : {
+    "message" : [
+      "Cannot find a short name for the codec <codecName>."
+    ]
+  },
+  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Columns aliases are not allowed in <op>."
+    ]
+  },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
       "The column <columnName> already exists. Consider to choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
+  },
+  "COLUMN_NOT_DEFINED_IN_TABLE" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
   },
   "COLUMN_NOT_FOUND" : {
     "message" : [
@@ -201,6 +223,13 @@
     "message" : [
       "Another instance of this query was just started by a concurrent session."
     ]
+  },
+  "CONCURRENT_STREAM_LOG_UPDATE" : {
+    "message" : [
+      "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
+      "Please make sure only one streaming job runs on a specific checkpoint location at a time."
+    ],
+    "sqlState" : "40000"
   },
   "CONNECT" : {
     "message" : [
@@ -234,6 +263,11 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ],
     "sqlState" : "22018"
+  },
+  "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
+    "message" : [
+      "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
+    ]
   },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
@@ -539,6 +573,11 @@
     ],
     "sqlState" : "42704"
   },
+  "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
+    "message" : [
+      "Distinct window functions are not supported: <windowExpr>."
+    ]
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
@@ -555,6 +594,11 @@
       "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
     ],
     "sqlState" : "23505"
+  },
+  "DUPLICATE_CLAUSES" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>. Please, remove one of them."
+    ]
   },
   "DUPLICATE_KEY" : {
     "message" : [
@@ -830,6 +874,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_NETWORK" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -887,6 +937,11 @@
       "The location name cannot be empty string, but `<location>` was given."
     ],
     "sqlState" : "42K05"
+  },
+  "INVALID_ESC" : {
+    "message" : [
+      "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
+    ]
   },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
@@ -1012,6 +1067,33 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_LIMIT_LIKE_EXPRESSION" : {
+    "message" : [
+      "The limit like expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "The <name> expression must be integer type, but got <dataType>."
+        ]
+      },
+      "IS_NEGATIVE" : {
+        "message" : [
+          "The <name> expression must be equal to or greater than 0, but got <v>."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "The evaluated <name> expression must not be null."
+        ]
+      },
+      "IS_UNFOLDABLE" : {
+        "message" : [
+          "The <name> expression must evaluate to a constant value."
+        ]
+      }
+    }
+  },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
@@ -1041,14 +1123,24 @@
       "The value of parameter(s) <parameter> in <functionName> is invalid:"
     ],
     "subClass" : {
-      "AES_KEY" : {
+      "AES_CRYPTO_ERROR" : {
         "message" : [
           "detail message: <detailMessage>"
+        ]
+      },
+      "AES_IV_LENGTH" : {
+        "message" : [
+          "supports 16-byte CBC IVs and 12-byte GCM IVs, but got <actualLength> bytes for <mode>."
         ]
       },
       "AES_KEY_LENGTH" : {
         "message" : [
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
+        ]
+      },
+      "DATETIME_UNIT" : {
+        "message" : [
+          "expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
         ]
       },
       "PATTERN" : {
@@ -1068,6 +1160,23 @@
       }
     },
     "sqlState" : "22023"
+  },
+  "INVALID_PARTITION_OPERATION" : {
+    "message" : [
+      "The partition command is invalid."
+    ],
+    "subClass" : {
+      "PARTITION_MANAGEMENT_IS_UNSUPPORTED" : {
+        "message" : [
+          "Table <name> does not support partition management."
+        ]
+      },
+      "PARTITION_SCHEMA_IS_EMPTY" : {
+        "message" : [
+          "Table <name> is not partitioned."
+        ]
+      }
+    }
   },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
@@ -1118,8 +1227,90 @@
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
-      "Invalid SQL syntax: <inputString>."
+      "Invalid SQL syntax:"
     ],
+    "subClass" : {
+      "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
+        "message" : [
+          "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+        "message" : [
+          "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."
+        ]
+      },
+      "CREATE_TEMP_FUNC_WITH_DATABASE" : {
+        "message" : [
+          "CREATE TEMPORARY FUNCTION with specifying a database(<database>) is not allowed."
+        ]
+      },
+      "CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS" : {
+        "message" : [
+          "CREATE TEMPORARY FUNCTION with IF NOT EXISTS is not allowed."
+        ]
+      },
+      "EMPTY_PARTITION_VALUE" : {
+        "message" : [
+          "Partition key <partKey> must set value."
+        ]
+      },
+      "INVALID_COLUMN_REFERENCE" : {
+        "message" : [
+          "Expected a column reference for transform <transform>: <expr>."
+        ]
+      },
+      "INVALID_TABLE_VALUED_FUNC_NAME" : {
+        "message" : [
+          "Table valued function cannot specify database name: <funcName>."
+        ]
+      },
+      "INVALID_WINDOW_REFERENCE" : {
+        "message" : [
+          "Window reference <windowName> is not a window specification."
+        ]
+      },
+      "LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC" : {
+        "message" : [
+          "LATERAL can only be used with subquery and table-valued functions."
+        ]
+      },
+      "MULTI_PART_NAME" : {
+        "message" : [
+          "<statement> with multiple part function name(<funcName>) is not allowed."
+        ]
+      },
+      "REPETITIVE_WINDOW_DEFINITION" : {
+        "message" : [
+          "The definition of window <windowName> is repetitive."
+        ]
+      },
+      "SHOW_FUNCTIONS_INVALID_PATTERN" : {
+        "message" : [
+          "Invalid pattern in SHOW FUNCTIONS: <pattern>. It must be a \"STRING\" literal."
+        ]
+      },
+      "SHOW_FUNCTIONS_INVALID_SCOPE" : {
+        "message" : [
+          "SHOW <scope> FUNCTIONS not supported."
+        ]
+      },
+      "TRANSFORM_WRONG_NUM_ARGS" : {
+        "message" : [
+          "The transform<transform> requires <expectedNum> parameters but the actual number is <actualNum>."
+        ]
+      },
+      "UNRESOLVED_WINDOW_REFERENCE" : {
+        "message" : [
+          "Cannot resolve window reference <windowName>."
+        ]
+      },
+      "UNSUPPORTED_FUNC_NAME" : {
+        "message" : [
+          "Unsupported function name <funcName>."
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
@@ -1139,6 +1330,28 @@
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ]
+  },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR" : {
+    "message" : [
+      "The time travel timestamp expression <expr> is invalid."
+    ],
+    "subClass" : {
+      "INPUT" : {
+        "message" : [
+          "Cannot be casted to the \"TIMESTAMP\" type."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Must be deterministic."
+        ]
+      },
+      "UNEVALUABLE" : {
+        "message" : [
+          "Must be evaluable."
+        ]
+      }
+    }
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
@@ -1255,6 +1468,51 @@
       "PARTITION clause cannot contain the non-partition column: <columnName>."
     ],
     "sqlState" : "42000"
+  },
+  "NOT_ALLOWED_IN_FROM" : {
+    "message" : [
+      "Not allowed in the FROM clause:"
+    ],
+    "subClass" : {
+      "LATERAL_WITH_PIVOT" : {
+        "message" : [
+          "LATERAL together with PIVOT."
+        ]
+      },
+      "LATERAL_WITH_UNPIVOT" : {
+        "message" : [
+          "LATERAL together with UNPIVOT."
+        ]
+      },
+      "UNPIVOT_WITH_PIVOT" : {
+        "message" : [
+          "UNPIVOT together with PIVOT."
+        ]
+      }
+    }
+  },
+  "NOT_A_CONSTANT_STRING" : {
+    "message" : [
+      "The expression <expr> used for the routine or clause <name> must be a constant STRING which is NOT NULL."
+    ],
+    "subClass" : {
+      "NOT_CONSTANT" : {
+        "message" : [
+          "To be considered constant the expression must not depend on any columns, contain a subquery, or invoke a non deterministic function such as rand()."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "The expression evaluates to NULL."
+        ]
+      },
+      "WRONG_TYPE" : {
+        "message" : [
+          "The data type of the expression is <dataType>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
   },
   "NOT_A_PARTITIONED_TABLE" : {
     "message" : [
@@ -1453,6 +1711,11 @@
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
+    ]
+  },
+  "RECURSIVE_VIEW" : {
+    "message" : [
+      "Recursive view <viewIdent> detected (cycle: <newPath>)."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
@@ -1796,6 +2059,16 @@
           "AES-<mode> with the padding <padding> by the <functionName> function."
         ]
       },
+      "AES_MODE_AAD" : {
+        "message" : [
+          "<functionName> with AES-<mode> does not support additional authenticate data (AAD)."
+        ]
+      },
+      "AES_MODE_IV" : {
+        "message" : [
+          "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -1919,6 +2192,11 @@
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
+        ]
+      },
+      "TIME_TRAVEL" : {
+        "message" : [
+          "Time travel on the relation: <relationId>."
         ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
@@ -2086,6 +2364,16 @@
     ],
     "sqlState" : "42P01"
   },
+  "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
+    "message" : [
+      "<funcName> function can only be evaluated in an ordered row-based window frame with a single offset: <windowExpr>."
+    ]
+  },
+  "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
+    "message" : [
+      "Window function <funcName> requires an OVER clause."
+    ]
+  },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
       "`writeStream` can be called only on streaming Dataset/DataFrame."
@@ -2124,11 +2412,6 @@
       "INSERT OVERWRITE DIRECTORY is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0003" : {
-    "message" : [
-      "Columns aliases are not allowed in <op>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
@@ -2149,11 +2432,6 @@
       "DISTRIBUTE BY is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0013" : {
-    "message" : [
-      "LATERAL cannot be used together with PIVOT in FROM clause."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0014" : {
     "message" : [
       "TABLESAMPLE does not accept empty inputs."
@@ -2167,11 +2445,6 @@
   "_LEGACY_ERROR_TEMP_0016" : {
     "message" : [
       "<bytesStr> is not a valid byte length literal, expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0017" : {
-    "message" : [
-      "Invalid escape string. Escape string must contain only one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_0018" : {
@@ -2252,11 +2525,6 @@
   "_LEGACY_ERROR_TEMP_0039" : {
     "message" : [
       "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0041" : {
-    "message" : [
-      "Found duplicate clauses: <clauseName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {
@@ -3187,11 +3455,6 @@
       "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1206" : {
-    "message" : [
-      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1207" : {
     "message" : [
       "The duration and time inputs to window must be an integer, long or string literal."
@@ -3420,11 +3683,6 @@
       "Failed to truncate table <tableIdentWithDB> when removing data of the path: <path>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1269" : {
-    "message" : [
-      "SHOW PARTITIONS is not allowed on a table that is not partitioned: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1270" : {
     "message" : [
       "SHOW CREATE TABLE is not supported on a temporary view: <table>."
@@ -3478,16 +3736,6 @@
   "_LEGACY_ERROR_TEMP_1280" : {
     "message" : [
       "It is not allowed to create a persisted view from the Dataset API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1281" : {
-    "message" : [
-      "Recursive view <viewIdent> detected (cycle: <newPath>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1282" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1285" : {
@@ -3723,11 +3971,6 @@
       "<expr> is not a valid timestamp expression for time travel."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1336" : {
-    "message" : [
-      "Cannot time travel <target>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1337" : {
     "message" : [
       "Table <tableName> does not support time travel."
@@ -3866,11 +4109,6 @@
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2029" : {
-    "message" : [
-      "Not supported rounding mode: <roundMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2030" : {
@@ -4871,7 +5109,7 @@
   },
   "_LEGACY_ERROR_TEMP_2249" : {
     "message" : [
-      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB."
+      "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>: <dataSize>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2250" : {
@@ -5201,61 +5439,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2400" : {
-    "message" : [
-      "The <name> expression must evaluate to a constant value, but got <limitExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2401" : {
-    "message" : [
-      "The <name> expression must be integer type, but got <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2402" : {
-    "message" : [
-      "The evaluated <name> expression must not be null, but got <limitExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2403" : {
-    "message" : [
-      "The <name> expression must be equal to or greater than 0, but got <v>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2404" : {
-    "message" : [
-      "Table <name> is not partitioned."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2405" : {
-    "message" : [
-      "Table <name> does not support partition management."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2406" : {
-    "message" : [
-      "invalid cast from <srcType> to <targetType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2407" : {
-    "message" : [
-      "grouping_id() can only be used with GroupingSets/Cube/Rollup."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2408" : {
-    "message" : [
-      "Window function <w> requires an OVER clause."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2409" : {
-    "message" : [
-      "Distinct window functions are not supported: <w>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2410" : {
-    "message" : [
-      "<wf> function can only be evaluated in an ordered row-based window frame with a single offset: <w>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2411" : {

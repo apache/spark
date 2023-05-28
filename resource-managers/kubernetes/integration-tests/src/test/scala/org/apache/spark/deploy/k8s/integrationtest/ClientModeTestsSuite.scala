@@ -16,9 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.{PodBuilder, ServiceBuilder}
 import org.scalatest.concurrent.Eventually
-import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 

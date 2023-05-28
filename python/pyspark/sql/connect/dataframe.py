@@ -76,7 +76,7 @@ from pyspark.sql.connect.functions import (
     lit,
     expr as sql_expression,
 )
-from pyspark.sql.connect.types import from_arrow_schema
+from pyspark.sql.pandas.types import from_arrow_schema
 
 
 if TYPE_CHECKING:
@@ -265,7 +265,10 @@ class DataFrame:
 
     def checkSameSparkSession(self, other: "DataFrame") -> None:
         if self._session.session_id != other._session.session_id:
-            raise SessionNotSameException("Both Datasets must belong to the same SparkSession")
+            raise SessionNotSameException(
+                error_class="SESSION_NOT_SAME",
+                message_parameters={},
+            )
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
@@ -444,11 +447,6 @@ class DataFrame:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_STR",
                 message_parameters={"arg_name": "cols", "arg_type": type(cols).__name__},
-            )
-        if len(_cols) == 0:
-            raise PySparkValueError(
-                error_class="CANNOT_BE_EMPTY",
-                message_parameters={"item": "cols"},
             )
 
         return DataFrame.withPlan(
@@ -1626,7 +1624,7 @@ class DataFrame:
         query = self._plan.to_proto(self._session.client)
         table, schema = self._session.client.to_table(query)
 
-        schema = schema or from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1904,7 +1902,7 @@ class DataFrame:
                 assert isinstance(schema_or_table, pa.Table)
                 table = schema_or_table
                 if schema is None:
-                    schema = from_arrow_schema(table.schema)
+                    schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
                 yield from ArrowTableToRowsConversion.convert(table, schema)
 
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__

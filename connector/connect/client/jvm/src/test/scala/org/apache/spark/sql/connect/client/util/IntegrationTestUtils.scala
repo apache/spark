@@ -23,6 +23,8 @@ import scala.util.Properties.versionNumberString
 
 import org.scalatest.Assertions.fail
 
+import org.apache.spark.util.Utils
+
 object IntegrationTestUtils {
 
   // System properties used for testing and debugging
@@ -75,6 +77,16 @@ object IntegrationTestUtils {
     val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
       s"spark-hive_$scalaVersion-${org.apache.spark.SPARK_VERSION}.jar"
     Files.exists(Paths.get(filePath))
+  }
+
+  private[sql] def cleanUpHiveClassesDirIfNeeded(): Unit = {
+    def delete(f: File): Unit = {
+      if (f.exists()) {
+        Utils.deleteRecursively(f)
+      }
+    }
+    delete(new File(s"$sparkHome/sql/hive/target/$scalaDir/classes"))
+    delete(new File(s"$sparkHome/sql/hive/target/$scalaDir/test-classes"))
   }
 
   /**

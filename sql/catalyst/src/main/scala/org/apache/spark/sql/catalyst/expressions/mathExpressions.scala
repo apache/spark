@@ -1172,14 +1172,13 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
     nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       val maybeFailOnErrorCode = if (failOnError) {
-        val format = UTF8String.fromString("BASE64");
         val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
         s"""
            |if (${ev.value} == null) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
            |    $c,
-           |    $format,
+           |    UTF8String.fromString("HEX"),
            |    "try_to_binary");
            |}
            |""".stripMargin

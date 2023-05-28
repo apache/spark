@@ -19,6 +19,7 @@ package org.apache.spark.status
 import java.util.Date
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 import org.apache.spark.status.api.v1.{TaskData, TaskMetrics}
 
 class AppStatusUtilsSuite extends SparkFunSuite {
@@ -93,5 +94,15 @@ class AppStatusUtilsSuite extends SparkFunSuite {
       schedulerDelay = 0L,
       gettingResultTime = 0L)
     assert(AppStatusUtils.schedulerDelay(finishedTask) === 3L)
+  }
+
+  test("getQuantilesValue") {
+    val values = IndexedSeq(1.0, 2.0, 3.0, 4.0)
+    val quantiles = Array(0.0, 0.25, 0.5, 0.75, 1.0)
+    assert(getQuantilesValue(values, quantiles) == IndexedSeq(1.0, 2.0, 3.0, 4.0, 4.0))
+
+    // When values are empty
+    val emptyValue = IndexedSeq()
+    assert(getQuantilesValue(emptyValue, quantiles) == IndexedSeq(0.0, 0.0, 0.0, 0.0, 0.0))
   }
 }

@@ -16,17 +16,20 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_dataframe import DataFrameTestsMixin
+from pyspark import pandas as ps
+from pyspark.pandas.tests.indexes.test_align import FrameAlignMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class DataFrameParityTests(DataFrameTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    pass
+class FrameParityAlignTests(FrameAlignMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.pandas.tests.connect.indexes.test_parity_align import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

@@ -184,7 +184,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
     messageParameters = Map("sqlExpr" -> "\"0\""))
 
-  errorTest(
+  errorClassTest(
     "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
@@ -193,7 +193,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    "Distinct window functions are not supported" :: Nil)
+    errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+    messageParameters = Map("windowExpr" ->
+      s"""
+         |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
+         | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+         |""".stripMargin.replaceAll("\n", "")))
 
   errorTest(
     "window aggregate function with filter predicate",
@@ -626,40 +631,90 @@ class AnalysisErrorSuite extends AnalysisTest {
     "The generator is not supported: outside the SELECT clause, found: Sort" :: Nil
   )
 
-  errorTest(
+  errorClassTest(
+    "an evaluated limit class must not be string",
+    testRelation.limit(Literal(UTF8String.fromString("abc"), StringType)),
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"abc\"",
+      "dataType" -> "\"STRING\""
+    )
+  )
+
+  errorClassTest(
+    "an evaluated limit class must not be long",
+    testRelation.limit(Literal(10L, LongType)),
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"10\"",
+      "dataType" -> "\"BIGINT\""
+    )
+  )
+
+  errorClassTest(
     "an evaluated limit class must not be null",
     testRelation.limit(Literal(null, IntegerType)),
-    "The evaluated limit expression must not be null, but got " :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"NULL\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
-    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+    Map(
+      "name" -> "limit",
+      "expr" -> "\"-1\"",
+      "v" -> "-1"
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "an evaluated offset class must not be string",
     testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
-    "The offset expression must be integer type, but got string" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"abc\"",
+      "dataType" -> "\"STRING\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "an evaluated offset class must not be long",
     testRelation.offset(Literal(10L, LongType)),
-    "The offset expression must be integer type, but got bigint" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"10\"",
+      "dataType" -> "\"BIGINT\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "an evaluated offset class must not be null",
     testRelation.offset(Literal(null, IntegerType)),
-    "The evaluated offset expression must not be null, but got " :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"NULL\""
+    )
   )
 
-  errorTest(
+  errorClassTest(
     "num_rows in offset clause must be equal to or greater than 0",
     testRelation.offset(-1),
-    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+    "INVALID_LIMIT_LIKE_EXPRESSION.IS_NEGATIVE",
+    Map(
+      "name" -> "offset",
+      "expr" -> "\"-1\"",
+      "v" -> "-1"
+    )
   )
 
   errorClassTest(

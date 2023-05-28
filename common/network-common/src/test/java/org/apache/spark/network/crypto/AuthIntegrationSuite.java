@@ -149,6 +149,14 @@ public class AuthIntegrationSuite {
     assertEquals(testErrorMessageLength, messageEnd - messageStart);
   }
 
+  @Test
+  public void testValidMergedBlockMetaReqHandler() throws Exception {
+    ctx = new AuthTestCtx();
+    ctx.createServer("secret");
+    ctx.createClient("secret");
+    assertNotNull(ctx.authRpcHandler.getMergedBlockMetaReqHandler());
+  }
+
   private static class AuthTestCtx {
 
     private final String appId = "testAppId";

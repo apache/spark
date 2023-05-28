@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -64,7 +65,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // so we should leave it be for now.
       try {
         resolveDataSource(u.multipartIdentifier)
-        throw QueryCompilationErrors.timeTravelUnsupportedError("path-based tables")
+        throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
       } catch {
         case _: ClassNotFoundException => r
       }

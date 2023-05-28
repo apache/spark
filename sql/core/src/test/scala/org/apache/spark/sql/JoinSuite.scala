@@ -46,7 +46,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     // test case
     plan.foreachUp {
       case s: SortExec =>
-        val sortExec = spy(s)
+        val sortExec = spy[SortExec](s)
         verify(sortExec, atLeastOnce).cleanupResources()
         verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
       case _ =>
@@ -1489,5 +1489,59 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
     }
     dupStreamSideColTest("SHUFFLE_HASH", check)
+  }
+
+  test("SPARK-43718: USING with references to key columns: Full Outer") {
+    withTempView("t1", "t2") {
+      sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
+      sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
+
+      val query =
+        """select explode(array(t1.c1, t2.c1)) as x1
+          |from t1
+          |full outer join t2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(1), Row(2), Row(2), Row(3), Row(3), Row(4), Row(null), Row(null))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-43718: USING with references to key columns: Left Outer") {
+    withTempView("t1", "t2") {
+      sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
+      sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
+
+      val query =
+        """select explode(array(t1.c1, t2.c1)) as x1
+          |from t1
+          |left outer join t2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(1), Row(2), Row(2), Row(3), Row(3), Row(null))
+
+      checkAnswer(sql(query), expected)
+    }
+  }
+
+  test("SPARK-43718: USING with references to key columns: Right Outer") {
+    withTempView("t1", "t2") {
+      sql("create or replace temp view t1 as values (1), (2), (3) as (c1)")
+      sql("create or replace temp view t2 as values (2), (3), (4) as (c1)")
+
+      val query =
+        """select explode(array(t1.c1, t2.c1)) as x1
+          |from t1
+          |right outer join t2
+          |using (c1)
+          |""".stripMargin
+
+      val expected = Seq(Row(2), Row(2), Row(3), Row(3), Row(4), Row(null))
+
+      checkAnswer(sql(query), expected)
+    }
   }
 }

@@ -2525,49 +2525,49 @@ class PlanResolutionSuite extends AnalysisTest {
     val sql1 = createTableHeader("TBLPROPERTIES('test' = 'test2')")
     checkError(
       exception = parseException(parsePlan)(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(fragment = sql1, start = 0, stop = 117))
 
     val sql2 = createTableHeader("LOCATION '/tmp/file'")
     checkError(
       exception = parseException(parsePlan)(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 95))
 
     val sql3 = createTableHeader("COMMENT 'a table'")
     checkError(
       exception = parseException(parsePlan)(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 89))
 
     val sql4 = createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
     checkError(
       exception = parseException(parsePlan)(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTERED BY"),
       context = ExpectedContext(fragment = sql4, start = 0, stop = 119))
 
     val sql5 = createTableHeader("PARTITIONED BY (k int)")
     checkError(
       exception = parseException(parsePlan)(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(fragment = sql5, start = 0, stop = 99))
 
     val sql6 = createTableHeader("STORED AS parquet")
     checkError(
       exception = parseException(parsePlan)(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(fragment = sql6, start = 0, stop = 89))
 
     val sql7 = createTableHeader("ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'")
     checkError(
       exception = parseException(parsePlan)(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "ROW FORMAT"),
       context = ExpectedContext(fragment = sql7, start = 0, stop = 163))
   }

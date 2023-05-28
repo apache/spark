@@ -25,6 +25,7 @@ check_dependencies(__name__)
 
 import logging
 import os
+import platform
 import random
 import time
 import urllib.parse
@@ -57,7 +58,9 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
+from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
@@ -72,7 +75,7 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.types import _create_converter_to_pandas
+from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -299,7 +302,14 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return user_agent
+        return " ".join(
+            [
+                user_agent,
+                f"spark/{__version__}",
+                f"os/{platform.uname().system.lower()}",
+                f"python/{platform.python_version()}",
+            ]
+        )
 
     def get(self, key: str) -> Any:
         """
@@ -585,6 +595,7 @@ class SparkConnectClient(object):
 
         self._channel = self._builder.toChannel()
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._artifact_manager = ArtifactManager(self._user_id, self._session_id, self._channel)
         # Configure logging for the SparkConnect client.
 
     def register_udf(
@@ -706,7 +717,7 @@ class SparkConnectClient(object):
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
 
-        schema = schema or types.from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
         # Rename columns to avoid duplicated column names.
@@ -749,6 +760,7 @@ class SparkConnectClient(object):
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
         Helper method to generate a one line string representation of the plan.
+
         Parameters
         ----------
         p : google.protobuf.message.Message
@@ -1224,6 +1236,9 @@ class SparkConnectClient(object):
             raise SparkConnectGrpcException(status.message) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
+
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
+        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive)
 
 
 class RetryState:

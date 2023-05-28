@@ -26,7 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
@@ -178,6 +178,11 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
       InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output.map(_.name))
+
+    case DeleteFromTable(SubqueryAlias(_, HiveTableRelation(table, _, _, _, _)), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        table.identifier,
+        "DELETE")
   }
 }
 

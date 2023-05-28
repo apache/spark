@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, Statement}
+import java.sql.{DriverManager, ResultSet, Statement}
 import java.util
 
 import scala.collection.JavaConverters._
@@ -85,11 +85,13 @@ trait SharedThriftServer extends SharedSparkSession {
 
   protected def user: String = System.getProperty("user.name")
 
-  protected def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
+  protected def withJdbcStatement(
+      resultSetType: Int = ResultSet.TYPE_FORWARD_ONLY)(
+      fs: (Statement => Unit)*): Unit = {
     require(serverPort != 0, "Failed to bind an actual port for HiveThriftServer2")
     val connections =
       fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
+    val statements = connections.map(_.createStatement(resultSetType, ResultSet.CONCUR_READ_ONLY))
 
     try {
       statements.zip(fs).foreach { case (s, f) => f(s) }
@@ -151,7 +153,7 @@ trait SharedThriftServer extends SharedSparkSession {
       // Wait for thrift server to be ready to serve the query, via executing simple query
       // till the query succeeds. See SPARK-30345 for more details.
       eventually(timeout(30.seconds), interval(1.seconds)) {
-        withJdbcStatement { _.execute("SELECT 1") }
+        withJdbcStatement() { _.execute("SELECT 1") }
       }
     } catch {
       case e: Exception =>
