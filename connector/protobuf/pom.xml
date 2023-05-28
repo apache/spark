@@ -148,8 +148,17 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <addSources>test</addSources>
                   <includeStdTypes>true</includeStdTypes>
+                  <outputTargets>
+                    <outputTarget>
+                      <type>java</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                    <outputTarget>
+                      <type>descriptor</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                  </outputTargets>
                 </configuration>
               </execution>
             </executions>
@@ -182,7 +191,17 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
+                  <outputTargets>
+                    <outputTarget>
+                      <type>java</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                    <outputTarget>
+                      <type>descriptor</type>
+                      <addSources>test</addSources>
+                    </outputTarget>
+                  </outputTargets>
                 </configuration>
               </execution>
             </executions>
