@@ -904,6 +904,11 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_BOUNDARY" : {
+    "message" : [
+      "Boundary <boundary> is not a valid integer: <value>."
+    ]
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
@@ -3818,16 +3823,6 @@
   "_LEGACY_ERROR_TEMP_1300" : {
     "message" : [
       "Unable to find the column `<colName>` given [<actualColumns>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1301" : {
-    "message" : [
-      "Boundary start is not a valid integer: <start>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1302" : {
-    "message" : [
-      "Boundary end is not a valid integer: <end>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1304" : {

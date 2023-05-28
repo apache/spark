@@ -2877,14 +2877,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidBoundaryStartError(start: Long): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1301",
-      messageParameters = Map("start" -> start.toString))
+      errorClass = "INVALID_BOUNDARY",
+      messageParameters = Map(
+        "boundary" -> "start",
+        "value" -> toSQLValue(start, LongType)))
   }
 
   def invalidBoundaryEndError(end: Long): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1302",
-      messageParameters = Map("end" -> end.toString))
+      errorClass = "INVALID_BOUNDARY",
+      messageParameters = Map(
+        "boundary" -> "end",
+        "value" -> toSQLValue(end, LongType)))
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {
