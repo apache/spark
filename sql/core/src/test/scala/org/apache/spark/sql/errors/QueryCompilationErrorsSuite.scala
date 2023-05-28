@@ -885,7 +885,7 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("Unresolved attribute in select of USING join") {
+  test("SPARK-43841: Unresolved attribute in select of full outer join with USING") {
     withTempView("v1", "v2") {
       sql("create or replace temp view v1 as values (1, 2) as (c1, c2)")
       sql("create or replace temp view v2 as values (2, 3) as (c1, c2)")
