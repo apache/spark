@@ -1933,16 +1933,33 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-39643 Prohibit subquery expressions in DEFAULT values") {
-    Seq(
-      "create table t(a string default (select 'abc')) using parquet",
-      "create table t(a string default exists(select 42 where true)) using parquet",
-      "create table t(a string default 1 in (select 1 union all select 2)) using parquet"
-    ).foreach { query =>
-      assert(intercept[AnalysisException] {
-        sql(query)
-      }.getMessage.contains(
-        QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions().getMessage))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("create table t(a string default (select 'abc')) using parquet")
+      },
+      errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      parameters = Map(
+        "statement" -> "CREATE TABLE",
+        "colName" -> "`a`",
+        "defaultValue" -> "(select 'abc')"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("create table t(a string default exists(select 42 where true)) using parquet")
+      },
+      errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      parameters = Map(
+        "statement" -> "CREATE TABLE",
+        "colName" -> "`a`",
+        "defaultValue" -> "exists(select 42 where true)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("create table t(a string default 1 in (select 1 union all select 2)) using parquet")
+      },
+      errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      parameters = Map(
+        "statement" -> "CREATE TABLE",
+        "colName" -> "`a`",
+        "defaultValue" -> "1 in (select 1 union all select 2)"))
   }
 
   test("SPARK-39844 Restrict adding DEFAULT columns for existing tables to certain sources") {
