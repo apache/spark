@@ -2877,18 +2877,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidBoundaryStartError(start: Long): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_BOUNDARY",
+      errorClass = "INVALID_BOUNDARY.START",
       messageParameters = Map(
-        "boundary" -> "start",
-        "value" -> toSQLValue(start, LongType)))
+        "boundary" -> toSQLId("start"),
+        "invalidValue" -> toSQLValue(start, LongType),
+        "longMinValue" -> toSQLValue(Long.MinValue, LongType),
+        "intMinValue" -> toSQLValue(Int.MinValue, IntegerType),
+        "intMaxValue" -> toSQLValue(Int.MaxValue, IntegerType)))
   }
 
   def invalidBoundaryEndError(end: Long): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_BOUNDARY",
+      errorClass = "INVALID_BOUNDARY.END",
       messageParameters = Map(
-        "boundary" -> "end",
-        "value" -> toSQLValue(end, LongType)))
+        "boundary" -> toSQLId("end"),
+        "invalidValue" -> toSQLValue(end, LongType),
+        "longMaxValue" -> toSQLValue(Long.MaxValue, LongType),
+        "intMinValue" -> toSQLValue(Int.MinValue, IntegerType),
+        "intMaxValue" -> toSQLValue(Int.MaxValue, IntegerType)))
   }
 
   def tableOrViewNotFound(ident: Seq[String]): Throwable = {

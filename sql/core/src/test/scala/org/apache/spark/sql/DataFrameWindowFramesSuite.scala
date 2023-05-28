@@ -138,10 +138,13 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           $"key",
           count("key").over(
             Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
-      errorClass = "INVALID_BOUNDARY",
+      errorClass = "INVALID_BOUNDARY.START",
       parameters = Map(
-        "boundary" -> "start",
-        "value" -> "2147483648L"))
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`start`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMinValue" -> "-9223372036854775808L"))
 
     checkError(
       exception = intercept[AnalysisException](
@@ -149,10 +152,13 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           $"key",
           count("key").over(
             Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
-      errorClass = "INVALID_BOUNDARY",
+      errorClass = "INVALID_BOUNDARY.END",
       parameters = Map(
-        "boundary" -> "end",
-        "value" -> "2147483648L"))
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`end`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMaxValue" -> "9223372036854775807L"))
   }
 
   test("range between should accept at most one ORDER BY expression when unbounded") {

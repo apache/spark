@@ -906,8 +906,20 @@
   },
   "INVALID_BOUNDARY" : {
     "message" : [
-      "Boundary <boundary> is not a valid integer: <value>."
-    ]
+      "The boundary <boundary> is invalid: <invalidValue>."
+    ],
+    "subClass" : {
+      "END" : {
+        "message" : [
+          "Expected the value is '0', '<longMaxValue>', '[<intMinValue>, <intMaxValue>]'."
+        ]
+      },
+      "START" : {
+        "message" : [
+          "Expected the value is '0', '<longMinValue>', '[<intMinValue>, <intMaxValue>]'."
+        ]
+      }
+    }
   },
   "INVALID_BUCKET_FILE" : {
     "message" : [
