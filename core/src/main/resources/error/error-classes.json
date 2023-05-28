@@ -928,7 +928,7 @@
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
-      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>, "
+      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
     ],
     "subClass" : {
       "DATA_TYPE" : {
