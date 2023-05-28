@@ -3142,12 +3142,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("relationId" -> relationId))
   }
 
-  def tableNotSupportTimeTravelError(tableName: Identifier): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1337",
-      messageParameters = Map("tableName" -> tableName.toString))
-  }
-
   def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1338",

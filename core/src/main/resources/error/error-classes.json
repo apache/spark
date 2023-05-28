@@ -3966,16 +3966,6 @@
       "Cannot specify both version and timestamp when time travelling the table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1335" : {
-    "message" : [
-      "<expr> is not a valid timestamp expression for time travel."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1337" : {
-    "message" : [
-      "Table <tableName> does not support time travel."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
