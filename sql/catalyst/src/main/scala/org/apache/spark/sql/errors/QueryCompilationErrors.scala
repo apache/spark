@@ -3229,10 +3229,47 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "dataSource" -> dataSource))
   }
 
-  def defaultValuesMayNotContainSubQueryExpressions(): Throwable = {
+  def defaultValuesDataTypeError(
+      statement: String,
+      colName: String,
+      defaultValue: String,
+      expectedType: DataType,
+      actualType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1347",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue,
+        "actualType" -> toSQLType(actualType),
+        "expectedType" -> toSQLType(expectedType)))
+  }
+
+  def defaultValuesUnresolvedExprError(
+      statement: String,
+      colName: String,
+      defaultValue: String,
+      cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ),
+      cause = Option(cause))
+  }
+
+  def defaultValuesMayNotContainSubQueryExpressions(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue))
   }
 
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {

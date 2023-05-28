@@ -117,15 +117,50 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
           sql("select 42, timestamp_ntz'2022-01-02', date'2022-01-03', 0f"))
         // If the provided default value is a literal of a different type than the target column
         // such that no coercion is possible, throw an error.
-        Seq(
-          "create table demos.test_ts_other (a int default 'abc') using parquet",
-          "create table demos.test_ts_other (a timestamp default '2022-01-02') using parquet",
-          "create table demos.test_ts_other (a boolean default 'true') using parquet",
-          "create table demos.test_ts_other (a int default true) using parquet"
-        ).foreach { command =>
-          assert(intercept[AnalysisException](sql(command))
-            .getMessage.contains("statement provided a value of incompatible type"))
-        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table demos.test_ts_other (a int default 'abc') using parquet")
+          },
+          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`a`",
+            "expectedType" -> "\"INT\"",
+            "defaultValue" -> "'abc'",
+            "actualType" -> "\"STRING\""))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table demos.test_ts_other (a timestamp default '2022-01-02') using parquet")
+          },
+          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`a`",
+            "expectedType" -> "\"TIMESTAMP\"",
+            "defaultValue" -> "'2022-01-02'",
+            "actualType" -> "\"STRING\""))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table demos.test_ts_other (a boolean default 'true') using parquet")
+          },
+          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`a`",
+            "expectedType" -> "\"BOOLEAN\"",
+            "defaultValue" -> "'true'",
+            "actualType" -> "\"STRING\""))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table demos.test_ts_other (a int default true) using parquet")
+          },
+          errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`a`",
+            "expectedType" -> "\"INT\"",
+            "defaultValue" -> "true",
+            "actualType" -> "\"BOOLEAN\""))
       }
     }
   }

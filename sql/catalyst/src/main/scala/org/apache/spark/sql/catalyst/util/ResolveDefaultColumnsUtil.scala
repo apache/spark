@@ -188,14 +188,13 @@ object ResolveDefaultColumns {
       parser.parseExpression(defaultSQL)
     } catch {
       case ex: ParseException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"$colName has a DEFAULT value of $defaultSQL which fails to parse as a valid " +
-            s"expression: ${ex.getMessage}")
+        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+          statementType, colName, defaultSQL, ex)
     }
     // Check invariants before moving on to analysis.
     if (parsed.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions()
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        statementType, colName, defaultSQL)
     }
     // Analyze the parse result.
     val plan = try {
@@ -205,10 +204,8 @@ object ResolveDefaultColumns {
       ConstantFolding(analyzed)
     } catch {
       case ex: AnalysisException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"$colName has a DEFAULT value of $defaultSQL which fails to resolve as a valid " +
-            s"expression: ${ex.getMessage}")
+        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+          statementType, colName, defaultSQL, ex)
     }
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
@@ -241,10 +238,8 @@ object ResolveDefaultColumns {
         }
       } else None
       result.getOrElse {
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"$colName has a DEFAULT value with type $dataType, but the " +
-            s"statement provided a value of incompatible type ${analyzed.dataType}")
+        throw QueryCompilationErrors.defaultValuesDataTypeError(
+          statementType, colName, defaultSQL, dataType, analyzed.dataType)
       }
     }
   }

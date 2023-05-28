@@ -948,6 +948,28 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_DEFAULT_VALUE" : {
+    "message" : [
+      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
+        ]
+      },
+      "SUBQUERY_EXPRESSION" : {
+        "message" : [
+          "which contains subquery expressions."
+        ]
+      },
+      "UNRESOLVED_EXPRESSION" : {
+        "message" : [
+          "which fails to resolve as a valid expression."
+        ]
+      }
+    }
+  },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
       "System memory <systemMemory> must be at least <minSystemMemory>. Please increase heap size using the --driver-memory option or \"<config>\" in Spark configuration."
@@ -4046,11 +4068,6 @@
   "_LEGACY_ERROR_TEMP_1346" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1347" : {
-    "message" : [
-      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {
