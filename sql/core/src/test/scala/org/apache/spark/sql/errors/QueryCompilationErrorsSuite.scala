@@ -884,6 +884,33 @@ class QueryCompilationErrorsSuite
       )
     }
   }
+
+  test("SPARK-43841: Unresolved attribute in select of full outer join with USING") {
+    withTempView("v1", "v2") {
+      sql("create or replace temp view v1 as values (1, 2) as (c1, c2)")
+      sql("create or replace temp view v2 as values (2, 3) as (c1, c2)")
+
+      val query =
+        """select b
+          |from v1
+          |full outer join v2
+          |using (c1)
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "proposal" -> "`c1`, `v1`.`c2`, `v2`.`c2`",
+          "objectName" -> "`b`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 7, stop = 7)
+      )
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
