@@ -485,7 +485,7 @@ class QueryCompilationErrorsSuite
         sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "proposal" -> "`i`"),
+          "proposal" -> "`__auto_generated_subquery_name`.`i`"),
         context = ExpectedContext(
           fragment = "v.i",
           start = 7,
