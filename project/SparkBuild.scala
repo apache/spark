@@ -256,7 +256,6 @@ object SparkBuild extends PomBuild {
           // see `scalac -Wconf:help` for details
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
           "-Wunused:imports",
           "-Wconf:cat=lint-multiarg-infix:wv",
           "-Wconf:cat=other-nullary-override:wv",
