@@ -633,10 +633,11 @@ class SparkSession:
         ----------
         local_path: str
             Path to a local file (Directory is not supported yet).
-            The path can be either absolute path or relative path.
+            The path can be either an absolute path or a relative path.
 
         dest_path: str
             The FS path to the destination the file will be copied to.
+            The path must be an an absolute path.
 
         .. versionadded:: 3.5.0
         """
