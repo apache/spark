@@ -994,6 +994,18 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
+    object ExtractStringAttribute {
+      @scala.annotation.tailrec
+      def unapply(expr: Expression): Option[Attribute] = {
+        expr match {
+          case attr: Attribute => Some(attr)
+          case Cast(child, dt: IntegralType, _, _)
+            if child.dataType.isInstanceOf[StringType] => unapply(child)
+          case _ => None
+        }
+      }
+    }
+
     def convert(expr: Expression): Option[String] = expr match {
       case Not(InSet(_, values)) if values.size > inSetThreshold =>
         None
@@ -1040,6 +1052,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       case op @ SpecialBinaryComparison(
           ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
+
+      case EqualTo(ExtractStringAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
+        Some(s"$name = $value")
 
       case Contains(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name like " + (("\".*" + value.drop(1)).dropRight(1) + ".*\""))
