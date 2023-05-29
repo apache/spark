@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 private object MsSqlServerDialect extends JdbcDialect {
 
   // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v8.2.2/src/main/java/microsoft/sql/Types.java
+  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
   private object SpecificTypes {
     val GEOMETRY = -157
     val GEOGRAPHY = -158

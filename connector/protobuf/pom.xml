@@ -20,12 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
+    <artifactId>spark-parent_2.13</artifactId>
     <version>3.5.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-protobuf_2.12</artifactId>
+  <artifactId>spark-protobuf_2.13</artifactId>
   <properties>
     <sbt.project.name>protobuf</sbt.project.name>
   </properties>
@@ -70,16 +70,20 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
-    <!-- #if scala-2.13 --><!--
+    <!-- #if scala-2.13 -->
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    --><!-- #endif scala-2.13 -->
+    <!-- #endif scala-2.13 -->
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
       <scope>compile</scope>
     </dependency>
   </dependencies>
@@ -145,6 +149,7 @@
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
                   <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
                 </configuration>
               </execution>
             </executions>

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -30,7 +31,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 object AssignmentUtils extends SQLConfHelper with CastSupport {
 
   /**
-   * Aligns assignments to match table columns.
+   * Aligns update assignments to match table columns.
    * <p>
    * This method processes and reorders given assignments so that each target column gets
    * an expression it should be set to. If a column does not have a matching assignment,
@@ -46,9 +47,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *
    * @param attrs table attributes
    * @param assignments assignments to align
-   * @return aligned assignments that match table attributes
+   * @return aligned update assignments that match table attributes
    */
-  def alignAssignments(
+  def alignUpdateAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment]): Seq[Assignment] = {
 
@@ -68,6 +69,64 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     }
 
     attrs.zip(output).map { case (attr, expr) => Assignment(attr, expr) }
+  }
+
+  /**
+   * Aligns insert assignments to match table columns.
+   * <p>
+   * This method processes and reorders given assignments so that each target column gets
+   * an expression it should be set to. There must be exactly one assignment for each top-level
+   * attribute and its value must be compatible.
+   * <p>
+   * Insert assignments cannot refer to nested columns.
+   *
+   * @param attrs table attributes
+   * @param assignments insert assignments to align
+   * @return aligned insert assignments that match table attributes
+   */
+  def alignInsertAssignments(
+      attrs: Seq[Attribute],
+      assignments: Seq[Assignment]): Seq[Assignment] = {
+
+    val errors = new mutable.ArrayBuffer[String]()
+
+    val (topLevelAssignments, nestedAssignments) = assignments.partition { assignment =>
+      assignment.key.isInstanceOf[Attribute]
+    }
+
+    if (nestedAssignments.nonEmpty) {
+      val nestedAssignmentsStr = nestedAssignments.map(_.sql).mkString(", ")
+      errors += s"INSERT assignment keys cannot be nested fields: $nestedAssignmentsStr"
+    }
+
+    val alignedAssignments = attrs.map { attr =>
+      val matchingAssignments = topLevelAssignments.collect {
+        case assignment if assignment.key.semanticEquals(attr) => assignment
+      }
+      val resolvedValue = if (matchingAssignments.isEmpty) {
+        val defaultExpr = getDefaultValueExprOrNullLit(attr, conf)
+        if (defaultExpr.isEmpty) {
+          errors += s"No assignment for '${attr.name}'"
+        }
+        defaultExpr.getOrElse(attr)
+      } else if (matchingAssignments.length > 1) {
+        val conflictingValuesStr = matchingAssignments.map(_.value.sql).mkString(", ")
+        errors += s"Multiple assignments for '${attr.name}': $conflictingValuesStr"
+        attr
+      } else {
+        val colPath = Seq(attr.name)
+        val actualAttr = restoreActualType(attr)
+        val value = matchingAssignments.head.value
+        TableOutputResolver.resolveUpdate(value, actualAttr, conf, err => errors += err, colPath)
+      }
+      Assignment(attr, resolvedValue)
+    }
+
+    if (errors.nonEmpty) {
+      throw QueryCompilationErrors.invalidRowLevelOperationAssignments(assignments, errors.toSeq)
+    }
+
+    alignedAssignments
   }
 
   private def restoreActualType(attr: Attribute): Attribute = {

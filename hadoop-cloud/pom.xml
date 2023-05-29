@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
+    <artifactId>spark-parent_2.13</artifactId>
     <version>3.5.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-hadoop-cloud_2.12</artifactId>
+  <artifactId>spark-hadoop-cloud_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hadoop Cloud Integration</name>
   <description>
@@ -65,13 +65,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <version>${hadoop.version}</version>
     </dependency>
     <!--
@@ -108,30 +108,6 @@
         <exclusion>
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-openstack</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>${hadoop.deps.scope}</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-common</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>junit</groupId>
-          <artifactId>junit</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.mockito</groupId>
-          <artifactId>mockito-all</artifactId>
         </exclusion>
       </exclusions>
     </dependency>

@@ -344,6 +344,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("misc aes function") {
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val encryptedEcb = "9J3iZbIxnmaG+OIA9Amd+A=="
+    val encryptedGcm = "y5la3muiuxN2suj6VsYXB+0XUFjtrUD0/zv5eDafsA3U"
+    val encryptedCbc = "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93KvhY="
+    val df1 = Seq("Spark").toDF
+
+    // Successful decryption of fixed values
+    Seq(
+      (key32, encryptedEcb, "ECB"),
+      (key32, encryptedGcm, "GCM"),
+      (key32, encryptedCbc, "CBC")).foreach {
+      case (key, encryptedText, mode) =>
+        checkAnswer(
+          df1.selectExpr(
+            s"cast(aes_decrypt(unbase64('$encryptedText'), '$key', '$mode') as string)"),
+          Seq(Row("Spark")))
+        checkAnswer(
+          df1.selectExpr(
+            s"cast(aes_decrypt(unbase64('$encryptedText'), binary('$key'), '$mode') as string)"),
+          Seq(Row("Spark")))
+    }
+  }
+
+  test("misc aes ECB function") {
     val key16 = "abcdefghijklmnop"
     val key24 = "abcdefghijklmnop12345678"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
@@ -358,15 +382,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // Successful encryption
     Seq(
-      (key16, encryptedText16, encryptedEmptyText16),
-      (key24, encryptedText24, encryptedEmptyText24),
-      (key32, encryptedText32, encryptedEmptyText32)).foreach {
-      case (key, encryptedText, encryptedEmptyText) =>
+      (key16, encryptedText16, encryptedEmptyText16, "ECB"),
+      (key24, encryptedText24, encryptedEmptyText24, "ECB"),
+      (key32, encryptedText32, encryptedEmptyText32, "ECB")).foreach {
+      case (key, encryptedText, encryptedEmptyText, mode) =>
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(value, '$key', 'ECB'))"),
+          df1.selectExpr(s"base64(aes_encrypt(value, '$key', '$mode'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key', 'ECB'))"),
+          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key', '$mode'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
     }
 
@@ -2717,6 +2741,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("a", "b")
     checkAnswer(df2.selectExpr("array_prepend(a, b)"),
       Seq(Row(Seq("d", "a", "b", "c")), Row(null), Row(Seq(null, "x", "y", "z")), Row(null)))
+    val dataA = Seq[Array[Byte]](
+      Array[Byte](5, 6),
+      Array[Byte](1, 2),
+      Array[Byte](1, 2),
+      Array[Byte](5, 6))
+    val dataB = Seq[Array[Int]](Array[Int](1, 2), Array[Int](3, 4))
+    val df3 = Seq((dataA, dataB)).toDF("a", "b")
+    val dataToPrepend = Array[Byte](5, 6)
+    checkAnswer(
+      df3.select(array_prepend($"a", null), array_prepend($"a", dataToPrepend)),
+      Seq(Row(null +: dataA, dataToPrepend +: dataA)))
+    checkAnswer(
+      df3.select(array_prepend($"b", Array.empty[Int]), array_prepend($"b", Array[Int](5, 6))),
+      Seq(Row(
+        Seq(Seq.empty[Int], Seq[Int](1, 2), Seq[Int](3, 4)),
+        Seq(Seq[Int](5, 6), Seq[Int](1, 2), Seq[Int](3, 4)))))
   }
 
   test("array remove") {

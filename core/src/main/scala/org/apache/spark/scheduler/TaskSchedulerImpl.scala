@@ -1086,9 +1086,17 @@ private[spark] class TaskSchedulerImpl(
     case ExecutorKilled =>
       logInfo(s"Executor $executorId on $hostPort killed by driver.")
     case _: ExecutorDecommission =>
-      logInfo(s"Executor $executorId on $hostPort is decommissioned.")
+      logInfo(s"Executor $executorId on $hostPort is decommissioned" +
+        s"${getDecommissionDuration(executorId)}.")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
+  }
+
+  // return decommission duration in string or "" if decommission startTime not exists
+  private def getDecommissionDuration(executorId: String): String = {
+    executorsPendingDecommission.get(executorId)
+      .map(s => s" after ${Utils.msDurationToString(clock.getTimeMillis() - s.startTime)}")
+      .getOrElse("")
   }
 
   /**

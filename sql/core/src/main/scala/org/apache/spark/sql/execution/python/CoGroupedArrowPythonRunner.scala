@@ -52,6 +52,10 @@ class CoGroupedArrowPythonRunner(
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
   with BasicPythonArrowOutput {
 
+  override val pythonExec: String =
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head.funcs.head.pythonExec)
+
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriterThread(
@@ -96,7 +100,8 @@ class CoGroupedArrowPythonRunner(
           schema: StructType,
           dataOut: DataOutputStream,
           name: String): Unit = {
-        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+        val arrowSchema =
+          ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)

@@ -37,7 +37,12 @@ object MimaExcludes {
   // Exclude rules for 3.5.x from 3.4.0
   lazy val v35excludes = defaultExcludes ++ Seq(
     // [SPARK-43165][SQL] Move canWrite to DataTypeUtils
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite"),
+    // [SPARK-43195][CORE] Remove unnecessary serializable wrapper in HadoopFSUtils
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.HadoopFSUtils$SerializableFileStatus$")
   )
 
   // Defulat exclude rules
@@ -65,6 +70,14 @@ object MimaExcludes {
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
+
+    // SPARK-43265: Move Error framework to a common utils module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkThrowable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

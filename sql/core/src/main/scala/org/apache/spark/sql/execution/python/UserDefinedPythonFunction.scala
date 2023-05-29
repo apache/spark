@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDAF, PythonUDF}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -33,12 +33,25 @@ case class UserDefinedPythonFunction(
     udfDeterministic: Boolean) {
 
   def builder(e: Seq[Expression]): Expression = {
-    PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+    if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+      PythonUDAF(name, func, dataType, e, udfDeterministic)
+    } else {
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+    }
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    val udf = builder(exprs.map(_.expr))
-    Column(udf)
+    fromUDFExpr(builder(exprs.map(_.expr)))
+  }
+
+  /**
+   * Returns a [[Column]] that will evaluate the UDF expression with the given input.
+   */
+  def fromUDFExpr(expr: Expression): Column = {
+    expr match {
+      case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
+      case _ => Column(expr)
+    }
   }
 }

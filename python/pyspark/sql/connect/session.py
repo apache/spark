@@ -47,15 +47,14 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 
 from pyspark import SparkContext, SparkConf, __version__
-from pyspark.sql.connect import proto
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming import DataStreamReader
+from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
+from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -69,7 +68,13 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
+    PySparkValueError,
+    PySparkTypeError,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -90,6 +95,7 @@ class SparkSession:
 
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
+            self._channel_builder: Optional[ChannelBuilder] = None
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -123,14 +129,67 @@ class SparkSession:
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
+        def channelBuilder(self, channelBuilder: ChannelBuilder) -> "SparkSession.Builder":
+            """Uses custom :class:`ChannelBuilder` implementation, when there is a need
+            to customize the behavior for creation of GRPC connections.
+
+            .. versionadded:: 3.5.0
+
+            An example to use this class looks like this:
+
+            .. code-block:: python
+
+                from pyspark.sql.connect import SparkSession, ChannelBuilder
+
+                class CustomChannelBuilder(ChannelBuilder):
+                    ...
+
+                custom_channel_builder = CustomChannelBuilder(...)
+                spark = SparkSession.builder().channelBuilder(custom_channel_builder).getOrCreate()
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+            """
+            with self._lock:
+                # self._channel_builder is a separate field, because it may hold the state
+                # and cannot be serialized with to_str()
+                self._channel_builder = channelBuilder
+                return self
+
         def enableHiveSupport(self) -> "SparkSession.Builder":
-            raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
+            )
+
+        def create(self) -> "SparkSession":
+            has_channel_builder = self._channel_builder is not None
+            has_spark_remote = "spark.remote" in self._options
+
+            if has_channel_builder and has_spark_remote:
+                raise ValueError(
+                    "Only one of connection string or channelBuilder "
+                    "can be used to create a new SparkSession."
+                )
+
+            if not has_channel_builder and not has_spark_remote:
+                raise ValueError(
+                    "Needs either connection string or channelBuilder to create a new SparkSession."
+                )
+
+            if has_channel_builder:
+                assert self._channel_builder is not None
+                return SparkSession(connection=self._channel_builder)
+            else:
+                spark_remote = to_str(self._options.get("spark.remote"))
+                assert spark_remote is not None
+                return SparkSession(connection=spark_remote)
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
             if _active_spark_session is not None:
                 return _active_spark_session
-            _active_spark_session = SparkSession(connectionString=self._options["spark.remote"])
+            _active_spark_session = self.create()
             return _active_spark_session
 
     _client: SparkConnectClient
@@ -140,23 +199,24 @@ class SparkSession:
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
         return cls.Builder()
 
-    def __init__(self, connectionString: str, userId: Optional[str] = None):
+    def __init__(self, connection: Union[str, ChannelBuilder], userId: Optional[str] = None):
         """
         Creates a new SparkSession for the Spark Connect interface.
 
         Parameters
         ----------
-        connectionString: str, optional
+        connection: Union[str,ChannelBuilder]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection. Defaults to `sc://localhost`.
+            the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
+            Defaults to `sc://localhost`.
         userId : str, optional
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
-        # Parse the connection string.
-        self._client = SparkConnectClient(connectionString)
+        self._client = SparkConnectClient(connection=connection, userId=userId)
+        self._session_id = self._client._session_id
 
     def table(self, tableName: str) -> DataFrame:
         return self.read.table(tableName)
@@ -173,11 +233,6 @@ class SparkSession:
     def readStream(self) -> "DataStreamReader":
         return DataStreamReader(self)
 
-    def _get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
-        op = proto.ConfigRequest.Operation(get=proto.ConfigRequest.Get(keys=keys))
-        configs = dict(self._client.config(op).pairs)
-        return tuple(configs.get(key) for key in keys)
-
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
     ) -> StructType:
@@ -185,13 +240,16 @@ class SparkSession:
         Infer schema from list of Row, dict, or tuple.
         """
         if not data:
-            raise ValueError("can not infer schema from empty dataset")
+            raise PySparkValueError(
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
 
         (
             infer_dict_as_struct,
             infer_array_from_first_element,
             prefer_timestamp_ntz,
-        ) = self._get_configs(
+        ) = self._client.get_configs(
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
             "spark.sql.timestampType",
@@ -217,7 +275,10 @@ class SparkSession:
     ) -> "DataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
-            raise TypeError("data is already a DataFrame")
+            raise PySparkTypeError(
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+            )
 
         _schema: Optional[Union[AtomicType, StructType]] = None
         _cols: Optional[List[str]] = None
@@ -241,12 +302,18 @@ class SparkSession:
             _num_cols = len(_cols)
 
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
-            raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+            raise PySparkValueError(
+                error_class="INVALID_NDARRAY_DIMENSION",
+                message_parameters={"dimensions": "1 or 2"},
+            )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
             else:
-                raise ValueError("can not infer schema from empty dataset")
+                raise PySparkValueError(
+                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                    message_parameters={},
+                )
 
         _table: Optional[pa.Table] = None
 
@@ -264,38 +331,53 @@ class SparkSession:
 
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
+            spark_types: List[Optional[DataType]]
+            arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
-                arrow_schema = to_arrow_schema(schema)
+                deduped_schema = cast(StructType, _deduplicate_field_names(schema))
+                spark_types = [field.dataType for field in deduped_schema.fields]
+                arrow_schema = to_arrow_schema(deduped_schema)
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
-                raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    message_parameters={"data_type": str(schema)},
+                )
             else:
                 # Any timestamps must be coerced to be compatible with Spark
-                arrow_types = [
-                    to_arrow_type(TimestampType())
+                spark_types = [
+                    TimestampType()
                     if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
-                    else to_arrow_type(DayTimeIntervalType())
+                    else DayTimeIntervalType()
                     if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
                 ]
+                arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
 
-            timezone, safecheck = self._get_configs(
+            timezone, safecheck = self._client.get_configs(
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
-            ser = ArrowStreamPandasSerializer(
-                cast(str, timezone), safecheck == "true", assign_cols_by_name=True
-            )
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
 
             _table = pa.Table.from_batches(
-                [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
+                [
+                    ser._create_batch(
+                        [
+                            (c, at, st)
+                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
+                        ]
+                    )
+                ]
             )
 
             if isinstance(schema, StructType):
                 assert arrow_schema is not None
-                _table = _table.rename_columns(schema.names).cast(arrow_schema)
+                _table = _table.rename_columns(
+                    cast(StructType, _deduplicate_field_names(schema)).names
+                ).cast(arrow_schema)
 
         elif isinstance(data, np.ndarray):
             if _cols is None:
@@ -306,17 +388,23 @@ class SparkSession:
 
             if data.ndim == 1:
                 if 1 != len(_cols):
-                    raise ValueError(
-                        f"Length mismatch: Expected axis has {len(_cols)} element, "
-                        "new values have 1 elements"
+                    raise PySparkValueError(
+                        error_class="AXIS_LENGTH_MISMATCH",
+                        message_parameters={
+                            "expected_length": str(len(_cols)),
+                            "actual_length": "1",
+                        },
                     )
 
                 _table = pa.Table.from_arrays([pa.array(data)], _cols)
             else:
                 if data.shape[1] != len(_cols):
-                    raise ValueError(
-                        f"Length mismatch: Expected axis has {len(_cols)} elements, "
-                        f"new values have {data.shape[1]} elements"
+                    raise PySparkValueError(
+                        error_class="AXIS_LENGTH_MISMATCH",
+                        message_parameters={
+                            "expected_length": str(len(_cols)),
+                            "actual_length": str(data.shape[1]),
+                        },
                     )
 
                 _table = pa.Table.from_arrays(
@@ -368,9 +456,12 @@ class SparkSession:
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
         if _num_cols is not None and _num_cols != _table.shape[1]:
-            raise ValueError(
-                f"Length mismatch: Expected axis has {_num_cols} elements, "
-                f"new values have {_table.shape[1]} elements"
+            raise PySparkValueError(
+                error_class="AXIS_LENGTH_MISMATCH",
+                message_parameters={
+                    "expected_length": str(_num_cols),
+                    "actual_length": str(_table.shape[1]),
+                },
             )
 
         if _schema is not None:
@@ -436,6 +527,9 @@ class SparkSession:
         except Exception:
             pass
 
+    def interrupt_all(self) -> None:
+        self.client.interrupt_all()
+
     def stop(self) -> None:
         # Stopping the session will only close the connection to the current session (and
         # the life cycle of the session is maintained by the server),
@@ -459,53 +553,36 @@ class SparkSession:
                 active_session.stop()
             with SparkContext._lock:
                 del os.environ["SPARK_LOCAL_REMOTE"]
-                del os.environ["SPARK_REMOTE"]
+                del os.environ["SPARK_CONNECT_MODE_ENABLED"]
+                if "SPARK_REMOTE" in os.environ:
+                    del os.environ["SPARK_REMOTE"]
 
     stop.__doc__ = PySparkSession.stop.__doc__
 
     @classmethod
     def getActiveSession(cls) -> Any:
-        raise NotImplementedError("getActiveSession() is not implemented.")
-
-    def newSession(self) -> Any:
-        raise NotImplementedError("newSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "getActiveSession()"}
+        )
 
     @property
     def conf(self) -> RuntimeConf:
         return RuntimeConf(self.client)
 
     @property
-    def sparkContext(self) -> Any:
-        raise NotImplementedError("sparkContext() is not implemented.")
+    def streams(self) -> "StreamingQueryManager":
+        return StreamingQueryManager(self)
 
-    @property
-    def streams(self) -> Any:
-        raise NotImplementedError("streams() is not implemented.")
-
-    @property
-    def _jsc(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jsc"}
-        )
-
-    @property
-    def _jconf(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jconf"}
-        )
-
-    @property
-    def _jvm(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jvm"}
-        )
-
-    @property
-    def _jsparkSession(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-            message_parameters={"attr_name": "_jsparkSession"},
-        )
+    def __getattr__(self, name: str) -> Any:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
+        elif name in ["newSession", "sparkContext"]:
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
+            )
+        return object.__getattribute__(self, name)
 
     @property
     def udf(self) -> "UDFRegistration":
@@ -527,11 +604,38 @@ class SparkSession:
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
         and only relevant for testing.
+
+        .. versionadded:: 3.4.0
+
         Returns
         -------
         :class:`SparkConnectClient`
         """
         return self._client
+
+    def addArtifacts(self, *path: str, pyfile: bool = False, archive: bool = False) -> None:
+        """
+        Add artifact(s) to the client session. Currently only local files are supported.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        *path : tuple of str
+            Artifact's URIs to add.
+        pyfile : bool
+            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
+            The pyfiles are directly inserted into the path when executing Python functions
+            in executors.
+        archive : bool
+            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
+            The archives are unpacked on the executor side automatically.
+        """
+        if pyfile and archive:
+            raise ValueError("'pyfile' and 'archive' cannot be True together.")
+        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive)
+
+    addArtifact = addArtifacts
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
@@ -645,7 +749,14 @@ class SparkSession:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
-            raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
+            raise PySparkRuntimeError(
+                error_class="SESSION_OR_CONTEXT_EXISTS",
+                message_parameters={},
+            )
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

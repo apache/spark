@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -155,6 +156,92 @@ object ResolveDefaultColumns {
   }
 
   /**
+   * Returns true if the unresolved column is an explicit DEFAULT column reference.
+   */
+  def isExplicitDefaultColumn(col: UnresolvedAttribute): Boolean = {
+    col.name.equalsIgnoreCase(CURRENT_DEFAULT_COLUMN_NAME)
+  }
+
+  /**
+   * Returns true if the given expression contains an explicit DEFAULT column reference.
+   */
+  def containsExplicitDefaultColumn(expr: Expression): Boolean = {
+    expr.exists {
+      case u: UnresolvedAttribute => isExplicitDefaultColumn(u)
+      case _ => false
+    }
+  }
+
+  /**
+   * Resolves the column "DEFAULT" in UPDATE/MERGE assignment value expression if the following
+   * conditions are met:
+   * 1. The assignment value expression is a single `UnresolvedAttribute` with name "DEFAULT". This
+   *    means `key = DEFAULT` is allowed but `key = DEFAULT + 1` is not.
+   * 2. The assignment key expression is a top-level column. This means `col = DEFAULT` is allowed
+   *    but `col.field = DEFAULT` is not.
+   *
+   * The column "DEFAULT" will be resolved to the default value expression defined for the column of
+   * the assignment key.
+   */
+  def resolveColumnDefaultInAssignmentValue(
+      key: Expression,
+      value: Expression,
+      invalidColumnDefaultException: Throwable): Expression = {
+    key match {
+      case attr: AttributeReference =>
+        value match {
+          case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
+            getDefaultValueExprOrNullLit(attr)
+          case other if containsExplicitDefaultColumn(other) =>
+            throw invalidColumnDefaultException
+          case other => other
+        }
+      case _ => value
+    }
+  }
+
+  private def getDefaultValueExprOpt(field: StructField): Option[Expression] = {
+    if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      Some(analyze(field, "INSERT"))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Generates the expression of the default value for the given field. If there is no
+   * user-specified default value for this field, returns null literal.
+   */
+  def getDefaultValueExprOrNullLit(field: StructField): Expression = {
+    getDefaultValueExprOpt(field).getOrElse(Literal(null, field.dataType))
+  }
+
+  /**
+   * Generates the expression of the default value for the given column. If there is no
+   * user-specified default value for this field, returns null literal.
+   */
+  def getDefaultValueExprOrNullLit(attr: Attribute): Expression = {
+    val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+    getDefaultValueExprOrNullLit(field)
+  }
+
+  /**
+   * Generates the aliased expression of the default value for the given column. If there is no
+   * user-specified default value for this column, returns a null literal or None w.r.t. the config
+   * `USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES`.
+   */
+  def getDefaultValueExprOrNullLit(attr: Attribute, conf: SQLConf): Option[NamedExpression] = {
+    val field = StructField(attr.name, attr.dataType, attr.nullable, attr.metadata)
+    getDefaultValueExprOpt(field).orElse {
+      if (conf.useNullsForMissingDefaultColumnValues) {
+        Some(Literal(null, attr.dataType))
+      } else {
+        None
+      }
+    }.map(expr => Alias(expr, attr.name)())
+  }
+
+  /**
    * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
    *
    * @param field         represents the DEFAULT column value whose "default" metadata to parse
@@ -187,14 +274,13 @@ object ResolveDefaultColumns {
       parser.parseExpression(defaultSQL)
     } catch {
       case ex: ParseException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"$colName has a DEFAULT value of $defaultSQL which fails to parse as a valid " +
-            s"expression: ${ex.getMessage}")
+        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+          statementType, colName, defaultSQL, ex)
     }
     // Check invariants before moving on to analysis.
     if (parsed.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions()
+      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+        statementType, colName, defaultSQL)
     }
     // Analyze the parse result.
     val plan = try {
@@ -204,10 +290,8 @@ object ResolveDefaultColumns {
       ConstantFolding(analyzed)
     } catch {
       case ex: AnalysisException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"$colName has a DEFAULT value of $defaultSQL which fails to resolve as a valid " +
-            s"expression: ${ex.getMessage}")
+        throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+          statementType, colName, defaultSQL, ex)
     }
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
@@ -218,10 +302,31 @@ object ResolveDefaultColumns {
     } else if (Cast.canUpCast(analyzed.dataType, dataType)) {
       Cast(analyzed, dataType)
     } else {
-      throw new AnalysisException(
-        s"Failed to execute $statementType command because the destination table column " +
-          s"$colName has a DEFAULT value with type $dataType, but the " +
-          s"statement provided a value of incompatible type ${analyzed.dataType}")
+      // If the provided default value is a literal of a wider type than the target column, but the
+      // literal value fits within the narrower type, just coerce it for convenience. Exclude
+      // boolean/array/struct/map types from consideration for this type coercion to avoid
+      // surprising behavior like interpreting "false" as integer zero.
+      val result = if (analyzed.isInstanceOf[Literal] &&
+        !Seq(dataType, analyzed.dataType).exists(_ match {
+          case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
+          case _ => false
+        })) {
+        try {
+          val casted = Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
+          if (casted != null) {
+            Some(Literal(casted, dataType))
+          } else {
+            None
+          }
+        } catch {
+          case _: SparkThrowable | _: RuntimeException =>
+            None
+        }
+      } else None
+      result.getOrElse {
+        throw QueryCompilationErrors.defaultValuesDataTypeError(
+          statementType, colName, defaultSQL, dataType, analyzed.dataType)
+      }
     }
   }
   /**

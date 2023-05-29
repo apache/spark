@@ -54,6 +54,8 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
+import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -89,7 +91,7 @@ private[spark] object CallSite {
 /**
  * Various utility methods used by Spark.
  */
-private[spark] object Utils extends Logging {
+private[spark] object Utils extends Logging with SparkClassUtils {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
@@ -192,42 +194,9 @@ private[spark] object Utils extends Logging {
     weakStringInterner.intern(s)
   }
 
-  /**
-   * Get the ClassLoader which loaded Spark.
-   */
-  def getSparkClassLoader: ClassLoader = getClass.getClassLoader
-
-  /**
-   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
-   * loaded Spark.
-   *
-   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
-   * active loader when setting up ClassLoader delegation chains.
-   */
-  def getContextOrSparkClassLoader: ClassLoader =
-    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
-
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
     Try { classForName(clazz, initialize = false) }.isSuccess
-  }
-
-  // scalastyle:off classforname
-  /**
-   * Preferred alternative to Class.forName(className), as well as
-   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
-   */
-  def classForName[C](
-      className: String,
-      initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[C] = {
-    if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
-    } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
-        asInstanceOf[Class[C]]
-    }
-    // scalastyle:on classforname
   }
 
   /**
@@ -3358,11 +3327,11 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[org.apache.hadoop.ipc.CallerContext]].
+   * [[HadoopCallerContext]].
    */
   def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
-    val hdfsContext = new org.apache.hadoop.ipc.CallerContext.Builder(context).build()
-    org.apache.hadoop.ipc.CallerContext.setCurrent(hdfsContext)
+    val hdfsContext = new HadoopCallerContextBuilder(context).build()
+    HadoopCallerContext.setCurrent(hdfsContext)
   }
 }
 

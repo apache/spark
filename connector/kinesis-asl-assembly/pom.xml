@@ -20,12 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
+    <artifactId>spark-parent_2.13</artifactId>
     <version>3.5.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-streaming-kinesis-asl-assembly_2.12</artifactId>
+  <artifactId>spark-streaming-kinesis-asl-assembly_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Kinesis Assembly</name>
   <url>https://spark.apache.org/</url>
@@ -101,14 +101,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <version>${hadoop.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>

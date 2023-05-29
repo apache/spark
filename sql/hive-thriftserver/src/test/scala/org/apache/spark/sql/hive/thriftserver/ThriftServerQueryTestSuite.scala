@@ -108,7 +108,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       testCase: TestCase,
       configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
 
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
@@ -266,7 +266,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   test("Check if ThriftServer can work") {
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val rs = statement.executeQuery("select 1L")
       rs.next()
       assert(rs.getLong(1) === 1L)

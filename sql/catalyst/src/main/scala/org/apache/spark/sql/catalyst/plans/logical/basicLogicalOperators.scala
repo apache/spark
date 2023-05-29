@@ -187,7 +187,7 @@ object Project {
           if (columnPath.isEmpty) {
             val candidates = fields.map(_._1)
             val orderedCandidates =
-              StringUtils.orderStringsBySimilarity(f.name, candidates)
+              StringUtils.orderSuggestedIdentifiersBySimilarity(f.name, candidates)
             throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
           } else {
             throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
@@ -1997,7 +1997,8 @@ case class LateralJoin(
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(
+    left.output ++ right.plan.output)
 
   private[this] lazy val childMetadataAttributes =
     AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)

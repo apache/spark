@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.concurrent.TimeUnit
+
+import scala.collection.JavaConverters._
+
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -63,9 +67,30 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         // Verify some of the API.
         assert(query.isActive)
 
-        eventually(timeout(10.seconds)) {
+        eventually(timeout(30.seconds)) {
           assert(query.status.isDataAvailable)
           assert(query.recentProgress.nonEmpty) // Query made progress.
+        }
+
+        val lastProgress = query.lastProgress
+        assert(lastProgress != null)
+        assert(lastProgress.name == queryName)
+        assert(!lastProgress.durationMs.isEmpty)
+        assert(!lastProgress.eventTime.isEmpty)
+        assert(lastProgress.stateOperators.nonEmpty)
+        assert(
+          lastProgress.stateOperators.head.customMetrics.keySet().asScala == Set(
+            "loadedMapCacheHitCount",
+            "loadedMapCacheMissCount",
+            "stateOnCurrentVersionSizeBytes"))
+        assert(lastProgress.sources.nonEmpty)
+        assert(lastProgress.sink.description == "MemorySink")
+        assert(lastProgress.observedMetrics.isEmpty)
+
+        query.recentProgress.foreach { p =>
+          assert(p.id == lastProgress.id)
+          assert(p.runId == lastProgress.runId)
+          assert(p.name == lastProgress.name)
         }
 
         query.explain() // Prints the plan to console.
@@ -75,7 +100,101 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       } finally {
         // Don't wait for any processed data. Otherwise the test could take multiple seconds.
         query.stop()
+
+        // The query should still be accessible after stopped.
+        assert(!query.isActive)
+        assert(query.recentProgress.nonEmpty)
       }
     }
+  }
+
+  test("Streaming table API") {
+    withSQLConf(
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
+      spark.sql("DROP TABLE IF EXISTS my_table")
+
+      withTempPath { ckpt =>
+        val q1 = spark.readStream
+          .format("rate")
+          .load()
+          .writeStream
+          .option("checkpointLocation", ckpt.getCanonicalPath)
+          .toTable("my_table")
+
+        val q2 = spark.readStream
+          .table("my_table")
+          .writeStream
+          .format("memory")
+          .queryName("my_sink")
+          .start()
+
+        try {
+          q1.processAllAvailable()
+          q2.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            assert(spark.table("my_sink").count() > 0)
+          }
+        } finally {
+          q1.stop()
+          q2.stop()
+          spark.sql("DROP TABLE my_table")
+        }
+      }
+    }
+  }
+
+  test("awaitTermination") {
+    withSQLConf(
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
+      val q = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("test")
+        .start()
+
+      val start = System.nanoTime
+      val terminated = q.awaitTermination(500)
+      val end = System.nanoTime
+      assert((end - start) / 1e6 >= 500)
+      assert(!terminated)
+
+      q.stop()
+      // TODO (SPARK-43032): uncomment below
+      // eventually(timeout(1.minute)) {
+      // q.awaitTermination()
+      // }
+    }
+  }
+
+  test("streaming query manager") {
+    assert(spark.streams.active.isEmpty)
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    assert(q.name == null)
+    val q1 = spark.streams.get(q.id)
+    val q2 = spark.streams.active(0)
+    assert(q.id == q1.id && q.id == q2.id)
+    assert(q.runId == q1.runId && q.runId == q2.runId)
+    assert(q1.name == null && q2.name == null)
+
+    spark.streams.resetTerminated()
+    val start = System.nanoTime
+    // Same setting as in test_query_manager_await_termination in test_streaming.py
+    val terminated = spark.streams.awaitAnyTermination(2600)
+    val end = System.nanoTime
+    assert((end - start) >= TimeUnit.MILLISECONDS.toNanos(2000))
+    assert(!terminated)
+
+    q.stop()
+    assert(!q1.isActive)
   }
 }

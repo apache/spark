@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -67,16 +68,50 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
+  /**
+   * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
+   * between them. For example, [1A C0].
+   */
+  def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
+
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
 
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
-  private[spark] def orderStringsBySimilarity(
+  private[spark] def orderSuggestedIdentifiersBySimilarity(
       baseString: String,
       testStrings: Seq[String]): Seq[String] = {
-    testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+    // This method is used to generate suggested list of candidates closest to `baseString` from the
+    // list of `testStrings`. Spark uses it to clarify error message in case a query refers to non
+    // existent column or attribute. The `baseString` could be single part or multi part and this
+    // method will try to match suggestions.
+    // Note that identifiers from `testStrings` could represent columns or attributes from different
+    // catalogs, schemas or tables. We preserve suggested identifier prefix and reconstruct
+    // multi-part identifier after ordering if there are more than one unique prefix in a list. This
+    // will also reconstruct multi-part identifier for the cases of nested columns. E.g. for a
+    // table `t` with columns `a`, `b`, `c.d` (nested) and requested column `d` we will create
+    // prefixes `t`, `t`, and `t.c`. Since there is more than one distinct prefix we will return
+    // sorted suggestions as multi-part identifiers => (`t`.`c`.`d`, `t`.`a`, `t`.`b`).
+    val multiPart = UnresolvedAttribute.parseAttributeName(baseString).size > 1
+    if (multiPart) {
+      testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+    } else {
+      val split = testStrings.map { ident =>
+        val parts = UnresolvedAttribute.parseAttributeName(ident).map(quoteIfNeeded)
+        (parts.init.mkString("."), parts.last)
+      }
+      val sorted =
+        split.sortBy(pair => LevenshteinDistance.getDefaultInstance.apply(pair._2, baseString))
+      if (sorted.map(_._1).toSet.size == 1) {
+        // All identifier belong to the same relation
+        sorted.map(_._2)
+      } else {
+        // More than one relation
+        sorted.map(x => if (x._1.isEmpty) s"${x._2}" else s"${x._1}.${x._2}")
+      }
+    }
   }
 
   // scalastyle:off caselocale
