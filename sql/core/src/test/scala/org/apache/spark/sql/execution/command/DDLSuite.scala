@@ -2106,8 +2106,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "routineName" -> "`default`.`md5`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
-        fragment = "REFRESH FUNCTION default.md5",
-        start = 0,
+        fragment = "default.md5",
+        start = 17,
         stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
@@ -2140,8 +2140,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "routineName" -> "`func2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(
-          fragment = "REFRESH FUNCTION func2",
-          start = 0,
+          fragment = "func2",
+          start = 17,
           stop = 21))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 

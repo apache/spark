@@ -1878,8 +1878,13 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
 substring_index.__doc__ = pysparkfuncs.substring_index.__doc__
 
 
-def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("levenshtein", left, right)
+def levenshtein(
+    left: "ColumnOrName", right: "ColumnOrName", threshold: Optional[int] = None
+) -> Column:
+    if threshold is None:
+        return _invoke_function_over_columns("levenshtein", left, right)
+    else:
+        return _invoke_function("levenshtein", _to_col(left), _to_col(right), lit(threshold))
 
 
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__

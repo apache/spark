@@ -101,6 +101,7 @@ case class AggregateInPandasExec(
     val inputRDD = child.execute()
 
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
+    val largeVarTypes = conf.arrowUseLargeVarTypes
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
@@ -167,6 +168,7 @@ case class AggregateInPandasExec(
         argOffsets,
         aggInputSchema,
         sessionLocalTimeZone,
+        largeVarTypes,
         pythonRunnerConf,
         pythonMetrics).compute(projectedRowIter, context.partitionId(), context)
 

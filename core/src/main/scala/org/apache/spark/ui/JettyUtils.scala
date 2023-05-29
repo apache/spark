@@ -590,11 +590,6 @@ private class ProxyRedirectHandler(_proxyUri: String) extends HandlerWrapper {
     override def sendRedirect(location: String): Unit = {
       val newTarget = if (location != null) {
         val target = new URI(location)
-        val path = if (target.getPath().startsWith("/")) {
-          target.getPath()
-        } else {
-          req.getRequestURI().stripSuffix("/") + "/" + target.getPath()
-        }
         // The target path should already be encoded, so don't re-encode it, just the
         // proxy address part.
         val proxyBase = UIUtils.uiRoot(req)

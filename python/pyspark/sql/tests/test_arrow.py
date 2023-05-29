@@ -53,6 +53,8 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    ExamplePoint,
+    ExamplePointUDT,
 )
 from pyspark.testing.utils import QuietTest
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
@@ -1026,7 +1028,7 @@ class ArrowTestsMixin:
         df = self.spark.range(2).select([])
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-            assert_frame_equal(df.toPandas(), pd.DataFrame(index=range(2)))
+            assert_frame_equal(df.toPandas(), pd.DataFrame(columns=[], index=range(2)))
 
     def test_createDataFrame_nested_timestamp(self):
         for arrow_enabled in [True, False]:
@@ -1144,6 +1146,69 @@ class ArrowTestsMixin:
                 "map_ntz": [dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0))],
             }
         )
+
+        assert_frame_equal(pdf, expected)
+
+    def test_createDataFrame_udt(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_udt(arrow_enabled)
+
+    def check_createDataFrame_udt(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("point", ExamplePointUDT())
+            .add("struct", StructType().add("point", ExamplePointUDT()))
+            .add("array", ArrayType(ExamplePointUDT()))
+            .add("map", MapType(StringType(), ExamplePointUDT()))
+        )
+        data = [
+            Row(
+                ExamplePoint(1.0, 2.0),
+                Row(ExamplePoint(3.0, 4.0)),
+                [ExamplePoint(5.0, 6.0)],
+                dict(point=ExamplePoint(7.0, 8.0)),
+            )
+        ]
+        pdf = pd.DataFrame.from_records(data, columns=schema.names)
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            df = self.spark.createDataFrame(pdf, schema)
+
+        self.assertEqual(df.collect(), data)
+
+    def test_toPandas_udt(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_udt(arrow_enabled)
+
+    def check_toPandas_udt(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("point", ExamplePointUDT())
+            .add("struct", StructType().add("point", ExamplePointUDT()))
+            .add("array", ArrayType(ExamplePointUDT()))
+            .add("map", MapType(StringType(), ExamplePointUDT()))
+        )
+        data = [
+            Row(
+                ExamplePoint(1.0, 2.0),
+                Row(ExamplePoint(3.0, 4.0)),
+                [ExamplePoint(5.0, 6.0)],
+                dict(point=ExamplePoint(7.0, 8.0)),
+            )
+        ]
+        df = self.spark.createDataFrame(data, schema)
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+                "spark.sql.execution.pandas.structHandlingMode": "row",
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame.from_records(data, columns=schema.names)
 
         assert_frame_equal(pdf, expected)
 

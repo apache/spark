@@ -75,7 +75,7 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.types import _create_converter_to_pandas
+from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -717,7 +717,7 @@ class SparkConnectClient(object):
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
 
-        schema = schema or types.from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
         # Rename columns to avoid duplicated column names.
@@ -1237,8 +1237,8 @@ class SparkConnectClient(object):
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
-    def add_artifacts(self, *path: str, pyfile: bool) -> None:
-        self._artifact_manager.add_artifacts(*path, pyfile=pyfile)
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
+        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive)
 
 
 class RetryState:

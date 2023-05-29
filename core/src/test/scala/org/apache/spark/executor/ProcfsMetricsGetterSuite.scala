@@ -43,7 +43,7 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
 
   test("SPARK-34845: partial metrics shouldn't be returned") {
     val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
-    val mockedP = spy(p)
+    val mockedP = spy[ProcfsMetricsGetter](p)
 
     var ptree: Set[Int] = Set(26109, 22763)
     when(mockedP.computeProcessTree).thenReturn(ptree)

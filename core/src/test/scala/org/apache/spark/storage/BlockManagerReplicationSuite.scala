@@ -275,7 +275,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
       // create 1 faulty block manager by injecting faulty memory manager
       val memManager = UnifiedMemoryManager(conf, numCores = 1)
-      val mockedMemoryManager = spy(memManager)
+      val mockedMemoryManager = spy[UnifiedMemoryManager](memManager)
       doAnswer(_ => false).when(mockedMemoryManager).acquireStorageMemory(any(), any(), any())
       val store2 = makeBlockManager(10000, "host-2", Some(mockedMemoryManager))
 
