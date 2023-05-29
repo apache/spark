@@ -429,7 +429,7 @@ class QueryCompilationErrorsSuite
       errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`",
-        "proposal" -> "`m`, `a.a`"),
+        "proposal" -> "`m`, `a`.`a`"),
       context = ExpectedContext(
         fragment = "a",
         start = 9,
@@ -485,7 +485,7 @@ class QueryCompilationErrorsSuite
         sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "proposal" -> "`__auto_generated_subquery_name`.`i`"),
+          "proposal" -> "`i`"),
         context = ExpectedContext(
           fragment = "v.i",
           start = 7,

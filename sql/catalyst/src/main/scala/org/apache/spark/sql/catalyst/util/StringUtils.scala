@@ -83,35 +83,30 @@ object StringUtils extends Logging {
   private[spark] def orderSuggestedIdentifiersBySimilarity(
       baseString: String,
       testStrings: Seq[String]): Seq[String] = {
-    // This method is used to generate suggested list of candidates closest to `baseString` from the
-    // list of `testStrings`. Spark uses it to clarify error message in case a query refers to non
-    // existent column or attribute. The `baseString` could be single part or multi part and this
-    // method will try to match suggestions.
-    // Note that identifiers from `testStrings` could represent columns or attributes from different
-    // catalogs, schemas or tables. We preserve suggested identifier prefix and reconstruct
-    // multi-part identifier after ordering if there are more than one unique prefix in a list. This
-    // will also reconstruct multi-part identifier for the cases of nested columns. E.g. for a
-    // table `t` with columns `a`, `b`, `c.d` (nested) and requested column `d` we will create
-    // prefixes `t`, `t`, and `t.c`. Since there is more than one distinct prefix we will return
-    // sorted suggestions as multi-part identifiers => (`t`.`c`.`d`, `t`.`a`, `t`.`b`).
-    val multiPart = UnresolvedAttribute.parseAttributeName(baseString).size > 1
-    if (multiPart) {
-      testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+    val testParts = testStrings
+      .map(UnresolvedAttribute.parseAttributeName)
+    val dbTbl2Col = testParts.groupBy(_.init)
+    // Group by the qualifier. If all identifiers have the same qualifier, strip it.
+    // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
+    val candidates = if (dbTbl2Col.size == 1) {
+      dbTbl2Col.values.flatten.map(_.last)
     } else {
-      val split = testStrings.map { ident =>
-        val parts = UnresolvedAttribute.parseAttributeName(ident).map(quoteIfNeeded)
-        (parts.init.mkString("."), parts.last)
+      // Group by the qualifier excluding table name. If all identifiers have the same prefix
+      // (namespace) excluding table names, strip this prefix.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
+      val db2TblCol = dbTbl2Col.map { case (dbTbl, col) =>
+        dbTbl.init -> (dbTbl.lastOption.toSeq :+ col)
       }
-      val sorted =
-        split.sortBy(pair => LevenshteinDistance.getDefaultInstance.apply(pair._2, baseString))
-      if (sorted.map(_._1).toSet.size == 1) {
-        // All identifier belong to the same relation
-        sorted.map(_._2)
+      val dbCols = if (db2TblCol.size == 1) {
+        db2TblCol.values
       } else {
-        // More than one relation
-        sorted.map(x => s"${x._1}.${x._2}")
+        // Some candidates belong to different namespaces
+        testParts
       }
+      dbCols.map(_.mkString("."))
     }
+
+    candidates.toSeq.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale
