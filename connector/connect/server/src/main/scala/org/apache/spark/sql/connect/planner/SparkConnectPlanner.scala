@@ -1690,6 +1690,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
   }
 
+  @scala.annotation.tailrec
   private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
     case map: CreateMap => ExprUtils.convertToMapData(map)
     case UnresolvedFunction(Seq("map"), args, _, _, _) => extractMapData(CreateMap(args), field)
