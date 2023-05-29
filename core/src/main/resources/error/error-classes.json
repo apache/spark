@@ -49,7 +49,7 @@
   },
   "AS_OF_JOIN" : {
     "message" : [
-      "Generic Spark Connect error."
+      "Invalid as-of join."
     ],
     "subClass" : {
       "TOLERANCE_IS_NON_NEGATIVE" : {
