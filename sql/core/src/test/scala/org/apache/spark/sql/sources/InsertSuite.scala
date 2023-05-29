@@ -2375,6 +2375,41 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       checkAnswer(spark.table("t2"), Row(-1))
     }
   }
+
+  test("UNSUPPORTED_OVERWRITE.TABLE: Can't overwrite a table that is also being read from") {
+    val tableName = "t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`spark_catalog`.`default`.`$tableName`")
+      )
+    }
+  }
+
+  test("UNSUPPORTED_OVERWRITE.PATH: Can't overwrite a path that is also being read from") {
+    val tableName = "t1"
+    withTable(tableName) {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        sql(s"CREATE TABLE $tableName(i int) USING parquet LOCATION '$path'")
+        val insertDirSql =
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '$path'
+             |USING parquet
+             |SELECT i from $tableName""".stripMargin
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(insertDirSql)
+          },
+          errorClass = "UNSUPPORTED_OVERWRITE.PATH",
+          parameters = Map("path" -> ("file:" + path)))
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
