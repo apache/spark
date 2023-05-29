@@ -1047,7 +1047,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     messageParameters = Map(
       "objectName" -> "`the`.`id`",
-      "proposal" -> "`the.id`"))
+      "proposal" -> "`the`.`id`"))
 
   errorClassTest(
     "SPARK-39783: backticks in error message for candidate struct column",

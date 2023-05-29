@@ -85,28 +85,25 @@ object StringUtils extends Logging {
       testStrings: Seq[String]): Seq[String] = {
     val testParts = testStrings
       .map(UnresolvedAttribute.parseAttributeName)
-    val dbTbl2Col = testParts.groupBy(_.init)
-    // Group by the qualifier. If all identifiers have the same qualifier, strip it.
-    // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
-    val candidates = if (dbTbl2Col.size == 1) {
-      dbTbl2Col.values.flatten.map(_.last)
-    } else {
+    val baseParts = UnresolvedAttribute.parseAttributeName(baseString)
+    val candidates =
+      // Group by the qualifier. If all identifiers have the same qualifier, strip it.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
+      if (baseParts.size == 1 && testParts.groupBy(_.dropRight(1)).size == 1) {
+        testParts.map(_.takeRight(1))
       // Group by the qualifier excluding table name. If all identifiers have the same prefix
       // (namespace) excluding table names, strip this prefix.
       // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
-      val db2TblCol = dbTbl2Col.map { case (dbTbl, col) =>
-        dbTbl.init -> (dbTbl.lastOption.toSeq :+ col)
-      }
-      val dbCols = if (db2TblCol.size == 1) {
-        db2TblCol.values
+      } else if (baseParts.size <= 2 && testParts.groupBy(_.dropRight(2)).size == 1) {
+        testParts.map(_.takeRight(2))
       } else {
-        // Some candidates belong to different namespaces
+        // Some candidates have different qualifiers
         testParts
       }
-      dbCols.map(_.mkString("."))
-    }
 
-    candidates.toSeq.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+    candidates
+      .map(_.mkString("."))
+      .sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale
