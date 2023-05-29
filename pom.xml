@@ -2891,7 +2891,6 @@
               <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
               <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
               <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
-
               <!--
                 TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
                 from the corresponding files when Scala 2.12 is no longer supported.
