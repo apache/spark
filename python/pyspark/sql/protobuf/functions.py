@@ -56,6 +56,9 @@ def from_protobuf(
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.5.0
+        Supports `binaryDescriptorSet` to pass binary descriptor directly.
+
     Parameters
     ----------
     data : :class:`~pyspark.sql.Column` or str
@@ -182,6 +185,9 @@ def to_protobuf(
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.5.0
+        Supports `binaryDescriptorSet` to pass binary descriptor directly.
+
     Parameters
     ----------
     data : :class:`~pyspark.sql.Column` or str
@@ -275,7 +281,7 @@ def to_protobuf(
 
 
 def _read_descriptor_set_file(filePath: str) -> bytes:
-    # TODO: Throw structured errors like "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" etc.
+    # TODO(SPARK-43847): Throw structured errors like "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" etc.
     with open(filePath, "rb") as f:
         return f.read()
 
