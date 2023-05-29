@@ -102,13 +102,15 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       val localPath = artifact.stagedPath
       val fs = destFSPath.getFileSystem(hadoopConf)
       fs.copyFromLocalFile(
+        false,
+        true,
         new FSPath(localPath.toString),
         destFSPath
       )
     } catch {
       case e: java.io.IOException =>
         // TODO: report failure in response message
-        throw e
+        ()
     }
   }
 

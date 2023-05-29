@@ -271,6 +271,21 @@ class ArtifactTests(ReusedConnectTestCase):
             self.spark.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
 
+    def test_copy_from_local_to_FS(self):
+        with tempfile.TemporaryDirectory() as d:
+            with tempfile.TemporaryDirectory() as d2:
+                file_path = os.path.join(d, "file1")
+                dest_path = os.path.join(d2, "file1_dest")
+                file_content = "test_copy_from_local_to_FS"
+
+                with open(file_path, "w") as f:
+                    f.write(file_content)
+
+                self.spark.copyFromLocalToFS(file_path, dest_path)
+
+                with open(dest_path, "r") as f:
+                    self.assertEqual(f.read(), file_content)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.client.test_artifact import *  # noqa: F401
