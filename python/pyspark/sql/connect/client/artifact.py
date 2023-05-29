@@ -39,6 +39,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
 ARCHIVE_PREFIX: str = "archives"
+FORWARD_TO_FS_PREFIX: str = "forward_to_fs"
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -187,6 +188,19 @@ class ArtifactManager:
             return [artifact]
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
+    def _parse_forward_to_FS_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
+        local_path = str(Path(local_path).absolute())
+        # TODO: Support directory path.
+        assert local_path.is_file(), "local path must be a file path."
+        storage = LocalFile(local_path)
+
+        assert Path(dest_path).is_absolute(), "destination FS path must be an absolut path."
+
+        # The `dest_path` is an absolute path, to add the FORWARD_TO_FS_PREFIX,
+        # we cannot use `os.path.join`
+        artifact_path = FORWARD_TO_FS_PREFIX + dest_path
+        return Artifact(artifact_path, storage)
+
     def _create_requests(
         self, *path: str, pyfile: bool, archive: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
@@ -215,6 +229,11 @@ class ArtifactManager:
         for summary in response.artifacts:
             summaries.append(summary)
             # TODO(SPARK-42658): Handle responses containing CRC failures.
+
+    def _add_forward_to_fs_artifacts(self, local_path, dest_path):
+        return self._add_artifacts(
+            self._parse_forward_to_FS_artifacts(local_path, dest_path)
+        )
 
     def _add_artifacts(self, artifacts: Iterable[Artifact]) -> Iterator[proto.AddArtifactsRequest]:
         """

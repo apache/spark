@@ -1240,6 +1240,9 @@ class SparkConnectClient(object):
     def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
         self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive)
 
+    def copy_file_to_FS(self, local_path: str, dest_path: str) -> None:
+        self._artifact_manager._add_forward_to_fs_artifacts(local_path, dest_path)
+
 
 class RetryState:
     """
