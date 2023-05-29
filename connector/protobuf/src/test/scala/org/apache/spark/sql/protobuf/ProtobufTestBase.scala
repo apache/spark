@@ -28,12 +28,7 @@ trait ProtobufTestBase extends SQLTestUtils {
    * The result path doesn't contain the `file:/` protocol part.
    */
   protected def testFile(fileName: String, alternateFileName: String): String = {
-    val ret = try {
-      testFile(fileName)
-    } catch {
-      case _: NullPointerException => testFile(alternateFileName)
-    }
-    ret.replace("file:/", "/")
+      s"target/generated-test-sources/$fileName"
   }
 
   protected def structFromDDL(ddl: String): StructType =
