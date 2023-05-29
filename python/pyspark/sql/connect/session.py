@@ -625,6 +625,23 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
+    def copyFromLocalToFS(self, local_path: str, dest_path: str) -> None:
+        """
+        copy file from local to FS.
+
+        Parameters
+        ----------
+        local_path: str
+            Path to a local file (Directory is not supported yet).
+            The path can be either absolute path or relative path.
+
+        dest_path: str
+            The FS path to the destination the file will be copied to.
+
+        .. versionadded:: 3.5.0
+        """
+        self._client.copy_from_local_to_FS(local_path, dest_path)
+
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
         """

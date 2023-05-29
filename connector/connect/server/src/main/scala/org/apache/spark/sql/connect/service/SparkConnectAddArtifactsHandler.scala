@@ -52,7 +52,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   private def artifactManager: SparkConnectArtifactManager =
     SparkConnectArtifactManager.getOrCreateArtifactManager
 
-  val forwardToFSPrefix = "forwardToFS"
+  val forwardToFSPrefix = "forward_to_fs"
 
   override def onNext(req: AddArtifactsRequest): Unit = {
     if (this.holder == null) {
@@ -106,9 +106,9 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
         destFSPath
       )
     } catch {
-      case _: java.io.IOException =>
+      case e: java.io.IOException =>
         // TODO: report failure in response message
-        ()
+        throw e
     }
   }
 
@@ -123,11 +123,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // We do not store artifacts that fail the CRC. The failure is reported in the artifact
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
-        addStagedArtifactToArtifactManager(artifact)
-
         if (artifact.path.startsWith(forwardToFSPrefix)) {
           uploadStagedArtifactToFS(artifact)
         }
+        addStagedArtifactToArtifactManager(artifact)
       }
       artifact.summary()
     }.toSeq

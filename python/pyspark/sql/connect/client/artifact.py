@@ -189,17 +189,17 @@ class ArtifactManager:
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
     def _parse_forward_to_FS_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
-        local_path = str(Path(local_path).absolute())
+        local_path = Path(local_path).absolute()
         # TODO: Support directory path.
         assert local_path.is_file(), "local path must be a file path."
-        storage = LocalFile(local_path)
+        storage = LocalFile(str(local_path))
 
         assert Path(dest_path).is_absolute(), "destination FS path must be an absolut path."
 
         # The `dest_path` is an absolute path, to add the FORWARD_TO_FS_PREFIX,
         # we cannot use `os.path.join`
         artifact_path = FORWARD_TO_FS_PREFIX + dest_path
-        return Artifact(artifact_path, storage)
+        return [Artifact(artifact_path, storage)]
 
     def _create_requests(
         self, *path: str, pyfile: bool, archive: bool
@@ -215,6 +215,14 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
+    def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]):
+        response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
+        summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
+
+        for summary in response.artifacts:
+            summaries.append(summary)
+            # TODO(SPARK-42658): Handle responses containing CRC failures.
+
     def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
         """
         Add a single artifact to the session.
@@ -223,17 +231,13 @@ class ArtifactManager:
         requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
             *path, pyfile=pyfile, archive=archive
         )
-        response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
-        summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
-
-        for summary in response.artifacts:
-            summaries.append(summary)
-            # TODO(SPARK-42658): Handle responses containing CRC failures.
+        self._request_add_artifacts(requests)
 
     def _add_forward_to_fs_artifacts(self, local_path, dest_path):
-        return self._add_artifacts(
+        requests: Iterator[proto.AddArtifactsRequest] = self._add_artifacts(
             self._parse_forward_to_FS_artifacts(local_path, dest_path)
         )
+        self._request_add_artifacts(requests)
 
     def _add_artifacts(self, artifacts: Iterable[Artifact]) -> Iterator[proto.AddArtifactsRequest]:
         """
