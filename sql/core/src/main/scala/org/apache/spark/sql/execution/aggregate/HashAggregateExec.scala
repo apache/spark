@@ -383,8 +383,7 @@ case class HashAggregateExec(
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
-        f.dataType.isInstanceOf[CalendarIntervalType]) &&
-        bufferSchema.nonEmpty
+        f.dataType.isInstanceOf[CalendarIntervalType])
 
     // For vectorized hash map, We do not support byte array based decimal type for aggregate values
     // as ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
