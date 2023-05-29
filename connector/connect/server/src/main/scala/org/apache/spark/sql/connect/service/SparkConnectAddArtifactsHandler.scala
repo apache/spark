@@ -127,8 +127,9 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       if (artifact.getCrcStatus.contains(true)) {
         if (artifact.path.startsWith(forwardToFSPrefix + File.separator)) {
           uploadStagedArtifactToFS(artifact)
+        } else {
+          addStagedArtifactToArtifactManager(artifact)
         }
-        addStagedArtifactToArtifactManager(artifact)
       }
       artifact.summary()
     }.toSeq
