@@ -2856,6 +2856,9 @@
               <arg>-target:jvm-1.8</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
               <arg>-Wunused:imports</arg>
+              <!--
+                TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
+              -->
               <arg>-Wconf:cat=scaladoc:wv</arg>
               <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
               <arg>-Wconf:cat=other-nullary-override:wv</arg>
