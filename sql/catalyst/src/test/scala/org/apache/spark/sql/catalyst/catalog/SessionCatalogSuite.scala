@@ -163,15 +163,35 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         .analyze(columnA, statementType, ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
         .sql == "41")
       assert(ResolveDefaultColumns.analyze(columnB, statementType).sql == "'abc'")
-      assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(columnC, statementType)
-      }.getMessage.contains("fails to parse as a valid expression"))
-      assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(columnD, statementType)
-      }.getMessage.contains("subquery expressions are not allowed in DEFAULT values"))
-      assert(intercept[AnalysisException] {
-        ResolveDefaultColumns.analyze(columnE, statementType)
-      }.getMessage.contains("statement provided a value of incompatible type"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ResolveDefaultColumns.analyze(columnC, statementType)
+        },
+        errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        parameters = Map(
+          "statement" -> "CREATE TABLE",
+          "colName" -> "`c`",
+          "defaultValue" -> "_@#$%"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ResolveDefaultColumns.analyze(columnD, statementType)
+        },
+        errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+        parameters = Map(
+          "statement" -> "CREATE TABLE",
+          "colName" -> "`d`",
+          "defaultValue" -> "(select min(x) from badtable)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          ResolveDefaultColumns.analyze(columnE, statementType)
+        },
+        errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+        parameters = Map(
+          "statement" -> "CREATE TABLE",
+          "colName" -> "`e`",
+          "expectedType" -> "\"BOOLEAN\"",
+          "defaultValue" -> "41 + 1",
+          "actualType" -> "\"INT\""))
 
       // Make sure that constant-folding default values does not take place when the feature is
       // disabled.

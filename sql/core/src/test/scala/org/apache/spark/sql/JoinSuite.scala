@@ -46,7 +46,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     // test case
     plan.foreachUp {
       case s: SortExec =>
-        val sortExec = spy(s)
+        val sortExec = spy[SortExec](s)
         verify(sortExec, atLeastOnce).cleanupResources()
         verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
       case _ =>

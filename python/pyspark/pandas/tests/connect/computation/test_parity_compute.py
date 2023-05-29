@@ -17,47 +17,15 @@
 import unittest
 
 from pyspark import pandas as ps
-from pyspark.pandas.tests.test_dataframe_slow import DataFrameSlowTestsMixin
+from pyspark.pandas.tests.computation.test_compute import FrameComputeMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class DataFrameSlowParityTests(
-    DataFrameSlowTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
-):
+class FrameParityComputeTests(FrameComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
     @property
     def psdf(self):
         return ps.from_pandas(self.pdf)
-
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_at_time(self):
-        super().test_at_time()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_backfill(self):
-        super().test_backfill()
-
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_between_time(self):
-        super().test_between_time()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_bfill(self):
-        super().test_bfill()
-
-    @unittest.skip(
-        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_cov(self):
-        super().test_cov()
 
     @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
@@ -65,27 +33,11 @@ class DataFrameSlowParityTests(
     def test_diff(self):
         super().test_diff()
 
-    @unittest.skip("TODO(SPARK-43615): Enable DataFrameSlowParityTests.test_eval.")
-    def test_eval(self):
-        super().test_eval()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_ffill(self):
-        super().test_ffill()
-
     @unittest.skip(
         "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.mode in Spark Connect."
     )
     def test_mode(self):
         super().test_mode()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_pad(self):
-        super().test_pad()
 
     @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
@@ -103,19 +55,9 @@ class DataFrameSlowParityTests(
     def test_rank(self):
         super().test_rank()
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_shift(self):
-        super().test_shift()
-
-    @unittest.skip("TODO(SPARK-43619): Enable DataFrameSlowParityTests.test_udt.")
-    def test_udt(self):
-        super().test_udt()
-
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.pandas.tests.connect.computation.test_parity_compute import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

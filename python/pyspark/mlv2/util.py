@@ -16,10 +16,10 @@
 #
 
 import pandas as pd
-import cloudpickle  # type: ignore[import]
 from collections.abc import Callable, Iterable
 from typing import Any, Union
 
+from pyspark import cloudpickle
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, pandas_udf
 

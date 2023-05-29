@@ -121,6 +121,12 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_toPandas_nested_timestamp(self):
         self.check_toPandas_nested_timestamp(True)
 
+    def test_createDataFrame_udt(self):
+        self.check_createDataFrame_udt(True)
+
+    def test_toPandas_udt(self):
+        self.check_toPandas_udt(True)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_arrow import *  # noqa: F401

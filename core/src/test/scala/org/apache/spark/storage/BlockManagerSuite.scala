@@ -186,8 +186,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(sc.conf).thenReturn(conf)
 
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
-    liveListenerBus = spy(new LiveListenerBus(conf))
-    master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+    liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
+    master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
         liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
         isDriver = true)),
@@ -873,7 +873,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       conf.set("spark.shuffle.io.maxRetries", "0")
       val sameHostBm = makeBlockManager(8000, "sameHost", master)
 
-      val otherHostTransferSrv = spy(sameHostBm.blockTransferService)
+      val otherHostTransferSrv = spy[BlockTransferService](sameHostBm.blockTransferService)
       doAnswer { _ =>
          "otherHost"
       }.when(otherHostTransferSrv).hostName
@@ -888,7 +888,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val blockId = "list"
       bmToPutBlock.putIterator(blockId, List(array).iterator, storageLevel, tellMaster = true)
 
-      val sameHostTransferSrv = spy(sameHostBm.blockTransferService)
+      val sameHostTransferSrv = spy[BlockTransferService](sameHostBm.blockTransferService)
       doAnswer { _ =>
          fail("Fetching over network is not expected when the block is requested from same host")
       }.when(sameHostTransferSrv).fetchBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
@@ -935,7 +935,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         }
       }
       val store1 = makeBlockManager(8000, "executor1", this.master, Some(mockTransferService))
-      val spiedStore1 = spy(store1)
+      val spiedStore1 = spy[BlockManager](store1)
       doAnswer { inv =>
         val blockId = inv.getArguments()(0).asInstanceOf[BlockId]
         val localDirs = inv.getArguments()(1).asInstanceOf[Array[String]]
@@ -974,7 +974,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
-    val store = spy(makeBlockManager(8000, "executor1"))
+    val store = spy[BlockManager](makeBlockManager(8000, "executor1"))
     val store2 = makeBlockManager(8000, "executor2")
     val list1 = List(new Array[Byte](4000))
     val blockId = RDDBlockId(0, 0)
