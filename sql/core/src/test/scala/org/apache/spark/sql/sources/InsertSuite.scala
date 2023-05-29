@@ -252,15 +252,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("it is not allowed to write to a table while querying it.") {
-    val message = intercept[AnalysisException] {
-      sql(
-        s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
-      """.stripMargin)
-    }.getMessage
-    assert(
-      message.contains("Cannot overwrite a path that is also being read from."),
-      "INSERT OVERWRITE to a table while querying it should not be allowed.")
+    checkErrorMatchPVals(
+      exception = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable")
+      },
+      errorClass = "UNSUPPORTED_OVERWRITE.PATH",
+      parameters = Map("path" -> ".*"))
   }
 
   test("SPARK-30112: it is allowed to write to a table while querying it for " +
@@ -296,16 +293,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             checkAnswer(spark.table("insertTable"),
               Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
           } else {
-            val message = intercept[AnalysisException] {
-              sql(
-                """
-                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
-                  |SELECT i + 1, part2 FROM insertTable
-                """.stripMargin)
-            }.getMessage
-            assert(
-              message.contains("Cannot overwrite a path that is also being read from."),
-              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(
+                  """
+                    |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                    |SELECT i + 1, part2 FROM insertTable
+                  """.stripMargin)
+              },
+              errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+              parameters = Map("table" -> "`spark_catalog`.`default`.`inserttable`"))
           }
         }
       }
