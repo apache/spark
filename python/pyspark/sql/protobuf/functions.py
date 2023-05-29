@@ -57,7 +57,7 @@ def from_protobuf(
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.5.0
-        Supports `binaryDescriptorSet` to pass binary descriptor directly.
+        Supports `binaryDescriptorSet` arg to pass binary descriptor directly.
 
     Parameters
     ----------
@@ -186,7 +186,7 @@ def to_protobuf(
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.5.0
-        Supports `binaryDescriptorSet` to pass binary descriptor directly.
+        Supports `binaryDescriptorSet` arg to pass binary descriptor directly.
 
     Parameters
     ----------
