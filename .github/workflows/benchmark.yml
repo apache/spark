@@ -182,7 +182,7 @@ jobs:
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
           "${{ github.event.inputs.class }}"
         # Revert to default Scala version to clean up unnecessary git diff
-        dev/change-scala-version.sh 2.12
+        dev/change-scala-version.sh 2.13
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
