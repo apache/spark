@@ -57,6 +57,8 @@ case class ShuffledHashJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     case FullOuter => Nil
+    case LeftOuter if buildSide == BuildLeft => Nil
+    case RightOuter if buildSide == BuildRight => Nil
     case _ => super.outputOrdering
   }
 
@@ -83,8 +85,10 @@ case class ShuffledHashJoinExec(
       iter,
       buildBoundKeys,
       taskMemoryManager = context.taskMemoryManager(),
-      // Full outer join needs support for NULL key in HashedRelation.
-      allowsNullKey = joinType == FullOuter,
+      // build-side outer join needs support for NULL key in HashedRelation.
+      allowsNullKey = joinType == FullOuter ||
+        (joinType == LeftOuter && buildSide == BuildLeft) ||
+        (joinType == RightOuter && buildSide == BuildRight),
       ignoresDuplicatedKey = ignoreDuplicatedKey)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
@@ -98,16 +102,21 @@ case class ShuffledHashJoinExec(
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
       joinType match {
-        case FullOuter => fullOuterJoin(streamIter, hashed, numOutputRows)
+        case FullOuter => buildSideOuterJoin(streamIter, hashed, numOutputRows, full = true)
+        case LeftOuter if buildSide.equals(BuildLeft) =>
+          buildSideOuterJoin(streamIter, hashed, numOutputRows, full = false)
+        case RightOuter if buildSide.equals(BuildRight) =>
+          buildSideOuterJoin(streamIter, hashed, numOutputRows, full = false)
         case _ => join(streamIter, hashed, numOutputRows)
       }
     }
   }
 
-  private def fullOuterJoin(
+  private def buildSideOuterJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
-      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric,
+      full: Boolean): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
     val joinRow = new JoinedRow
     val (joinRowWithStream, joinRowWithBuild) = {
@@ -130,11 +139,11 @@ case class ShuffledHashJoinExec(
     }
 
     val iter = if (hashedRelation.keyIsUnique) {
-      fullOuterJoinWithUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow)
+      buildSideOuterJoinUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, full)
     } else {
-      fullOuterJoinWithNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow)
+      buildSideOuterJoinNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, full)
     }
 
     val resultProj = UnsafeProjection.create(output, output)
@@ -145,7 +154,7 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Full outer shuffled hash join with unique join keys:
+   * Shuffled hash join with unique join keys, where an outer side is the build side.
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
    *    A bit set is used to track matched rows with key index.
@@ -153,23 +162,30 @@ case class ShuffledHashJoinExec(
    *    Filter out rows from build side being matched already,
    *    by checking key index from bit set.
    */
-  private def fullOuterJoinWithUniqueKey(
+  private def buildSideOuterJoinUniqueKey(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
+      buildNullRow: GenericInternalRow,
+      full: Boolean): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
     longMetric("buildDataSize") += matchedKeys.capacity / 8
 
+    def noMatch = if (full) {
+      Some(joinRowWithBuild(buildNullRow))
+    } else {
+      None
+    }
+
     // Process stream side with looking up hash relation
-    val streamResultIter = streamIter.map { srow =>
+    val streamResultIter = streamIter.flatMap { srow =>
       joinRowWithStream(srow)
       val keys = joinKeys(srow)
       if (keys.anyNull) {
-        joinRowWithBuild(buildNullRow)
+        noMatch
       } else {
         val matched = hashedRelation.getValueWithKeyIndex(keys)
         if (matched != null) {
@@ -178,12 +194,12 @@ case class ShuffledHashJoinExec(
           val joinRow = joinRowWithBuild(buildRow)
           if (boundCondition(joinRow)) {
             matchedKeys.set(keyIndex)
-            joinRow
+            Some(joinRow)
           } else {
-            joinRowWithBuild(buildNullRow)
+            noMatch
           }
         } else {
-          joinRowWithBuild(buildNullRow)
+          noMatch
         }
       }
     }
@@ -205,7 +221,7 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Full outer shuffled hash join with non-unique join keys:
+   * Shuffled hash join with non-unique join keys, where an outer side is the build side.
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
    *    A [[OpenHashSet]] (Long) is used to track matched rows with
@@ -219,14 +235,15 @@ case class ShuffledHashJoinExec(
    * the value indices of its tuples will be 0, 1 and 2.
    * Note that value indices of tuples with different keys are incomparable.
    */
-  private def fullOuterJoinWithNonUniqueKey(
+  private def buildSideOuterJoinNonUniqueKey(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
+      buildNullRow: GenericInternalRow,
+      full: Boolean): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
     TaskContext.get().addTaskCompletionListener[Unit](_ => {
       // At the end of the task, update the task's memory usage for this
@@ -252,7 +269,12 @@ case class ShuffledHashJoinExec(
       val joinRow = joinRowWithStream(srow)
       val keys = joinKeys(srow)
       if (keys.anyNull) {
-        Iterator.single(joinRowWithBuild(buildNullRow))
+        // return row with build side NULL row to satisfy full outer join semantics if enabled
+        if (full) {
+          Iterator.single(joinRowWithBuild(buildNullRow))
+        } else {
+          Iterator.empty
+        }
       } else {
         val buildIter = hashedRelation.getWithKeyIndex(keys)
         new RowIterator {
@@ -272,8 +294,8 @@ case class ShuffledHashJoinExec(
             }
             // When we reach here, it means no match is found for this key.
             // So we need to return one row with build side NULL row,
-            // to satisfy the full outer join semantic.
-            if (!found) {
+            // to satisfy the full outer join semantic if enabled.
+            if (!found && full) {
               joinRowWithBuild(buildNullRow)
               // Set `found` to be true as we only need to return one row
               // but no more.
@@ -314,7 +336,9 @@ case class ShuffledHashJoinExec(
 
   override def supportCodegen: Boolean = joinType match {
     case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
-    case _ => true
+    case LeftOuter if buildSide == BuildLeft => false
+    case RightOuter if buildSide == BuildRight => false
+    case _ => super.supportCodegen
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
