@@ -51,7 +51,7 @@ trait RunnableCommand extends Command {
 
 trait LeafRunnableCommand extends RunnableCommand with LeafLike[LogicalPlan]
 
-trait RootRunnableCommand extends RunnableCommand with UnaryLike[LogicalPlan]
+trait UnaryRunnableCommand extends RunnableCommand with UnaryLike[LogicalPlan]
 
 /**
  * A physical operator that executes the run method of a `RunnableCommand` and

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.{DataWritingCommand, RootRunnableCommand}
+import org.apache.spark.sql.execution.command.{DataWritingCommand, UnaryRunnableCommand}
 
 /**
  * Create table and insert the query result into it.
@@ -37,7 +37,7 @@ case class CreateHiveTableAsSelectCommand(
     query: LogicalPlan,
     outputColumnNames: Seq[String],
     mode: SaveMode)
-  extends RootRunnableCommand {
+  extends UnaryRunnableCommand {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
