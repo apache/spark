@@ -844,7 +844,17 @@ case class CTERelationRef(
 
   override lazy val resolved: Boolean = _resolved
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    // CTERelationRef inherits the output attributes from a query, which may contain duplicated
+    // attributes, for queries like `SELECT a, a FROM t`. It's important to keep the duplicated
+    // attributes to have the same id in the new instance, as column resolution allows more than one
+    // matching attributes if their ids are the same.
+    // For example, `Project('a, CTERelationRef(a#1, a#1))` can be resolved properly as the matching
+    // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
+    // resolved.
+    val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
+    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+  }
 
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
 
