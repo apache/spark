@@ -28,6 +28,10 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameCovMixin:
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43809): Enable DataFrameSlowTests.test_cov for pandas 2.0.0.",
+    )
     def test_cov(self):
         # SPARK-36396: Implement DataFrame.cov
 
