@@ -1,7 +1,7 @@
 {
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
+      "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
     ]
   },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
@@ -54,12 +54,12 @@
     "subClass" : {
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
-          "Input argument tolerance must be non-negative."
+          "The input argument `tolerance` must be non-negative."
         ]
       },
       "TOLERANCE_IS_UNFOLDABLE" : {
         "message" : [
-          "Input argument tolerance must be a constant."
+          "The input argument `tolerance` must be a constant."
         ]
       }
     }
@@ -727,7 +727,7 @@
   },
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
-      "expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+      "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ]
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
@@ -1845,7 +1845,7 @@
   },
   "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
     "message" : [
-      "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
+      "The correlated scalar subquery '<sqlExpr>' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get."
     ]
   },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
