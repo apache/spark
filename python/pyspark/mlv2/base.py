@@ -34,7 +34,11 @@ from pyspark import since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param import Params
-
+from pyspark.ml.param.shared import (
+    HasLabelCol,
+    HasFeaturesCol,
+    HasPredictionCol,
+)
 from pyspark.mlv2.util import transform_dataframe_column
 
 if TYPE_CHECKING:
@@ -238,3 +242,72 @@ class Model(Transformer, metaclass=ABCMeta):
     """
 
     pass
+
+
+@inherit_doc
+class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+    """
+    Params for :py:class:`Predictor` and :py:class:`PredictorModel`.
+
+    .. versionadded:: 3.5.0
+    """
+
+    pass
+
+
+@inherit_doc
+class Predictor(Estimator[M], _PredictorParams, metaclass=ABCMeta):
+    """
+    Estimator for prediction tasks (regression and classification).
+    """
+
+    @since("3.5.0")
+    def setLabelCol(self, value: str) -> "Predictor":
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.5.0")
+    def setFeaturesCol(self, value: str) -> "Predictor":
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.5.0")
+    def setPredictionCol(self, value: str) -> "Predictor":
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+
+@inherit_doc
+class PredictionModel(Model, _PredictorParams, metaclass=ABCMeta):
+    """
+    Model for prediction tasks (regression and classification).
+    """
+
+    @since("3.5.0")
+    def setFeaturesCol(self, value: str) -> "PredictionModel":
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.5.0")
+    def setPredictionCol(self, value: str) -> "PredictionModel":
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @property  # type: ignore[misc]
+    @abstractmethod
+    @since("3.5.0")
+    def numFeatures(self) -> int:
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        raise NotImplementedError()
