@@ -34,6 +34,7 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
     @staticmethod
     def _get_field_converter(field_type: str) -> Callable[[Any], Any]:
         if field_type == "vector":
+
             def converter(value: Any) -> Any:
                 if value["type"] == 1:
                     # dense vector
@@ -44,9 +45,12 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     sparse_array = np.zeros(size, dtype=np.float64)
                     sparse_array[value["indices"]] = value["values"]
                     return sparse_array
+
         elif field_type in ["float", "double", "int", "bigint", "smallint"]:
+
             def converter(value: Any) -> Any:
                 return value
+
         else:
             raise ValueError(
                 "SparkPartitionTorchDataset does not support loading data from field of "
@@ -78,7 +82,9 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     for row in batch_pdf.itertuples(index=False):
                         yield [
                             field_converter(value)
-                            for value, field_converter in zip(row, self.field_converters)
+                            for value, field_converter in zip(
+                                row, self.field_converters
+                            )
                         ]
                         count += 1
                         if count == self.num_samples:
