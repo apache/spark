@@ -83,7 +83,8 @@
   "CANNOT_FIND_BATCH" : {
     "message" : [
       "Unable to find batch <batchMetadataFile>."
-    ]
+    ],
+    "sqlState" : "42K03"
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
