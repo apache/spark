@@ -29,7 +29,6 @@ import org.slf4j.{Logger, LoggerFactory}
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.SparkClassUtils
 
-
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
  * logging messages at different levels using methods that only evaluate parameters lazily if the
