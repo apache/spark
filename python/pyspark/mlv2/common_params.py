@@ -62,7 +62,7 @@ class HasLearningRate(Params):
         Params._dummy(),
         "learningRate",
         "learning rate for training",
-        typeConverter=TypeConverters.toInt,
+        typeConverter=TypeConverters.toFloat,
     )
 
     def __init__(self) -> None:
@@ -81,7 +81,7 @@ class HasMomentum(Params):
         Params._dummy(),
         "momentum",
         "momentum for training optimizer",
-        typeConverter=TypeConverters.toInt,
+        typeConverter=TypeConverters.toFloat,
     )
 
     def __init__(self) -> None:

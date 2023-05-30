@@ -27,15 +27,8 @@ from pyspark.mlv2.base import Estimator, Model
 
 from pyspark.sql import DataFrame
 
-from pyspark.ml.param import (
-    Param,
-    Params,
-    TypeConverters,
-)
 from pyspark.ml.torch.distributor import TorchDistributor
 from pyspark.ml.param.shared import (
-    HasRegParam,
-    HasElasticNetParam,
     HasMaxIter,
     HasFitIntercept,
     HasTol,
@@ -92,24 +85,32 @@ class _LogisticRegressionParams(
     .. versionadded:: 3.0.0
     """
 
-    def __init__(self, *args: Any):
-        super(_LogisticRegressionParams, self).__init__(*args)
-        self._setDefault(
+    def __init__(
+            self,
+            *,
             maxIter=100,
             tol=1e-6,
             numTrainWorkers=1,
-            numBatchSize=32,
-            learning_rate=0.001,
+            batchSize=32,
+            learningRate=0.001,
             momentum=0.9,
+    ):
+        super(_LogisticRegressionParams, self).__init__()
+        self._set(
+            maxIter=maxIter,
+            tol=tol,
+            numTrainWorkers=numTrainWorkers,
+            batchSize=batchSize,
+            learningRate=learningRate,
+            momentum=momentum,
         )
 
 
 class _LinearNet(torch_nn.Module):
     def __init__(self, num_features, num_labels, bias) -> None:
         super(_LinearNet, self).__init__()
-
         output_dim = num_labels
-        self.fc = torch_nn.Linear(num_features, output_dim, bias=bias)
+        self.fc = torch_nn.Linear(num_features, output_dim, bias=bias, dtype=torch.float32)
 
     def forward(self, x: Any) -> Any:
         output = self.fc(x)
@@ -132,6 +133,7 @@ def _train_logistic_regression_model_worker_fn(
     import torch.optim as optim
 
     # TODO: support training on GPU
+    # TODO: support L1 / L2 regularization
     torch.distributed.init_process_group("gloo")
 
     ddp_model = DDP(_LinearNet(
@@ -146,11 +148,16 @@ def _train_logistic_regression_model_worker_fn(
     data_loader = _get_spark_partition_data_loader(num_samples_per_worker, batch_size)
     for i in range(max_iter):
         ddp_model.train()
+
+        step_count = 0
         for x, target in data_loader:
             optimizer.zero_grad()
-            output = ddp_model(x)
-            loss_fn(output, target).backward()
+            output = ddp_model(x.to(torch.float32))
+            loss_fn(output, target.to(torch.long)).backward()
             optimizer.step()
+            step_count += 1
+
+        print(f"DBG: train loop {i} steps {step_count}\n")
 
         # TODO: early stopping
         #  When each epoch ends, computes loss on validation dataset and compare
@@ -195,7 +202,7 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
 
         # TODO: support GPU.
         distributor = TorchDistributor(local_mode=False, use_gpu=False)
-        model_state_dict = distributor.train_on_dataframe(
+        model_state_dict = distributor._train_on_dataframe(
             _train_logistic_regression_model_worker_fn,
             dataset,
             num_samples_per_worker=num_samples_per_worker,
@@ -223,4 +230,5 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
 class LogisticRegressionModel(Model, _LogisticRegressionParams):
 
     def __init__(self, torch_model):
+        super().__init__()
         self.torch_model = torch_model
