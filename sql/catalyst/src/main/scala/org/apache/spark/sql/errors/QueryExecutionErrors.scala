@@ -1306,7 +1306,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "FAILED_PARSE_STRUCT_TYPE",
-      messageParameters = Map("simpleString" -> StructType.simpleString, "raw" -> raw))
+      messageParameters = Map("raw" -> raw))
   }
 
   def cannotMergeDecimalTypesWithIncompatibleScaleError(

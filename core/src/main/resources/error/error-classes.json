@@ -636,7 +636,7 @@
   },
   "FAILED_PARSE_STRUCT_TYPE" : {
     "message" : [
-      "Failed parsing <simpleString>: <raw>."
+      "Failed parsing struct: <raw>."
     ],
     "sqlState" : "22018"
   },
