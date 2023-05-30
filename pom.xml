@@ -1125,16 +1125,6 @@
         <groupId>org.scalatestplus</groupId>
         <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
         <version>3.2.16.0</version>
-        <exclusions>
-          <exclusion>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy-agent</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
