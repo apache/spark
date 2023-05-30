@@ -212,6 +212,7 @@
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <netty.version>4.1.92.Final</netty.version>
+    <bytebuddy.version>1.14.4</bytebuddy.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -719,18 +720,6 @@
         <artifactId>xml-apis</artifactId>
         <version>1.4.01</version>
       </dependency>
-      <dependency>
-        <groupId>net.bytebuddy</groupId>
-        <artifactId>byte-buddy</artifactId>
-        <version>1.14.4</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>net.bytebuddy</groupId>
-        <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.4</version>
-        <scope>test</scope>
-      </dependency>
 
       <!-- log4j -->
       <dependency>
@@ -1125,16 +1114,6 @@
         <groupId>org.scalatestplus</groupId>
         <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
         <version>3.2.16.0</version>
-        <exclusions>
-          <exclusion>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy-agent</artifactId>
-          </exclusion>
-        </exclusions>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1157,6 +1136,18 @@
           </exclusion>
         </exclusions>
         <version>4.11.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy</artifactId>
+        <version>${bytebuddy.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy-agent</artifactId>
+        <version>${bytebuddy.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
