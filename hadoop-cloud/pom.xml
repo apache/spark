@@ -136,9 +136,9 @@
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <!--
-        There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
-        but it still needs some selective exclusion across versions, especially 3.0.x.
-        -->
+    There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
+    but it still needs some selective exclusion across versions, especially 3.0.x.
+    -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-cloud-storage</artifactId>
