@@ -726,11 +726,14 @@ class SparkConnectClient(object):
 
         if len(pdf.columns) > 0:
             timezone: Optional[str] = None
+            if any(_has_type(f.dataType, TimestampType) for f in schema.fields):
+                (timezone,) = self.get_configs("spark.sql.session.timeZone")
+
             struct_in_pandas: Optional[str] = None
             error_on_duplicated_field_names: bool = False
-            if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
-                timezone, struct_in_pandas = self.get_configs(
-                    "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+            if any(_has_type(f.dataType, StructType) for f in schema.fields):
+                (struct_in_pandas,) = self.get_config_with_defaults(
+                    ("spark.sql.execution.pandas.structHandlingMode", "legacy"),
                 )
 
                 if struct_in_pandas == "legacy":
@@ -1107,6 +1110,17 @@ class SparkConnectClient(object):
         op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
         configs = dict(self.config(op).pairs)
         return tuple(configs.get(key) for key in keys)
+
+    def get_config_with_defaults(
+        self, *pairs: Tuple[str, Optional[str]]
+    ) -> Tuple[Optional[str], ...]:
+        op = pb2.ConfigRequest.Operation(
+            get_with_default=pb2.ConfigRequest.GetWithDefault(
+                pairs=[pb2.KeyValue(key=key, value=default) for key, default in pairs]
+            )
+        )
+        configs = dict(self.config(op).pairs)
+        return tuple(configs.get(key) for key, _ in pairs)
 
     def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """
