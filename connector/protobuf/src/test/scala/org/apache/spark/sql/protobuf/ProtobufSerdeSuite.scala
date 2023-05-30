@@ -208,8 +208,8 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   }
 
   test("raise cannot parse and construct protobuf descriptor error") {
-    // passing a Java file instead serde_suite.desc
-    val javaFile = "org/apache/spark/sql/protobuf/protos/CatalystTypes.java" // XXX
+    // passing a Java file instead of serde_suite.desc
+    val javaFile = "org/apache/spark/sql/protobuf/protos/CatalystTypes.java"
     var fileDescFile = testFile(javaFile, "protobuf/serde_suite.proto")
 
     val e1 = intercept[AnalysisException] {
@@ -223,19 +223,24 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
       exception = e1,
       errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR")
 
-    fileDescFile =
-      testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+    val basicMessageDescWithoutImports = descriptorSetWithoutImports(
+      ProtobufUtils.readDescriptorFileContent(
+        testFile("basicmessage.desc", "protobuf/basicmessage.desc")
+      ),
+      "BasicMessage"
+    )
+
 
     val e2 = intercept[AnalysisException] {
       ProtobufUtils.buildDescriptor(
-        ProtobufUtils.readDescriptorFileContent(fileDescFile),
-        "SerdeBasicMessage")
+        basicMessageDescWithoutImports,
+        "BasicMessage")
     }
 
-//    checkError( XXX
-//      exception = e2,
-//      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
-//      parameters = Map("dependencyName" -> "nestedenum.proto"))
+    checkError(
+      exception = e2,
+      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
   /**

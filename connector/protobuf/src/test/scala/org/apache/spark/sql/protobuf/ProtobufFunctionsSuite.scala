@@ -686,13 +686,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  ignore("XXX Need to create descriptor without imports: raise protobuf descriptor error") {
+  test("raise protobuf descriptor error") {
     val df = Seq(ByteString.empty().toByteArray).toDF("value")
-    val testFileDescriptor =
-      testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+    val descWithoutImports = descriptorSetWithoutImports(testFileDesc, "BasicMessage")
 
     val e = intercept[AnalysisException] {
-      df.select(functions.from_protobuf($"value", "BasicMessage", testFileDescriptor) as 'sample)
+      df.select(functions.from_protobuf($"value", "BasicMessage", descWithoutImports) as 'sample)
         .where("sample.string_value == \"slam\"").show()
     }
     checkError(

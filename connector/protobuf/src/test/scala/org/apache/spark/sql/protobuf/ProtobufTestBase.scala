@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.protobuf
 
+import scala.collection.JavaConverters._
+
+import com.google.protobuf.DescriptorProtos.FileDescriptorSet
+
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -28,9 +32,35 @@ trait ProtobufTestBase extends SQLTestUtils {
    * The result path doesn't contain the `file:/` protocol part.
    */
   protected def testFile(fileName: String, alternateFileName: String): String = {
-      s"target/generated-test-sources/$fileName"
+    s"target/generated-test-sources/$fileName"
+    // XXX Remove alternateFileName arg?
   }
 
   protected def structFromDDL(ddl: String): StructType =
     DataType.fromDDL(ddl).asInstanceOf[StructType]
+
+  /**
+   * Returns a new binary descriptor set that contains single FileDescriptor that has
+   * Protobuf message with the name `messageName`. It does not include any of its dependencies.
+   * This roughly simulates a case where `--include_imports` is missing for `protoc` command that
+   * generated the descriptor file. E.g.
+   * {{ protoc --descriptor_set_out=my_protos.desc my_protos.proto }}
+   */
+  protected def descriptorSetWithoutImports(
+    binaryDescriptorSet: Array[Byte],
+    messageName: String): Array[Byte] = {
+
+    val fdSet = FileDescriptorSet.parseFrom(binaryDescriptorSet)
+    val fdForMessage = fdSet.getFileList.asScala.find { fd =>
+      fd.getMessageTypeList.asScala.exists(_.getName == messageName)
+    }
+
+    fdForMessage match {
+      case Some(fd) =>
+        // Create a file descriptor with single FileDescriptor, no dependencies are included.
+        FileDescriptorSet.newBuilder().addFile(fd).build().toByteArray()
+      case None =>
+        throw new RuntimeException(s"Could not find FileDescriptor for '$messageName'")
+    }
+  }
 }
