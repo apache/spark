@@ -41,6 +41,10 @@ class FrameCombineMixin:
         psdf = ps.from_pandas(pdf)
         return pdf, psdf
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43562): Enable DataFrameTests.test_append for pandas 2.0.0.",
+    )
     def test_append(self):
         pdf = pd.DataFrame([[1, 2], [3, 4]], columns=list("AB"))
         psdf = ps.from_pandas(pdf)
