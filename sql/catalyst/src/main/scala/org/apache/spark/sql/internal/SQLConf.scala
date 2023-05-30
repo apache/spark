@@ -4200,7 +4200,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA =
-    buildConf("spark.sql.legacy.avro.allowReadingWithIncompatibleSchema")
+    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
       .internal()
       .doc("When set to false, if types in Avro are encoded in the same format, but " +
         "the type in the Avro schema explicitly says that the data types are different, " +

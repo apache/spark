@@ -26,7 +26,7 @@ license: |
 
 - Since Spark 3.5, the JDBC options related to DS V2 pushdown are `true` by default. These options include: `pushDownAggregate`, `pushDownLimit`, `pushDownOffset` and `pushDownTableSample`. To restore the legacy behavior, please set them to `false`. e.g. set `spark.sql.catalog.your_catalog_name.pushDownAggregate` to `false`.
 - Since Spark 3.5, Spark thrift server will interrupt task when canceling a running statement. To restore the previous behavior, set `spark.sql.thriftServer.interruptOnCancel` to `false`.
-- Since Spark 3.5, the Avro will throw `AnalysisException` when reading Interval types as Date or Timestamp types and reading Decimal types with lower precision. To restore the legacy behavior, set `spark.sql.legacy.avro.allowReadingWithIncompatibleSchema` to `true`
+- Since Spark 3.5, the Avro will throw `AnalysisException` when reading Interval types as Date or Timestamp types, or reading Decimal types with lower precision. To restore the legacy behavior, set `spark.sql.legacy.avro.allowIncompatibleSchema` to `true`
 
 ## Upgrading from Spark SQL 3.3 to 3.4
 
