@@ -14,11 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import os
-import time
-import unittest
-
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
