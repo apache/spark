@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.SparkFileNotFoundException
-
 import java.io.File
 import java.util.ConcurrentModificationException
+
 import scala.language.implicitConversions
+
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.SparkFileNotFoundException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
+
 
 class HDFSMetadataLogSuite extends SharedSparkSession {
 
