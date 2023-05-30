@@ -74,7 +74,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client import Retrying
+    from pyspark.sql.connect.client.core import Retrying
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -1815,14 +1815,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         spark2 = RemoteSparkSession(connection="sc://localhost")
         df2 = spark2.range(10).limit(3)
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e1:
             df.union(df2).collect()
+        self.check_error(
+            exception=e1.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e2:
             df.unionByName(df2).collect()
+        self.check_error(
+            exception=e2.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e3:
             df.join(df2).collect()
+        self.check_error(
+            exception=e3.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
     def test_extended_hint_types(self):
         cdf = self.connect.range(100).toDF("id")

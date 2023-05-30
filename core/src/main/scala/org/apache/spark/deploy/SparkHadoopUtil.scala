@@ -560,7 +560,7 @@ private[spark] object SparkHadoopUtil extends Logging {
    * Create a file on the given file system, optionally making sure erasure coding is disabled.
    *
    * Disabling EC can be helpful as HDFS EC doesn't support hflush(), hsync(), or append().
-   * https://hadoop.apache.org/docs/r3.0.0/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
+   * https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
    */
   // scalastyle:on line.size.limit
   def createFile(fs: FileSystem, path: Path, allowEC: Boolean): FSDataOutputStream = {

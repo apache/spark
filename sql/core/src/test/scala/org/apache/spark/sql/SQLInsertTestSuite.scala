@@ -201,30 +201,6 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert with column list - missing columns") {
-    val v2Msg = "Cannot write incompatible data to table 'testcat.t1'"
-    val cols = Seq("c1", "c2", "c3", "c4")
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 values(1)"))
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
-        e1.getMessage.contains("expected 4 columns but found 1") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
-    }
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO t1 partition(c3=3, c4=4) values(1)")
-      }
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
-    }
-  }
-
   test("SPARK-34223: static partition with null raise NPE") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
