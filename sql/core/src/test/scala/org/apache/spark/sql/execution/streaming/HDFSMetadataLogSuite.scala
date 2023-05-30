@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.hadoop.fs.Path
+
 import java.io.File
 import java.util.ConcurrentModificationException
-
 import scala.language.implicitConversions
-
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.SparkFileNotFoundException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -212,7 +211,14 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     withTempDir { temp =>
       val dir = new File(temp, "dir")
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
-      intercept[SparkFileNotFoundException](metadataLog.get(0))
+      val metadataPath = new Path("dir")
+      val batchMetadataFileName = new Path(metadataPath, "0")
+
+      checkError(exception = intercept[SparkFileNotFoundException](metadataLog.get(0)),
+        errorClass = "CANNOT_FIND_BATCH",
+        parameters = Map("batchMetadataFile" -> batchMetadataFileName.toString())
+      )
+
     }
   }
 }
