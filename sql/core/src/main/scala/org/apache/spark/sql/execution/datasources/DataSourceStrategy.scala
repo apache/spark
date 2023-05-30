@@ -165,7 +165,6 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
     case i @ InsertIntoStatement(
         l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _, _) =>
-        if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -274,6 +273,9 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case i: InsertIntoStatement if i.byName =>
+        i.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_3043", messageParameters = Map.empty)
+
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
         _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))

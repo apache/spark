@@ -165,7 +165,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
