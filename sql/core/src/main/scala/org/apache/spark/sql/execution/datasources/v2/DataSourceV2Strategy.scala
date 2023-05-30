@@ -319,6 +319,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // use the original relation to refresh the cache
       WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
 
+    case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
+        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
+      MergeRowsExec(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
+        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality,
+        output, planLater(child)) :: Nil
+
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil
 
