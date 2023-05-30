@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
+import scala.collection.parallel.immutable.ParVector
 import scala.util.Random
 
 import org.apache.spark.internal.Logging
@@ -46,7 +47,9 @@ private[mllib] object LocalKMeans extends Logging {
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
-    val costArray = points.map(EuclideanDistanceMeasure.fastSquaredDistance(_, centers(0)))
+    val pointsParVector = new ParVector(points.toVector)
+    val costArray = pointsParVector.map(
+      EuclideanDistanceMeasure.fastSquaredDistance(_, centers(0))).toArray
 
     for (i <- 1 until k) {
       val sum = costArray.zip(weights).map(p => p._1 * p._2).sum
@@ -66,9 +69,11 @@ private[mllib] object LocalKMeans extends Logging {
       }
 
       // update costArray
+      val tmpCost = pointsParVector.map(p =>
+        EuclideanDistanceMeasure.fastSquaredDistance(p, centers(i)))
       for (p <- points.indices) {
         costArray(p) = math.min(
-          EuclideanDistanceMeasure.fastSquaredDistance(points(p), centers(i)),
+          tmpCost(p),
           costArray(p))
       }
 
@@ -84,10 +89,12 @@ private[mllib] object LocalKMeans extends Logging {
       moved = false
       val counts = Array.ofDim[Double](k)
       val sums = Array.fill(k)(Vectors.zeros(dimensions))
+      val indexArray = pointsParVector.map(p =>
+        distanceMeasureInstance.findClosest(centers, p)._1)
       var i = 0
       while (i < points.length) {
         val p = points(i)
-        val index = distanceMeasureInstance.findClosest(centers, p)._1
+        val index = indexArray(i)
         axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
         if (index != oldClosest(i)) {
