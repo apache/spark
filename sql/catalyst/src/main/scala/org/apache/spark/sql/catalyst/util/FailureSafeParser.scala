@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -67,8 +66,7 @@ class FailureSafeParser[IN](
           Iterator.empty
         case FailFastMode =>
           e.getCause match {
-            case exception: SparkRuntimeException if exception.getErrorClass
-              .equals("MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS") =>
+            case _: JsonArraysAsStructsException =>
               // SPARK-42298 we recreate the exception here to make sure the error message
               // have the record content.
               throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
