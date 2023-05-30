@@ -634,6 +634,12 @@
     ],
     "sqlState" : "38000"
   },
+  "FAILED_PARSE_STRUCT_TYPE" : {
+    "message" : [
+      "Failed parsing <simpleString>: <raw>."
+    ],
+    "sqlState" : "22018"
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
@@ -4559,11 +4565,6 @@
   "_LEGACY_ERROR_TEMP_2121" : {
     "message" : [
       "Do not support type <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2122" : {
-    "message" : [
-      "Failed parsing <simpleString>: <raw>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2124" : {

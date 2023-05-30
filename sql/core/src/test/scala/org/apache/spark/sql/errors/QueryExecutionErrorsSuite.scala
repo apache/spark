@@ -633,6 +633,18 @@ class QueryExecutionErrorsSuite
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }
 
+  test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
+    val raw = """{"type":"array","elementType":"integer","containsNull":false}"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        StructType.fromString(raw)
+      },
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
+      parameters = Map(
+        "simpleString" -> "struct",
+        "raw" -> raw))
+  }
+
   test("CAST_OVERFLOW: from long to ANSI intervals") {
     Seq(
       LongType -> "9223372036854775807L",

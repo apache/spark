@@ -1305,7 +1305,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2122",
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
       messageParameters = Map("simpleString" -> StructType.simpleString, "raw" -> raw))
   }
 
