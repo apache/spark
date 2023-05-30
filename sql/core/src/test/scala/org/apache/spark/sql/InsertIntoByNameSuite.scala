@@ -29,6 +29,6 @@ class InsertIntoByNameSuite extends QueryTest with SharedSparkSession {
       spark.sql("INSERT INTO foo BY NAME SELECT * FROM RANGE(10)").collect()
     }
 
-    assert(ex.getErrorClass == "_LEGACY_ERROR_TEMP_3043")
+    assert(ex.getErrorClass == "UNSUPPORTED_FEATURE.BY_NAME")
   }
 }

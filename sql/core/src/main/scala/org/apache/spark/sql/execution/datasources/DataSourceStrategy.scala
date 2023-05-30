@@ -274,7 +274,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i: InsertIntoStatement if i.byName =>
-        i.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_3043", messageParameters = Map.empty)
+        i.failAnalysis(errorClass = "UNSUPPORTED_FEATURE.BY_NAME", messageParameters = Map.empty)
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
         _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>

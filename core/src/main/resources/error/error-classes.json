@@ -2154,6 +2154,11 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
+      "BY_NAME" : {
+        "message" : [
+          "The BY NAME clause is not supported yet."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -5810,11 +5815,6 @@
   "_LEGACY_ERROR_TEMP_3042" : {
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3043" : {
-    "message" : [
-      "The BY NAME clause is not implemented yet."
     ]
   }
 }
