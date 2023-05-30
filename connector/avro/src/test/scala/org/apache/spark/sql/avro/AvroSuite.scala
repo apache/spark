@@ -767,7 +767,7 @@ abstract class AvroSuite
         val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
         checkAnswer(
           spark.read.schema("a Date").format("avro").load(path.toString),
-          Row( format.parse("1970-01-14"))
+          Row(format.parse("1970-01-14"))
         )
       }
     }
