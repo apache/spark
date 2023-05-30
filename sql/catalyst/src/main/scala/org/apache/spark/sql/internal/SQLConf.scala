@@ -4199,7 +4199,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA =
+  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
     buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
       .internal()
       .doc("When set to false, if types in Avro are encoded in the same format, but " +
