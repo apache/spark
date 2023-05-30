@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -52,6 +53,10 @@ class FrameIndexingMixin:
         with option_context("compute.ordered_head", True):
             self.assert_eq(psdf.head(), pdf.head())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43559): Enable DataFrameSlowTests.test_iteritems for pandas 2.0.0.",
+    )
     def test_iteritems(self):
         pdf = pd.DataFrame(
             {"species": ["bear", "bear", "marsupial"], "population": [1864, 22000, 80000]},

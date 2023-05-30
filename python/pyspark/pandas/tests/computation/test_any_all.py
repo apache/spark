@@ -39,6 +39,10 @@ class FrameAnyAllMixin:
         psdf = ps.from_pandas(pdf)
         return pdf, psdf
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43812): Enable DataFrameTests.test_all for pandas 2.0.0.",
+    )
     def test_all(self):
         pdf = pd.DataFrame(
             {

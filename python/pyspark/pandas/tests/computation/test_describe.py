@@ -39,6 +39,10 @@ class FrameDescribeMixin:
         psdf = ps.from_pandas(pdf)
         return pdf, psdf
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43556): Enable DataFrameSlowTests.test_describe for pandas 2.0.0.",
+    )
     def test_describe(self):
         pdf, psdf = self.df_pair
 
@@ -284,6 +288,10 @@ class FrameDescribeMixin:
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe()
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43556): Enable DataFrameSlowTests.test_describe for pandas 2.0.0.",
+    )
     def test_describe_empty(self):
         # Empty DataFrame
         psdf = ps.DataFrame(columns=["A", "B"])
