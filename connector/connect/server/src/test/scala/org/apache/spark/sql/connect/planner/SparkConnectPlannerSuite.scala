@@ -20,11 +20,9 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,18 +42,12 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
 
-  class MockObserver extends StreamObserver[proto.ExecutePlanResponse] {
-    override def onNext(value: ExecutePlanResponse): Unit = {}
-    override def onError(t: Throwable): Unit = {}
-    override def onCompleted(): Unit = {}
-  }
-
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     new SparkConnectPlanner(spark).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId", new MockObserver())
+    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId")
   }
 
   def readRel: proto.Relation =

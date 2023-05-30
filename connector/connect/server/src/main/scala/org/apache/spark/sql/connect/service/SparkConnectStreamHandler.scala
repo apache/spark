@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
@@ -113,11 +114,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(session)
+    val responses = mutable.ArrayBuffer.empty[ExecutePlanResponse]
     planner.process(
       command = command,
       userId = request.getUserContext.getUserId,
       sessionId = request.getSessionId,
-      responseObserver = responseObserver)
+      responses = responses)
+    responses.foreach(responseObserver.onNext(_))
     responseObserver.onCompleted()
   }
 }
