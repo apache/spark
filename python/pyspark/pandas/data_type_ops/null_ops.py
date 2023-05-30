@@ -46,7 +46,7 @@ class NullOps(DataTypeOps):
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         result = pyspark_column_op("__lt__")(left, right)
-        if is_remote:
+        if is_remote():
             # In Spark Connect, it returns None instead of False, so we manually cast it.
             result = result.fillna(False)
         return result
@@ -54,7 +54,7 @@ class NullOps(DataTypeOps):
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         result = pyspark_column_op("__le__")(left, right)
-        if is_remote:
+        if is_remote():
             # In Spark Connect, it returns None instead of False, so we manually cast it.
             result = result.fillna(False)
         return result
@@ -62,7 +62,7 @@ class NullOps(DataTypeOps):
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         result = pyspark_column_op("__ge__")(left, right)
-        if is_remote:
+        if is_remote():
             # In Spark Connect, it returns None instead of False, so we manually cast it.
             result = result.fillna(False)
         return result
@@ -70,7 +70,7 @@ class NullOps(DataTypeOps):
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         result = pyspark_column_op("__gt__")(left, right)
-        if is_remote:
+        if is_remote():
             # In Spark Connect, it returns None instead of False, so we manually cast it.
             result = result.fillna(False)
         return result
