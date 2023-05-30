@@ -217,7 +217,7 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         result = pyspark_column_op("__lt__")(left, right)
         if is_remote():
-            # In Spark Connect, it returns None instead of False, so we manually cast it.
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
             result = result.fillna(False)
         return result
 
@@ -225,7 +225,7 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         result = pyspark_column_op("__le__")(left, right)
         if is_remote():
-            # In Spark Connect, it returns None instead of False, so we manually cast it.
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
             result = result.fillna(False)
         return result
 
@@ -233,7 +233,7 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         result = pyspark_column_op("__ge__")(left, right)
         if is_remote():
-            # In Spark Connect, it returns None instead of False, so we manually cast it.
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
             result = result.fillna(False)
         return result
 
@@ -241,7 +241,7 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         result = pyspark_column_op("__gt__")(left, right)
         if is_remote():
-            # In Spark Connect, it returns None instead of False, so we manually cast it.
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
             result = result.fillna(False)
         return result
 
