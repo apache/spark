@@ -19,6 +19,7 @@ from pyspark.mlv2.base import _PredictorParams
 
 from pyspark.ml.param.shared import HasProbabilityCol
 
+import logging
 from typing import Any, Union
 import numpy as np
 import pandas as pd
@@ -85,25 +86,7 @@ class _LogisticRegressionParams(
     .. versionadded:: 3.0.0
     """
 
-    def __init__(
-            self,
-            *,
-            maxIter=100,
-            tol=1e-6,
-            numTrainWorkers=1,
-            batchSize=32,
-            learningRate=0.001,
-            momentum=0.9,
-    ):
-        super(_LogisticRegressionParams, self).__init__()
-        self._set(
-            maxIter=maxIter,
-            tol=tol,
-            numTrainWorkers=numTrainWorkers,
-            batchSize=batchSize,
-            learningRate=learningRate,
-            momentum=momentum,
-        )
+    pass
 
 
 class _LinearNet(torch_nn.Module):
@@ -157,12 +140,13 @@ def _train_logistic_regression_model_worker_fn(
             optimizer.step()
             step_count += 1
 
-        print(f"DBG: train loop {i} steps {step_count}\n")
-
         # TODO: early stopping
         #  When each epoch ends, computes loss on validation dataset and compare
         #  current epoch validation loss with last epoch validation loss, if
         #  less than provided `tol`, stop training.
+
+        if torch.distributed.get_rank() == 0:
+            print(f"Progress: train epoch {i + 1} completes.")
 
     if torch.distributed.get_rank() == 0:
         return ddp_model.module.state_dict()
@@ -171,6 +155,26 @@ def _train_logistic_regression_model_worker_fn(
 
 
 class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressionParams):
+
+    def __init__(
+            self,
+            *,
+            maxIter=100,
+            tol=1e-6,
+            numTrainWorkers=1,
+            batchSize=32,
+            learningRate=0.001,
+            momentum=0.9,
+    ):
+        super(_LogisticRegressionParams, self).__init__()
+        self._set(
+            maxIter=maxIter,
+            tol=tol,
+            numTrainWorkers=numTrainWorkers,
+            batchSize=batchSize,
+            learningRate=learningRate,
+            momentum=momentum,
+        )
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "LogisticRegressionModel":
         if isinstance(dataset, pd.DataFrame):
@@ -201,7 +205,9 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
             raise ValueError("Training dataset distinct labels must >= 2.")
 
         # TODO: support GPU.
-        distributor = TorchDistributor(local_mode=False, use_gpu=False)
+        distributor = TorchDistributor(
+            local_mode=False, use_gpu=False, num_processes=num_train_workers
+        )
         model_state_dict = distributor._train_on_dataframe(
             _train_logistic_regression_model_worker_fn,
             dataset,
