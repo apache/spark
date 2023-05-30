@@ -396,7 +396,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   try {
     _conf = config.clone()
-    _conf.get(OVERRIDE_LOG_LEVEL).foreach(setLogLevel(_))
+    _conf.get(SPARK_LOG_LEVEL).foreach(setLogLevel(_))
     _conf.validateSettings()
     _conf.set("spark.app.startTime", startTime.toString)
 

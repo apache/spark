@@ -1111,8 +1111,8 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val OVERRIDE_LOG_LEVEL = ConfigBuilder("spark.log.level")
-    .doc("When set, overrides any user-defiend log settings as if calling " +
+  private[spark] val SPARK_LOG_LEVEL = ConfigBuilder("spark.log.level")
+    .doc("When set, overrides any user-defined log settings as if calling " +
       "SparkContext.setLogLevel() at Spark startup. Valid log levels include: " +
       SparkContext.VALID_LOG_LEVELS.mkString(","))
     .version("3.5.0")

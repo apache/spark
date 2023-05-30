@@ -628,12 +628,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-43782: conf to override log level") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
-      .set(OVERRIDE_LOG_LEVEL, "ERROR"))
+      .set(SPARK_LOG_LEVEL, "ERROR"))
     assert(LogManager.getRootLogger().getLevel === Level.ERROR)
     sc.stop()
 
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
-      .set(OVERRIDE_LOG_LEVEL, "TRACE"))
+      .set(SPARK_LOG_LEVEL, "TRACE"))
     assert(LogManager.getRootLogger().getLevel === Level.TRACE)
     sc.stop()
   }
