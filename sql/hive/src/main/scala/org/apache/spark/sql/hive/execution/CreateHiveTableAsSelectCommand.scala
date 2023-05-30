@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan

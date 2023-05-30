@@ -4667,6 +4667,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |SELECT * FROM z
         |""".stripMargin).collect()
   }
+
+  test("SPARK-43883: CTAS commands are unary nodes") {
+    withTable("t") {
+      val ctasQuery = sql("CREATE TABLE t AS SELECT 1")
+      assert(ctasQuery.queryExecution.executedPlan.containsChild.size == 1)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
