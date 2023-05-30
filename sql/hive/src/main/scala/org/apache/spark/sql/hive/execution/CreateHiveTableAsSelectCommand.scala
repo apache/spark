@@ -44,6 +44,12 @@ case class CreateHiveTableAsSelectCommand(
 
   protected val tableIdentifier = tableDesc.identifier
 
+  override def child: LogicalPlan = query
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
+    copy(query = newChild)
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdentifier)

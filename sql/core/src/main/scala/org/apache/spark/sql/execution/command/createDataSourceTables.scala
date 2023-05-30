@@ -145,6 +145,12 @@ case class CreateDataSourceTableAsSelectCommand(
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
+  override def child: LogicalPlan = query
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
+    copy(query = newChild)
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
