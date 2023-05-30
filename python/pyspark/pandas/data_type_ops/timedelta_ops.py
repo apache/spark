@@ -37,6 +37,7 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.sql.utils import pyspark_column_op
 
 
 class TimedeltaOps(DataTypeOps):
@@ -89,25 +90,17 @@ class TimedeltaOps(DataTypeOps):
             raise TypeError("Timedelta subtraction can only be applied to timedelta series.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        return pyspark_column_op("__lt__")(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        return pyspark_column_op("__le__")(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        return pyspark_column_op("__ge__")(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        return pyspark_column_op("__gt__")(left, right)
