@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -50,6 +50,8 @@ trait RunnableCommand extends Command {
 }
 
 trait LeafRunnableCommand extends RunnableCommand with LeafLike[LogicalPlan]
+
+trait RootRunnableCommand extends RunnableCommand with UnaryLike[LogicalPlan]
 
 /**
  * A physical operator that executes the run method of a `RunnableCommand` and

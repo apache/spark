@@ -141,7 +141,7 @@ case class CreateDataSourceTableAsSelectCommand(
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
-  extends LeafRunnableCommand {
+  extends RootRunnableCommand {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
