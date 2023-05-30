@@ -504,7 +504,8 @@ package object dsl {
           partition: Map[String, Option[String]] = Map.empty,
           overwrite: Boolean = false,
           ifPartitionNotExists: Boolean = false): LogicalPlan =
-        InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
+        InsertIntoStatement(
+          table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists, byName = false)
 
       def coalesce(num: Integer): LogicalPlan =
         Repartition(num, shuffle = false, logicalPlan)

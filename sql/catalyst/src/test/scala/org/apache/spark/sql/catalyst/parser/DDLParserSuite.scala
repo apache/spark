@@ -1499,7 +1499,7 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty,
           Nil,
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-          overwrite = false, ifPartitionNotExists = false))
+          overwrite = false, ifPartitionNotExists = false, byName = false))
     }
   }
 
@@ -1514,7 +1514,7 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty,
           Seq("a", "b"),
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-          overwrite = false, ifPartitionNotExists = false))
+          overwrite = false, ifPartitionNotExists = false, byName = false))
     }
   }
 
@@ -1525,7 +1525,7 @@ class DDLParserSuite extends AnalysisTest {
         Map.empty,
         Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testcat2", "db", "tbl"))),
-        overwrite = false, ifPartitionNotExists = false))
+        overwrite = false, ifPartitionNotExists = false, byName = false))
   }
 
   test("insert table: append with partition") {
@@ -1540,7 +1540,7 @@ class DDLParserSuite extends AnalysisTest {
         Map("p1" -> Some("3"), "p2" -> None),
         Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        overwrite = false, ifPartitionNotExists = false))
+        overwrite = false, ifPartitionNotExists = false, byName = false))
   }
 
   test("insert table: append with partition and a column list") {
@@ -1555,7 +1555,7 @@ class DDLParserSuite extends AnalysisTest {
         Map("p1" -> Some("3"), "p2" -> None),
         Seq("a", "b"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        overwrite = false, ifPartitionNotExists = false))
+        overwrite = false, ifPartitionNotExists = false, byName = false))
   }
 
   test("insert table: overwrite") {
@@ -1569,7 +1569,7 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty,
           Nil,
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-          overwrite = true, ifPartitionNotExists = false))
+          overwrite = true, ifPartitionNotExists = false, byName = false))
     }
   }
 
@@ -1584,7 +1584,7 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty,
           Seq("a", "b"),
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-          overwrite = true, ifPartitionNotExists = false))
+          overwrite = true, ifPartitionNotExists = false, byName = false))
     }
   }
 
@@ -1600,7 +1600,7 @@ class DDLParserSuite extends AnalysisTest {
         Map("p1" -> Some("3"), "p2" -> None),
         Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        overwrite = true, ifPartitionNotExists = false))
+        overwrite = true, ifPartitionNotExists = false, byName = false))
   }
 
   test("insert table: overwrite with partition and column list") {
@@ -1615,7 +1615,7 @@ class DDLParserSuite extends AnalysisTest {
         Map("p1" -> Some("3"), "p2" -> None),
         Seq("a", "b"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        overwrite = true, ifPartitionNotExists = false))
+        overwrite = true, ifPartitionNotExists = false, byName = false))
   }
 
   test("insert table: overwrite with partition if not exists") {
@@ -1630,7 +1630,7 @@ class DDLParserSuite extends AnalysisTest {
         Map("p1" -> Some("3")),
         Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        overwrite = true, ifPartitionNotExists = true))
+        overwrite = true, ifPartitionNotExists = true, byName = false))
   }
 
   test("insert table: if not exists with dynamic partition fails") {
@@ -2537,7 +2537,7 @@ class DDLParserSuite extends AnalysisTest {
         Map("part" -> Some(part)),
         Seq.empty[String],
         UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
-        overwrite = false, ifPartitionNotExists = false)
+        overwrite = false, ifPartitionNotExists = false, byName = false)
     }
     val binaryStr = "Spark SQL"
     val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
@@ -2666,7 +2666,7 @@ class DDLParserSuite extends AnalysisTest {
         userSpecifiedCols = Seq.empty[String],
         query = UnresolvedInlineTable(Seq("col1", "col2"), Seq(Seq(Literal("a"),
           UnresolvedAttribute("DEFAULT")))),
-        overwrite = false, ifPartitionNotExists = false))
+        overwrite = false, ifPartitionNotExists = false, byName = false))
     parseCompare(
       """
         |MERGE INTO testcat1.ns1.ns2.tbl AS target

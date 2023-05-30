@@ -423,7 +423,8 @@ class PlanParserSuite extends AnalysisTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoStatement(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
+      InsertIntoStatement(
+        table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists, byName = false)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -1024,7 +1025,8 @@ class PlanParserSuite extends AnalysisTest {
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),
-              table("t").select(star())))), overwrite = false, ifPartitionNotExists = false))
+              table("t").select(star())))),
+        overwrite = false, ifPartitionNotExists = false, byName = false))
 
     comparePlans(
       parsePlan("SELECT /*+ BROADCASTJOIN(u), REPARTITION(100) */ * FROM t"),

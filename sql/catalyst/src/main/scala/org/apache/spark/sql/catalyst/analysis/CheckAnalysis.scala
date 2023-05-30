@@ -182,8 +182,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           errorClass = "_LEGACY_ERROR_TEMP_2313",
           messageParameters = Map("name" -> u.name))
 
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
+
+      case i: InsertIntoStatement if i.byName =>
+        i.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_3043", messageParameters = Map.empty)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>

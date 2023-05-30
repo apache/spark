@@ -483,7 +483,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         Nil,
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
-        ifPartitionNotExists = false)
+        ifPartitionNotExists = false,
+        byName = false)
     }
   }
 

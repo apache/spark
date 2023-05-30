@@ -317,9 +317,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?  identifierList?        #insertOverwriteTable
-    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
-    | INSERT INTO TABLE? multipartIdentifier REPLACE whereClause                                            #insertIntoReplaceWhere
+    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)? (BY NAME)? identifierList?        #insertOverwriteTable
+    | INSERT INTO TABLE? multipartIdentifier (BY NAME)? partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
+    | INSERT INTO TABLE? multipartIdentifier (BY NAME)? REPLACE whereClause                                            #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
     ;
@@ -1308,6 +1308,7 @@ ansiNonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAME
     | NAMESPACE
     | NAMESPACES
     | NANOSECOND

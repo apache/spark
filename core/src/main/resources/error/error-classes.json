@@ -5545,5 +5545,10 @@
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
     ]
+  },
+  "_LEGACY_ERROR_TEMP_3043" : {
+    "message" : [
+      "The BY NAME clause is not implemented yet."
+    ]
   }
 }

@@ -278,7 +278,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           cols,
           query,
           overwrite = false,
-          ifPartitionNotExists)
+          ifPartitionNotExists,
+          byName = true)
       case table: InsertOverwriteTableContext =>
         val (relation, cols, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
         InsertIntoStatement(
@@ -287,7 +288,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           cols,
           query,
           overwrite = true,
-          ifPartitionNotExists)
+          ifPartitionNotExists,
+          byName = table.NAME() != null)
       case ctx: InsertIntoReplaceWhereContext =>
         OverwriteByExpression.byPosition(
           createUnresolvedRelation(ctx.multipartIdentifier),
