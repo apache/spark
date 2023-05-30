@@ -40,7 +40,7 @@ trait ProtobufTestBase extends SQLTestUtils {
     } else { // sbt test
       s"$dir/descriptor-set-sbt.desc"  // Single file contains all the proto files in sbt.
     }
-    // XXX Remove alternateFileName arg?
+    // XXX Remove alternateFileName arg.
   }
 
   protected def structFromDDL(ddl: String): StructType =
