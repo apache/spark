@@ -928,6 +928,8 @@ object SparkProtobuf {
 
     (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
+    (Test / PB.protocOptions) += "--include_imports",
+
     (Test / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-test-sources",
       PB.gens.descriptorSet -> target.value / "generated-test-sources/descriptor-set-sbt.desc",
