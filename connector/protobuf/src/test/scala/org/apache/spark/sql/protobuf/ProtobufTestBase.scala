@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.protobuf
 
+import java.io.File
+
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet
@@ -32,7 +34,12 @@ trait ProtobufTestBase extends SQLTestUtils {
    * The result path doesn't contain the `file:/` protocol part.
    */
   protected def testFile(fileName: String, alternateFileName: String): String = {
-    s"target/generated-test-sources/$fileName"
+    val dir = "target/generated-test-sources"
+    if (new File(s"$dir/$fileName").exists) {
+      s"$dir/$fileName"
+    } else { // sbt test
+      s"$dir/descriptor-set-sbt.desc"  // Single file contains all the proto files in sbt.
+    }
     // XXX Remove alternateFileName arg?
   }
 

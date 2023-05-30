@@ -929,7 +929,12 @@ object SparkProtobuf {
     (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
     (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources"
+      PB.gens.java -> target.value / "generated-test-sources",
+      PB.gens.descriptorSet -> target.value / "generated-test-sources/descriptor-set-sbt.desc",
+      // The above creates single descriptor file with all the proto files. This is different
+      // from how Maven's protoc-jar plugin creates descriptor-set file. It creates one for
+      // each file (catalyst_types.desc, functions_suite.desc) etc. How can we change either one
+      // so that we have consistent output from both builds?
     ),
 
     (assembly / test) := { },
