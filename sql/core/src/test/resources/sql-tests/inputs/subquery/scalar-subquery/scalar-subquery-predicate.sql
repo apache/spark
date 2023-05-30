@@ -398,3 +398,6 @@ HAVING t0a <
   FROM   t2
   WHERE  t2b <= t0b)
 );
+
+--
+select t0a, t0b, (select count(*) cnt from t0 t0_inner where t0_inner.t0a = t0_outer.t0a having cnt = 0) from t0 t0_outer

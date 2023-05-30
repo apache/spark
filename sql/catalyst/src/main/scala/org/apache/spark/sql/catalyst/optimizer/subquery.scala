@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,6 +33,8 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+import scala.collection.mutable
 
 /*
  * This file defines optimization rules related to subqueries.
@@ -596,6 +597,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val joinHint = JoinHint(None, subHint)
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
+        // rename 'query' using PullOutGroupingExpressions
+        val replacementMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
+        val oldProjectList = query.output.map(x => Alias(x, x.name)(NamedExpression.newExprId))
+
+
+
+
         lazy val planWithoutCountBug = Project(
           currentChild.output :+ origOutput,
           Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
