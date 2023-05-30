@@ -129,6 +129,9 @@ class Catalog:
         pattern : str
             The pattern that the catalog name needs to match.
 
+            .. versionchanged: 3.5.0
+                Added ``pattern`` argument.
+
         Returns
         -------
         list

@@ -70,9 +70,11 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       val catalogsAfterChange = spark.catalog.listCatalogs().collect()
       assert(catalogsAfterChange.length == 2)
       assert(catalogsAfterChange.map(_.name).toSet == Set("testcat", "spark_catalog"))
-      val catalogsWithPattern = spark.catalog.listCatalogs("spark*").collect()
+      var catalogsWithPattern = spark.catalog.listCatalogs("spark*").collect()
       assert(catalogsWithPattern.length == 1)
       assert(catalogsWithPattern.map(_.name) sameElements Array("spark_catalog"))
+      catalogsWithPattern = spark.catalog.listCatalogs("hive*").collect()
+      assert(catalogsWithPattern.length == 0)
     } finally {
       spark.catalog.setCurrentCatalog(currentCatalog)
       assert(spark.catalog.currentCatalog() == "spark_catalog")
