@@ -80,6 +80,11 @@
     ],
     "sqlState" : "22546"
   },
+  "CANNOT_FIND_BATCH" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>."
+    ]
+  },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
       "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
@@ -4933,11 +4938,6 @@
   "_LEGACY_ERROR_TEMP_2205" : {
     "message" : [
       "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2206" : {
-    "message" : [
-      "Unable to find batch <batchMetadataFile>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2207" : {
