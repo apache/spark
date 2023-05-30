@@ -661,9 +661,6 @@ class TorchDistributor(Distributor):
         log_streaming_server = LogStreamingServer()
         self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
         assert self.driver_address != ""
-        log_streaming_server.start(spark_host_address=self.driver_address)
-        time.sleep(1)  # wait for the server to start
-        self.log_streaming_server_port = log_streaming_server.port
 
         spark_task_function = self._get_spark_task_function(
             framework_wrapper_fn, train_object, spark_dataframe, *args, **kwargs
@@ -678,6 +675,10 @@ class TorchDistributor(Distributor):
             input_df = self.spark.range(
                 start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks
             )
+
+        log_streaming_server.start(spark_host_address=self.driver_address)
+        time.sleep(1)  # wait for the server to start
+        self.log_streaming_server_port = log_streaming_server.port
         try:
             rows = input_df.mapInArrow(
                 func=spark_task_function, schema="chunk binary", barrier=True
