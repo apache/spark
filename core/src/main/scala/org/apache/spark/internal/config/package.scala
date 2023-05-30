@@ -921,6 +921,24 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val MAX_EXECUTOR_FAILURES =
+    ConfigBuilder("spark.executor.maxNumFailures")
+      .doc("Spark exits if the number of failed executors exceeds this threshold. " +
+        "This configuration only takes effect on YARN, or Kubernetes when " +
+        "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+      .version("3.5.0")
+      .intConf
+      .createOptional
+
+  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+    ConfigBuilder("spark.executor.failuresValidityInterval")
+      .doc("Interval after which Executor failures will be considered independent and not " +
+        "accumulate towards the attempt count. This configuration only takes effect on YARN, " +
+        "or Kubernetes when `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
     ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
       .doc("Whether to un-register all the outputs on the host in condition that we receive " +
@@ -2242,6 +2260,16 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(0)
 
+  private[spark] val SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedUnknownDecommissionExecutors")
+      .internal()
+      .doc("Max number of unknown executors by decommission to retain. This affects " +
+        "whether executor could receive decommission request sent before its registration.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(0)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
@@ -2476,6 +2504,25 @@ package object config {
         " a RDD cache block can be used only when it's marked as visible. And a RDD block will be" +
         " marked as visible only when one of the tasks generating the cache block finished" +
         " successfully. This is relevant in context of consistent accumulator status.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STAGE_MAX_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxAttempts")
+      .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +
+        "stages is resubmitted multiple times beyond the max retries limitation. The maximum " +
+        "number of stage retries is the maximum of `spark.stage.maxAttempts` and " +
+        "`spark.stage.maxConsecutiveAttempts`.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
+  private[spark] val SHUFFLE_SERVER_RECOVERY_DISABLED =
+    ConfigBuilder("spark.yarn.shuffle.server.recovery.disabled")
+      .internal()
+      .doc("Set to true for applications that prefer to disable recovery when the External " +
+        "Shuffle Service restarts. This configuration only takes effect on YARN.")
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)

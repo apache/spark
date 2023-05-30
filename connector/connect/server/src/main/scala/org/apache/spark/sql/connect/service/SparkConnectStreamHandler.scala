@@ -18,9 +18,11 @@
 package org.apache.spark.sql.connect.service
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
@@ -28,30 +30,66 @@ import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{LocalTableScanExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
 
-  def handle(v: ExecutePlanRequest): Unit = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-        .session
+  def handle(v: ExecutePlanRequest): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
+    val sessionHolder = SparkConnectService
+      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    val session = sessionHolder.session
+
     session.withActive {
-      v.getPlan.getOpTypeCase match {
-        case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-        case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
-        case _ =>
-          throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+      val debugString =
+        try {
+          Utils.redact(
+            session.sessionState.conf.stringRedactionPattern,
+            ProtoUtils.abbreviate(v).toString)
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Fail to extract debug information", e)
+            "UNKNOWN"
+        }
+
+      val executeHolder = sessionHolder.createExecutePlanHolder(v)
+      session.sparkContext.setJobGroup(
+        executeHolder.jobGroupId,
+        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
+        interruptOnCancel = true)
+
+      try {
+        // Add debug information to the query execution so that the jobs are traceable.
+        session.sparkContext.setLocalProperty(
+          "callSite.short",
+          s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+        session.sparkContext.setLocalProperty(
+          "callSite.long",
+          StringUtils.abbreviate(debugString, 2048))
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to attach the debug information", e)
+      }
+
+      try {
+        v.getPlan.getOpTypeCase match {
+          case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
+          case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+          case _ =>
+            throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+        }
+      } finally {
+        sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }
   }
@@ -60,9 +98,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
+    responseObserver.onNext(
+      SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
     responseObserver.onNext(
-      SparkConnectStreamHandler.sendMetricsToResponse(request.getSessionId, dataframe))
+      SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(
         SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
@@ -73,7 +113,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(session)
-    planner.process(command, request.getSessionId, responseObserver)
+    planner.process(
+      command = command,
+      userId = request.getUserContext.getUserId,
+      sessionId = request.getSessionId,
+      responseObserver = responseObserver)
     responseObserver.onCompleted()
   }
 }
@@ -85,13 +129,15 @@ object SparkConnectStreamHandler {
       schema: StructType,
       maxRecordsPerBatch: Int,
       maxBatchSize: Long,
-      timeZoneId: String): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean): Iterator[InternalRow] => Iterator[Batch] = { rows =>
     val batches = ArrowConverters.toBatchWithSchemaIterator(
       rows,
       schema,
       maxRecordsPerBatch,
       maxBatchSize,
-      timeZoneId)
+      timeZoneId,
+      errorOnDuplicatedFieldNames)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
@@ -106,104 +152,126 @@ object SparkConnectStreamHandler {
     // Conservatively sets it 70% because the size is not accurate but estimated.
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
 
-    SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
-      val rows = dataframe.queryExecution.executedPlan.execute()
-      val numPartitions = rows.getNumPartitions
-      var numSent = 0
+    val rowToArrowConverter = SparkConnectStreamHandler.rowToArrowConverter(
+      schema,
+      maxRecordsPerBatch,
+      maxBatchSize,
+      timeZoneId,
+      errorOnDuplicatedFieldNames = false)
 
-      if (numPartitions > 0) {
-        type Batch = (Array[Byte], Long)
+    var numSent = 0
+    def sendBatch(bytes: Array[Byte], count: Long): Unit = {
+      val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
+      val batch = proto.ExecutePlanResponse.ArrowBatch
+        .newBuilder()
+        .setRowCount(count)
+        .setData(ByteString.copyFrom(bytes))
+        .build()
+      response.setArrowBatch(batch)
+      responseObserver.onNext(response.build())
+      numSent += 1
+    }
 
-        val batches = rows.mapPartitionsInternal(
-          SparkConnectStreamHandler
-            .rowToArrowConverter(schema, maxRecordsPerBatch, maxBatchSize, timeZoneId))
-
-        val signal = new Object
-        val partitions = new Array[Array[Batch]](numPartitions)
-        var error: Option[Throwable] = None
-
-        // This callback is executed by the DAGScheduler thread.
-        // After fetching a partition, it inserts the partition into the Map, and then
-        // wakes up the main thread.
-        val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
-          signal.synchronized {
-            partitions(partitionId) = partition
-            signal.notify()
-          }
-          ()
+    dataframe.queryExecution.executedPlan match {
+      case LocalTableScanExec(_, rows) =>
+        rowToArrowConverter(rows.iterator).foreach { case (bytes, count) =>
+          sendBatch(bytes, count)
         }
+      case _ =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
+          val rows = dataframe.queryExecution.executedPlan.execute()
+          val numPartitions = rows.getNumPartitions
 
-        val future = spark.sparkContext.submitJob(
-          rdd = batches,
-          processPartition = (iter: Iterator[Batch]) => iter.toArray,
-          partitions = Seq.range(0, numPartitions),
-          resultHandler = resultHandler,
-          resultFunc = () => ())
+          if (numPartitions > 0) {
+            type Batch = (Array[Byte], Long)
 
-        // Collect errors and propagate them to the main thread.
-        future.onComplete { result =>
-          result.failed.foreach { throwable =>
-            signal.synchronized {
-              error = Some(throwable)
-              signal.notify()
+            val batches = rows.mapPartitionsInternal(rowToArrowConverter)
+
+            val signal = new Object
+            val partitions = new Array[Array[Batch]](numPartitions)
+            var error: Option[Throwable] = None
+
+            // This callback is executed by the DAGScheduler thread.
+            // After fetching a partition, it inserts the partition into the Map, and then
+            // wakes up the main thread.
+            val resultHandler = (partitionId: Int, partition: Array[Batch]) => {
+              signal.synchronized {
+                partitions(partitionId) = partition
+                signal.notify()
+              }
+              ()
+            }
+
+            val future = spark.sparkContext.submitJob(
+              rdd = batches,
+              processPartition = (iter: Iterator[Batch]) => iter.toArray,
+              partitions = Seq.range(0, numPartitions),
+              resultHandler = resultHandler,
+              resultFunc = () => ())
+
+            // Collect errors and propagate them to the main thread.
+            future.onComplete { result =>
+              result.failed.foreach { throwable =>
+                signal.synchronized {
+                  error = Some(throwable)
+                  signal.notify()
+                }
+              }
+            }(ThreadUtils.sameThread)
+
+            // The main thread will wait until 0-th partition is available,
+            // then send it to client and wait for the next partition.
+            // Different from the implementation of [[Dataset#collectAsArrowToPython]], it sends
+            // the arrow batches in main thread to avoid DAGScheduler thread been blocked for
+            // tasks not related to scheduling. This is particularly important if there are
+            // multiple users or clients running code at the same time.
+            var currentPartitionId = 0
+            while (currentPartitionId < numPartitions) {
+              val partition = signal.synchronized {
+                var part = partitions(currentPartitionId)
+                while (part == null && error.isEmpty) {
+                  signal.wait()
+                  part = partitions(currentPartitionId)
+                }
+                partitions(currentPartitionId) = null
+
+                error.foreach { other =>
+                  throw other
+                }
+                part
+              }
+
+              partition.foreach { case (bytes, count) =>
+                sendBatch(bytes, count)
+              }
+
+              currentPartitionId += 1
             }
           }
-        }(ThreadUtils.sameThread)
-
-        // The main thread will wait until 0-th partition is available,
-        // then send it to client and wait for the next partition.
-        // Different from the implementation of [[Dataset#collectAsArrowToPython]], it sends
-        // the arrow batches in main thread to avoid DAGScheduler thread been blocked for
-        // tasks not related to scheduling. This is particularly important if there are
-        // multiple users or clients running code at the same time.
-        var currentPartitionId = 0
-        while (currentPartitionId < numPartitions) {
-          val partition = signal.synchronized {
-            var part = partitions(currentPartitionId)
-            while (part == null && error.isEmpty) {
-              signal.wait()
-              part = partitions(currentPartitionId)
-            }
-            partitions(currentPartitionId) = null
-
-            error.foreach { case other =>
-              throw other
-            }
-            part
-          }
-
-          partition.foreach { case (bytes, count) =>
-            val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
-            val batch = proto.ExecutePlanResponse.ArrowBatch
-              .newBuilder()
-              .setRowCount(count)
-              .setData(ByteString.copyFrom(bytes))
-              .build()
-            response.setArrowBatch(batch)
-            responseObserver.onNext(response.build())
-            numSent += 1
-          }
-
-          currentPartitionId += 1
         }
-      }
+    }
 
-      // Make sure at least 1 batch will be sent.
-      if (numSent == 0) {
-        val bytes = ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
-        val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
-        val batch = proto.ExecutePlanResponse.ArrowBatch
-          .newBuilder()
-          .setRowCount(0L)
-          .setData(ByteString.copyFrom(bytes))
-          .build()
-        response.setArrowBatch(batch)
-        responseObserver.onNext(response.build())
-      }
+    // Make sure at least 1 batch will be sent.
+    if (numSent == 0) {
+      sendBatch(
+        ArrowConverters.createEmptyArrowBatch(
+          schema,
+          timeZoneId,
+          errorOnDuplicatedFieldNames = false),
+        0L)
     }
   }
 
-  def sendMetricsToResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
+  def sendSchemaToResponse(sessionId: String, schema: StructType): ExecutePlanResponse = {
+    // Send the Spark data type
+    ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(sessionId)
+      .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
+      .build()
+  }
+
+  def createMetricsResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
     ExecutePlanResponse
       .newBuilder()
@@ -216,7 +284,7 @@ object SparkConnectStreamHandler {
       sessionId: String,
       dataframe: DataFrame): ExecutePlanResponse = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
-      val cols = (0 until row.length).map(i => toConnectProtoValue(row(i)))
+      val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
       ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)

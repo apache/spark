@@ -703,7 +703,7 @@ others.
 
 ###  Available families
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th>Family</th>
@@ -935,7 +935,7 @@ and $f_{0}(\epsilon_{i})$ is the corresponding density function.
 The most commonly used AFT model is based on the Weibull distribution of the survival time.
 The Weibull distribution for lifetime corresponds to the extreme value distribution for the
 log of the lifetime, and the $S_{0}(\epsilon)$ function is:
-`\[   
+`\[
 S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
 \]`
 the $f_{0}(\epsilon_{i})$ function is:
@@ -949,7 +949,7 @@ The log-likelihood function for AFT model with a Weibull distribution of lifetim
 Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
 the loss function we use to optimize is $-\iota(\beta,\sigma)$.
 The gradient functions for $\beta$ and $\log\sigma$ respectively are:
-`\[   
+`\[
 \frac{\partial (-\iota)}{\partial \beta}=\sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
 \]`
 `\[
@@ -1211,7 +1211,7 @@ The main differences between this API and the [original MLlib Decision Tree API]
 * use of DataFrame metadata to distinguish continuous and categorical features
 
 
-The Pipelines API for Decision Trees offers a bit more functionality than the original API.  
+The Pipelines API for Decision Trees offers a bit more functionality than the original API.
 In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities);
 for regression, users can get the biased sample variance of prediction.
 
@@ -1224,7 +1224,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Input Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1251,7 +1251,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Output Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1299,7 +1299,7 @@ All output columns are optional; to exclude an output column, set its correspond
 The DataFrame API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
 Both use [`spark.ml` decision trees](ml-classification-regression.html#decision-trees) as their base models.
 
-Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).  
+Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).
 In this section, we demonstrate the DataFrame API for ensembles.
 
 The main differences between this API and the [original MLlib ensembles API](mllib-ensembles.html) are:
@@ -1326,7 +1326,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1353,7 +1353,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Output Columns (Predictions)
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1407,7 +1407,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1436,7 +1436,7 @@ Note that `GBTClassifier` currently only supports binary labels.
 
 #### Output Columns (Predictions)
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>

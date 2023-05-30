@@ -73,33 +73,20 @@ struct<two:int>
 -- !query
 SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 -- !query schema
-struct<>
+struct<three:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+1
+2
+3
 
 
 -- !query
 SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
 -- !query schema
-struct<>
+struct<two:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+1
+2
 
 
 -- !query
@@ -168,33 +155,20 @@ struct<two:double>
 -- !query
 SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 -- !query schema
-struct<>
+struct<three:decimal(11,1)>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+1.1
+2.0
+3.0
 
 
 -- !query
 SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
 -- !query schema
-struct<>
+struct<two:double>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+1.1
+2.0
 
 
 -- !query
@@ -382,65 +356,33 @@ struct<q1:bigint>
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6
 -- !query schema
-struct<>
+struct<1:int,2:int,3:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+4	5	6
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6
 -- !query schema
-struct<>
+struct<1:int,2:int,3:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+4	5	6
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6
 -- !query schema
-struct<>
+struct<1:int,2:int,3:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+1	2	3
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6
 -- !query schema
-struct<>
+struct<1:int,2:int,3:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+1	2	3
 
 
 -- !query
@@ -586,7 +528,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`q2`",
-    "proposal" : "`int8_tbl`.`q1`"
+    "proposal" : "`q1`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -753,14 +695,23 @@ SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'foo'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 56,
+    "fragment" : "SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'"
+  } ]
 }
 
 

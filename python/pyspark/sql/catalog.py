@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
@@ -78,21 +79,22 @@ class Catalog:
     """User-facing catalog API, accessible through `SparkSession.catalog`.
 
     This is a thin wrapper around its Scala implementation org.apache.spark.sql.catalog.Catalog.
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, sparkSession: SparkSession) -> None:
         """Create a new Catalog that wraps the underlying JVM object."""
         self._sparkSession = sparkSession
         self._jsparkSession = sparkSession._jsparkSession
+        self._sc = sparkSession._sc
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
     def currentCatalog(self) -> str:
         """Returns the current default catalog in this session.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Examples
         --------
@@ -105,9 +107,6 @@ class Catalog:
         """Sets the current default catalog in this session.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -125,19 +124,23 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Returns
         -------
         list
             A list of :class:`CatalogMetadata`.
+
+        Examples
+        --------
+        >>> spark.catalog.listCatalogs()
+        [CatalogMetadata(name='spark_catalog', description=None)]
         """
         iter = self._jcatalog.listCatalogs().toLocalIterator()
         catalogs = []
         while iter.hasNext():
             jcatalog = iter.next()
-            catalogs.append(CatalogMetadata(name=jcatalog.name, description=jcatalog.description))
+            catalogs.append(
+                CatalogMetadata(name=jcatalog.name(), description=jcatalog.description())
+            )
         return catalogs
 
     def currentDatabase(self) -> str:
@@ -145,9 +148,6 @@ class Catalog:
         Returns the current default database in this session.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Returns
         -------
@@ -167,9 +167,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Examples
         --------
         >>> spark.catalog.setCurrentDatabase("default")
@@ -181,9 +178,6 @@ class Catalog:
         Returns a list of databases available across all sessions.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Returns
         -------
@@ -214,9 +208,6 @@ class Catalog:
         This throws an :class:`AnalysisException` when the database cannot be found.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -250,9 +241,6 @@ class Catalog:
         """Check if the database with the specified name exists.
 
         .. versionadded:: 3.3.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -289,9 +277,6 @@ class Catalog:
         """Returns a list of tables/views in the specified database.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -352,9 +337,6 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Parameters
         ----------
         tableName : str
@@ -411,9 +393,6 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Parameters
         ----------
         dbName : str
@@ -465,9 +444,6 @@ class Catalog:
 
         .. versionadded:: 3.3.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Parameters
         ----------
         functionName : str
@@ -516,9 +492,6 @@ class Catalog:
         function. This throws an :class:`AnalysisException` when the function cannot be found.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -570,9 +543,6 @@ class Catalog:
         """Returns a list of columns for the given table/view in the specified database.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -636,9 +606,6 @@ class Catalog:
         This can either be a temporary view or a table/view.
 
         .. versionadded:: 3.3.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -738,9 +705,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Returns
         -------
         :class:`DataFrame`
@@ -763,9 +727,6 @@ class Catalog:
         """Creates a table based on the dataset in a data source.
 
         .. versionadded:: 2.2.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -837,9 +798,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Parameters
         ----------
         viewName : str
@@ -876,9 +834,6 @@ class Catalog:
         """Drops the global temporary view with the given view name in the catalog.
 
         .. versionadded:: 2.1.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -924,7 +879,7 @@ class Catalog:
             Use :func:`spark.udf.register` instead.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
         """
         warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)
@@ -934,9 +889,6 @@ class Catalog:
         Returns true if the table is currently cached in-memory.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -974,13 +926,11 @@ class Catalog:
         """
         return self._jcatalog.isCached(tableName)
 
-    def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory.
+    def cacheTable(self, tableName: str, storageLevel: Optional[StorageLevel] = None) -> None:
+        """Caches the specified table in-memory or with given storage level.
+        Default MEMORY_AND_DISK.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -990,11 +940,21 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
+        storageLevel : :class:`StorageLevel`
+            storage level to set for persistence.
+
+            .. versionchanged:: 3.5.0
+                Allow to specify storage level.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         >>> _ = spark.sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.cacheTable("tbl1")
+
+        or
+
+        >>> spark.catalog.cacheTable("tbl1", StorageLevel.OFF_HEAP)
 
         Throw an analysis exception when the table does not exist.
 
@@ -1009,15 +969,16 @@ class Catalog:
         >>> spark.catalog.uncacheTable("tbl1")
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
-        self._jcatalog.cacheTable(tableName)
+        if storageLevel:
+            javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
+            self._jcatalog.cacheTable(tableName, javaStorageLevel)
+        else:
+            self._jcatalog.cacheTable(tableName)
 
     def uncacheTable(self, tableName: str) -> None:
         """Removes the specified table from the in-memory cache.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -1057,9 +1018,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1075,9 +1033,6 @@ class Catalog:
         """Invalidates and refreshes all the cached data and metadata of the given table.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------
@@ -1128,9 +1083,6 @@ class Catalog:
 
         .. versionadded:: 2.1.1
 
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
-
         Parameters
         ----------
         tableName : str
@@ -1174,9 +1126,6 @@ class Catalog:
         DataFrame that contains the given data source path.
 
         .. versionadded:: 2.2.0
-
-        .. versionchanged:: 3.4.0
-            Support Spark Connect.
 
         Parameters
         ----------

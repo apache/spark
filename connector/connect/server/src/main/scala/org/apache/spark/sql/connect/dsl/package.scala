@@ -26,8 +26,8 @@ import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
 import org.apache.spark.sql.{Observation, SaveMode}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -342,7 +342,7 @@ package object dsl {
             proto.NAFill
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllValues(Seq(toConnectProtoValue(value)).asJava)
+              .addAllValues(Seq(toLiteralProto(value)).asJava)
               .build())
           .build()
       }
@@ -355,13 +355,13 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllCols(cols.asJava)
-              .addAllValues(Seq(toConnectProtoValue(value)).asJava)
+              .addAllValues(Seq(toLiteralProto(value)).asJava)
               .build())
           .build()
       }
 
       def fillValueMap(valueMap: Map[String, Any]): Relation = {
-        val (cols, values) = valueMap.mapValues(toConnectProtoValue).toSeq.unzip
+        val (cols, values) = valueMap.mapValues(toLiteralProto).toSeq.unzip
         Relation
           .newBuilder()
           .setFillNa(
@@ -422,8 +422,8 @@ package object dsl {
           replace.addReplacements(
             proto.NAReplace.Replacement
               .newBuilder()
-              .setOldValue(toConnectProtoValue(oldValue))
-              .setNewValue(toConnectProtoValue(newValue)))
+              .setOldValue(toLiteralProto(oldValue))
+              .setNewValue(toLiteralProto(newValue)))
         }
 
         Relation
@@ -594,6 +594,17 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .addAllColumnNames(colNames.asJava))
+          .build()
+
+      def deduplicateWithinWatermark(colNames: Seq[String]): Relation =
+        Relation
+          .newBuilder()
+          .setDeduplicate(
+            Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(colNames.asJava)
+              .setWithinWatermark(true))
           .build()
 
       def distinct(): Relation =
@@ -978,7 +989,7 @@ package object dsl {
 
       def hint(name: String, parameters: Any*): Relation = {
         val expressions = parameters.map { parameter =>
-          proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
+          proto.Expression.newBuilder().setLiteral(toLiteralProto(parameter)).build()
         }
 
         Relation

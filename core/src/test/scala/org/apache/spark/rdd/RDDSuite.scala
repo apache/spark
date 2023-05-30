@@ -498,7 +498,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
-    import collection.mutable
+    import scala.collection.mutable
     val partitions = 10000
     val numMachines = 50
     val machines = mutable.ListBuffer[String]()
@@ -539,7 +539,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("coalesced RDDs with partial locality, large scale (10K partitions)") {
     // large scale experiment
-    import collection.mutable
+    import scala.collection.mutable
     val halfpartitions = 5000
     val partitions = 10000
     val numMachines = 50

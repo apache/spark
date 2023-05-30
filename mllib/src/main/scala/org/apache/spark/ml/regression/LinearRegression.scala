@@ -559,7 +559,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     if ($(fitIntercept) && $(loss) == Huber) {
-      // orginal `initialSolution` is for problem:
+      // original `initialSolution` is for problem:
       // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
       // we should adjust it to the initial solution for problem:
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)

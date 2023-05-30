@@ -216,7 +216,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "errorClass" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003"
 }
 
@@ -442,9 +442,20 @@ struct<array_insert(array(1, 2, 3), 3, 4):array<int>>
 -- !query
 select array_insert(array(2, 3, 4), 0, 1)
 -- !query schema
-struct<array_insert(array(2, 3, 4), 0, 1):array<int>>
+struct<>
 -- !query output
-[1,2,3,4]
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_INDEX_OF_ZERO",
+  "sqlState" : "22003",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "array_insert(array(2, 3, 4), 0, 1)"
+  } ]
+}
 
 
 -- !query
@@ -663,5 +674,77 @@ struct<array_append(array(), CAST(NULL AS STRING)):array<string>>
 select array_append(array(CAST(NULL AS String)), CAST(NULL AS String))
 -- !query schema
 struct<array_append(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null,null]
+
+
+-- !query
+select array_prepend(array(1, 2, 3), 4)
+-- !query schema
+struct<array_prepend(array(1, 2, 3), 4):array<int>>
+-- !query output
+[4,1,2,3]
+
+
+-- !query
+select array_prepend(array('a', 'b', 'c'), 'd')
+-- !query schema
+struct<array_prepend(array(a, b, c), d):array<string>>
+-- !query output
+["d","a","b","c"]
+
+
+-- !query
+select array_prepend(array(1, 2, 3, NULL), NULL)
+-- !query schema
+struct<array_prepend(array(1, 2, 3, NULL), NULL):array<int>>
+-- !query output
+[null,1,2,3,null]
+
+
+-- !query
+select array_prepend(array('a', 'b', 'c', NULL), NULL)
+-- !query schema
+struct<array_prepend(array(a, b, c, NULL), NULL):array<string>>
+-- !query output
+[null,"a","b","c",null]
+
+
+-- !query
+select array_prepend(CAST(null AS ARRAY<String>), 'a')
+-- !query schema
+struct<array_prepend(NULL, a):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String))
+-- !query schema
+struct<array_prepend(NULL, CAST(NULL AS STRING)):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_prepend(array(), 1)
+-- !query schema
+struct<array_prepend(array(), 1):array<int>>
+-- !query output
+[1]
+
+
+-- !query
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String))
+-- !query schema
+struct<array_prepend(array(), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null]
+
+
+-- !query
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
+-- !query schema
+struct<array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
 -- !query output
 [null,null]

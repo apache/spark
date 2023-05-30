@@ -20,7 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
 
@@ -56,14 +57,32 @@ private object DerbyDialect extends JdbcDialect {
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"RENAME TABLE $oldTable TO $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    if (!oldTable.namespace().sameElements(newTable.namespace())) {
+      throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
+    }
+    // New table name restriction:
+    // https://db.apache.org/derby/docs/10.2/ref/rrefnewtablename.html#rrefnewtablename
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO ${newTable.name()}"
   }
 
   // Derby currently doesn't support comment on table. Here is the ticket to add the support
   // https://issues.apache.org/jira/browse/DERBY-7008
   override def getTableCommentQuery(table: String, comment: String): String = {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
+  }
+
+  // Derby Support 2 types of clauses for nullability constraint alteration
+  //   columnName { SET | DROP } NOT NULL
+  //   columnName [ NOT ] NULL
+  // Here we use the 2nd one
+  // For more information, https://db.apache.org/derby/docs/10.16/ref/rrefsqlj81859.html
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
   }
 
   override def getLimitClause(limit: Integer): String = {

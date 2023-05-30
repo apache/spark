@@ -21,13 +21,14 @@ import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
 
@@ -51,19 +52,11 @@ trait DataWritingCommand extends UnaryCommand {
   def outputColumns: Seq[Attribute] =
     DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
 
-  lazy val metrics: Map[String, SQLMetric] = {
-    // If planned write is enable, we have pulled out write files metrics from `V1WriteCommand`
-    // to `WriteFiles`. `DataWritingCommand` should only holds the task commit metric and driver
-    // commit metric.
-    if (conf.getConf(SQLConf.PLANNED_WRITE_ENABLED)) {
-      BasicWriteJobStatsTracker.writeCommitMetrics
-    } else {
-      BasicWriteJobStatsTracker.metrics
-    }
-  }
+  lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
-    DataWritingCommand.basicWriteJobStatsTracker(metrics, hadoopConf)
+    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
+    new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
@@ -87,6 +80,27 @@ object DataWritingCommand {
   }
 
   /**
+   * When execute CTAS operators, Spark will use [[InsertIntoHadoopFsRelationCommand]]
+   * or [[InsertIntoHiveTable]] command to write data, they both inherit metrics from
+   * [[DataWritingCommand]], but after running [[InsertIntoHadoopFsRelationCommand]]
+   * or [[InsertIntoHiveTable]], we only update metrics in these two command through
+   * [[BasicWriteJobStatsTracker]], we also need to propogate metrics to the command
+   * that actually calls [[InsertIntoHadoopFsRelationCommand]] or [[InsertIntoHiveTable]].
+   *
+   * @param sparkContext Current SparkContext.
+   * @param command Command to execute writing data.
+   * @param metrics Metrics of real DataWritingCommand.
+   */
+  def propogateMetrics(
+      sparkContext: SparkContext,
+      command: DataWritingCommand,
+      metrics: Map[String, SQLMetric]): Unit = {
+    command.metrics.foreach { case (key, metric) => metrics(key).set(metric.value) }
+    SQLMetrics.postDriverMetricUpdates(sparkContext,
+      sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
+  }
+  /**
    * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]].
    * For CTAS, the SaveMode is always [[ErrorIfExists]]
    *
@@ -105,12 +119,5 @@ object DataWritingCommand {
           tablePath.toString)
       }
     }
-  }
-
-  def basicWriteJobStatsTracker(
-      metrics: Map[String, SQLMetric],
-      hadoopConf: Configuration): BasicWriteJobStatsTracker = {
-    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
 }

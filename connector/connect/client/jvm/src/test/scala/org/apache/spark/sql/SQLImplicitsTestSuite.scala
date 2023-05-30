@@ -18,12 +18,13 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
@@ -36,9 +37,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = SparkConnectClient(
-      proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null").build())
+    val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
@@ -130,9 +129,21 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(BigDecimal(decimal))
     testImplicit(Date.valueOf(LocalDate.now()))
     testImplicit(LocalDate.now())
-    testImplicit(LocalDateTime.now())
-    testImplicit(Instant.now())
-    testImplicit(Timestamp.from(Instant.now()))
+    // SPARK-42770: Run `LocalDateTime.now()` and `Instant.now()` with Java 8 & 11 always
+    // get microseconds on both Linux and MacOS, but there are some differences when
+    // using Java 17, it will get accurate nanoseconds on Linux, but still get the microseconds
+    // on MacOS. At present, Spark always converts them to microseconds, this will cause the
+    // test fail when using Java 17 on Linux, so add `truncatedTo(ChronoUnit.MICROS)` when
+    // testing on Linux using Java 17 to ensure the accuracy of input data is microseconds.
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17) && SystemUtils.IS_OS_LINUX) {
+      testImplicit(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS))
+      testImplicit(Instant.now().truncatedTo(ChronoUnit.MICROS))
+      testImplicit(Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))
+    } else {
+      testImplicit(LocalDateTime.now())
+      testImplicit(Instant.now())
+      testImplicit(Timestamp.from(Instant.now()))
+    }
     testImplicit(Period.ofYears(2))
     testImplicit(Duration.ofMinutes(77))
     testImplicit(SaveMode.Append)

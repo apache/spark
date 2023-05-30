@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.connect.client
 
-import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
+
+import com.google.protobuf.ByteString
+import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
@@ -30,35 +32,46 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  * Conceptually the remote spark session that communicates with the server.
  */
 private[sql] class SparkConnectClient(
-    private val userContext: proto.UserContext,
-    private val channel: ManagedChannel,
-    private[client] val userAgent: String) {
+    private[sql] val configuration: SparkConnectClient.Configuration,
+    private val channel: ManagedChannel) {
+
+  def this(configuration: SparkConnectClient.Configuration) =
+    this(configuration, configuration.createChannel())
+
+  private val userContext: UserContext = configuration.userContext
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
-  private[client] val artifactManager: ArtifactManager = new ArtifactManager(userContext, channel)
+  private[client] def userAgent: String = configuration.userAgent
 
   /**
    * Placeholder method.
    * @return
    *   User ID.
    */
-  private[client] def userId: String = userContext.getUserId()
+  private[sql] def userId: String = userContext.getUserId
 
   // Generate a unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
-  private[client] val sessionId: String = UUID.randomUUID.toString
+  private[sql] val sessionId: String = UUID.randomUUID.toString
+
+  private[client] val artifactManager: ArtifactManager = {
+    new ArtifactManager(userContext, sessionId, channel)
+  }
 
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
    * @return
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
-  def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
+  def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
+    artifactManager.uploadAllClassFileArtifacts()
     stub.analyzePlan(request)
+  }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+    artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
       .setPlan(plan)
@@ -154,7 +167,17 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
-  private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
+  def semanticHash(plan: proto.Plan): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSemanticHash(
+      proto.AnalyzePlanRequest.SemanticHash
+        .newBuilder()
+        .setPlan(plan))
+    analyze(builder)
+  }
+
+  private[sql] def analyze(
+      builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
       .setSessionId(sessionId)
@@ -163,9 +186,18 @@ private[sql] class SparkConnectClient(
     analyze(request)
   }
 
-  def copy(): SparkConnectClient = {
-    new SparkConnectClient(userContext, channel, userAgent)
+  private[sql] def interruptAll(): proto.InterruptResponse = {
+    val builder = proto.InterruptRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
+      .build()
+    stub.interrupt(request)
   }
+
+  def copy(): SparkConnectClient = new SparkConnectClient(configuration)
 
   /**
    * Add a single artifact to the client session.
@@ -189,14 +221,34 @@ private[sql] class SparkConnectClient(
   def addArtifacts(uri: Seq[URI]): Unit = artifactManager.addArtifacts(uri)
 
   /**
+   * Register a [[ClassFinder]] for dynamically generated classes.
+   */
+  def registerClassFinder(finder: ClassFinder): Unit = artifactManager.registerClassFinder(finder)
+
+  /**
    * Shutdown the client's connection to the server.
    */
   def shutdown(): Unit = {
     channel.shutdownNow()
   }
+
+  /**
+   * Cache the given local relation at the server, and return its key in the remote cache.
+   */
+  def cacheLocalRelation(data: ByteString, schema: String): String = {
+    val localRelation = proto.Relation
+      .newBuilder()
+      .getLocalRelationBuilder
+      .setSchema(schema)
+      .setData(data)
+      .build()
+    artifactManager.cacheArtifact(localRelation.toByteArray)
+  }
 }
 
-private[sql] object SparkConnectClient {
+object SparkConnectClient {
+
+  private val SPARK_REMOTE: String = "SPARK_REMOTE"
 
   private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
 
@@ -208,8 +260,9 @@ private[sql] object SparkConnectClient {
       "Either remove 'token' or set 'use_ssl=true'"
 
   // for internal tests
-  def apply(userContext: UserContext, channel: ManagedChannel): SparkConnectClient =
-    new SparkConnectClient(userContext, channel, DEFAULT_USER_AGENT)
+  private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {
+    new SparkConnectClient(Configuration(), channel)
+  }
 
   def builder(): Builder = new Builder()
 
@@ -217,39 +270,42 @@ private[sql] object SparkConnectClient {
    * This is a helper class that is used to create a GRPC channel based on either a set host and
    * port or a NameResolver-compliant URI connection string.
    */
-  class Builder() {
-    private val userContextBuilder = proto.UserContext.newBuilder()
-    private var userAgent: Option[String] = None
+  class Builder(private var _configuration: Configuration) {
+    def this() = this(Configuration())
 
-    private var host: String = "localhost"
-    private var port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
-
-    private var token: Option[String] = None
-    // If no value specified for isSslEnabled, default to false
-    private var isSslEnabled: Option[Boolean] = None
-
-    private var metadata: Map[String, String] = Map.empty
+    def configuration: Configuration = _configuration
 
     def userId(id: String): Builder = {
-      userContextBuilder.setUserId(id)
+      // TODO this is not an optional field!
+      require(id != null && id.nonEmpty)
+      _configuration = _configuration.copy(userId = id)
       this
     }
 
+    def userId: Option[String] = Option(_configuration.userId)
+
     def userName(name: String): Builder = {
-      userContextBuilder.setUserName(name)
+      require(name != null && name.nonEmpty)
+      _configuration = _configuration.copy(userName = name)
       this
     }
+
+    def userName: Option[String] = Option(_configuration.userName)
 
     def host(inputHost: String): Builder = {
       require(inputHost != null)
-      host = inputHost
+      _configuration = _configuration.copy(host = inputHost)
       this
     }
 
+    def host: String = _configuration.host
+
     def port(inputPort: Int): Builder = {
-      port = inputPort
+      _configuration = _configuration.copy(port = inputPort)
       this
     }
+
+    def port: Int = _configuration.port
 
     /**
      * Setting the token implicitly sets the use_ssl=true. All the following examples yield the
@@ -270,19 +326,18 @@ private[sql] object SparkConnectClient {
      */
     def token(inputToken: String): Builder = {
       require(inputToken != null && inputToken.nonEmpty)
-      token = Some(inputToken)
-      // Only set the isSSlEnabled if it is not yet set
-      isSslEnabled match {
-        case None => isSslEnabled = Some(true)
-        case Some(false) =>
-          throw new IllegalArgumentException(AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
-        case Some(true) => // Good, the ssl is enabled
+      if (_configuration.isSslEnabled.contains(false)) {
+        throw new IllegalArgumentException(AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
       }
+      _configuration =
+        _configuration.copy(token = Option(inputToken), isSslEnabled = Option(true))
       this
     }
 
+    def token: Option[String] = _configuration.token
+
     def enableSsl(): Builder = {
-      isSslEnabled = Some(true)
+      _configuration = _configuration.copy(isSslEnabled = Option(true))
       this
     }
 
@@ -294,9 +349,11 @@ private[sql] object SparkConnectClient {
      */
     def disableSsl(): Builder = {
       require(token.isEmpty, AUTH_TOKEN_ON_INSECURE_CONN_ERROR_MSG)
-      isSslEnabled = Some(false)
+      _configuration = _configuration.copy(isSslEnabled = Option(false))
       this
     }
+
+    def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
     private object URIParams {
       val PARAM_USER_ID = "user_id"
@@ -330,9 +387,18 @@ private[sql] object SparkConnectClient {
 
     def userAgent(value: String): Builder = {
       require(value != null)
-      userAgent = Some(value)
+      _configuration = _configuration.copy(userAgent = value)
       this
     }
+
+    def userAgent: String = _configuration.userAgent
+
+    def option(key: String, value: String): Builder = {
+      _configuration = _configuration.copy(metadata = _configuration.metadata + ((key, value)))
+      this
+    }
+
+    def options: Map[String, String] = _configuration.metadata
 
     private def parseURIParams(uri: URI): Unit = {
       val params = uri.getPath.split(';').drop(1).filter(_ != "")
@@ -352,9 +418,17 @@ private[sql] object SparkConnectClient {
           case URIParams.PARAM_TOKEN => token(value)
           case URIParams.PARAM_USE_SSL =>
             if (java.lang.Boolean.valueOf(value)) enableSsl() else disableSsl()
-          case _ => this.metadata = this.metadata + (key -> value)
+          case _ => option(key, value)
         }
       }
+    }
+
+    /**
+     * Configure the builder using the env SPARK_REMOTE environment variable.
+     */
+    def loadFromEnvironment(): Builder = {
+      sys.env.get(SparkConnectClient.SPARK_REMOTE).foreach(connectionString)
+      this
     }
 
     /**
@@ -367,38 +441,72 @@ private[sql] object SparkConnectClient {
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
-      host = uri.getHost
+      host(uri.getHost)
       val inputPort = uri.getPort
       if (inputPort != -1) {
-        port = inputPort
+        port(uri.getPort)
       }
       this
     }
 
-    def build(): SparkConnectClient = {
-      val creds = isSslEnabled match {
-        case Some(false) | None => InsecureChannelCredentials.create()
-        case Some(true) =>
-          token match {
-            case Some(t) =>
-              // With access token added in the http header.
-              CompositeChannelCredentials.create(
-                TlsChannelCredentials.create,
-                new AccessTokenCallCredentials(t))
-            case None =>
-              TlsChannelCredentials.create
-          }
-      }
+    /**
+     * Configure the builder with the given CLI arguments.
+     */
+    def parse(args: Array[String]): Builder = {
+      SparkConnectClientParser.parse(args.toList, this)
+      this
+    }
 
-      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, creds)
+    def build(): SparkConnectClient = new SparkConnectClient(_configuration)
+  }
+
+  /**
+   * Helper class that fully captures the configuration for a [[SparkConnectClient]].
+   */
+  private[sql] case class Configuration(
+      userId: String = null,
+      userName: String = null,
+      host: String = "localhost",
+      port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT,
+      token: Option[String] = None,
+      isSslEnabled: Option[Boolean] = None,
+      metadata: Map[String, String] = Map.empty,
+      userAgent: String = DEFAULT_USER_AGENT) {
+
+    def userContext: proto.UserContext = {
+      val builder = proto.UserContext.newBuilder()
+      if (userId != null) {
+        builder.setUserId(userId)
+      }
+      if (userName != null) {
+        builder.setUserName(userName)
+      }
+      builder.build()
+    }
+
+    def credentials: ChannelCredentials = {
+      if (isSslEnabled.contains(true)) {
+        token match {
+          case Some(t) =>
+            // With access token added in the http header.
+            CompositeChannelCredentials.create(
+              TlsChannelCredentials.create,
+              new AccessTokenCallCredentials(t))
+          case None =>
+            TlsChannelCredentials.create()
+        }
+      } else {
+        InsecureChannelCredentials.create()
+      }
+    }
+
+    def createChannel(): ManagedChannel = {
+      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
-      val channel: ManagedChannel = channelBuilder.build()
-      new SparkConnectClient(
-        userContextBuilder.build(),
-        channel,
-        userAgent.getOrElse(DEFAULT_USER_AGENT))
+      channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
+      channelBuilder.build()
     }
   }
 
@@ -417,7 +525,7 @@ private[sql] object SparkConnectClient {
       appExecutor.execute(() => {
         try {
           val headers = new Metadata()
-          headers.put(AUTH_TOKEN_META_DATA_KEY, s"Bearer $token");
+          headers.put(AUTH_TOKEN_META_DATA_KEY, s"Bearer $token")
           applier.apply(headers)
         } catch {
           case e: Throwable =>

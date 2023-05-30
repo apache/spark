@@ -788,7 +788,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
   }
 
   test("provider correctly checks whether fs is in safe mode") {
-    val provider = spy(new FsHistoryProvider(createTestConf()))
+    val provider = spy[FsHistoryProvider](new FsHistoryProvider(createTestConf()))
     val dfs = mock(classOf[DistributedFileSystem])
     // Asserts that safe mode is false because we can't really control the return value of the mock,
     // since the API is different between hadoop 1 and 2.
@@ -1032,7 +1032,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     withTempDir { storeDir =>
       val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       val clock = new ManualClock()
-      val provider = spy(new FsHistoryProvider(conf, clock))
+      val provider = spy[FsHistoryProvider](new FsHistoryProvider(conf, clock))
       val appId = "new1"
 
       // Write logs for two app attempts.
@@ -1196,11 +1196,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
       SparkListenerApplicationEnd(5L))
     var isReadable = false
-    val mockedFs = spy(provider.fs)
+    val mockedFs = spy[FileSystem](provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
         !isReadable))
-    val mockedProvider = spy(provider)
+    val mockedProvider = spy[FsHistoryProvider](provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
@@ -1225,7 +1225,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
   test("check in-progress event logs absolute length") {
     val path = new Path("testapp.inprogress")
     val provider = new FsHistoryProvider(createTestConf())
-    val mockedProvider = spy(provider)
+    val mockedProvider = spy[FsHistoryProvider](provider)
     val mockedFs = mock(classOf[FileSystem])
     val in = mock(classOf[FSDataInputStream])
     val dfsIn = mock(classOf[DFSInputStream])

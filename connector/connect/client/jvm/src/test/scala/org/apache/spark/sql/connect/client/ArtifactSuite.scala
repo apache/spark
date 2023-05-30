@@ -20,7 +20,8 @@ import java.io.InputStream
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
+
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
@@ -49,7 +50,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
-    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), channel)
+    artifactManager = new ArtifactManager(proto.UserContext.newBuilder().build(), "", channel)
   }
 
   override def beforeEach(): Unit = {
@@ -75,7 +76,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   private val CHUNK_SIZE: Int = 32 * 1024
-  protected def artifactFilePath: Path = baseResourcePath.resolve("artifact-tests")
+  protected def artifactFilePath: Path = commonResourcePath.resolve("artifact-tests")
   protected def artifactCrcPath: Path = artifactFilePath.resolve("crc")
 
   private def getCrcValues(filePath: Path): Seq[Long] = {

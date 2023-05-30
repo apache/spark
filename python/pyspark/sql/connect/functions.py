@@ -50,9 +50,14 @@ from pyspark.sql.connect.expressions import (
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
 )
-from pyspark.sql.connect.udf import _create_udf
+from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+
+# The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
+# for code reuse.
+from pyspark.sql.functions import pandas_udf  # noqa: F401
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -1243,6 +1248,13 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 array_position.__doc__ = pysparkfuncs.array_position.__doc__
 
 
+def array_prepend(col: "ColumnOrName", value: Any) -> Column:
+    return _invoke_function("array_prepend", _to_col(col), lit(value))
+
+
+array_prepend.__doc__ = pysparkfuncs.array_prepend.__doc__
+
+
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
     return _invoke_function("array_remove", _to_col(col), lit(element))
 
@@ -1866,8 +1878,13 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
 substring_index.__doc__ = pysparkfuncs.substring_index.__doc__
 
 
-def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("levenshtein", left, right)
+def levenshtein(
+    left: "ColumnOrName", right: "ColumnOrName", threshold: Optional[int] = None
+) -> Column:
+    if threshold is None:
+        return _invoke_function_over_columns("levenshtein", left, right)
+    else:
+        return _invoke_function("levenshtein", _to_col(left), _to_col(right), lit(threshold))
 
 
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
@@ -2429,6 +2446,47 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
+    if lgConfigK is not None:
+        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
+    else:
+        return _invoke_function("hll_sketch_agg", _to_col(col))
+
+
+hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
+
+
+def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
+    if allowDifferentLgConfigK is not None:
+        return _invoke_function("hll_union_agg", _to_col(col), lit(allowDifferentLgConfigK))
+    else:
+        return _invoke_function("hll_union_agg", _to_col(col))
+
+
+hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
+
+
+def hll_sketch_estimate(col: "ColumnOrName") -> Column:
+    return _invoke_function("hll_sketch_estimate", _to_col(col))
+
+
+hll_sketch_estimate.__doc__ = pysparkfuncs.hll_sketch_estimate.__doc__
+
+
+def hll_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None
+) -> Column:
+    if allowDifferentLgConfigK is not None:
+        return _invoke_function(
+            "hll_union", _to_col(col1), _to_col(col2), lit(allowDifferentLgConfigK)
+        )
+    else:
+        return _invoke_function("hll_union", _to_col(col1), _to_col(col2))
+
+
+hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
+
+
 # User Defined Function
 
 
@@ -2449,25 +2507,22 @@ unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
-    from pyspark.rdd import PythonEvalType
-
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(
-            _create_udf, returnType=return_type, evalType=PythonEvalType.SQL_BATCHED_UDF
+            _create_py_udf,
+            returnType=return_type,
+            useArrow=useArrow,
         )
     else:
-        return _create_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
+        return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
-
-
-def pandas_udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("pandas_udf() is not implemented.")
 
 
 def _test() -> None:
@@ -2480,9 +2535,6 @@ def _test() -> None:
 
     # Spark Connect does not support Spark Context but the test depends on that.
     del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
-    # TODO(SPARK-41843): Implement SparkSession.udf
-    del pyspark.sql.connect.functions.call_udf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

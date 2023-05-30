@@ -363,6 +363,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
+      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
     if (!isEmpty(pyOpts)) {

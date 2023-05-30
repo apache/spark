@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -297,8 +297,8 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 </div>
 
 Each row in the source has the following schema:
-<table class="table">
-<tr><th>Column</th><th>Type</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Column</th><th>Type</th></tr></thead>
 <tr>
   <td>key</td>
   <td>binary</td>
@@ -336,8 +336,8 @@ Each row in the source has the following schema:
 The following options must be set for the Kafka source
 for both batch and streaming queries.
 
-<table class="table">
-<tr><th>Option</th><th>value</th><th>meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
 <tr>
   <td>assign</td>
   <td>json string {"topicA":[0,1],"topicB":[2,4]}</td>
@@ -368,8 +368,8 @@ for both batch and streaming queries.
 
 The following configurations are optional:
 
-<table class="table">
-<tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr></thead>
 <tr>
   <td>startingTimestamp</td>
   <td>timestamp string e.g. "1000"</td>
@@ -607,8 +607,8 @@ The caching key is built up from the following information:
 
 The following properties are available to configure the consumer pool:
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.consumer.cache.capacity</td>
   <td>64</td>
@@ -657,8 +657,8 @@ Note that it doesn't leverage Apache Commons Pool due to the difference of chara
 
 The following properties are available to configure the fetched data pool:
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
   <td>5m (5 minutes)</td>
@@ -685,8 +685,8 @@ solution to remove duplicates when reading the written data could be to introduc
 that can be used to perform de-duplication when reading.
 
 The Dataframe being written to Kafka should have the following columns in schema:
-<table class="table">
-<tr><th>Column</th><th>Type</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Column</th><th>Type</th></tr></thead>
 <tr>
   <td>key (optional)</td>
   <td>string or binary</td>
@@ -715,7 +715,7 @@ a ```null``` valued key column will be automatically added (see Kafka semantics 
 how ```null``` valued key values are handled). If a topic column exists then its value
 is used as the topic when writing the given row to Kafka, unless the "topic" configuration
 option is set i.e., the "topic" configuration option overrides the topic column.
-If a "partition" column is not specified (or its value is ```null```) 
+If a "partition" column is not specified (or its value is ```null```)
 then the partition is calculated by the Kafka producer.
 A Kafka partitioner can be specified in Spark by setting the
 ```kafka.partitioner.class``` option. If not present, Kafka default partitioner
@@ -725,8 +725,8 @@ will be used.
 The following options must be set for the Kafka sink
 for both batch and streaming queries.
 
-<table class="table">
-<tr><th>Option</th><th>value</th><th>meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Option</th><th>value</th><th>meaning</th></tr></thead>
 <tr>
   <td>kafka.bootstrap.servers</td>
   <td>A comma-separated list of host:port</td>
@@ -736,8 +736,8 @@ for both batch and streaming queries.
 
 The following configurations are optional:
 
-<table class="table">
-<tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr></thead>
 <tr>
   <td>topic</td>
   <td>string</td>
@@ -912,8 +912,8 @@ It will use different Kafka producer when delegation token is renewed; Kafka pro
 
 The following properties are available to configure the producer pool:
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.producer.cache.timeout</td>
   <td>10m (10 minutes)</td>
@@ -1039,8 +1039,8 @@ When none of the above applies then unsecure connection assumed.
 
 Delegation tokens can be obtained from multiple clusters and <code>${cluster}</code> is an arbitrary unique identifier which helps to group different configurations.
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>
     <td>None</td>

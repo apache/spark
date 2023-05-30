@@ -33,6 +33,8 @@ Upgrading from PySpark 3.3 to 3.4
 * In Spark 3.4, the ``Series.concat`` sort parameter will be respected to follow pandas 1.4 behaviors.
 * In Spark 3.4, the ``DataFrame.__setitem__`` will make a copy and replace pre-existing arrays, which will NOT be over-written to follow pandas 1.4 behaviors.
 * In Spark 3.4, the ``SparkSession.sql`` and the Pandas on Spark API ``sql`` have got new parameter ``args`` which provides binding of named parameters to their SQL literals.
+* In Spark 3.4, Pandas API on Spark follows for the pandas 2.0, and some APIs were deprecated or removed in Spark 3.4 according to the changes made in pandas 2.0. Please refer to the [release notes of pandas](https://pandas.pydata.org/docs/dev/whatsnew/) for more details.
+* In Spark 3.4, the custom monkey-patch of ``collections.namedtuple`` was removed, and ``cloudpickle`` was used by default. To restore the previous behavior for any relevant pickling issue of ``collections.namedtuple``, set ``PYSPARK_ENABLE_NAMEDTUPLE_PATCH`` environment variable to ``1``.
 
 
 Upgrading from PySpark 3.2 to 3.3

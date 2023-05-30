@@ -31,8 +31,8 @@ from pyspark.sql.functions import (
     pandas_udf,
     PandasUDFType,
 )
-from pyspark.sql.types import ArrayType, TimestampType
-from pyspark.errors import AnalysisException
+from pyspark.sql.types import ArrayType, YearMonthIntervalType
+from pyspark.errors import AnalysisException, PySparkNotImplementedError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -52,7 +52,7 @@ if have_pandas:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedAggPandasUDFTests(ReusedSQLTestCase):
+class GroupedAggPandasUDFTestsMixin:
     @property
     def data(self):
         return (
@@ -177,24 +177,55 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     def test_unsupported_types(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, "not supported"):
-                pandas_udf(
-                    lambda x: x, ArrayType(ArrayType(TimestampType())), PandasUDFType.GROUPED_AGG
-                )
+            self.check_unsupported_types()
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, "not supported"):
+    def check_unsupported_types(self):
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            pandas_udf(
+                lambda x: x,
+                ArrayType(ArrayType(YearMonthIntervalType())),
+                PandasUDFType.GROUPED_AGG,
+            )
 
-                @pandas_udf("mean double, std double", PandasUDFType.GROUPED_AGG)
-                def mean_and_std_udf(v):
-                    return v.mean(), v.std()
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={
+                "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
+                "ArrayType(ArrayType(YearMonthIntervalType(0, 1), True), True)"
+            },
+        )
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, "not supported"):
+        with self.assertRaises(PySparkNotImplementedError) as pe:
 
-                @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
-                def mean_and_std_udf(v):  # noqa: F811
-                    return {v.mean(): v.std()}
+            @pandas_udf("mean double, std double", PandasUDFType.GROUPED_AGG)
+            def mean_and_std_udf(v):
+                return v.mean(), v.std()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={
+                "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
+                "StructType([StructField('mean', DoubleType(), True), "
+                "StructField('std', DoubleType(), True)])"
+            },
+        )
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+
+            @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
+            def mean_and_std_udf(v):  # noqa: F811
+                return {v.mean(): v.std()}
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={
+                "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
+                "ArrayType(YearMonthIntervalType(0, 1), True)"
+            },
+        )
 
     def test_alias(self):
         df = self.data
@@ -470,27 +501,25 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(result1.first()["v2"], [1.0, 2.0])
 
     def test_invalid_args(self):
+        with QuietTest(self.sc):
+            self.check_invalid_args()
+
+    def check_invalid_args(self):
         df = self.data
         plus_one = self.python_plus_one
         mean_udf = self.pandas_agg_mean_udf
-
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(AnalysisException, "[MISSING_AGGREGATION]"):
-                df.groupby(df.id).agg(plus_one(df.v)).collect()
-
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                AnalysisException, "aggregate function.*argument.*aggregate function"
-            ):
-                df.groupby(df.id).agg(mean_udf(mean_udf(df.v))).collect()
-
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                AnalysisException,
-                "The group aggregate pandas UDF `avg` cannot be invoked together with as other, "
-                "non-pandas aggregate functions.",
-            ):
-                df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
+        with self.assertRaisesRegex(AnalysisException, "[MISSING_AGGREGATION]"):
+            df.groupby(df.id).agg(plus_one(df.v)).collect()
+        with self.assertRaisesRegex(
+            AnalysisException, "aggregate function.*argument.*aggregate function"
+        ):
+            df.groupby(df.id).agg(mean_udf(mean_udf(df.v))).collect()
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "The group aggregate pandas UDF `avg` cannot be invoked together with as other, "
+            "non-pandas aggregate functions.",
+        ):
+            df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
 
     def test_register_vectorized_udf_basic(self):
         sum_pandas_udf = pandas_udf(
@@ -545,6 +574,10 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         filtered = agg.filter(agg["mean"] > 40.0)
 
         assert filtered.collect()[0]["mean"] == 42.0
+
+
+class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

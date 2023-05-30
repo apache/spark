@@ -235,3 +235,15 @@ SELECT c, (
     FROM (VALUES (0, 6), (1, 5), (2, 4), (3, 3)) t1(a, b)
     WHERE a + b = c
 ) FROM (VALUES (6)) t2(c);
+
+-- SPARK-43156: scalar subquery with Literal result like `COUNT(1) is null`
+SELECT *, (SELECT count(1) is null FROM t2 WHERE t1.c1 = t2.c1) FROM t1;
+
+select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2;
+
+-- SPARK-43596: handle IsNull when rewriting the domain join
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false;
+WITH T AS (SELECT 1 AS a)
+SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
+FROM (SELECT null as col) as foo;
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true;

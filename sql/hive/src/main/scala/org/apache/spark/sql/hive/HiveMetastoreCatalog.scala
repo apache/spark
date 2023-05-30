@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -89,7 +90,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             // we will use the cached relation.
             val useCached =
               relation.location.rootPaths.toSet == pathsInMetastore.toSet &&
-                logical.schema.sameType(schemaInMetastore) &&
+                DataTypeUtils.sameType(logical.schema, schemaInMetastore) &&
                 // We don't support hive bucketed tables. This function `getCached` is only used for
                 // converting supported Hive tables to data source tables.
                 relation.bucketSpec.isEmpty &&
@@ -338,7 +339,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         .inferSchema(
           sparkSession,
           options,
-          fileIndex.listFiles(Nil, Nil).flatMap(_.files))
+          fileIndex.listFiles(Nil, Nil).flatMap(_.files).map(_.fileStatus))
         .map(mergeWithMetastoreSchema(relation.tableMeta.dataSchema, _))
 
       inferredSchema match {

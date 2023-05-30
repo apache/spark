@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.AppSummary
 
-class AppSummarySerializer extends ProtobufSerDe[AppSummary] {
+private[protobuf] class AppSummarySerializer extends ProtobufSerDe[AppSummary] {
 
   override def serialize(input: AppSummary): Array[Byte] = {
     val builder = StoreTypes.AppSummary.newBuilder()

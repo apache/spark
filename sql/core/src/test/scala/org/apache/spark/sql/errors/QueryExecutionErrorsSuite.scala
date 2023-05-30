@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.io.{File, IOException}
 import java.net.{URI, URL}
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
@@ -30,7 +30,8 @@ import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.util.BadRecordException
@@ -57,17 +58,40 @@ class QueryExecutionErrorsSuite
 
   import testImplicits._
 
-  test("CONVERSION_INVALID_INPUT: to_binary conversion function") {
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        sql("select to_binary('???', 'base64')").collect()
-      },
-      errorClass = "CONVERSION_INVALID_INPUT",
-      parameters = Map(
-        "str" -> "'???'",
-        "fmt" -> "'BASE64'",
-        "targetType" -> "\"BINARY\"",
-        "suggestion" -> "`try_to_binary`"))
+  test("CONVERSION_INVALID_INPUT: to_binary conversion function base64") {
+    for (codegenMode <- Seq(CODEGEN_ONLY, NO_CODEGEN)) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+        val exception = intercept[SparkException] {
+          Seq(("???")).toDF("a").selectExpr("to_binary(a, 'base64')").collect()
+        }.getCause.asInstanceOf[SparkIllegalArgumentException]
+        checkError(
+          exception,
+          errorClass = "CONVERSION_INVALID_INPUT",
+          parameters = Map(
+            "str" -> "'???'",
+            "fmt" -> "'BASE64'",
+            "targetType" -> "\"BINARY\"",
+            "suggestion" -> "`try_to_binary`"))
+      }
+    }
+  }
+
+  test("CONVERSION_INVALID_INPUT: to_binary conversion function hex") {
+    for (codegenMode <- Seq(CODEGEN_ONLY, NO_CODEGEN)) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+        val exception = intercept[SparkException] {
+          Seq(("???")).toDF("a").selectExpr("to_binary(a, 'hex')").collect()
+        }.getCause.asInstanceOf[SparkIllegalArgumentException]
+        checkError(
+          exception,
+          errorClass = "CONVERSION_INVALID_INPUT",
+          parameters = Map(
+            "str" -> "'???'",
+            "fmt" -> "'HEX'",
+            "targetType" -> "\"BINARY\"",
+            "suggestion" -> "`try_to_binary`"))
+      }
+    }
   }
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
@@ -121,7 +145,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INVALID_PARAMETER_VALUE.AES_KEY: AES decrypt failure - key mismatch") {
+  test("INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR: AES decrypt failure - key mismatch") {
     val (_, df2) = getAesInputs()
     Seq(
       ("value16", "1234567812345678"),
@@ -131,7 +155,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }.getCause.asInstanceOf[SparkRuntimeException],
-        errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
+        errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
           "detailMessage" -> ("Given final block not properly padded. " +
@@ -157,18 +181,20 @@ class QueryExecutionErrorsSuite
     }
 
     // Unsupported AES mode and padding in encrypt
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"),
-      "CBC", "DEFAULT")
+    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC', 'None')"),
+      "CBC", "None")
     checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"),
       "ECB", "NoPadding")
 
     // Unsupported AES mode and padding in decrypt
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"),
-    "GSM", "DEFAULT")
+      "GSM", "DEFAULT")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"),
-    "GCM", "PKCS")
+      "GCM", "PKCS")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"),
-    "ECB", "None")
+      "ECB", "None")
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'CBC', 'NoPadding')"),
+      "CBC", "NoPadding")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
@@ -471,7 +497,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type -100") {
+  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type DATALINK") {
     Utils.classForName("org.h2.Driver")
 
     val properties = new Properties()
@@ -481,7 +507,8 @@ class QueryExecutionErrorsSuite
     val url = "jdbc:h2:mem:testdb0"
     val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
     val tableName = "test.table1"
-    val unrecognizedColumnType = -100
+    val unrecognizedColumnType = java.sql.Types.DATALINK
+    val unrecognizedColumnTypeName = "h2" + java.sql.Types.DATALINK.toString
 
     var conn: java.sql.Connection = null
     try {
@@ -518,6 +545,7 @@ class QueryExecutionErrorsSuite
           val resultSetMetaData = mock(classOf[ResultSetMetaData])
           when(resultSetMetaData.getColumnCount).thenReturn(1)
           when(resultSetMetaData.getColumnType(1)).thenReturn(unrecognizedColumnType)
+          when(resultSetMetaData.getColumnTypeName(1)).thenReturn(unrecognizedColumnTypeName)
 
           val resultSet = mock(classOf[ResultSet])
           when(resultSet.next()).thenReturn(true).thenReturn(false)
@@ -545,7 +573,7 @@ class QueryExecutionErrorsSuite
         spark.read.jdbc(urlWithUserAndPass, tableName, new Properties()).collect()
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      parameters = Map("typeName" -> unrecognizedColumnType.toString),
+      parameters = Map("typeName" -> unrecognizedColumnTypeName, "jdbcType" -> "DATALINK"),
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
@@ -625,6 +653,21 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select 127Y + 5Y").collect()
+        },
+        errorClass = "BINARY_ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "value1" -> "127S",
+          "symbol" -> "+",
+          "value2" -> "5S"),
+        sqlState = "22003")
+    }
+  }
+
   test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -700,8 +743,8 @@ class QueryExecutionErrorsSuite
             val driver: Driver = DriverRegistry.get(driverClass)
             val connection = ConnectionProvider.create(
               driver, options.parameters, options.connectionProviderName)
-            val spyConnection = spy(connection)
-            val spyMetaData = spy(connection.getMetaData)
+            val spyConnection = spy[Connection](connection)
+            val spyMetaData = spy[DatabaseMetaData](connection.getMetaData)
             when(spyConnection.getMetaData).thenReturn(spyMetaData)
             when(spyMetaData.supportsTransactions()).thenReturn(false)
 
@@ -719,12 +762,10 @@ class QueryExecutionErrorsSuite
         JdbcDialects.unregisterDialect(existedH2Dialect)
         JdbcDialects.registerDialect(testH2DialectUnsupportedJdbcTransaction)
 
-        val e = intercept[AnalysisException] {
-          sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
-        }
-
         checkError(
-          exception = e.getCause.asInstanceOf[SparkSQLFeatureNotSupportedException],
+          exception = intercept[SparkSQLFeatureNotSupportedException] {
+            sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
+          },
           errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
           parameters = Map("tableName" -> "\"test\".\"people\""))
 
@@ -821,6 +862,42 @@ class QueryExecutionErrorsSuite
         "message" -> ("""A method named "nonexistent" is not declared in """ +
           "any enclosing class nor any supertype")),
       sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Aggregate Window Functions do not support merging") {
+    val e = intercept[SparkException] {
+      RowNumber().mergeExpressions
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "The aggregate window function `row_number` does not support merging."),
+      sqlState = "XX000")
+  }
+
+  test("SPARK-43589: Use bytesToString instead of shift operation") {
+    checkError(
+      exception = intercept[SparkException] {
+        throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
+          maxBroadcastTableBytes = 1024 * 1024 * 1024,
+          dataSize = 2 * 1024 * 1024 * 1024 - 1)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2249",
+      parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
+  }
+
+  test("V1 table don't support time travel") {
+    withTable("t") {
+      sql("CREATE TABLE t(c String) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect()
+        },
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
+      )
+    }
   }
 }
 

@@ -166,4 +166,14 @@ case class InMemoryTableScanExec(
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     columnarInputRDD
   }
+
+  def isMaterialized: Boolean = relation.cacheBuilder.isCachedColumnBuffersLoaded
+
+  /**
+   * This method is only used by AQE which executes the actually cached RDD that without filter and
+   * serialization of row/columnar.
+   */
+  def baseCacheRDD(): RDD[CachedBatch] = {
+    relation.cacheBuilder.cachedColumnBuffers
+  }
 }

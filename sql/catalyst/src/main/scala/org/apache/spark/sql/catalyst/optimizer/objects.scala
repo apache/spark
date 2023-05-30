@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
 
 /*
@@ -165,7 +166,8 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
    * Note: we should do `transformUp` explicitly to change data types.
    */
   private def alignNullTypeInIf(expr: Expression) = expr.transformUp {
-    case i @ If(IsNullCondition(), Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+    case i @ If(IsNullCondition(), Literal(null, dt), ser)
+      if !DataTypeUtils.sameType(dt, ser.dataType) =>
       i.copy(trueValue = Literal(null, ser.dataType))
   }
 
@@ -204,7 +206,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
     val transformedSerializer = serializer.transformDown(transformer)
     val prunedSerializer = alignNullTypeInIf(transformedSerializer).asInstanceOf[NamedExpression]
 
-    if (prunedSerializer.dataType.sameType(prunedDataType)) {
+    if (DataTypeUtils.sameType(prunedSerializer.dataType, prunedDataType)) {
       prunedSerializer
     } else {
       serializer

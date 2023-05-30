@@ -1400,7 +1400,7 @@ class Frame(object, metaclass=ABCMeta):
 
         If there is no numeric type columns, returns empty Series.
 
-        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()
+        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()  # doctest: +SKIP
         Series([], dtype: float64)
 
         On a Series:
@@ -1410,12 +1410,12 @@ class Frame(object, metaclass=ABCMeta):
 
         By default, the product of an empty or all-NA Series is ``1``
 
-        >>> ps.Series([]).prod()
+        >>> ps.Series([]).prod()  # doctest: +SKIP
         1.0
 
         This can be controlled with the ``min_count`` parameter
 
-        >>> ps.Series([]).prod(min_count=1)
+        >>> ps.Series([]).prod(min_count=1)  # doctest: +SKIP
         nan
         """
         axis = validate_axis(axis)
@@ -2726,7 +2726,7 @@ class Frame(object, metaclass=ABCMeta):
         return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
-    #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
+    #   'axis' implementation, refer https://github.com/databricks/koalas/pull/607
     def expanding(self: FrameLike, min_periods: int = 1) -> "Expanding[FrameLike]":
         """
         Provide expanding transformations.

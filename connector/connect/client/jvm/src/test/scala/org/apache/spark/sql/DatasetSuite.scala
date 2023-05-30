@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -39,10 +40,8 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private var ss: SparkSession = _
 
   private def newSparkSession(): SparkSession = {
-    val client = new SparkConnectClient(
-      proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build(),
-      "test")
+    val client = SparkConnectClient(
+      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build())
     new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
 
@@ -96,6 +95,33 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .partitionBy("col99")
       .bucketBy(2, "col1", "col2")
       .parquet("my/test/path")
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
+  test("write jdbc") {
+    val df = ss.newDataFrame(_ => ()).limit(10)
+
+    val builder = proto.WriteOperation.newBuilder()
+    builder
+      .setInput(df.plan.getRoot)
+      .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS)
+      .setSource("jdbc")
+      .putOptions("a", "b")
+      .putOptions("1", "2")
+      .putOptions("url", "url")
+      .putOptions("dbtable", "table")
+
+    val expectedPlan = proto.Plan
+      .newBuilder()
+      .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
+      .build()
+
+    val connectionProperties = new Properties
+    connectionProperties.put("a", "b")
+    connectionProperties.put("1", "2")
+    df.write.jdbc("url", "table", connectionProperties)
+
     val actualPlan = service.getAndClearLatestInputPlan()
     assert(actualPlan.equals(expectedPlan))
   }

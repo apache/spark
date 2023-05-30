@@ -49,7 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -67,6 +67,7 @@ from pyspark.sql.types import (
     StructType,
     DataType,
 )
+from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
@@ -94,6 +95,8 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
+# For Supporting Spark Connect
+from pyspark.sql.utils import is_remote
 
 __all__ = [
     "from_pandas",
@@ -1647,7 +1650,7 @@ def to_datetime(
     Passing errors='coerce' will force an out-of-bounds date to NaT,
     in addition to forcing non-dates (or non-parseable dates) to NaT.
 
-    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')
+    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')  # doctest: +SKIP
     datetime.datetime(1300, 1, 1, 0, 0)
     >>> ps.to_datetime('13000101', format='%Y%m%d', errors='coerce')
     NaT
@@ -1818,21 +1821,21 @@ def date_range(
 
     Specify `start` and `end`, with the default daily frequency.
 
-    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +SKIP
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `start` and `periods`, the number of periods (days).
 
-    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +SKIP
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `end` and `periods`, the number of periods (days).
 
-    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +SKIP
     DatetimeIndex(['2017-12-25', '2017-12-26', '2017-12-27', '2017-12-28',
                    '2017-12-29', '2017-12-30', '2017-12-31', '2018-01-01'],
                   dtype='datetime64[ns]', freq=None)
@@ -1842,7 +1845,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2018-04-24', end='2018-04-27', periods=3
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2018-04-24 00:00:00', '2018-04-25 12:00:00',
                    '2018-04-27 00:00:00'],
                   dtype='datetime64[ns]', freq=None)
@@ -1851,14 +1854,14 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1867,7 +1870,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='1/1/2018', periods=5, freq=pd.offsets.MonthEnd(3)
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1877,7 +1880,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed=None
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
                    dtype='datetime64[ns]', freq=None)
 
@@ -1885,14 +1888,14 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed='left'
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
 
     Use ``closed='right'`` to exclude `start` if it falls on the boundary.
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed='right'
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
@@ -2188,9 +2191,8 @@ def get_dummies(
     if sparse is not False:
         raise NotImplementedError("get_dummies currently does not support sparse")
 
-    if columns is not None:
-        if not is_list_like(columns):
-            raise TypeError("Input must be a list-like for parameter `columns`")
+    if columns is not None and not is_list_like(columns):
+        raise TypeError("Input must be a list-like for parameter `columns`")
 
     if dtype is None:
         dtype = "byte"
@@ -3427,6 +3429,12 @@ def merge_asof(
     else:
         on = None
 
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        Column = ConnectColumn
+    else:
+        Column = PySparkColumn  # type: ignore[assignment]
     if tolerance is not None and not isinstance(tolerance, Column):
         tolerance = F.lit(tolerance)
 
@@ -3452,10 +3460,10 @@ def merge_asof(
     data_columns = []
     column_labels = []
 
-    def left_scol_for(label: Label) -> Column:
+    def left_scol_for(label: Label) -> Column:  # type: ignore[valid-type]
         return scol_for(as_of_joined_table, left_internal.spark_column_name_for(label))
 
-    def right_scol_for(label: Label) -> Column:
+    def right_scol_for(label: Label) -> Column:  # type: ignore[valid-type]
         return scol_for(as_of_joined_table, right_internal.spark_column_name_for(label))
 
     for label in left_internal.column_labels:
@@ -3469,7 +3477,7 @@ def merge_asof(
                 pass
             else:
                 col = col + left_suffix
-                scol = scol.alias(col)
+                scol = scol.alias(col)  # type: ignore[attr-defined]
                 label = tuple([str(label[0]) + left_suffix] + list(label[1:]))
         exprs.append(scol)
         data_columns.append(col)
@@ -3477,7 +3485,7 @@ def merge_asof(
     for label in right_internal.column_labels:
         # recover `right_prefix` here.
         col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
-        scol = right_scol_for(label).alias(col)
+        scol = right_scol_for(label).alias(col)  # type: ignore[attr-defined]
         if label in duplicate_columns:
             spark_column_name = left_internal.spark_column_name_for(label)
             if spark_column_name in left_as_of_names + left_join_on_names and (
@@ -3486,7 +3494,7 @@ def merge_asof(
                 continue
             else:
                 col = col + right_suffix
-                scol = scol.alias(col)
+                scol = scol.alias(col)  # type: ignore[attr-defined]
                 label = tuple([str(label[0]) + right_suffix] + list(label[1:]))
         exprs.append(scol)
         data_columns.append(col)
@@ -3720,9 +3728,9 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
-) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
-    index_spark_columns: Optional[List[Column]]
+    sdf: PySparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+) -> Tuple[Optional[List[PySparkColumn]], Optional[List[Label]]]:
+    index_spark_columns: Optional[List[PySparkColumn]]
     index_names: Optional[List[Label]]
     if index_col is not None:
         if isinstance(index_col, str):

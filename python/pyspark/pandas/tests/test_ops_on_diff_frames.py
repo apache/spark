@@ -35,7 +35,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesEnabledTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -547,6 +547,11 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             ),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43453): Enable OpsOnDiffFramesEnabledTests.test_concat_column_axis "
+        "for pandas 2.0.0.",
+    )
     def test_concat_column_axis(self):
         pdf1 = pd.DataFrame({"A": [0, 2, 4], "B": [1, 3, 5]}, index=[1, 2, 3])
         pdf1.columns.names = ["AB"]
@@ -1118,7 +1123,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
 
-class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesDisabledTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1324,6 +1329,18 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 psser.eq(other)
             with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
                 psser == other
+
+
+class OpsOnDiffFramesEnabledTests(
+    OpsOnDiffFramesEnabledTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
+
+
+class OpsOnDiffFramesDisabledTests(
+    OpsOnDiffFramesDisabledTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

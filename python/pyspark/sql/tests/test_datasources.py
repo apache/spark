@@ -200,6 +200,30 @@ class DataSourcesTestsMixin:
 
         try:
             df = self.spark.range(10)
+            df.write.jdbc(url=f"{url};create=true", table=dbtable)
+
+            readback = self.spark.read.jdbc(url=url, table=dbtable)
+            self.assertEqual(sorted(df.collect()), sorted(readback.collect()))
+
+            additional_arguments = dict(column="id", lowerBound=3, upperBound=8, numPartitions=10)
+            readback = self.spark.read.jdbc(url=url, table=dbtable, **additional_arguments)
+            self.assertEqual(sorted(df.collect()), sorted(readback.collect()))
+
+            additional_arguments = dict(predicates=['"id" < 5'])
+            readback = self.spark.read.jdbc(url=url, table=dbtable, **additional_arguments)
+            self.assertEqual(sorted(df.filter("id < 5").collect()), sorted(readback.collect()))
+        finally:
+            # Clean up.
+            with self.assertRaisesRegex(Exception, f"Database '{db}' dropped."):
+                self.spark.read.jdbc(url=f"{url};drop=true", table=dbtable).collect()
+
+    def test_jdbc_format(self):
+        db = f"memory:{uuid.uuid4()}"
+        url = f"jdbc:derby:{db}"
+        dbtable = "test_table"
+
+        try:
+            df = self.spark.range(10)
             df.write.format("jdbc").options(url=f"{url};create=true", dbtable=dbtable).save()
             readback = self.spark.read.format("jdbc").options(url=url, dbtable=dbtable).load()
             self.assertEqual(sorted(df.collect()), sorted(readback.collect()))

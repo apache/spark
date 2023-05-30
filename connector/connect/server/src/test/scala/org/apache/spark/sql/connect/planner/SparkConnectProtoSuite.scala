@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.SparkClassNotFoundException
+import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
@@ -32,11 +32,11 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInt
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -245,7 +245,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     val connectPlan3 =
       connectTestRelation.rollup("id".protoAttr, "name".protoAttr)(
-        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+        proto_min(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
           .as("agg1"))
     val sparkPlan3 =
       sparkTestRelation
@@ -269,7 +269,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     val connectPlan3 =
       connectTestRelation.cube("id".protoAttr, "name".protoAttr)(
-        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+        proto_min(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
           .as("agg1"))
     val sparkPlan3 =
       sparkTestRelation
@@ -282,8 +282,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan1 =
       connectTestRelation.pivot("id".protoAttr)(
         "name".protoAttr,
-        Seq("a", "b", "c").map(toConnectProtoValue))(
-        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+        Seq("a", "b", "c").map(toLiteralProto))(
+        proto_min(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
           .as("agg1"))
     val sparkPlan1 =
       sparkTestRelation
@@ -295,8 +295,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val connectPlan2 =
       connectTestRelation.pivot("name".protoAttr)(
         "id".protoAttr,
-        Seq(1, 2, 3).map(toConnectProtoValue))(
-        proto_min(proto.Expression.newBuilder().setLiteral(toConnectProtoValue(1)).build())
+        Seq(1, 2, 3).map(toLiteralProto))(
+        proto_min(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
           .as("agg1"))
     val sparkPlan2 =
       sparkTestRelation
@@ -345,6 +345,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
     val connectPlan2 = connectTestRelation.deduplicate(Seq("id", "name"))
     val sparkPlan2 = sparkTestRelation.dropDuplicates(Seq("id", "name"))
+    comparePlans(connectPlan2, sparkPlan2)
+  }
+
+  test("Test basic deduplicateWithinWatermark") {
+    val connectPlan = connectTestRelation.distinct()
+    val sparkPlan = sparkTestRelation.distinct()
+    comparePlans(connectPlan, sparkPlan)
+
+    val connectPlan2 = connectTestRelation.deduplicateWithinWatermark(Seq("id", "name"))
+    val sparkPlan2 = sparkTestRelation.dropDuplicatesWithinWatermark(Seq("id", "name"))
     comparePlans(connectPlan2, sparkPlan2)
   }
 
@@ -554,11 +564,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
-  // TODO(SPARK-42733): Writes without path or table should work.
-  ignore("Writes fails without path or table") {
-    assertThrows[UnsupportedOperationException] {
+  test("Writes fails without path or table") {
+    assertThrows[SparkIllegalArgumentException] {
       transform(localRelation.write())
     }
+  }
+
+  test("Writes without path or table") {
+    transform(localRelation.write(format = Some("noop"), mode = Some("Append")))
   }
 
   test("Write fails with unknown table - AnalysisException") {
@@ -1029,7 +1042,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         StructType.fromAttributes(attributes),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
     proto.Relation
       .newBuilder()

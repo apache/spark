@@ -15,7 +15,9 @@
 # limitations under the License.
 #
 
+import unittest
 from datetime import timedelta
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -23,7 +25,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
+class TimedeltaIndexTestsMixin:
     @property
     def pidx(self):
         return pd.TimedeltaIndex(
@@ -96,6 +98,10 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
         ):
             psidx.all()
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43705): Enable TimedeltaIndexTests.test_properties for pandas 2.0.0.",
+    )
     def test_properties(self):
         self.assert_eq(self.psidx.days, self.pidx.days)
         self.assert_eq(self.psidx.seconds, self.pidx.seconds)
@@ -103,6 +109,10 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(self.neg_psidx.days, self.neg_pidx.days)
         self.assert_eq(self.neg_psidx.seconds, self.neg_pidx.seconds)
         self.assert_eq(self.neg_psidx.microseconds, self.neg_pidx.microseconds)
+
+
+class TimedeltaIndexTests(TimedeltaIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

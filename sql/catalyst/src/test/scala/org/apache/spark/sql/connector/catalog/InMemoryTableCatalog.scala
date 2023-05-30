@@ -91,7 +91,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     createTable(ident, schema, partitions, properties, Distributions.unspecified(),
-      Array.empty, None)
+      Array.empty, None, None)
   }
 
   override def createTable(
@@ -111,6 +111,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       distribution: Distribution,
       ordering: Array[SortOrder],
       requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
     if (tables.containsKey(ident)) {
@@ -121,7 +122,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     val tableName = s"$name.${ident.quoted}"
     val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
-      ordering, requiredNumPartitions, distributionStrictlyRequired, numRowsPerSplit)
+      ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
+      numRowsPerSplit)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

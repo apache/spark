@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -118,7 +119,11 @@ object Project {
       case (StructType(fields), expected: StructType) =>
         val newFields = reorderFields(
           fields.zipWithIndex.map { case (f, index) =>
-            (f.name, GetStructField(col, index))
+            if (col.nullable) {
+              (f.name, GetStructField(KnownNotNull(col), index))
+            } else {
+              (f.name, GetStructField(col, index))
+            }
           },
           expected.fields,
           columnPath,
@@ -182,7 +187,7 @@ object Project {
           if (columnPath.isEmpty) {
             val candidates = fields.map(_._1)
             val orderedCandidates =
-              StringUtils.orderStringsBySimilarity(f.name, candidates)
+              StringUtils.orderSuggestedIdentifiersBySimilarity(f.name, candidates)
             throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
           } else {
             throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
@@ -330,7 +335,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
-        l.dataType.sameType(r.dataType)
+        DataTypeUtils.sameType(l.dataType, r.dataType)
       } && duplicateResolved
 }
 
@@ -450,54 +455,22 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  /**
-   * Merges a sequence of attributes to have a common datatype and updates the
-   * nullability to be consistent with the attributes being merged.
-   */
-  private def mergeAttributes(attributes: Seq[Attribute]): Attribute = {
-    val firstAttr = attributes.head
-    val nullable = attributes.exists(_.nullable)
-    val newDt = attributes.map(_.dataType).reduce(StructType.unionLikeMerge)
-    if (firstAttr.dataType == newDt) {
-      firstAttr.withNullability(nullable)
-    } else {
-      AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-        firstAttr.exprId, firstAttr.qualifier)
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
     }
   }
 
-  override def output: Seq[Attribute] = children.map(_.output).transpose.map(mergeAttributes)
-
-  override def metadataOutput: Seq[Attribute] = {
-    val childrenMetadataOutput = children.map(_.metadataOutput)
-    // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
-    // but just silently doesn't return an output instead of throwing an error. It also ensures
-    // that the attribute and data type names are the same.
-    val refDataTypes = childrenMetadataOutput.head.map(_.dataType)
-    val refAttrNames = childrenMetadataOutput.head.map(_.name)
-    childrenMetadataOutput.tail.foreach { childMetadataOutput =>
-      // We can only propagate the metadata output correctly if every child has the same
-      // number of columns
-      if (childMetadataOutput.length != refDataTypes.length) return Nil
-      // Check if the data types match by name and type
-      val childDataTypes = childMetadataOutput.map(_.dataType)
-      childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
-        if (!DataType.equalsStructurally(dt1, dt2, true) ||
-           !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver)) {
-          return Nil
-        }
-      }
-      // Check that the names of the attributes match
-      val childAttrNames = childMetadataOutput.map(_.name)
-      childAttrNames.zip(refAttrNames).foreach { case (attrName1, attrName2) =>
-        if (!conf.resolver(attrName1, attrName2)) {
-          return Nil
-        }
-      }
-    }
-    // If the metadata output matches, merge the attributes and return them
-    childrenMetadataOutput.transpose.map(mergeAttributes)
-  }
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -871,7 +844,17 @@ case class CTERelationRef(
 
   override lazy val resolved: Boolean = _resolved
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    // CTERelationRef inherits the output attributes from a query, which may contain duplicated
+    // attributes, for queries like `SELECT a, a FROM t`. It's important to keep the duplicated
+    // attributes to have the same id in the new instance, as column resolution allows more than one
+    // matching attributes if their ids are the same.
+    // For example, `Project('a, CTERelationRef(a#1, a#1))` can be resolved properly as the matching
+    // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
+    // resolved.
+    val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
+    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+  }
 
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
 
@@ -1312,7 +1295,9 @@ object Expand {
       } :+ {
         val bitMask = buildBitmask(groupingSetAttrs, attrMap)
         val dataType = GroupingID.dataType
-        Literal.create(if (dataType.sameType(IntegerType)) bitMask.toInt else bitMask, dataType)
+        Literal.create(
+          if (DataTypeUtils.sameType(dataType, IntegerType)) bitMask.toInt
+          else bitMask, dataType)
       }
 
       if (hasDuplicateGroupingSets) {
@@ -1534,7 +1519,7 @@ case class Unpivot(
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
     // all inner values at position idx must have the same data type
     values.get.head.zipWithIndex.forall { case (v, idx) =>
-      values.get.tail.forall(vals => vals(idx).dataType.sameType(v.dataType))
+      values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
 
 }
@@ -1822,6 +1807,8 @@ trait HasPartitionExpressions extends SQLConfHelper {
 
   def optNumPartitions: Option[Int]
 
+  def optAdvisoryPartitionSize: Option[Long]
+
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(numPartitions)
   } else {
@@ -1852,7 +1839,11 @@ trait HasPartitionExpressions extends SQLConfHelper {
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int]) extends RepartitionOperation with HasPartitionExpressions {
+    optNumPartitions: Option[Int],
+    optAdvisoryPartitionSize: Option[Long] = None)
+  extends RepartitionOperation with HasPartitionExpressions {
+
+  require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
 
   override val partitioning: Partitioning = {
     if (numPartitions == 1) {
@@ -1889,7 +1880,11 @@ object RepartitionByExpression {
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int] = None) extends UnaryNode with HasPartitionExpressions {
+    optNumPartitions: Option[Int] = None,
+    optAdvisoryPartitionSize: Option[Long] = None) extends UnaryNode with HasPartitionExpressions {
+
+  require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
+
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
@@ -1924,6 +1919,14 @@ case class Deduplicate(
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
+    copy(child = newChild)
+}
+
+case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
+  override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)
 }
 
@@ -2004,7 +2007,8 @@ case class LateralJoin(
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(
+    left.output ++ right.plan.output)
 
   private[this] lazy val childMetadataAttributes =
     AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)

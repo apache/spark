@@ -71,7 +71,9 @@ from pyspark.sql.connect.types import (
     JVM_LONG_MAX,
     UnparsedDataType,
     pyspark_types_to_proto_types,
+    proto_schema_to_pyspark_data_type,
 )
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
@@ -105,6 +107,7 @@ class CaseWhen(Expression):
     def __init__(
         self, branches: Sequence[Tuple[Expression, Expression]], else_value: Optional[Expression]
     ):
+        super().__init__()
 
         assert isinstance(branches, list)
         for branch in branches:
@@ -141,6 +144,7 @@ class CaseWhen(Expression):
 
 class ColumnAlias(Expression):
     def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
+        super().__init__()
 
         self._alias = alias
         self._metadata = metadata
@@ -157,7 +161,10 @@ class ColumnAlias(Expression):
             return exp
         else:
             if self._metadata:
-                raise ValueError("metadata can only be provided for a single column")
+                raise PySparkValueError(
+                    error_class="CANNOT_PROVIDE_METADATA",
+                    message_parameters={},
+                )
             exp = proto.Expression()
             exp.alias.name.extend(self._alias)
             exp.alias.expr.CopyFrom(self._parent.to_plan(session))
@@ -252,7 +259,10 @@ class LiteralExpression(Expression):
             elif isinstance(dataType, ArrayType):
                 assert isinstance(value, list)
             else:
-                raise TypeError(f"Unsupported Data Type {dataType}")
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE",
+                    message_parameters={"data_type": str(dataType)},
+                )
 
         self._value = value
         self._dataType = dataType
@@ -271,7 +281,14 @@ class LiteralExpression(Expression):
             elif JVM_LONG_MIN <= value <= JVM_LONG_MAX:
                 return LongType()
             else:
-                raise ValueError(f"integer {value} out of bounds")
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_BETWEEN",
+                    message_parameters={
+                        "arg_name": "value",
+                        "min": str(JVM_LONG_MIN),
+                        "max": str(JVM_SHORT_MAX),
+                    },
+                )
         elif isinstance(value, float):
             return DoubleType()
         elif isinstance(value, str):
@@ -294,19 +311,86 @@ class LiteralExpression(Expression):
             # follow the 'infer_array_from_first_element' strategy in 'sql.types._infer_type'
             # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
             if len(value) == 0:
-                raise TypeError("Can not infer Array Type from an empty list")
+                raise PySparkValueError(
+                    error_class="CANNOT_BE_EMPTY",
+                    message_parameters={"item": "value"},
+                )
             first = value[0]
             if first is None:
-                raise TypeError(
-                    "Can not infer Array Type from an list with None as the first element"
+                raise PySparkTypeError(
+                    error_class="CANNOT_INFER_ARRAY_TYPE",
+                    message_parameters={},
                 )
             return ArrayType(LiteralExpression._infer_type(first), True)
 
-        raise TypeError(f"Unsupported Data Type {type(value).__name__}")
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": type(value).__name__},
+        )
 
     @classmethod
     def _from_value(cls, value: Any) -> "LiteralExpression":
         return LiteralExpression(value=value, dataType=LiteralExpression._infer_type(value))
+
+    @classmethod
+    def _to_value(
+        cls, literal: "proto.Expression.Literal", dataType: Optional[DataType] = None
+    ) -> Any:
+        if literal.HasField("null"):
+            return None
+        elif literal.HasField("binary"):
+            assert dataType is None or isinstance(dataType, BinaryType)
+            return literal.binary
+        elif literal.HasField("boolean"):
+            assert dataType is None or isinstance(dataType, BooleanType)
+            return literal.boolean
+        elif literal.HasField("byte"):
+            assert dataType is None or isinstance(dataType, ByteType)
+            return literal.byte
+        elif literal.HasField("short"):
+            assert dataType is None or isinstance(dataType, ShortType)
+            return literal.short
+        elif literal.HasField("integer"):
+            assert dataType is None or isinstance(dataType, IntegerType)
+            return literal.integer
+        elif literal.HasField("long"):
+            assert dataType is None or isinstance(dataType, LongType)
+            return literal.long
+        elif literal.HasField("float"):
+            assert dataType is None or isinstance(dataType, FloatType)
+            return literal.float
+        elif literal.HasField("double"):
+            assert dataType is None or isinstance(dataType, DoubleType)
+            return literal.double
+        elif literal.HasField("decimal"):
+            assert dataType is None or isinstance(dataType, DecimalType)
+            return decimal.Decimal(literal.decimal.value)
+        elif literal.HasField("string"):
+            assert dataType is None or isinstance(dataType, StringType)
+            return literal.string
+        elif literal.HasField("date"):
+            assert dataType is None or isinstance(dataType, DataType)
+            return DateType().fromInternal(literal.date)
+        elif literal.HasField("timestamp"):
+            assert dataType is None or isinstance(dataType, TimestampType)
+            return TimestampType().fromInternal(literal.timestamp)
+        elif literal.HasField("timestamp_ntz"):
+            assert dataType is None or isinstance(dataType, TimestampNTZType)
+            return TimestampNTZType().fromInternal(literal.timestamp_ntz)
+        elif literal.HasField("day_time_interval"):
+            assert dataType is None or isinstance(dataType, DayTimeIntervalType)
+            return DayTimeIntervalType().fromInternal(literal.day_time_interval)
+        elif literal.HasField("array"):
+            elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
+            if dataType is not None:
+                assert isinstance(dataType, ArrayType)
+                assert elementType == dataType.elementType
+            return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
+
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_LITERAL",
+            message_parameters={"literal": str(literal)},
+        )
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
@@ -353,7 +437,10 @@ class LiteralExpression(Expression):
                     LiteralExpression(v, element_type).to_plan(session).literal
                 )
         else:
-            raise ValueError(f"Unsupported Data Type {self._dataType}")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": str(self._dataType)},
+            )
 
         return expr
 
@@ -591,6 +678,7 @@ class CommonInlineUserDefinedFunction(Expression):
         deterministic: bool = False,
         arguments: Sequence[Expression] = [],
     ):
+        super().__init__()
         self._function_name = function_name
         self._deterministic = deterministic
         self._arguments = arguments
@@ -879,7 +967,14 @@ class WindowExpression(Expression):
                 elif JVM_INT_MIN <= start <= JVM_INT_MAX:
                     expr.window.frame_spec.lower.value.literal.integer = start
                 else:
-                    raise ValueError(f"start is out of bound: {start}")
+                    raise PySparkValueError(
+                        error_class="VALUE_NOT_BETWEEN",
+                        message_parameters={
+                            "arg_name": "start",
+                            "min": str(JVM_INT_MIN),
+                            "max": str(JVM_INT_MAX),
+                        },
+                    )
 
                 end = self._windowSpec._frame._end
                 if end == 0:
@@ -889,7 +984,14 @@ class WindowExpression(Expression):
                 elif JVM_INT_MIN <= end <= JVM_INT_MAX:
                     expr.window.frame_spec.upper.value.literal.integer = end
                 else:
-                    raise ValueError(f"end is out of bound: {end}")
+                    raise PySparkValueError(
+                        error_class="VALUE_NOT_BETWEEN",
+                        message_parameters={
+                            "arg_name": "end",
+                            "min": str(JVM_INT_MIN),
+                            "max": str(JVM_INT_MAX),
+                        },
+                    )
 
             else:
                 expr.window.frame_spec.frame_type = (
@@ -916,3 +1018,12 @@ class WindowExpression(Expression):
 
     def __repr__(self) -> str:
         return f"WindowExpression({str(self._windowFunction)}, ({str(self._windowSpec)}))"
+
+
+class DistributedSequenceID(Expression):
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        unresolved_function = UnresolvedFunction(name="distributed_sequence_id", args=[])
+        return unresolved_function.to_plan(session)
+
+    def __repr__(self) -> str:
+        return "DistributedSequenceID()"

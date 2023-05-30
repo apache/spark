@@ -34,7 +34,6 @@ HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
     -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
-    hadoop-2-hive-2.3
     hadoop-3-hive-2.3
 )
 
@@ -63,7 +62,7 @@ SCALA_BINARY_VERSION=$($MVN -q \
     -Dexec.args='${scala.binary.version}' \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
-if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
+if [[ "$SCALA_BINARY_VERSION" != "2.13" ]]; then
   echo "Skip dependency testing on $SCALA_BINARY_VERSION"
   exit 0
 fi
@@ -85,8 +84,6 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
   if [[ $HADOOP_HIVE_PROFILE == **hadoop-3-hive-2.3** ]]; then
     HADOOP_PROFILE=hadoop-3
-  else
-    HADOOP_PROFILE=hadoop-2
   fi
   echo "Performing Maven install for $HADOOP_HIVE_PROFILE"
   $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q

@@ -148,7 +148,7 @@ object ResolveReferencesInAggregate extends SQLConfHelper
    * Aggregate.
    */
   private def expandGroupByAll(selectList: Seq[NamedExpression]): Option[Seq[Expression]] = {
-    val groupingExprs = selectList.filter(!_.exists(AggregateExpression.isAggregate))
+    val groupingExprs = selectList.filter(e => !AggregateExpression.containsAggregate(e))
     // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
     // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
     // not automatically infer the grouping column to be "i".
@@ -181,7 +181,7 @@ object ResolveReferencesInAggregate extends SQLConfHelper
    *  "sum(j) / 2" -> false
    */
   private def containsAttribute(expr: Expression): Boolean = expr match {
-    case _ if AggregateExpression.isAggregate(expr) =>
+    case _: AggregateExpression =>
       // Don't recurse into AggregateExpressions
       false
     case _: Attribute =>
