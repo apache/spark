@@ -893,9 +893,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "IDENTIFIER(1)()"
+    "startIndex" : 19,
+    "stopIndex" : 19,
+    "fragment" : "1"
   } ]
 }
 

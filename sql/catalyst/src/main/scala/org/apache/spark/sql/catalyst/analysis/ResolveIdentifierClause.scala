@@ -18,23 +18,38 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_IDENTIFIER
 import org.apache.spark.sql.types.StringType
 
 /**
- * Resolves the catalog of the name parts for table/view/function/namespace.
+ * Resolves the identifier expressions and builds the original plans/expressions.
  */
-object IdentifierClauseUtil {
-  private def getNotNullFoldableString(clauseName: String, expr: Expression): String = {
+object ResolveIdentifierClause extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
+    case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved =>
+      p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr))
+    case other =>
+      other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
+        case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
+          e.exprBuilder.apply(evalIdentifierExpr(e.identifierExpr))
+      }
+  }
+
+  private def evalIdentifierExpr(expr: Expression): Seq[String] = {
     expr match {
       case e if !e.foldable => expr.failAnalysis(
         errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
         messageParameters = Map(
-          "name" -> clauseName,
+          "name" -> "IDENTIFIER",
           "expr" -> expr.sql))
       case e if e.dataType != StringType => expr.failAnalysis(
         errorClass = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
         messageParameters = Map(
-          "name" -> clauseName,
+          "name" -> "IDENTIFIER",
           "expr" -> expr.sql,
           "dataType" -> e.dataType.catalogString))
       case e =>
@@ -42,15 +57,12 @@ object IdentifierClauseUtil {
           case null => expr.failAnalysis(
             errorClass = "NOT_A_CONSTANT_STRING.NULL",
             messageParameters = Map(
-              "name" -> clauseName,
+              "name" -> "IDENTIFIER",
               "expr" -> expr.sql))
-          case other => other.toString // OK
+          case other =>
+            // Parse the identifier string to name parts.
+            UnresolvedAttribute(other.toString).nameParts
         }
     }
-  }
-
-  def evalIdentifierClause(expr: Expression): Seq[String] = {
-    val str = getNotNullFoldableString("IDENTIFIER", expr)
-    UnresolvedAttribute(str).nameParts
   }
 }
