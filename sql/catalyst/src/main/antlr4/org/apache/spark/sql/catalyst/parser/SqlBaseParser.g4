@@ -317,9 +317,9 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF NOT EXISTS)?)? (BY NAME)? identifierList?        #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference (BY NAME)? partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
-    | INSERT INTO TABLE? identifierReference (BY NAME)? REPLACE whereClause                                            #insertIntoReplaceWhere
+    : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF NOT EXISTS)?)? (BY NAME)? identifierList? #insertOverwriteTable
+    | INSERT INTO TABLE? identifierReference (BY NAME)? partitionSpec? (IF NOT EXISTS)? identifierList?        #insertIntoTable
+    | INSERT INTO TABLE? identifierReference (BY NAME)? REPLACE whereClause                                    #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
     ;
