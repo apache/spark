@@ -512,11 +512,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(
-        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
+        Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
         Project(Seq(x, y, a3, b3),
           Join(testRelation2, testRelation3, LeftOuter,
             Some(And(y === y, x === a3)), JoinHint.NONE)))
-    check(innerPlan, outerPlan, correctAnswer, Seq.empty[Expression])
+    check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
   }
 
   test("SPARK-43780: union all in subquery with correlated join") {

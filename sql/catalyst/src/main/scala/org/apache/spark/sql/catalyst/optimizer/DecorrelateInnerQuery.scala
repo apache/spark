@@ -816,10 +816,13 @@ object DecorrelateInnerQuery extends PredicateHelper {
                 val equivalences =
                   if (underSetOp) AttributeMap.empty[Attribute]
                   else collectEquivalentOuterReferences(correlated)
-                // Do not split the join predicate for non-inner joins.
-                val (equalityCond, predicates) =
-                  if (underSetOp || !isInnerJoin) (Seq.empty[Expression], correlated)
+                var (equalityCond, predicates) =
+                  if (underSetOp) (Seq.empty[Expression], correlated)
                   else correlated.partition(canPullUpOverAgg)
+                // Fully preserve the join predicate for non-inner joins.
+                if (!isInnerJoin) {
+                  predicates = predicates ++ equalityCond
+                }
                 (correlated, uncorrelated, equalityCond, predicates, equivalences)
               } else {
                 (Seq.empty[Expression],
