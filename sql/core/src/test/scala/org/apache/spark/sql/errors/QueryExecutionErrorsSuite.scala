@@ -916,6 +916,7 @@ class QueryExecutionErrorsSuite
         checkError(
           exception = e,
           errorClass = "CANNOT_FIND_BATCH",
+          sqlState = "42K03",
           parameters = Map("batchMetadataFile" -> batchMetadataFileName.toString())
         )
       }
