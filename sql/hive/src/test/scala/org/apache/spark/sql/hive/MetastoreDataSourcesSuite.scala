@@ -1251,17 +1251,21 @@ class MetastoreDataSourcesSuite extends QueryTest
       checkAnswer(table(tableName),
         Seq(Row(1, 2), Row(1, 2)))
 
-      var e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
-      }
-      assert(e.getMessage.contains(
-        s"Cannot overwrite table $SESSION_CATALOG_NAME.default.$tableName " +
-        "that is also being read from"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
 
-      e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
-      }
-      checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+      checkError(
+        exception = intercept[AnalysisException] {
+          table(tableName).write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
+        },
+        errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
     }
   }
 
@@ -1285,10 +1289,13 @@ class MetastoreDataSourcesSuite extends QueryTest
         table(tableName),
         Seq(Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2), Row(1, 2)))
 
-      val e = intercept[AnalysisException] {
-        table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
-      }.getMessage
-      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`tab1`")
+      )
     }
   }
 

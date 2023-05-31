@@ -634,6 +634,12 @@
     ],
     "sqlState" : "38000"
   },
+  "FAILED_PARSE_STRUCT_TYPE" : {
+    "message" : [
+      "Failed parsing struct: <raw>."
+    ],
+    "sqlState" : "22018"
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
@@ -2320,6 +2326,23 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ]
   },
+  "UNSUPPORTED_OVERWRITE" : {
+    "message" : [
+      "Can't overwrite the target that is also being read from."
+    ],
+    "subClass" : {
+      "PATH" : {
+        "message" : [
+          "The target path is <path>."
+        ]
+      },
+      "TABLE" : {
+        "message" : [
+          "The target table is <table>."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -2475,11 +2498,6 @@
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0002" : {
-    "message" : [
-      "INSERT OVERWRITE DIRECTORY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0004" : {
@@ -3669,11 +3687,6 @@
       "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1254" : {
-    "message" : [
-      "Cannot overwrite a path that is also being read from."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1255" : {
     "message" : [
       "Cannot drop built-in function '<functionName>'."
@@ -3919,11 +3932,6 @@
   "_LEGACY_ERROR_TEMP_1313" : {
     "message" : [
       "'<operation>' does not support bucketBy and sortBy right now."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1315" : {
-    "message" : [
-      "Cannot overwrite table <tableName> that is also being read from."
     ]
   },
   "_LEGACY_ERROR_TEMP_1316" : {
@@ -4559,11 +4567,6 @@
   "_LEGACY_ERROR_TEMP_2121" : {
     "message" : [
       "Do not support type <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2122" : {
-    "message" : [
-      "Failed parsing <simpleString>: <raw>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2124" : {

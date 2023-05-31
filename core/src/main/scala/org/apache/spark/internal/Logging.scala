@@ -139,6 +139,7 @@ trait Logging {
             context.setConfigLocation(url.toURI)
             if (!silent) {
               System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+              Logging.setLogLevelPrinted = true
             }
           case None =>
             System.err.println(s"Spark was unable to load $defaultLogProps")
@@ -164,6 +165,7 @@ trait Logging {
             System.err.printf("Setting default log level to \"%s\".\n", replLevel)
             System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
               "For SparkR, use setLogLevel(newLevel).")
+            Logging.setLogLevelPrinted = true
           }
           Logging.sparkShellThresholdLevel = replLevel
           rootLogger.getAppenders().asScala.foreach {
@@ -189,6 +191,7 @@ private[spark] object Logging {
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
+  @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
   val initLock = new Object()
   try {
