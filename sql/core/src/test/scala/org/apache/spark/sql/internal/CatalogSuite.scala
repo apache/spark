@@ -873,6 +873,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(spark.catalog.currentCatalog().equals("spark_catalog"))
     assert(spark.catalog.listCatalogs().collect().map(c => c.name).toSet ==
       Set("testcat", CatalogManager.SESSION_CATALOG_NAME))
+    assert(spark.catalog.listCatalogs("spark*").collect().map(c => c.name).toSet ==
+      Set(CatalogManager.SESSION_CATALOG_NAME))
+    assert(spark.catalog.listCatalogs("spark2*").collect().map(c => c.name).toSet ==
+      Set.empty)
   }
 
   test("SPARK-39583: Make RefreshTable be compatible with 3 layer namespace") {
