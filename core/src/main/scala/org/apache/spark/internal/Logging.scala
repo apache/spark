@@ -191,7 +191,7 @@ private[spark] object Logging {
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
-  @volatile var setLogLevelPrinted: Boolean = false
+  @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
   val initLock = new Object()
   try {
