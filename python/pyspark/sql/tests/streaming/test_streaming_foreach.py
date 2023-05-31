@@ -21,7 +21,7 @@ import tempfile
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class StreamingTestsForeach(ReusedSQLTestCase):
+class StreamingTestsForeachMixin:
     class ForeachWriterTester:
         def __init__(self, spark):
             self.spark = spark
@@ -243,7 +243,7 @@ class StreamingTestsForeach(ReusedSQLTestCase):
             def open(self, partition):
                 pass
 
-        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+        tester.assert_invalid_writer(WriterWithoutProcess(), "ATTRIBUTE_NOT_CALLABLE")
 
         class WriterWithNonCallableProcess:
             process = True
@@ -276,6 +276,10 @@ class StreamingTestsForeach(ReusedSQLTestCase):
             close = True
 
         tester.assert_invalid_writer(WriterWithNonCallableClose(), "ATTRIBUTE_NOT_CALLABLE")
+
+
+class StreamingTestsForeach(StreamingTestsForeachMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

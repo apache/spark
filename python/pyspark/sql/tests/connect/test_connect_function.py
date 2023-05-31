@@ -867,7 +867,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.check_error(
             exception=pe.exception,
-            error_class="VALUE_OUT_OF_BOUND",
+            error_class="VALUE_NOT_BETWEEN",
             message_parameters={"arg_name": "end", "min": "-2147483648", "max": "2147483647"},
         )
 
@@ -1924,6 +1924,11 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             cdf.select(CF.levenshtein(cdf.b, cdf.c)).toPandas(),
             sdf.select(SF.levenshtein(sdf.b, sdf.c)).toPandas(),
         )
+        self.assert_eq(
+            cdf.select(CF.levenshtein(cdf.b, cdf.c, 1)).toPandas(),
+            sdf.select(SF.levenshtein(sdf.b, sdf.c, 1)).toPandas(),
+        )
+
         self.assert_eq(
             cdf.select(CF.locate("e", cdf.b)).toPandas(),
             sdf.select(SF.locate("e", sdf.b)).toPandas(),

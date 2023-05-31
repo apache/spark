@@ -24,19 +24,25 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class GroupBySlowParityTests(
     GroupBySlowTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_diff(self):
         super().test_diff()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
+    )
     def test_dropna(self):
         super().test_dropna()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43652): Enable GroupBy.rank with Spark Connect.")
     def test_rank(self):
         super().test_rank()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43653): Enable GroupBySlowParityTests.test_split_apply_combine_on_series."
+    )
     def test_split_apply_combine_on_series(self):
         super().test_split_apply_combine_on_series()
 

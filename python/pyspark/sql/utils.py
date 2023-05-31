@@ -37,6 +37,7 @@ from pyspark.errors import (  # noqa: F401
     PythonException,
     UnknownException,
     SparkUpgradeException,
+    PySparkNotImplementedError,
 )
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
@@ -44,6 +45,7 @@ from pyspark.find_spark_home import _find_spark_home
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.pandas._typing import SeriesOrIndex
 
 has_numpy = False
 try:
@@ -143,7 +145,7 @@ def is_remote() -> bool:
     """
     Returns if the current running environment is for Spark Connect.
     """
-    return "SPARK_REMOTE" in os.environ
+    return "SPARK_CONNECT_MODE_ENABLED" in os.environ
 
 
 def try_remote_functions(f: FuncT) -> FuncT:
@@ -226,7 +228,26 @@ def try_remote_observation(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         # TODO(SPARK-41527): Add the support of Observation.
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            raise NotImplementedError()
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "Observation support for Spark Connect"},
+            )
         return f(*args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+def pyspark_column_op(func_name: str) -> Callable[..., "SeriesOrIndex"]:
+    """
+    Wrapper function for column_op to get proper Column class.
+    """
+    from pyspark.pandas.base import column_op
+    from pyspark.sql.column import Column as PySparkColumn
+
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        Column = ConnectColumn
+    else:
+        Column = PySparkColumn  # type: ignore[assignment]
+    return column_op(getattr(Column, func_name))

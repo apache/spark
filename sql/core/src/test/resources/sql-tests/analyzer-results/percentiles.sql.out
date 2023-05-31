@@ -206,9 +206,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_cont"
+    "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -232,9 +232,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_disc"
+    "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -257,9 +257,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "median"
+    "aggFunc" : "\"median(salary)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -283,9 +283,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_cont"
+    "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -309,9 +309,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_disc"
+    "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -334,9 +334,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "median"
+    "aggFunc" : "\"median(salary)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -416,9 +416,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_cont"
+    "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -443,9 +443,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_disc"
+    "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -469,9 +469,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "median"
+    "aggFunc" : "\"median(salary)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -496,9 +496,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_cont"
+    "aggFunc" : "\"percentile_cont(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -523,9 +523,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "percentile_disc"
+    "aggFunc" : "\"percentile_disc(salary, 0.25)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -549,9 +549,9 @@ ORDER BY salary
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2411",
+  "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "messageParameters" : {
-    "aggFunc" : "median"
+    "aggFunc" : "\"median(salary)\""
   },
   "queryContext" : [ {
     "objectType" : "",

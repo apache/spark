@@ -58,9 +58,13 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     // Verify there is no dangling statefulset
     // This depends on the garbage collection happening inside of K8s so give it some time.
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val sets = kubernetesTestComponents.kubernetesClient.apps().statefulSets().list().getItems
-      val scalaSets = sets.asScala
-      scalaSets.size shouldBe (0)
+      val sets = kubernetesTestComponents.kubernetesClient
+        .apps()
+        .statefulSets()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .list()
+        .getItems
+      sets.asScala.size shouldBe 0
     }
   }
 
@@ -164,8 +168,10 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkPiAndVerifyCompletion(
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
-        executorPod.getSpec.getContainers.get(0).getEnv.asScala
-          .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        assert {
+          executorPod.getSpec.getContainers.get(0).getEnv.asScala
+            .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        }
       })
   }
 }

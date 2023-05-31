@@ -59,7 +59,7 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: >-
         ${{
-          ((inputs.branch == 'branch-3.2' || inputs.branch == 'branch-3.3') && 'dongjoon/apache-spark-github-action-image:20220207')
+          (inputs.branch == 'branch-3.3' && 'dongjoon/apache-spark-github-action-image:20220207')
           || steps.infra-image-outputs.outputs.image_url
         }}
     steps:
@@ -80,16 +80,13 @@ jobs:
       id: set-outputs
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
-          # is-changed.py is missing in branch-3.2, and it might run in scheduled build, see also SPARK-39517
           pyspark=true; sparkr=true; tpcds=true; docker=true;
-          if [ -f "./dev/is-changed.py" ]; then
-            pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-            pyspark=`./dev/is-changed.py -m $pyspark_modules`
-            sparkr=`./dev/is-changed.py -m sparkr`
-            tpcds=`./dev/is-changed.py -m sql`
-            docker=`./dev/is-changed.py -m docker-integration-tests`
-          fi
-          # 'build', 'scala-213', and 'java-11-17' are always true for now.
+          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
+          pyspark=`./dev/is-changed.py -m $pyspark_modules`
+          sparkr=`./dev/is-changed.py -m sparkr`
+          tpcds=`./dev/is-changed.py -m sql`
+          docker=`./dev/is-changed.py -m docker-integration-tests`
+          # 'build', 'scala-212', and 'java-11-17' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
@@ -98,7 +95,7 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"scala-213\": \"true\",
+              \"scala-212\": \"true\",
               \"java-11-17\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
@@ -278,7 +275,7 @@ jobs:
       (fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true') &&
-      (inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3')
+      (inputs.branch != 'branch-3.3')
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -344,6 +341,8 @@ jobs:
             pyspark-connect, pyspark-errors
           - >-
             pyspark-pandas-connect
+          - >-
+            pyspark-pandas-slow-connect
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -602,7 +601,7 @@ jobs:
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
-      if: inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3'
+      if: inputs.branch != 'branch-3.3'
       run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies
       run: |
@@ -617,7 +616,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.17.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.19.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
@@ -729,10 +728,10 @@ jobs:
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
-  scala-213:
+  scala-212:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
-    name: Scala 2.13 build with SBT
+    if: fromJson(needs.precondition.outputs.required).scala-212 == 'true'
+    name: Scala 2.12 build with SBT
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
@@ -762,9 +761,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: scala-212-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          scala-213-coursier-
+          scala-212-coursier-
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
@@ -772,8 +771,8 @@ jobs:
         java-version: 8
     - name: Build with SBT
       run: |
-        ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile Test/compile
+        ./dev/change-scala-version.sh 2.12
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.12 compile Test/compile
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:

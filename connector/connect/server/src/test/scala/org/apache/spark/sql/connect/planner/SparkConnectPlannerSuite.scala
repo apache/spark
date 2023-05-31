@@ -55,7 +55,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", new MockObserver())
+    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId", new MockObserver())
   }
 
   def readRel: proto.Relation =
@@ -89,7 +89,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         StructType.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
@@ -464,7 +465,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(

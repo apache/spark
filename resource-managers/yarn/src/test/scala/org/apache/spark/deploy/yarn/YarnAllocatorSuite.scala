@@ -285,7 +285,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     handler.handleAllocatedContainers(Array(container))
 
     // get amount of memory and vcores from resource, so effectively skipping their validation
-    val expectedResources = Resource.newInstance(defaultResource.getMemory(),
+    val expectedResources = Resource.newInstance(defaultResource.getMemorySize(),
       defaultResource.getVirtualCores)
     setResourceRequests(Map("gpu" -> "2G"), expectedResources)
     val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
@@ -638,7 +638,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
-    val rmClientSpy = spy(rmClient)
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val maxExecutors = 11
 
     val (handler, _) = createAllocator(
@@ -723,7 +723,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val memory = defaultResource.getMemory
+      val memory = defaultResource.getMemorySize
       assert(memory ==
         executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
     } finally {
@@ -739,7 +739,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val memory = defaultResource.getMemory
+      val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory * 1.5).toLong)
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
@@ -754,7 +754,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val memory = defaultResource.getMemory
+      val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory * 1.4).toLong)
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
@@ -763,7 +763,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
   test("Test YARN container decommissioning") {
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
-    val rmClientSpy = spy(rmClient)
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])
     val (handler, sparkConfClone) = createAllocator(3, rmClientSpy)
 

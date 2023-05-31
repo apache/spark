@@ -269,6 +269,503 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT count(*) FROM (
+  WITH q1(x) AS (SELECT random() FROM range(1, 5))
+    SELECT * FROM q1
+  UNION
+    SELECT * FROM q1
+) ss
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+WITH w1(c1) AS
+ (WITH w2(c2) AS
+  (WITH w3(c3) AS
+   (WITH w4(c4) AS
+    (WITH w5(c5) AS
+     (WITH w6(c6) AS
+      (WITH w7(c7) AS
+       (WITH w8(c8) AS
+        (SELECT 1)
+        SELECT * FROM w8)
+       SELECT * FROM w7)
+      SELECT * FROM w6)
+     SELECT * FROM w5)
+    SELECT * FROM w4)
+   SELECT * FROM w3)
+  SELECT * FROM w2)
+SELECT * FROM w1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w8
+:     +- Project [1#x AS c8#x]
+:        +- Project [1 AS 1#x]
+:           +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w7
+:     +- Project [c8#x AS c7#x]
+:        +- Project [c8#x]
+:           +- SubqueryAlias w8
+:              +- CTERelationRef xxxx, true, [c8#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w6
+:     +- Project [c7#x AS c6#x]
+:        +- Project [c7#x]
+:           +- SubqueryAlias w7
+:              +- CTERelationRef xxxx, true, [c7#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w5
+:     +- Project [c6#x AS c5#x]
+:        +- Project [c6#x]
+:           +- SubqueryAlias w6
+:              +- CTERelationRef xxxx, true, [c6#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w4
+:     +- Project [c5#x AS c4#x]
+:        +- Project [c5#x]
+:           +- SubqueryAlias w5
+:              +- CTERelationRef xxxx, true, [c5#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w3
+:     +- Project [c4#x AS c3#x]
+:        +- Project [c4#x]
+:           +- SubqueryAlias w4
+:              +- CTERelationRef xxxx, true, [c4#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w2
+:     +- Project [c3#x AS c2#x]
+:        +- Project [c3#x]
+:           +- SubqueryAlias w3
+:              +- CTERelationRef xxxx, true, [c3#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias w1
+:     +- Project [c2#x AS c1#x]
+:        +- Project [c2#x]
+:           +- SubqueryAlias w2
+:              +- CTERelationRef xxxx, true, [c2#x]
++- Project [c1#x]
+   +- SubqueryAlias w1
+      +- CTERelationRef xxxx, true, [c1#x]
+
+
+-- !query
+SELECT ( WITH cte(foo) AS ( VALUES(id) )
+         SELECT (SELECT foo FROM cte) )
+FROM t
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "messageParameters" : {
+    "sqlExpr" : "outer(t.id)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 37,
+    "fragment" : "id"
+  } ]
+}
+
+
+-- !query
+WITH same_name AS (SELECT 42)
+SELECT * FROM same_name, (SELECT 10) AS same_name
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias same_name
+:     +- Project [42 AS 42#x]
+:        +- OneRowRelation
++- Project [42#x, 10#x]
+   +- Join Inner
+      :- SubqueryAlias same_name
+      :  +- CTERelationRef xxxx, true, [42#x]
+      +- SubqueryAlias same_name
+         +- Project [10 AS 10#x]
+            +- OneRowRelation
+
+
+-- !query
+WITH same_name(x) AS (SELECT 42)
+SELECT same_name.x FROM (SELECT 10) AS same_name(x), same_name
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`same_name`.`x`",
+    "referenceNames" : "[`same_name`.`x`, `same_name`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 51,
+    "fragment" : "same_name.x"
+  } ]
+}
+
+
+-- !query
+WITH q AS (SELECT 'foo' AS x)
+SELECT x, typeof(x) FROM q
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias q
+:     +- Project [foo AS x#x]
+:        +- OneRowRelation
++- Project [x#x, typeof(x#x) AS typeof(x)#x]
+   +- SubqueryAlias q
+      +- CTERelationRef xxxx, true, [x#x]
+
+
+-- !query
+with cte as (select id as id_alias from t)
+select id from cte
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`id`",
+    "proposal" : "`id_alias`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 52,
+    "fragment" : "id"
+  } ]
+}
+
+
+-- !query
+with r1 as (select * from r2),
+     r2 as (select 1)
+select 2
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`r2`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 28,
+    "fragment" : "r2"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM
+  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q)
+-- !query analysis
+Project [y#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias q
+      :     +- Project [1 AS x#x]
+      :        +- OneRowRelation
+      +- Project [(x#x + 1) AS y#x]
+         +- SubqueryAlias q
+            +- CTERelationRef xxxx, true, [x#x]
+
+
+-- !query
+select (with q as (select 1 x) select * from q)
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [1 AS x#x]
+:     :        +- OneRowRelation
+:     +- Project [x#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [x#x]
++- OneRowRelation
+
+
+-- !query
+select 1 in (with q as (select 1) select * from q)
+-- !query analysis
+Project [1 IN (list#x []) AS (1 IN (listquery()))#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [1 AS 1#x]
+:     :        +- OneRowRelation
+:     +- Project [1#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [1#x]
++- OneRowRelation
+
+
+-- !query
+SELECT * FROM
+  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q),
+  q
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`q`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 68,
+    "stopIndex" : 68,
+    "fragment" : "q"
+  } ]
+}
+
+
+-- !query
+WITH T1 as (select 1 a)
+select *
+from
+  T1 x,
+  (WITH T1 as (select 2 b) select * from T1) y,
+  T1 z
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias T1
+:     +- Project [1 AS a#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias T1
+:     +- Project [2 AS b#x]
+:        +- OneRowRelation
++- Project [a#x, b#x, a#x]
+   +- Join Inner
+      :- Join Inner
+      :  :- SubqueryAlias x
+      :  :  +- SubqueryAlias T1
+      :  :     +- CTERelationRef xxxx, true, [a#x]
+      :  +- SubqueryAlias y
+      :     +- Project [b#x]
+      :        +- SubqueryAlias T1
+      :           +- CTERelationRef xxxx, true, [b#x]
+      +- SubqueryAlias z
+         +- SubqueryAlias T1
+            +- CTERelationRef xxxx, true, [a#x]
+
+
+-- !query
+WITH TTtt as (select 1 a),
+     `tTTt_2` as (select 2 a)
+select *
+from
+  (WITH TtTt as (select 3 c) select * from ttTT, `tttT_2`)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias TTtt
+:     +- Project [1 AS a#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias tTTt_2
+:     +- Project [2 AS a#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias TtTt
+:     +- Project [3 AS c#x]
+:        +- OneRowRelation
++- Project [c#x, a#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [c#x, a#x]
+         +- Join Inner
+            :- SubqueryAlias ttTT
+            :  +- CTERelationRef xxxx, true, [c#x]
+            +- SubqueryAlias tttT_2
+               +- CTERelationRef xxxx, true, [a#x]
+
+
+-- !query
+select
+  (WITH q AS (select T.x) select * from q)
+from (select 1 x, 2 y) T
+-- !query analysis
+Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [outer(x#x)]
+:     :        +- OneRowRelation
+:     +- Project [x#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [x#x]
++- SubqueryAlias T
+   +- Project [1 AS x#x, 2 AS y#x]
+      +- OneRowRelation
+
+
+-- !query
+select
+  (WITH q AS (select 3 z) select x + t.y + z from q)
+from (select 1 x, 2 y) T
+-- !query analysis
+Project [scalar-subquery#x [x#x && y#x] AS scalarsubquery(x, y)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias q
+:     :     +- Project [3 AS z#x]
+:     :        +- OneRowRelation
+:     +- Project [((outer(x#x) + outer(y#x)) + z#x) AS ((outer(T.x) + outer(T.y)) + z)#x]
+:        +- SubqueryAlias q
+:           +- CTERelationRef xxxx, true, [z#x]
++- SubqueryAlias T
+   +- Project [1 AS x#x, 2 AS y#x]
+      +- OneRowRelation
+
+
+-- !query
+WITH q1 as (select 1 x)
+select * from
+  (with q2 as (select * from q1) select * from q2)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias q1
+:     +- Project [1 AS x#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias q2
+:     +- Project [x#x]
+:        +- SubqueryAlias q1
+:           +- CTERelationRef xxxx, true, [x#x]
++- Project [x#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [x#x]
+         +- SubqueryAlias q2
+            +- CTERelationRef xxxx, true, [x#x]
+
+
+-- !query
+WITH q1 as (select 1 x)
+select * from
+  (with q1 as (select x+1 from q1) select * from q1)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias q1
+:     +- Project [1 AS x#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias q1
+:     +- Project [(x#x + 1) AS (x + 1)#x]
+:        +- SubqueryAlias q1
+:           +- CTERelationRef xxxx, true, [x#x]
++- Project [(x + 1)#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [(x + 1)#x]
+         +- SubqueryAlias q1
+            +- CTERelationRef xxxx, true, [(x + 1)#x]
+
+
+-- !query
+with cte1 as (select 42), cte1 as (select 42) select * FROM cte1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "messageParameters" : {
+    "duplicateNames" : "'cte1'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 64,
+    "fragment" : "with cte1 as (select 42), cte1 as (select 42) select * FROM cte1"
+  } ]
+}
+
+
+-- !query
+with cte1 as (Select id as j from t)
+select * from cte1 where j = (select max(j) from cte1 as cte2)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte1
+:     +- Project [id#x AS j#x]
+:        +- SubqueryAlias t
+:           +- View (`t`, [id#x])
+:              +- Project [cast(id#x as int) AS id#x]
+:                 +- Project [id#x]
+:                    +- SubqueryAlias t
+:                       +- LocalRelation [id#x]
++- Project [j#x]
+   +- Filter (j#x = scalar-subquery#x [])
+      :  +- Aggregate [max(j#x) AS max(j)#x]
+      :     +- SubqueryAlias cte2
+      :        +- SubqueryAlias cte1
+      :           +- CTERelationRef xxxx, true, [j#x]
+      +- SubqueryAlias cte1
+         +- CTERelationRef xxxx, true, [j#x]
+
+
+-- !query
+with cte AS (SELECT * FROM va) SELECT * FROM cte
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`va`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 29,
+    "fragment" : "va"
+  } ]
+}
+
+
+-- !query
+with cte as (select * from cte) select * from cte
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 30,
+    "fragment" : "cte"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t

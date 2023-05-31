@@ -84,7 +84,7 @@ Project [concat(one) AS concat(one)#x]
 -- !query
 select concat(1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query analysis
-Project [concat(cast(1 as string), cast(2 as string), cast(3 as string), hello, cast(true as string), cast(false as string), cast(to_date(20100309, Some(yyyyMMdd), Some(America/Los_Angeles)) as string)) AS concat(1, 2, 3, hello, true, false, to_date(20100309, yyyyMMdd))#x]
+Project [concat(cast(1 as string), cast(2 as string), cast(3 as string), hello, cast(true as string), cast(false as string), cast(to_date(20100309, Some(yyyyMMdd), Some(America/Los_Angeles), true) as string)) AS concat(1, 2, 3, hello, true, false, to_date(20100309, yyyyMMdd))#x]
 +- OneRowRelation
 
 
@@ -98,7 +98,7 @@ Project [concat_ws(#, one) AS concat_ws(#, one)#x]
 -- !query
 select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query analysis
-Project [concat_ws(#, cast(1 as string), cast(2 as string), cast(3 as string), hello, cast(true as string), cast(false as string), cast(to_date(20100309, Some(yyyyMMdd), Some(America/Los_Angeles)) as string)) AS concat_ws(#, 1, 2, 3, hello, true, false, to_date(20100309, yyyyMMdd))#x]
+Project [concat_ws(#, cast(1 as string), cast(2 as string), cast(3 as string), hello, cast(true as string), cast(false as string), cast(to_date(20100309, Some(yyyyMMdd), Some(America/Los_Angeles), true) as string)) AS concat_ws(#, 1, 2, 3, hello, true, false, to_date(20100309, yyyyMMdd))#x]
 +- OneRowRelation
 
 
