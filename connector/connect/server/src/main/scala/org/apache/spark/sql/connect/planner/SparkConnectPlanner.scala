@@ -2943,6 +2943,10 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
-    session.catalog.listCatalogs().logicalPlan
+    if (getListCatalogs.hasPattern) {
+      session.catalog.listCatalogs(getListCatalogs.getPattern).logicalPlan
+    } else {
+      session.catalog.listCatalogs().logicalPlan
+    }
   }
 }

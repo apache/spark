@@ -229,4 +229,7 @@ message SetCurrentCatalog {
 }
 
 // See `spark.catalog.listCatalogs`
-message ListCatalogs { }
+message ListCatalogs {
+  // (Optional) The pattern that the catalog name needs to match
+  optional string pattern = 1;
+}
