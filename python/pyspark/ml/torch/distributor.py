@@ -591,6 +591,12 @@ class TorchDistributor(Distributor):
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
 
+                if context.partitionId() >= num_processes:
+                    raise ValueError(
+                        "TorchDistributor._train_on_dataframe requires setting num_processes "
+                        "equal to input spark dataframe partition number."
+                    )
+
             if is_spark_local_master:
                 # distributed training on a local mode spark cluster
                 def set_gpus(context: "BarrierTaskContext") -> None:
