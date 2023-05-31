@@ -967,9 +967,9 @@ class ScalarPandasUDFTestsMixin:
             self.nondeterministic_vectorized_udf,
             self.nondeterministic_vectorized_iter_udf,
         ]:
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                 df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                 df.agg(sum(random_udf(df.id))).collect()
 
     def test_register_vectorized_udf_basic(self):
