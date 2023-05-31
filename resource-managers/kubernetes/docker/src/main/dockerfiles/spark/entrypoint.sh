@@ -75,9 +75,6 @@ elif ! [ -z ${SPARK_HOME+x} ]; then
   SPARK_CLASSPATH="$SPARK_HOME/conf:$SPARK_CLASSPATH";
 fi
 
-# SPARK-43540: add current working directory into executor classpath
-SPARK_CLASSPATH="$PWD:$SPARK_CLASSPATH"
-
 case "$1" in
   driver)
     shift 1
