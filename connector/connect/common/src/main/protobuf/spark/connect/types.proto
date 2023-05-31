@@ -21,6 +21,7 @@ package spark.connect;
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // This message describes the logical [[DataType]] of something. It does not carry the value
 // itself but only describes it.
