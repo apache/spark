@@ -27,7 +27,6 @@ import org.apache.hadoop.conf.Configuration
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark._
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
@@ -75,6 +74,8 @@ trait AlsoTestWithChangelogCheckpointingEnabled
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
         testBody
       }
+      // in case tests have any code that needs to execute after every test
+      super.afterEach()
     }
   }
 
@@ -87,6 +88,8 @@ trait AlsoTestWithChangelogCheckpointingEnabled
         SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
         testBody
       }
+      // in case tests have any code that needs to execute after every test
+      super.afterEach()
     }
   }
 }
