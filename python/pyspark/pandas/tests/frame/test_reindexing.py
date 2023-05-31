@@ -115,6 +115,10 @@ class FrameReindexingMixin:
         with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.at_time("0:15")
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43557): Enable DataFrameSlowTests.test_between_time for pandas 2.0.0.",
+    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pdf = pd.DataFrame({"A": [1, 2, 3, 4]}, index=idx)

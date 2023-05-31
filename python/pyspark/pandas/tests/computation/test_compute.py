@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -77,6 +78,10 @@ class FrameComputeMixin:
         str_psdf = ps.DataFrame({"A": ["a", "b", "c"]}, index=np.random.rand(3))
         self.assert_eq(str_psdf.clip(1, 3), str_psdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43560): Enable DataFrameSlowTests.test_mad for pandas 2.0.0.",
+    )
     def test_mad(self):
         pdf = pd.DataFrame(
             {
@@ -312,6 +317,10 @@ class FrameComputeMixin:
         self.assert_eq(psdf.nunique(), pdf.nunique())
         self.assert_eq(psdf.nunique(dropna=False), pdf.nunique(dropna=False))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43810): Enable DataFrameSlowTests.test_quantile for pandas 2.0.0.",
+    )
     def test_quantile(self):
         pdf, psdf = self.df_pair
 
@@ -365,6 +374,10 @@ class FrameComputeMixin:
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.quantile([0.25, 0.5, 0.75], numeric_only=False)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43558): Enable DataFrameSlowTests.test_product for pandas 2.0.0.",
+    )
     def test_product(self):
         pdf = pd.DataFrame(
             {"A": [1, 2, 3, 4, 5], "B": [10, 20, 30, 40, 50], "C": ["a", "b", "c", "d", "e"]}
