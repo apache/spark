@@ -833,7 +833,7 @@ abstract class AvroSuite
               parameters = Map("avroPath" -> "field 'a'",
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",
-                "sqlType" -> """"DECIMAL\\(4,3\\)"""",
+                "sqlType" -> "\"DECIMAL\\(4,3\\)\"",
                 "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
               matchPVals = true
             )
