@@ -638,7 +638,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
-    val rmClientSpy = spy(rmClient)
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val maxExecutors = 11
 
     val (handler, _) = createAllocator(
@@ -763,7 +763,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
   test("Test YARN container decommissioning") {
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
-    val rmClientSpy = spy(rmClient)
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])
     val (handler, sparkConfClone) = createAllocator(3, rmClientSpy)
 

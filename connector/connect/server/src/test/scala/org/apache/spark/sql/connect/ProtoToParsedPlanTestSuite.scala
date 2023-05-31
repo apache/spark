@@ -195,7 +195,9 @@ class ProtoToParsedPlanTestSuite
   }
 
   private def removeMemoryAddress(expr: String): String = {
-    expr.replaceAll("@[0-9a-f]+,", ",")
+    expr
+      .replaceAll("@[0-9a-f]+,", ",")
+      .replaceAll("@[0-9a-f]+\\)", ")")
   }
 
   private def readRelation(path: Path): proto.Relation = {

@@ -1500,6 +1500,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(refs.map(_.output).distinct.length == 2)
     }
 
+    withClue("CTE relation has duplicated attributes") {
+      val cteDef = CTERelationDef(testRelation.select($"a", $"a"))
+      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val plan = WithCTE(cteRef.join(cteRef.select($"a")), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 2)
+      assert(refs.map(_.output).distinct.length == 2)
+    }
+
     withClue("references in both CTE relation definition and main query") {
       val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
       val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)

@@ -547,6 +547,11 @@ class OpsOnDiffFramesEnabledTestsMixin:
             ),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43453): Enable OpsOnDiffFramesEnabledTests.test_concat_column_axis "
+        "for pandas 2.0.0.",
+    )
     def test_concat_column_axis(self):
         pdf1 = pd.DataFrame({"A": [0, 2, 4], "B": [1, 3, 5]}, index=[1, 2, 3])
         pdf1.columns.names = ["AB"]
