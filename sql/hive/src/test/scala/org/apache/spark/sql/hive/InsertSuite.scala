@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -914,6 +915,24 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
       SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
       testDefaultColumn
+    }
+  }
+
+  test("Fix issue for partitioned table dynamic overwrite") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTempDir { dir =>
+        withTable("t1") {
+          sql("CREATE TABLE t1 (i int, j int, k int) USING PARQUET PARTITIONED BY (j, k)")
+          sql("INSERT INTO TABLE t1 PARTITION(j = 1, k = 1) SELECT 1")
+          sql("INSERT INTO TABLE t1 PARTITION(j = 1, k = 2) SELECT 2")
+          sql("INSERT INTO TABLE t1 PARTITION(j = 1, k = 3) SELECT 3")
+          checkAnswer(sql("SELECT * FROM t1"), Seq(Row(1, 1, 1), Row(2, 1, 2), Row(3, 1, 3)))
+
+          sql(s"ALTER TABLE t1 SET LOCATION '${dir.getCanonicalPath}'")
+          sql("INSERT OVERWRITE TABLE t1 PARTITION(j = 1, k) SELECT i + 6, k FROM t1 WHERE j = 1")
+          checkAnswer(sql("SELECT * FROM t1"), Seq(Row(7, 1, 1), Row(8, 1, 2), Row(9, 1, 3)))
+        }
+      }
     }
   }
 }
