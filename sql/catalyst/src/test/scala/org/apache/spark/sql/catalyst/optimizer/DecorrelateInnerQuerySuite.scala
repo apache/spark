@@ -201,12 +201,15 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val innerPlan =
       Join(
         testRelation.as("t1"),
-        Filter(OuterReference(y) === 3, testRelation),
+        Filter(OuterReference(y) === b3, testRelation3),
         Inner,
         Some(OuterReference(x) === a),
         JoinHint.NONE)
-    val error = intercept[AssertionError] { DecorrelateInnerQuery(innerPlan, outerPlan.select()) }
-    assert(error.getMessage.contains("Correlated column is not allowed in join"))
+    val correctAnswer =
+      Join(
+        testRelation.as("t1"), testRelation3,
+        Inner, None, JoinHint.NONE)
+    check(innerPlan, outerPlan, correctAnswer, Seq(b3 === y, x === a))
   }
 
   test("correlated values in project") {
@@ -509,10 +512,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(
-        Seq(y), Seq(Alias(count(Literal(1)), "a")(), y),
+        Seq.empty[Expression], Seq(Alias(count(Literal(1)), "a")()),
         Project(Seq(x, y, a3, b3),
-          Join(testRelation2, testRelation3, LeftOuter, Some(x === a3), JoinHint.NONE)))
-    check(innerPlan, outerPlan, correctAnswer, Seq(y === a))
+          Join(testRelation2, testRelation3, LeftOuter,
+            Some(And(y === y, x === a3)), JoinHint.NONE)))
+    check(innerPlan, outerPlan, correctAnswer, Seq.empty[Expression])
   }
 
   test("SPARK-43780: union all in subquery with correlated join") {
