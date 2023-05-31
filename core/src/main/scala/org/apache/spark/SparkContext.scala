@@ -2685,7 +2685,7 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
-  val VALID_LOG_LEVELS =
+  private[spark] val VALID_LOG_LEVELS =
     Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
