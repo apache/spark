@@ -45,9 +45,10 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
     def test_register_java_udaf(self):
         super(PythonUDFArrowTests, self).test_register_java_udaf()
 
-    @unittest.skip("Struct input types are not supported with Arrow optimization")
-    def test_udf_input_serialization_valuecompare_disabled(self):
-        super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
+    # TODO(SPARK-43903): Standardize ArrayType conversion for Python UDF
+    @unittest.skip("Inconsistent ArrayType conversion with/without Arrow.")
+    def test_nested_array(self):
+        super(PythonUDFArrowTests, self).test_nested_array()
 
     def test_complex_input_types(self):
         row = (

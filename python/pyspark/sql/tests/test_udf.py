@@ -872,7 +872,7 @@ class UDFInitializationTests(unittest.TestCase):
         ):
             udf(lambda x: x, "integer")
 
-    def test_nested_structs(self):
+    def test_nested_struct(self):
         df = self.spark.range(1).selectExpr(
             "struct(1, struct('John', 30, ('value', 10))) as nested_struct"
         )
@@ -900,6 +900,20 @@ class UDFInitializationTests(unittest.TestCase):
 
         row = df.select(f("nested_map")).first()
         self.assertEquals(row[0], {"a": {"b": "d"}})
+
+    def test_nested_array(self):
+        df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
+        # Input
+        row = df.select(udf(lambda x: str(x))("nested_array")).first()
+        self.assertEquals(row[0], "[[1, 2], [3, 4]]")
+        # Output
+        @udf(returnType=df.dtypes[0][1])
+        def f(x):
+            x.append([4, 5])
+            return x
+
+        row = df.select(f("nested_array")).first()
+        self.assertEquals(row[0], [[1, 2], [3, 4], [4, 5]])
 
 
 if __name__ == "__main__":
