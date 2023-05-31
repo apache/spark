@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
-import java.util.Objects
 import java.util.StringJoiner
-
-import com.google.common.base.Preconditions
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
@@ -33,8 +30,8 @@ import org.apache.spark.sql.connector.catalog.Identifier
 case class IdentifierImpl(namespace: Array[String], name: String)
   extends Identifier {
 
-  Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null")
-  Preconditions.checkNotNull(name, "Identifier name cannot be null")
+  assert(namespace != null, "Identifier namespace cannot be null")
+  assert(name != null, "Identifier name cannot be null")
 
   override def toString: String = {
     val joiner = new StringJoiner(".")
