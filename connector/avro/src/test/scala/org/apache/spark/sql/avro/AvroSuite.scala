@@ -643,7 +643,7 @@ abstract class AvroSuite
   test("SPARK-43380: Fix Avro data type conversion" +
       " of decimal type to avoid producing incorrect results") {
     withTempPath { path =>
-      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
       // With the flag disabled, we will throw an exception if there is a mismatch
       withSQLConf(confKey -> "false") {
@@ -659,7 +659,7 @@ abstract class AvroSuite
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",
                 "sqlType" -> "decimal\\(4,3\\)",
-                "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
+                "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
               matchPVals = true
             )
           case other =>
@@ -688,7 +688,7 @@ abstract class AvroSuite
   test("SPARK-43380: Fix Avro data type conversion" +
     " of DayTimeIntervalType to avoid producing incorrect results") {
     withTempPath { path =>
-      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
       val schema = StructType(Array(StructField("a", DayTimeIntervalType(), false)))
       val data = Seq(Row(java.time.Duration.ofDays(1).plusSeconds(1)))
 
@@ -710,7 +710,7 @@ abstract class AvroSuite
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval day to second",
                   "sqlType" -> sqlType,
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
+                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
                 matchPVals = true
               )
             case other =>
@@ -732,7 +732,7 @@ abstract class AvroSuite
   test("SPARK-43380: Fix Avro data type conversion" +
     " of YearMonthIntervalType to avoid producing incorrect results") {
     withTempPath { path =>
-      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key
       val schema = StructType(Array(StructField("a", YearMonthIntervalType(), false)))
       val data = Seq(Row(java.time.Period.of(1, 1, 0)))
 
@@ -754,7 +754,7 @@ abstract class AvroSuite
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
                   "sqlType" -> sqlType,
-                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key),
+                  "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
                 matchPVals = true
               )
             case other =>
