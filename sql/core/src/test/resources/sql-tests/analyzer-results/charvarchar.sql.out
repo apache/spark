@@ -692,3 +692,24 @@ select chr(167), chr(247), chr(215)
 -- !query analysis
 Project [chr(cast(167 as bigint)) AS chr(167)#x, chr(cast(247 as bigint)) AS chr(247)#x, chr(cast(215 as bigint)) AS chr(215)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT to_varchar(78.12, '$99.99')
+-- !query analysis
+Project [to_char(78.12, $99.99) AS to_char(78.12, $99.99)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_varchar(111.11, '99.9')
+-- !query analysis
+Project [to_char(111.11, 99.9) AS to_char(111.11, 99.9)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_varchar(12454.8, '99,999.9S')
+-- !query analysis
+Project [to_char(12454.8, 99,999.9S) AS to_char(12454.8, 99,999.9S)#x]
++- OneRowRelation

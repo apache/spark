@@ -617,6 +617,11 @@
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
+  "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
+    "message" : [
+      "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
@@ -829,7 +834,18 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+      "Cannot write to '<tableName>', <reason>:",
+      "Table columns: <tableColumns>.",
+      "Data columns: <dataColumns>."
+    ],
+    "sqlState" : "21S01"
+  },
+  "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "Cannot write to '<tableName>', <reason>:",
+      "Table columns: <tableColumns>.",
+      "Partition columns with static values: <staticPartCols>.",
+      "Data columns: <dataColumns>."
     ],
     "sqlState" : "21S01"
   },
@@ -904,6 +920,23 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_BOUNDARY" : {
+    "message" : [
+      "The boundary <boundary> is invalid: <invalidValue>."
+    ],
+    "subClass" : {
+      "END" : {
+        "message" : [
+          "Expected the value is '0', '<longMaxValue>', '[<intMinValue>, <intMaxValue>]'."
+        ]
+      },
+      "START" : {
+        "message" : [
+          "Expected the value is '0', '<longMinValue>', '[<intMinValue>, <intMaxValue>]'."
+        ]
+      }
+    }
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
@@ -925,6 +958,28 @@
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_DEFAULT_VALUE" : {
+    "message" : [
+      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
+        ]
+      },
+      "SUBQUERY_EXPRESSION" : {
+        "message" : [
+          "which contains subquery expressions."
+        ]
+      },
+      "UNRESOLVED_EXPRESSION" : {
+        "message" : [
+          "which fails to resolve as a valid expression."
+        ]
+      }
+    }
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
@@ -1371,6 +1426,11 @@
     ],
     "sqlState" : "42903"
   },
+  "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
+    "message" : [
+      "Cannot specify ORDER BY or a window frame for <aggFunc>."
+    ]
+  },
   "INVALID_WRITE_DISTRIBUTION" : {
     "message" : [
       "The requested write distribution is invalid."
@@ -1392,6 +1452,11 @@
         ]
       }
     }
+  },
+  "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
+    "message" : [
+      "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
+    ]
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -1784,6 +1849,11 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "SEED_EXPRESSION_IS_UNFOLDABLE" : {
+    "message" : [
+      "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
+    ]
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
@@ -2250,6 +2320,23 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ]
   },
+  "UNSUPPORTED_OVERWRITE" : {
+    "message" : [
+      "Can't overwrite the target that is also being read from."
+    ],
+    "subClass" : {
+      "PATH" : {
+        "message" : [
+          "The target path is <path>."
+        ]
+      },
+      "TABLE" : {
+        "message" : [
+          "The target table is <table>."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -2405,11 +2492,6 @@
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0002" : {
-    "message" : [
-      "INSERT OVERWRITE DIRECTORY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0004" : {
@@ -3430,20 +3512,6 @@
       "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1202" : {
-    "message" : [
-      "Cannot write to '<tableName>', too many data columns:",
-      "Table columns: <tableColumns>.",
-      "Data columns: <dataColumns>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1203" : {
-    "message" : [
-      "Cannot write to '<tableName>', not enough data columns:",
-      "Table columns: <tableColumns>.",
-      "Data columns: <dataColumns>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1204" : {
     "message" : [
       "Cannot write incompatible data to table '<tableName>':",
@@ -3611,11 +3679,6 @@
   "_LEGACY_ERROR_TEMP_1253" : {
     "message" : [
       "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1254" : {
-    "message" : [
-      "Cannot overwrite a path that is also being read from."
     ]
   },
   "_LEGACY_ERROR_TEMP_1255" : {
@@ -3820,16 +3883,6 @@
       "Unable to find the column `<colName>` given [<actualColumns>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1301" : {
-    "message" : [
-      "Boundary start is not a valid integer: <start>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1302" : {
-    "message" : [
-      "Boundary end is not a valid integer: <end>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1304" : {
     "message" : [
       "Unexpected type <className> of the relation <tableName>."
@@ -3873,11 +3926,6 @@
   "_LEGACY_ERROR_TEMP_1313" : {
     "message" : [
       "'<operation>' does not support bucketBy and sortBy right now."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1315" : {
-    "message" : [
-      "Cannot overwrite table <tableName> that is also being read from."
     ]
   },
   "_LEGACY_ERROR_TEMP_1316" : {
@@ -3966,16 +4014,6 @@
       "Cannot specify both version and timestamp when time travelling the table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1335" : {
-    "message" : [
-      "<expr> is not a valid timestamp expression for time travel."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1337" : {
-    "message" : [
-      "Table <tableName> does not support time travel."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
@@ -4019,11 +4057,6 @@
   "_LEGACY_ERROR_TEMP_1346" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1347" : {
-    "message" : [
-      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {
@@ -5439,31 +5472,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2411" : {
-    "message" : [
-      "Cannot specify order by or frame for '<aggFunc>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2413" : {
-    "message" : [
-      "Input argument to <argName> must be a constant."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2414" : {
-    "message" : [
-      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2416" : {
-    "message" : [
-      "join condition '<join>' of type <type> is not a boolean."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2417" : {
-    "message" : [
-      "join condition '<condition>' of type <dataType> is not a boolean."
     ]
   },
   "_LEGACY_ERROR_TEMP_2418" : {

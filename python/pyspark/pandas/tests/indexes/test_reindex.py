@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -38,6 +39,10 @@ class FrameReindexMixin:
         psdf = ps.from_pandas(pdf)
         return pdf, psdf
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43811): Enable DataFrameTests.test_reindex for pandas 2.0.0.",
+    )
     def test_reindex(self):
         index = pd.Index(["A", "B", "C", "D", "E"])
         columns = pd.Index(["numbers"])

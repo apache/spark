@@ -886,6 +886,19 @@ class QueryExecutionErrorsSuite
       errorClass = "_LEGACY_ERROR_TEMP_2249",
       parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
   }
+
+  test("V1 table don't support time travel") {
+    withTable("t") {
+      sql("CREATE TABLE t(c String) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect()
+        },
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
+      )
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

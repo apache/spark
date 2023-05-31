@@ -89,10 +89,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
           throw QueryCompilationErrors.timeTravelUnsupportedError(
             toSQLId(catalogTable.identifier.nameParts))
         } else {
-          throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+          throw QueryCompilationErrors.timeTravelUnsupportedError(
+            toSQLId(catalogTable.identifier.nameParts))
         }
 
-      case _ => throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+      case _ => throw QueryCompilationErrors.timeTravelUnsupportedError(
+        toSQLId(ident.asTableIdentifier.nameParts))
     }
   }
 

@@ -393,7 +393,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     val newExpression = expression.transformWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.plan.output.head
+        // Results of scalar subqueries are nullable (as they get connected to the rest of the
+        // query via left outer join)
+        s.plan.output.head.withNullability(true)
     }
     newExpression.asInstanceOf[E]
   }

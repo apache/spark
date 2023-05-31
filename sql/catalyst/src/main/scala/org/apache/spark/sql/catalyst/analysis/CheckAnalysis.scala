@@ -161,6 +161,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
+    // The target table is not a child plan of the insert command. We should report errors for table
+    // not found first, instead of errors in the input query of the insert command, by doing a
+    // top-down traversal.
+    plan.foreach {
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
+        u.tableNotFound(u.multipartIdentifier)
+
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
+        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        write.table.tableNotFound(tblName)
+
+      case _ =>
+    }
+
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -196,14 +211,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         u.failAnalysis(
           errorClass = "_LEGACY_ERROR_TEMP_2313",
           messageParameters = Map("name" -> u.name))
-
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
-        u.tableNotFound(u.multipartIdentifier)
-
-      // TODO (SPARK-27484): handle streaming write commands when we have them.
-      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
-        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.tableNotFound(tblName)
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -329,8 +336,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
                 agg.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2411",
-                  messageParameters = Map("aggFunc" -> agg.aggregateFunction.prettyName))
+                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
               case other =>
@@ -344,8 +351,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             e.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2413",
-              messageParameters = Map("argName" -> e.prettyName))
+              errorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
+              messageParameters = Map(
+                "seedExpr" -> toSQLExpr(e.seedExpression),
+                "exprWithSeed" -> toSQLExpr(e)))
 
           case p: Parameter =>
             p.failAnalysis(
@@ -363,10 +372,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case _: TimestampType =>
               case _ =>
                 etw.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2414",
+                  errorClass = "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE",
                   messageParameters = Map(
-                    "evName" -> etw.eventTime.name,
-                    "evType" -> etw.eventTime.dataType.catalogString))
+                    "eventName" -> toSQLId(etw.eventTime.name),
+                    "eventType" -> toSQLType(etw.eventTime.dataType)))
             }
           case f: Filter if f.condition.dataType != BooleanType =>
             f.failAnalysis(
@@ -378,18 +387,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case j @ Join(_, _, _, Some(condition), _) if condition.dataType != BooleanType =>
             j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2416",
+              errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
               messageParameters = Map(
-                "join" -> condition.sql,
-                "type" -> condition.dataType.catalogString))
+                "joinCondition" -> toSQLExpr(condition),
+                "conditionType" -> toSQLType(condition.dataType)))
 
           case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
               if condition.dataType != BooleanType =>
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2417",
-              messageParameters = Map(
-                "condition" -> condition.sql,
-                "dataType" -> condition.dataType.catalogString))
+            throw SparkException.internalError(
+              msg = s"join condition '${toSQLExpr(condition)}' " +
+                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
             if (!toleranceAssertion.foldable) {

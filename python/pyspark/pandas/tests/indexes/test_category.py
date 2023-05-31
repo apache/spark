@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 from distutils.version import LooseVersion
 
 import pandas as pd
@@ -74,6 +75,10 @@ class CategoricalIndexTestsMixin:
         ):
             ps.CategoricalIndex([1, 2, 3]).all()
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43568): Enable CategoricalIndexTests.test_categories_setter for pandas 2.0.0.",
+    )
     def test_categories_setter(self):
         pdf = pd.DataFrame(
             {
@@ -117,6 +122,10 @@ class CategoricalIndexTestsMixin:
         self.assertRaises(ValueError, lambda: psidx.add_categories(3))
         self.assertRaises(ValueError, lambda: psidx.add_categories([4, 4]))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43633): Enable CategoricalIndexTests.test_remove_categories for pandas 2.0.0.",
+    )
     def test_remove_categories(self):
         pidx = pd.CategoricalIndex([1, 2, 3], categories=[3, 2, 1])
         psidx = ps.from_pandas(pidx)
@@ -201,6 +210,10 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(pscidx.astype(str), pcidx.astype(str))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43567): Enable CategoricalIndexTests.test_factorize for pandas 2.0.0.",
+    )
     def test_factorize(self):
         pidx = pd.CategoricalIndex([1, 2, 3, None])
         psidx = ps.from_pandas(pidx)

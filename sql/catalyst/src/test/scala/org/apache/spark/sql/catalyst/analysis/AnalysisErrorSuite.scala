@@ -361,10 +361,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
     messageParameters = Map("sqlExpr" -> "\"1\"", "filter" -> "\"1\"", "type" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "non-boolean join conditions",
     testRelation.join(testRelation, condition = Some(Literal(1))),
-    "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+    errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+    messageParameters = Map("joinCondition" -> "\"1\"", "conditionType" -> "\"INT\""))
 
   errorClassTest(
     "missing group by",
@@ -964,10 +965,17 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
-    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
-      val plan = Project(Seq(r.as("r")), testRelation)
-      assertAnalysisError(plan,
-        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    Seq((Rand("a".attr), "\"rand(a)\""),
+      (Randn("a".attr), "\"randn(a)\"")).foreach {
+      case (r, expectedArg) =>
+        val plan = Project(Seq(r.as("r")), testRelation)
+        assertAnalysisErrorClass(plan,
+          expectedErrorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
+          expectedMessageParameters = Map(
+            "seedExpr" -> "\"a\"",
+            "exprWithSeed" -> expectedArg),
+          caseSensitive = false
+        )
     }
     Seq(
       Rand(1.0) -> ("\"rand(1.0)\"", "\"1.0\"", "\"DOUBLE\""),
