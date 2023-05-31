@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.connect.proto

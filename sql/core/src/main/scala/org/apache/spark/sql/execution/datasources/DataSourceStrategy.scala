@@ -164,7 +164,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _) =>
+        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _)
+        if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -223,7 +224,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       // We write to staging directories and move to final partition directories after writing
       // job is done. So it is ok to have outputPath try to overwrite inputpath.
       if (overwrite && !insertCommand.dynamicPartitionOverwrite) {
-        DDLUtils.verifyNotReadPath(actualQuery, outputPath)
+        DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
       }
       insertCommand
   }

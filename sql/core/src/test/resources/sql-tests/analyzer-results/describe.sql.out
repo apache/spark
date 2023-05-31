@@ -161,10 +161,10 @@ DESC t PARTITION (c='Us', d)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX",
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "inputString" : "PARTITION specification is incomplete: `d`"
+    "partKey" : "`d`"
   },
   "queryContext" : [ {
     "objectType" : "",

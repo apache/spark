@@ -30,7 +30,7 @@ from py4j.java_gateway import JavaObject
 from pyspark import SparkContext
 from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -419,8 +419,9 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = jPythonUDF.expr().resultId().id()
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, profiler)
             else:  # memory_profiler_enabled
                 f = self.func
@@ -436,8 +437,9 @@ class UserDefinedFunction:
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
                 judf = self._create_judf(func)
-                jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-                id = jPythonUDF.expr().resultId().id()
+                jUDFExpr = judf.builder(_to_seq(sc, cols, _to_java_expr))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                id = jUDFExpr.resultId().id()
                 sc.profiler_collector.add_profiler(id, memory_profiler)
         else:
             judf = self._judf

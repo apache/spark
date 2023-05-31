@@ -138,4 +138,11 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(quoteIfNeeded("_") === "_")
     assert(quoteIfNeeded("") === "``")
   }
+
+  test("SPARK-43841: mix of multipart and single-part identifiers") {
+    val baseString = "b"
+    val testStrings = Seq("c1", "v1.c2", "v2.c2") // mix of multipart and single-part
+    val expectedOutput = Seq("c1", "v1.c2", "v2.c2")
+    assert(orderSuggestedIdentifiersBySimilarity(baseString, testStrings) === expectedOutput)
+  }
 }

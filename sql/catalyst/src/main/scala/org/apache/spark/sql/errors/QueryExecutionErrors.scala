@@ -54,7 +54,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.CircularBuffer
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -1305,8 +1305,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2122",
-      messageParameters = Map("simpleString" -> StructType.simpleString, "raw" -> raw))
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
+      messageParameters = Map("raw" -> toSQLValue(raw, StringType)))
   }
 
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
@@ -1407,6 +1407,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkConcurrentModificationException(
       errorClass = "CONCURRENT_QUERY",
       messageParameters = Map.empty[String, String])
+  }
+
+  def concurrentStreamLogUpdate(batchId: Long): Throwable = {
+    new SparkException(
+      errorClass = "CONCURRENT_STREAM_LOG_UPDATE",
+      messageParameters = Map("batchId" -> batchId.toString),
+      cause = null)
   }
 
   def cannotParseJsonArraysAsStructsError(): SparkRuntimeException = {
@@ -2372,8 +2379,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2249",
       messageParameters = Map(
-        "maxBroadcastTableBytes" -> (maxBroadcastTableBytes >> 30).toString(),
-        "dataSize" -> (dataSize >> 30).toString()),
+        "maxBroadcastTableBytes" -> Utils.bytesToString(maxBroadcastTableBytes),
+        "dataSize" -> Utils.bytesToString(dataSize)),
       cause = null)
   }
 
@@ -2648,11 +2655,37 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE.AES_KEY",
+      errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
       messageParameters = Map(
         "parameter" -> (toSQLId("expr") + ", " + toSQLId("key")),
         "functionName" -> aesFuncName,
         "detailMessage" -> detailMessage))
+  }
+
+  def invalidAesIvLengthError(mode: String, actualLength: Int): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.AES_IV_LENGTH",
+      messageParameters = Map(
+        "mode" -> mode,
+        "parameter" -> toSQLId("iv"),
+        "functionName" -> aesFuncName,
+        "actualLength" -> actualLength.toString()))
+  }
+
+  def aesUnsupportedIv(mode: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE.AES_MODE_IV",
+      messageParameters = Map(
+        "mode" -> mode,
+        "functionName" -> toSQLId("aes_encrypt")))
+  }
+
+  def aesUnsupportedAad(mode: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE.AES_MODE_AAD",
+      messageParameters = Map(
+        "mode" -> mode,
+        "functionName" -> toSQLId("aes_encrypt")))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {

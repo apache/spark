@@ -29,10 +29,10 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils, SchemaConverters}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, StructType}
 
-private[protobuf] case class ProtobufDataToCatalyst(
+private[sql] case class ProtobufDataToCatalyst(
     child: Expression,
     messageName: String,
-    descFilePath: Option[String] = None,
+    binaryFileDescriptorSet: Option[Array[Byte]] = None,
     options: Map[String, String] = Map.empty)
     extends UnaryExpression
     with ExpectsInputTypes {
@@ -55,19 +55,15 @@ private[protobuf] case class ProtobufDataToCatalyst(
   private lazy val protobufOptions = ProtobufOptions(options)
 
   @transient private lazy val messageDescriptor =
-    ProtobufUtils.buildDescriptor(messageName, descFilePath)
-    // TODO: Avoid carrying the file name. Read the contents of descriptor file only once
-    //       at the start. Rest of the runs should reuse the buffer. Otherwise, it could
-    //       cause inconsistencies if the file contents are changed the user after a few days.
-    //       Same for the write side in [[CatalystDataToProtobuf]].
+    ProtobufUtils.buildDescriptor(messageName, binaryFileDescriptorSet)
 
   @transient private lazy val fieldsNumbers =
     messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
 
   @transient private lazy val deserializer = {
-    val typeRegistry = descFilePath match {
-      case Some(path) if protobufOptions.convertAnyFieldsToJson =>
-        ProtobufUtils.buildTypeRegistry(path) // This loads all the messages in the file.
+    val typeRegistry = binaryFileDescriptorSet match {
+      case Some(descBytes) if protobufOptions.convertAnyFieldsToJson =>
+        ProtobufUtils.buildTypeRegistry(descBytes) // This loads all the messages in the desc set.
       case None if protobufOptions.convertAnyFieldsToJson =>
         ProtobufUtils.buildTypeRegistry(messageDescriptor) // Loads only connected messages.
       case _ => TypeRegistry.getEmptyTypeRegistry // Default. Json conversion is not enabled.

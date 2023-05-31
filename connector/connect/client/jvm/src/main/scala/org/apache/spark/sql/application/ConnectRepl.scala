@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql.application
 
-import ammonite.compiler.CodeClassWrapper
-import ammonite.util.Bind
 import java.io.{InputStream, OutputStream}
 import java.util.concurrent.Semaphore
+
 import scala.util.control.NonFatal
+
+import ammonite.compiler.CodeClassWrapper
+import ammonite.util.Bind
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SparkSession

@@ -1030,14 +1030,22 @@ object DDLUtils extends Logging {
   /**
    * Throws exception if outputPath tries to overwrite inputpath.
    */
-  def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
+  def verifyNotReadPath(
+      query: LogicalPlan,
+      outputPath: Path,
+      table: Option[CatalogTable] = None) : Unit = {
     val inputPaths = query.collect {
       case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {
-      throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError()
+      table match {
+        case Some(v) =>
+          throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(v.identifier)
+        case _ =>
+          throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError(outputPath.toString)
+      }
     }
   }
 }

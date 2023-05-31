@@ -24,83 +24,123 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class ExpandingParityTests(
     ExpandingTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_count(self):
         super().test_expanding_count()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+    )
     def test_expanding_kurt(self):
         super().test_expanding_kurt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_max(self):
         super().test_expanding_max()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_mean(self):
         super().test_expanding_mean()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_min(self):
         super().test_expanding_min()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_quantile(self):
         super().test_expanding_quantile()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+    )
     def test_expanding_skew(self):
         super().test_expanding_skew()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_std(self):
         super().test_expanding_std()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_sum(self):
         super().test_expanding_sum()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_expanding_var(self):
         super().test_expanding_var()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_count(self):
         super().test_groupby_expanding_count()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+    )
     def test_groupby_expanding_kurt(self):
         super().test_groupby_expanding_kurt()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_max(self):
         super().test_groupby_expanding_max()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_mean(self):
         super().test_groupby_expanding_mean()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_min(self):
         super().test_groupby_expanding_min()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_quantile(self):
         super().test_groupby_expanding_quantile()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+    )
     def test_groupby_expanding_skew(self):
         super().test_groupby_expanding_skew()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_std(self):
         super().test_groupby_expanding_std()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_sum(self):
         super().test_groupby_expanding_sum()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_var(self):
         super().test_groupby_expanding_var()
 
