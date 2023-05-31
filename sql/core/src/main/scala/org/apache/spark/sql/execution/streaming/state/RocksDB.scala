@@ -176,7 +176,7 @@ class RocksDB(
   }
 
   /**
-   * Check if the check exists in the database.
+   * Check if the key exists in the database.
    */
   private def keyExists(key: Array[Byte]): Boolean = {
     if (!db.keyMayExist(readOptions, key, null)) {
