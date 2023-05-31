@@ -719,6 +719,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !o.isInstanceOf[Expand] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
