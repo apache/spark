@@ -823,6 +823,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS =
+    buildConf("spark.sql.adaptive.forceOptimizeSkewsInRebalancePartitions")
+      .doc("When true, force enable OptimizeSkewsInRebalancePartitions" +
+        " even if it introduces extra shuffle.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
       .doc(s"A partition will be merged during splitting if its size is small than this factor " +

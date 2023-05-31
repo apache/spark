@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleOrigin, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -34,7 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
  *                              /                                     \
  *   r0:[m0-b0, m1-b0, m2-b0], r1-0:[m0-b1], r1-1:[m1-b1], r1-2:[m2-b1], r2[m0-b2, m1-b2, m2-b2]
  */
-object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
+case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequirements)
+  extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
@@ -92,9 +93,21 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
       return plan
     }
 
-    plan transformUp {
+    val optimized = plan transformUp {
       case stage: ShuffleQueryStageExec if isSupported(stage.shuffle) =>
         tryOptimizeSkewedPartitions(stage)
+    }
+    val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
+      ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
+    } else {
+      ValidateRequirements.validate(optimized)
+    }
+    if (requirementSatisfied) {
+      optimized
+    } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS)) {
+      ensureRequirements.apply(optimized)
+    } else {
+      plan
     }
   }
 }

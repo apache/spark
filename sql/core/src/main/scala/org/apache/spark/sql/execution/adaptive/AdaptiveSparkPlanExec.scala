@@ -104,7 +104,10 @@ case class AdaptiveSparkPlanExec(
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
-      case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
+      case _ =>
+        val forceOptimizeSkewed = conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN) ||
+          conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS)
+        SimpleCostEvaluator(forceOptimizeSkewed)
     }
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
@@ -129,7 +132,8 @@ case class AdaptiveSparkPlanExec(
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
+      OptimizeSkewedJoin(ensureRequirements),
+      OptimizeSkewInRebalancePartitions(ensureRequirements)
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
@@ -138,7 +142,6 @@ case class AdaptiveSparkPlanExec(
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
-    OptimizeSkewInRebalancePartitions,
     CoalesceShufflePartitions(context.session),
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.

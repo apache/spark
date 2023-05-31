@@ -2849,6 +2849,53 @@ class AdaptiveQueryExecSuite
     val unionDF = aggDf1.union(aggDf2)
     checkAnswer(unionDF.select("id").distinct, Seq(Row(null)))
   }
+
+  test("SPARK-35725: Support optimize skewed partitions even if introduce extra shuffle") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 4) 5 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkPartitionNumber(
+            query: String, skewedPartitionNumber: Int, totalNumber: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          val read = collect(adaptive) {
+            case read: AQEShuffleReadExec => read
+          }
+          if (skewedPartitionNumber > 0) {
+            assert(read.size == 2)
+          }
+          assert(read.last.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
+            skewedPartitionNumber)
+          assert(read.last.partitionSpecs.size == totalNumber)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
+          // partition size [0,192,60,60,60]
+          checkPartitionNumber("SELECT c1, count(1) FROM " +
+            "(SELECT /*+ REBALANCE(c1) */ c1 FROM v) t group by c1", 2, 4)
+          // partition size [180,180,60,0,180]
+          checkPartitionNumber("SELECT c1, count(1) FROM " +
+            "(SELECT /*+ REBALANCE */ c1 FROM v) t group by c1", 6, 7)
+        }
+
+        // no skewed partition should be optimized
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10000") {
+          checkPartitionNumber("SELECT c1, count(1) FROM " +
+            "(SELECT /*+ REBALANCE(c1) */ c1 FROM v) t group by c1", 0, 1)
+        }
+      }
+    }
+  }
 }
 
 /**
