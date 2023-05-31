@@ -128,15 +128,21 @@ def _train_logistic_regression_model_worker_fn(
     loss_fn = torch_nn.CrossEntropyLoss()
 
     optimizer = optim.SGD(ddp_model.parameters(), lr=learning_rate, momentum=momentum)
-    data_loader = _get_spark_partition_data_loader(num_samples_per_worker, batch_size)
+    data_loader = _get_spark_partition_data_loader(
+        num_samples_per_worker, batch_size, num_workers=0
+    )
     for i in range(max_iter):
         ddp_model.train()
 
         step_count = 0
+
+        loss_sum = 0.0
         for x, target in data_loader:
             optimizer.zero_grad()
             output = ddp_model(x.to(torch.float32))
-            loss_fn(output, target.to(torch.long)).backward()
+            loss = loss_fn(output, target.to(torch.long))
+            loss.backward()
+            loss_sum += loss.detach().numpy()
             optimizer.step()
             step_count += 1
 
@@ -146,7 +152,7 @@ def _train_logistic_regression_model_worker_fn(
         #  less than provided `tol`, stop training.
 
         if torch.distributed.get_rank() == 0:
-            print(f"Progress: train epoch {i + 1} completes.")
+            print(f"Progress: train epoch {i + 1} completes, train loss = {loss_sum / step_count}")
 
     if torch.distributed.get_rank() == 0:
         return ddp_model.module.state_dict()
