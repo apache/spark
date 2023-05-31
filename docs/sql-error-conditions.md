@@ -59,12 +59,6 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 
 Cannot cast `<sourceType>` to `<targetType>`.
 
-### CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR
-
-SQLSTATE: none assigned
-
-Error constructing FileDescriptor for `<descFilePath>`.
-
 ### CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE
 
 SQLSTATE: none assigned
@@ -77,17 +71,17 @@ SQLSTATE: none assigned
 
 Unable to convert `<protobufType>` of Protobuf to SQL type `<toType>`.
 
-### CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_ENUM_TYPE
-
-SQLSTATE: none assigned
-
-Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` cannot be written since it's not defined in ENUM `<enumString>`.
-
 ### CANNOT_CONVERT_SQL_TYPE_TO_PROTOBUF_FIELD_TYPE
 
 SQLSTATE: none assigned
 
 Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because schema is incompatible (protobufType = `<protobufType>`, sqlType = `<sqlType>`).
+
+### CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE
+
+SQLSTATE: none assigned
+
+Cannot convert SQL `<sqlColumn>` to Protobuf `<protobufColumn>` because `<data>` is not in defined values for enum: `<enumString>`.
 
 ### CANNOT_DECODE_URL
 

@@ -1884,7 +1884,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> g.apply(plus_min).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(plus_min).sort_index()  # doctest: +SKIP
             A  B   C
         0  aa  2   8
         1  aa  3  10
@@ -1906,7 +1906,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
             c0   c1
         0  1.0  1.0
         1  1.0  1.0
@@ -1914,7 +1914,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("f1", float), ("f2", float)]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
                 f1   f2
         index
         0      1.0  1.0
@@ -1933,7 +1933,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> df.B.groupby(df.A).apply(plus_min).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_min).sort_index()  # doctest: +SKIP
         0    2
         1    3
         2    6

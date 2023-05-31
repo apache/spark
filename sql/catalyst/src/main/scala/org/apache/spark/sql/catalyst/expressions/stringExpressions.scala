@@ -2133,31 +2133,147 @@ case class OctetLength(child: Expression)
 /**
  * A function that return the Levenshtein distance between the two given strings.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.",
+  usage = """
+    _FUNC_(str1, str2[, threshold]) - Returns the Levenshtein distance between the two given strings. If threshold is set and distance more than it, return -1.""",
   examples = """
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
        3
+      > SELECT _FUNC_('kitten', 'sitting', 2);
+       -1
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes with NullIntolerant {
+// scalastyle:on line.size.limit
+case class Levenshtein(
+    left: Expression,
+    right: Expression,
+    threshold: Option[Expression] = None)
+  extends Expression
+  with ImplicitCastInputTypes
+  with NullIntolerant{
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  def this(left: Expression, right: Expression, threshold: Expression) =
+    this(left, right, Option(threshold))
 
-  override def dataType: DataType = IntegerType
-  protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
-    leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
+  def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (left, right) =>
-      s"${ev.value} = $left.levenshteinDistance($right);")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length > 3 || children.length < 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq(2, 3), children.length)
+    } else {
+      super.checkInputDataTypes()
+    }
   }
 
+  override def inputTypes: Seq[AbstractDataType] = threshold match {
+    case Some(_) => Seq(StringType, StringType, IntegerType)
+    case _ => Seq(StringType, StringType)
+  }
+
+  override def children: Seq[Expression] = threshold match {
+    case Some(value) => Seq(left, right, value)
+    case _ => Seq(left, right)
+  }
+
+  override def dataType: DataType = IntegerType
+
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): Levenshtein = copy(left = newLeft, right = newRight)
+      newChildren: IndexedSeq[Expression]): Expression = {
+    threshold match {
+      case Some(_) => copy(left = newChildren(0), right = newChildren(1),
+        threshold = Some(newChildren(2)))
+      case _ => copy(left = newChildren(0), right = newChildren(1))
+    }
+  }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val leftEval = left.eval(input)
+    if (leftEval == null) return null
+    val rightEval = right.eval(input)
+    if (rightEval == null) return null
+    val thresholdEval = threshold.map(_.eval(input))
+    thresholdEval match {
+      case Some(v) =>
+        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
+          v.asInstanceOf[Int])
+      case _ =>
+        leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String])
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    threshold match {
+      case Some(_) => genCodeWithThreshold(ctx, ev, children(2))
+      case _ => genCodeWithoutThreshold(ctx, ev)
+    }
+  }
+
+  private def genCodeWithThreshold(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      thresholdExpr: Expression): ExprCode = {
+    val leftGen = children.head.genCode(ctx)
+    val rightGen = children(1).genCode(ctx)
+    val thresholdGen = thresholdExpr.genCode(ctx)
+    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
+      s"${rightGen.value}, ${thresholdGen.value});"
+    if (nullable) {
+      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+          thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
+            s"""
+              ${ev.isNull} = false;
+              $resultCode
+             """
+          }
+        }
+      }
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      val eval = leftGen.code + rightGen.code + thresholdGen.code
+      ev.copy(code = code"""
+        $eval
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+
+  private def genCodeWithoutThreshold(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val leftGen = children.head.genCode(ctx)
+    val rightGen = children(1).genCode(ctx)
+    val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(${rightGen.value});"
+    if (nullable) {
+      val nullSafeEval = leftGen.code + ctx.nullSafeExec(children.head.nullable, leftGen.isNull) {
+        rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
+          s"""
+            ${ev.isNull} = false;
+            $resultCode
+           """
+        }
+      }
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      val eval = leftGen.code + rightGen.code
+      ev.copy(code = code"""
+        $eval
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
 }
 
 /**
@@ -2356,14 +2472,13 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
     nullSafeCodeGen(ctx, ev, child => {
       val maybeValidateInputCode = if (failOnError) {
         val unbase64 = UnBase64.getClass.getName.stripSuffix("$")
-        val format = UTF8String.fromString("BASE64");
         val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
         s"""
            |if (!$unbase64.isValidBase64($child)) {
            |  throw QueryExecutionErrors.invalidInputInConversionError(
            |    $binaryType,
            |    $child,
-           |    $format,
+           |    UTF8String.fromString("BASE64"),
            |    "try_to_binary");
            |}
        """.stripMargin

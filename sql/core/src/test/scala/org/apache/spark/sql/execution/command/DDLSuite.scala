@@ -534,12 +534,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       parameters = Map(
         "colType" -> "partition",
-        "colName" -> "c",
-        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
-        "tableCols" -> "a, b"))
+        "colName" -> "`c`",
+        "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tbl`",
+        "tableCols" -> "`a`, `b`"))
   }
 
   test("create table - bucket column names not in table definition") {
@@ -547,12 +547,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       parameters = Map(
         "colType" -> "bucket",
-        "colName" -> "c",
-        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
-        "tableCols" -> "a, b"))
+        "colName" -> "`c`",
+        "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tbl`",
+        "tableCols" -> "`a`, `b`"))
   }
 
   test("create table - column repeated in partition columns") {
@@ -2106,8 +2106,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "routineName" -> "`default`.`md5`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
-        fragment = "REFRESH FUNCTION default.md5",
-        start = 0,
+        fragment = "default.md5",
+        start = 17,
         stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
@@ -2140,8 +2140,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "routineName" -> "`func2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(
-          fragment = "REFRESH FUNCTION func2",
-          start = 0,
+          fragment = "func2",
+          start = 17,
           stop = 21))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 

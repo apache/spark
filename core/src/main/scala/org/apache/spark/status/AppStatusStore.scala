@@ -27,6 +27,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
+import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -768,14 +769,6 @@ private[spark] class AppStatusStore(
             values.flatMap(_.peakMemoryMetrics))
       ))
     }
-  }
-
-  def getQuantilesValue(
-    values: IndexedSeq[Double],
-    quantiles: Array[Double]): IndexedSeq[Double] = {
-    val count = values.size
-    val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
-    indices.map(i => values(i.toInt)).toIndexedSeq
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {

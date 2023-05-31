@@ -2825,6 +2825,16 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val ARROW_EXECUTION_USE_LARGE_VAR_TYPES =
+    buildConf("spark.sql.execution.arrow.useLargeVarTypes")
+      .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
+        "types. Regular string and binary types have a 2GiB limit for a column in a single " +
+        "record batch. Large variable types remove this limitation at the cost of higher memory " +
+        "usage per value.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
@@ -2893,6 +2903,16 @@ object SQLConf {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYSPARK_WORKER_PYTHON_EXECUTABLE =
+    buildConf("spark.sql.execution.pyspark.python")
+      .internal()
+      .doc("Python binary executable to use for PySpark in executors when running Python " +
+        "UDF, pandas UDF and pandas function APIs." +
+        "If not set, it falls back to 'spark.pyspark.python' by default.")
+      .version("3.5.0")
+      .stringConf
+      .createOptional
 
   val REPLACE_EXCEPT_WITH_FILTER = buildConf("spark.sql.optimizer.replaceExceptWithFilter")
     .internal()
@@ -4880,6 +4900,8 @@ class SQLConf extends Serializable with Logging {
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
+  def arrowUseLargeVarTypes: Boolean = getConf(ARROW_EXECUTION_USE_LARGE_VAR_TYPES)
+
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
   def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
@@ -4890,6 +4912,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
+
+  def pysparkWorkerPythonExecutable: Option[String] =
+    getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 

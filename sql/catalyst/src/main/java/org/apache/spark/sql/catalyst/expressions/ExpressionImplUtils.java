@@ -42,33 +42,40 @@ public class ExpressionImplUtils {
   private static final int CBC_IV_LEN = 16;
 
   enum CipherMode {
-    ECB("ECB", 0, 0, "AES/ECB/PKCS5Padding", false),
-    CBC("CBC", CBC_IV_LEN, 0, "AES/CBC/PKCS5Padding", true),
-    GCM("GCM", GCM_IV_LEN, GCM_TAG_LEN, "AES/GCM/NoPadding", true);
+    ECB("ECB", 0, 0, "AES/ECB/PKCS5Padding", false, false),
+    CBC("CBC", CBC_IV_LEN, 0, "AES/CBC/PKCS5Padding", true, false),
+    GCM("GCM", GCM_IV_LEN, GCM_TAG_LEN, "AES/GCM/NoPadding", true, true);
 
     private final String name;
     final int ivLength;
     final int tagLength;
     final String transformation;
     final boolean usesSpec;
+    final boolean supportsAad;
 
-    CipherMode(String name, int ivLen, int tagLen, String transformation, boolean usesSpec) {
+    CipherMode(String name,
+               int ivLen,
+               int tagLen,
+               String transformation,
+               boolean usesSpec,
+               boolean supportsAad) {
       this.name = name;
       this.ivLength = ivLen;
       this.tagLength = tagLen;
       this.transformation = transformation;
       this.usesSpec = usesSpec;
+      this.supportsAad = supportsAad;
     }
 
     static CipherMode fromString(String modeName, String padding) {
-      if (modeName.equalsIgnoreCase(ECB.name) &&
-              (padding.equalsIgnoreCase("PKCS") || padding.equalsIgnoreCase("DEFAULT"))) {
+      boolean isNone = padding.equalsIgnoreCase("NONE");
+      boolean isPkcs = padding.equalsIgnoreCase("PKCS");
+      boolean isDefault = padding.equalsIgnoreCase("DEFAULT");
+      if (modeName.equalsIgnoreCase(ECB.name) && (isPkcs || isDefault)) {
         return ECB;
-      } else if (modeName.equalsIgnoreCase(CBC.name) &&
-              (padding.equalsIgnoreCase("PKCS") || padding.equalsIgnoreCase("DEFAULT"))) {
+      } else if (modeName.equalsIgnoreCase(CBC.name) && (isPkcs || isDefault)) {
         return CBC;
-      } else if (modeName.equalsIgnoreCase(GCM.name) &&
-              (padding.equalsIgnoreCase("NONE") || padding.equalsIgnoreCase("DEFAULT"))) {
+      } else if (modeName.equalsIgnoreCase(GCM.name) && (isNone || isDefault)) {
         return GCM;
       }
       throw QueryExecutionErrors.aesModeUnsupportedError(modeName, padding);
@@ -105,11 +112,44 @@ public class ExpressionImplUtils {
   }
 
   public static byte[] aesEncrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
-    return aesInternal(input, key, mode.toString(), padding.toString(), Cipher.ENCRYPT_MODE);
+    return aesEncrypt(input, key, mode, padding, null, null);
   }
 
   public static byte[] aesDecrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
-    return aesInternal(input, key, mode.toString(), padding.toString(), Cipher.DECRYPT_MODE);
+    return aesDecrypt(input, key, mode, padding, null);
+  }
+
+  public static byte[] aesEncrypt(byte[] input,
+                                  byte[] key,
+                                  UTF8String mode,
+                                  UTF8String padding,
+                                  byte[] iv,
+                                  byte[] aad) {
+    return aesInternal(
+            input,
+            key,
+            mode.toString(),
+            padding.toString(),
+            Cipher.ENCRYPT_MODE,
+            iv,
+            aad
+    );
+  }
+
+  public static byte[] aesDecrypt(byte[] input,
+                                  byte[] key,
+                                  UTF8String mode,
+                                  UTF8String padding,
+                                  byte[] aad) {
+    return aesInternal(
+            input,
+            key,
+            mode.toString(),
+            padding.toString(),
+            Cipher.DECRYPT_MODE,
+            null,
+            aad
+    );
   }
 
   private static SecretKeySpec getSecretKeySpec(byte[] key) {
@@ -143,20 +183,40 @@ public class ExpressionImplUtils {
       byte[] key,
       String mode,
       String padding,
-      int opmode) {
+      int opmode,
+      byte[] iv,
+      byte[] aad) {
     try {
       SecretKeySpec secretKey = getSecretKeySpec(key);
       CipherMode cipherMode = CipherMode.fromString(mode, padding);
       Cipher cipher = Cipher.getInstance(cipherMode.transformation);
       if (opmode == Cipher.ENCRYPT_MODE) {
-        // This IV will be 0-length for ECB
-        byte[] iv = generateIv(cipherMode);
+        // This may be 0-length for ECB
+        if (iv == null) {
+          iv = generateIv(cipherMode);
+        } else if (!cipherMode.usesSpec) {
+          // If the caller passes an IV, ensure the mode actually uses it.
+          throw QueryExecutionErrors.aesUnsupportedIv(mode);
+        }
+        if (iv.length != cipherMode.ivLength) {
+          throw QueryExecutionErrors.invalidAesIvLengthError(mode, iv.length);
+        }
+
         if (cipherMode.usesSpec) {
           AlgorithmParameterSpec algSpec = getParamSpec(cipherMode, iv);
           cipher.init(opmode, secretKey, algSpec);
         } else {
           cipher.init(opmode, secretKey);
         }
+
+        // If the cipher mode supports additional authenticated data and it is provided, update it
+        if (aad != null) {
+          if (cipherMode.supportsAad != true) {
+            throw QueryExecutionErrors.aesUnsupportedAad(mode);
+          }
+          cipher.updateAAD(aad);
+        }
+
         byte[] encrypted = cipher.doFinal(input, 0, input.length);
         if (iv.length > 0) {
           ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + encrypted.length);
@@ -171,6 +231,12 @@ public class ExpressionImplUtils {
         if (cipherMode.usesSpec) {
           AlgorithmParameterSpec algSpec = getParamSpec(cipherMode, input);
           cipher.init(opmode, secretKey, algSpec);
+          if (aad != null) {
+            if (cipherMode.supportsAad != true) {
+              throw QueryExecutionErrors.aesUnsupportedAad(mode);
+            }
+            cipher.updateAAD(aad);
+          }
           return cipher.doFinal(input, cipherMode.ivLength, input.length - cipherMode.ivLength);
         } else {
           cipher.init(opmode, secretKey);

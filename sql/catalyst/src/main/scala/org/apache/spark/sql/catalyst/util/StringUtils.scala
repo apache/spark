@@ -109,7 +109,7 @@ object StringUtils extends Logging {
         sorted.map(_._2)
       } else {
         // More than one relation
-        sorted.map(x => s"${x._1}.${x._2}")
+        sorted.map(x => if (x._1.isEmpty) s"${x._2}" else s"${x._1}.${x._2}")
       }
     }
   }

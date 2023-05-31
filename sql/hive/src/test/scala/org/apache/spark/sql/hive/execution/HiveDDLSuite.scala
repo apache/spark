@@ -563,7 +563,7 @@ class HiveDDLSuite
   test("create partitioned table without specifying data type for the partition columns") {
     assertAnalysisError(
       "CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet",
-      "partition column b is not defined in table")
+      "partition column `b` is not defined in table")
   }
 
   test("add/drop partition with location - managed table") {
@@ -1855,11 +1855,12 @@ class HiveDDLSuite
       }
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
-      val e3 = intercept[AnalysisException] {
-        spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
-      }
-      assert(e3.message.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.t " +
-        "that is also being read from"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
     }
   }
 

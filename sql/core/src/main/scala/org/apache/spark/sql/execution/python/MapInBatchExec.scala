@@ -49,6 +49,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
 
+  private val largeVarTypes = conf.arrowUseLargeVarTypes
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -77,6 +79,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
         argOffsets,
         StructType(Array(StructField("struct", outputTypes))),
         sessionLocalTimeZone,
+        largeVarTypes,
         pythonRunnerConf,
         pythonMetrics).compute(batchIter, context.partitionId(), context)
 
