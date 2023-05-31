@@ -16,6 +16,7 @@
 #
 
 import unittest
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -36,6 +37,11 @@ class OpsOnDiffFramesGroupByTestsMixin:
         reset_option("compute.ops_on_diff_frames")
         super().tearDownClass()
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43460): Enable OpsOnDiffFramesGroupByTests.test_groupby_different_lengths "
+        "for pandas 2.0.0.",
+    )
     def test_groupby_different_lengths(self):
         pdfs1 = [
             pd.DataFrame({"c": [4, 2, 7, 3, None, 1, 1, 1, 2], "d": list("abcdefght")}),
@@ -80,6 +86,11 @@ class OpsOnDiffFramesGroupByTestsMixin:
                     almost=as_index,
                 )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43459): Enable OpsOnDiffFramesGroupByTests.test_groupby_multiindex_columns "
+        "for pandas 2.0.0.",
+    )
     def test_groupby_multiindex_columns(self):
         pdf1 = pd.DataFrame(
             {("y", "c"): [4, 2, 7, 3, None, 1, 1, 1, 2], ("z", "d"): list("abcdefght")}
