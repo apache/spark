@@ -82,9 +82,7 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     for row in batch_pdf.itertuples(index=False):
                         yield [
                             field_converter(value)
-                            for value, field_converter in zip(
-                                row, self.field_converters
-                            )
+                            for value, field_converter in zip(row, self.field_converters)
                         ]
                         count += 1
                         if count == self.num_samples:
