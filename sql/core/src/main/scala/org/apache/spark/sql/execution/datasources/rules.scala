@@ -397,7 +397,8 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     }
     val newQuery = try {
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = isByName, conf, supportColDefaultValue = true)
+        tblName, expectedColumns, query, byName = isByName || insert.byName, conf,
+        supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
           e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH" =>
