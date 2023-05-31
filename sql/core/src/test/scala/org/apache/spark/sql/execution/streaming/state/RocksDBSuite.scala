@@ -874,7 +874,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     test(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles config property " +
       "for RocksDB state store instance should succeed") {
       withTempDir { dir =>
+        val sqlConf = SQLConf.get.clone()
         sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles", maxOpenFiles)
+        val dbConf = RocksDBConf(StateStoreConf(sqlConf))
         assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
 
         val remoteDir = dir.getCanonicalPath
@@ -894,7 +896,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       "for RocksDB state store instance should fail") {
       withTempDir { dir =>
         val ex = intercept[IllegalArgumentException] {
-          val sqlConf = SQLConf.get
+          val sqlConf = SQLConf.get.clone()
           sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles",
             maxOpenFiles)
           val dbConf = RocksDBConf(StateStoreConf(sqlConf))
@@ -911,7 +913,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
         assert(ex.getMessage.contains("Invalid value for"))
         assert(ex.getMessage.contains("must be an integer"))
-        sqlConf.unsetConf("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles")
       }
     }
   }
