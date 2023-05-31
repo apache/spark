@@ -658,7 +658,7 @@ abstract class AvroSuite
               parameters = Map("avroPath" -> "field 'a'",
                 "sqlPath" -> "field 'a'",
                 "avroType" -> "decimal\\(12,10\\)",
-                "sqlType" -> "decimal\\(4,3\\)",
+                "sqlType" -> """"DECIMAL\\(4,3\\)"""",
                 "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
               matchPVals = true
             )
@@ -696,7 +696,7 @@ abstract class AvroSuite
       df.write.format("avro").save(path.getCanonicalPath)
 
       withSQLConf(confKey -> "false") {
-        Seq("date", "timestamp", "timestamp_ntz").foreach { sqlType =>
+        Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
           val e = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
@@ -709,7 +709,7 @@ abstract class AvroSuite
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval day to second",
-                  "sqlType" -> sqlType,
+                  "sqlType" -> s""""$sqlType"""",
                   "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
                 matchPVals = true
               )
@@ -739,7 +739,7 @@ abstract class AvroSuite
       df.write.format("avro").save(path.getCanonicalPath)
 
       withSQLConf(confKey -> "false") {
-        Seq("date", "timestamp", "timestamp_ntz").foreach { sqlType =>
+        Seq("DATE", "TIMESTAMP", "TIMESTAMP_NTZ").foreach { sqlType =>
           val e = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
@@ -752,7 +752,7 @@ abstract class AvroSuite
                 parameters = Map("avroPath" -> "field 'a'",
                   "sqlPath" -> "field 'a'",
                   "avroType" -> "interval year to month",
-                  "sqlType" -> sqlType,
+                  "sqlType" -> s""""$sqlType"""",
                   "key" -> SQLConf.LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA.key),
                 matchPVals = true
               )

@@ -3520,7 +3520,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "avroPath" -> avroPath,
         "sqlPath" -> sqlPath,
         "avroType" -> avroType,
-        "sqlType" -> sqlType,
+        "sqlType" -> toSQLType(sqlType),
         "key" -> key
       )
     )
@@ -3535,7 +3535,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "avroPath" -> avroPath,
         "sqlPath" -> sqlPath,
         "avroType" -> avroType,
-        "sqlType" -> sqlType,
+        "sqlType" -> toSQLType(sqlType),
         "key" -> key
       )
     )
