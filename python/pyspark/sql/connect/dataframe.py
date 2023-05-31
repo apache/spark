@@ -1826,9 +1826,7 @@ class DataFrame:
     def cache(self) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot cache on empty plan.")
-        relation = self._plan.plan(self._session.client)
-        self._session.client._analyze(method="persist", relation=relation)
-        return self
+        return self.persist()
 
     cache.__doc__ = PySparkDataFrame.cache.__doc__
 
