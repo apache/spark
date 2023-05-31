@@ -34,6 +34,9 @@ import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.storage.BlockId;
+import org.apache.spark.storage.BlockId$;
+import org.apache.spark.storage.ShufflePushBlockId;
 
 /**
  * Similar to {@link OneForOneBlockFetcher}, but for pushing blocks to remote shuffle service to
@@ -46,7 +49,6 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 public class OneForOneBlockPusher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockPusher.class);
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
-  public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
 
   private final TransportClient client;
   private final String appId;
@@ -155,15 +157,21 @@ public class OneForOneBlockPusher {
     for (int i = 0; i < blockIds.length; i++) {
       assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
         + blockIds[i];
-      String[] blockIdParts = blockIds[i].split("_");
-      if (blockIdParts.length != 5 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
+      BlockId typedBlockId = BlockId$.MODULE$.apply(blockIds[i]);
+      if (!(typedBlockId instanceof ShufflePushBlockId)) {
         throw new IllegalArgumentException(
           "Unexpected shuffle push block id format: " + blockIds[i]);
       }
-      ByteBuffer header =
-        new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
-          Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]),
-            Integer.parseInt(blockIdParts[4]), i).toByteBuffer();
+      ShufflePushBlockId shufflePushBlockId = (ShufflePushBlockId) typedBlockId;
+      ByteBuffer header = new PushBlockStream(
+          appId,
+          appAttemptId,
+          shufflePushBlockId.shuffleId(),
+          shufflePushBlockId.shuffleMergeId(),
+          shufflePushBlockId.mapIndex(),
+          shufflePushBlockId.reduceId(),
+          i
+        ).toByteBuffer();
       client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
         new BlockPushCallback(i, blockIds[i]));
     }

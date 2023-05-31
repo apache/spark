@@ -54,6 +54,14 @@ import org.apache.spark.network.util.DBProvider;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.storage.BlockId;
+import org.apache.spark.storage.BlockId$;
+import org.apache.spark.storage.ShuffleChecksumBlockId;
+import org.apache.spark.storage.ShuffleDataBlockId;
+import org.apache.spark.storage.ShuffleIndexBlockId;
+import org.apache.spark.storage.ShuffleMergedDataBlockId;
+import org.apache.spark.storage.ShuffleMergedIndexBlockId;
+import org.apache.spark.storage.RDDBlockId;
 
 /**
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
@@ -65,6 +73,9 @@ public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
 
   private static final ObjectMapper mapper = new ObjectMapper();
+
+  // This is from: IndexShuffleBlockResolver.NOOP_REDUCE_ID
+  private static final int NOOP_REDUCE_ID = 0;
 
   /**
    * This a common prefix to the key for each app registration we stick in leveldb, so they
@@ -284,9 +295,25 @@ public class ExternalShuffleBlockResolver {
    */
   private void deleteNonShuffleServiceServedFiles(String[] dirs) {
     FilenameFilter filter = (dir, name) -> {
-      // Don't delete shuffle data, shuffle index files or cached RDD files.
-      return !name.endsWith(".index") && !name.endsWith(".data")
-        && (!rddFetchEnabled || !name.startsWith("rdd_"));
+      try {
+        BlockId blockId = BlockId$.MODULE$.apply(name);
+        boolean isIndexFile = ((blockId instanceof ShuffleIndexBlockId) ||
+          (blockId instanceof ShuffleMergedIndexBlockId));
+        boolean isDataFile = ((blockId instanceof ShuffleDataBlockId) ||
+          (blockId instanceof ShuffleMergedDataBlockId));
+        boolean isRDDFile = blockId instanceof RDDBlockId;
+        // Don't delete shuffle data, shuffle index files or cached RDD files.
+        return !isIndexFile && !isDataFile && (!rddFetchEnabled || !isRDDFile);
+      } catch (Exception ex) {
+        // Attempting to catch UnrecognizedBlockId results in a compile error.
+        // This is because scala exceptions are unchecked so the java compiler doesn't know.
+        // Log only the exception message here on purpose because this is an "expected" exception.
+        logger.debug("deleteNonShuffleServiceServedFiles: Unrecognized block id: {}",
+          ex.toString());
+        // This maintain's the previous code's behavior where a file with an unknown block id type
+        // will be deleted.
+        return true;
+      }
     };
 
     for (String localDir : dirs) {
@@ -303,16 +330,17 @@ public class ExternalShuffleBlockResolver {
 
   /**
    * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0.index" into a data file
-   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
-   * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
+   * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
     ExecutorShuffleInfo executor, int shuffleId, long mapId, int startReduceId, int endReduceId) {
+    String shuffleIndexBlockId = new ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name();
+    String shuffleDataBlockId = new ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name();
     String indexFilePath =
       ExecutorDiskUtils.getFilePath(
         executor.localDirs,
         executor.subDirsPerLocalDir,
-        "shuffle_" + shuffleId + "_" + mapId + "_0.index");
+        shuffleIndexBlockId);
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFilePath);
@@ -324,7 +352,7 @@ public class ExternalShuffleBlockResolver {
           ExecutorDiskUtils.getFilePath(
             executor.localDirs,
             executor.subDirsPerLocalDir,
-            "shuffle_" + shuffleId + "_" + mapId + "_0.data")),
+            shuffleDataBlockId)),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
     } catch (ExecutionException e) {
@@ -334,9 +362,10 @@ public class ExternalShuffleBlockResolver {
 
   public ManagedBuffer getDiskPersistedRddBlockData(
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
+    RDDBlockId rddBlockId = new RDDBlockId(rddId, splitIndex);
     File file = new File(
       ExecutorDiskUtils.getFilePath(
-        executor.localDirs, executor.subDirsPerLocalDir, "rdd_" + rddId + "_" + splitIndex));
+        executor.localDirs, executor.subDirsPerLocalDir, rddBlockId.name()));
     long fileLength = file.length();
     ManagedBuffer res = null;
     if (file.exists()) {
@@ -400,9 +429,12 @@ public class ExternalShuffleBlockResolver {
       String algorithm) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     // This should be in sync with IndexShuffleBlockResolver.getChecksumFile
-    String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum." + algorithm;
+    String filename = String.format(
+      "%s.%s",
+      new ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name(),
+      algorithm);
     File checksumFile = new File(
-      ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, fileName));
+      ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, filename));
     ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
     return ShuffleChecksumHelper.diagnoseCorruption(
       algorithm, checksumFile, reduceId, data, checksumByReader);

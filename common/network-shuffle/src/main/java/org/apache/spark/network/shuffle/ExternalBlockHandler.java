@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -54,6 +55,11 @@ import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.storage.BlockId;
+import org.apache.spark.storage.BlockId$;
+import org.apache.spark.storage.RDDBlockId;
+import org.apache.spark.storage.ShuffleBlockId;
+import org.apache.spark.storage.ShuffleBlockChunkId;
 
 /**
  * RPC Handler for a server which can serve both RDD blocks and shuffle blocks from outside
@@ -386,102 +392,60 @@ public class ExternalBlockHandler extends RpcHandler
       String appId = msg.appId;
       String execId = msg.execId;
       String[] blockIds = msg.blockIds;
-      String[] blockId0Parts = blockIds[0].split("_");
-      if (blockId0Parts.length == 4 && blockId0Parts[0].equals(SHUFFLE_BLOCK_ID)) {
-        final int shuffleId = Integer.parseInt(blockId0Parts[1]);
-        final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
-        size = mapIdAndReduceIds.length;
-        blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
-          mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
-      } else if (blockId0Parts.length == 5 && blockId0Parts[0].equals(SHUFFLE_CHUNK_ID)) {
-        final int shuffleId = Integer.parseInt(blockId0Parts[1]);
-        final int shuffleMergeId = Integer.parseInt(blockId0Parts[2]);
-        final int[] reduceIdAndChunkIds = shuffleReduceIdAndChunkIds(blockIds, shuffleId,
-          shuffleMergeId);
-        size = reduceIdAndChunkIds.length;
-        blockDataForIndexFn = index -> mergeManager.getMergedBlockData(msg.appId, shuffleId,
-          shuffleMergeId, reduceIdAndChunkIds[index], reduceIdAndChunkIds[index + 1]);
-      } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
-        final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
-        size = rddAndSplitIds.length;
-        blockDataForIndexFn = index -> blockManager.getRddBlockData(appId, execId,
-          rddAndSplitIds[index], rddAndSplitIds[index + 1]);
+      this.size = blockIds.length;
+      BlockId firstBlockId = BlockId$.MODULE$.apply(blockIds[0]);
+      if (firstBlockId instanceof ShuffleBlockId) {
+        final int expectedShuffleId = ((ShuffleBlockId) firstBlockId).shuffleId();
+        final ShuffleBlockId[] shuffleBlockIds = Arrays.stream(blockIds)
+          .map(blockId -> {
+            ShuffleBlockId shuffleBlockId = (ShuffleBlockId) (BlockId$.MODULE$.apply(blockId));
+            if (expectedShuffleId != shuffleBlockId.shuffleId()) {
+              throw new IllegalArgumentException("Expected shuffleId=" + expectedShuffleId +
+                ", got:" + shuffleBlockId.name());
+            }
+            return shuffleBlockId;
+          })
+          .toArray(typedBlockIdsSize -> new ShuffleBlockId[typedBlockIdsSize]);
+        this.blockDataForIndexFn = index -> blockManager.getBlockData(
+          appId,
+          execId,
+          shuffleBlockIds[index].shuffleId(),
+          shuffleBlockIds[index].mapId(),
+          shuffleBlockIds[index].reduceId());
+      } else if (firstBlockId instanceof ShuffleBlockChunkId) {
+        final int expectedShuffleId = ((ShuffleBlockChunkId) firstBlockId).shuffleId();
+        final int expectedShuffleMergeId = ((ShuffleBlockChunkId) firstBlockId).shuffleMergeId();
+        final ShuffleBlockChunkId[] shuffleBlockChunkIds = Arrays.stream(blockIds)
+          .map(blockId -> {
+              ShuffleBlockChunkId shuffleBlockChunkId =
+                (ShuffleBlockChunkId) (BlockId$.MODULE$.apply(blockId));
+              if ((expectedShuffleId != shuffleBlockChunkId.shuffleId()) ||
+                  (expectedShuffleMergeId != shuffleBlockChunkId.shuffleMergeId())) {
+                throw new IllegalArgumentException(String.format(
+                  "Expected shuffleId = %s and shuffleMergeId = %s but got %s",
+                  expectedShuffleId, expectedShuffleMergeId, shuffleBlockChunkId.name()));
+              }
+              return shuffleBlockChunkId;
+          })
+          .toArray(typedBlockIdsSize -> new ShuffleBlockChunkId[typedBlockIdsSize]);
+        this.blockDataForIndexFn = index -> mergeManager.getMergedBlockData(
+          msg.appId,
+          shuffleBlockChunkIds[index].shuffleId(),
+          shuffleBlockChunkIds[index].shuffleMergeId(),
+          shuffleBlockChunkIds[index].reduceId(),
+          shuffleBlockChunkIds[index].chunkId());
+      } else if (firstBlockId instanceof RDDBlockId) {
+        final RDDBlockId[] rddBlockIds = Arrays.stream(blockIds)
+          .map(blockId -> (RDDBlockId) (BlockId$.MODULE$.apply(blockId)))
+          .toArray(typedBlockIdsSize -> new RDDBlockId[typedBlockIdsSize]);
+        this.blockDataForIndexFn = index -> blockManager.getRddBlockData(
+          appId,
+          execId,
+          rddBlockIds[index].rddId(),
+          rddBlockIds[index].splitIndex());
       } else {
         throw new IllegalArgumentException("Unexpected block id format: " + blockIds[0]);
       }
-    }
-
-    private int[] rddAndSplitIds(String[] blockIds) {
-      final int[] rddAndSplitIds = new int[2 * blockIds.length];
-      for (int i = 0; i < blockIds.length; i++) {
-        String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 3 || !blockIdParts[0].equals("rdd")) {
-          throw new IllegalArgumentException("Unexpected RDD block id format: " + blockIds[i]);
-        }
-        rddAndSplitIds[2 * i] = Integer.parseInt(blockIdParts[1]);
-        rddAndSplitIds[2 * i + 1] = Integer.parseInt(blockIdParts[2]);
-      }
-      return rddAndSplitIds;
-    }
-
-    /**
-     * @param blockIds Regular shuffle blockIds starts with SHUFFLE_BLOCK_ID to be parsed
-     * @param shuffleId shuffle blocks shuffleId
-     * @return mapId and reduceIds of the shuffle blocks in the same order as that of the blockIds
-     *
-     * Regular shuffle blocks format should be shuffle_$shuffleId_$mapId_$reduceId
-     */
-    private int[] shuffleMapIdAndReduceIds(String[] blockIds, int shuffleId) {
-      final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
-      for (int i = 0; i < blockIds.length; i++) {
-        String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 4 || !blockIdParts[0].equals(SHUFFLE_BLOCK_ID)) {
-          throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
-        }
-        if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
-          throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
-            ", got:" + blockIds[i]);
-        }
-        // mapId
-        mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
-        // reduceId
-        mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
-      }
-      return mapIdAndReduceIds;
-    }
-
-    /**
-     * @param blockIds Shuffle merged chunks starts with SHUFFLE_CHUNK_ID to be parsed
-     * @param shuffleId shuffle blocks shuffleId
-     * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
-     *                       of shuffle by an indeterminate stage attempt.
-     * @return reduceId and chunkIds of the shuffle chunks in the same order as that of the
-     *         blockIds
-     *
-     * Shuffle merged chunks format should be
-     * shuffleChunk_$shuffleId_$shuffleMergeId_$reduceId_$chunkId
-     */
-    private int[] shuffleReduceIdAndChunkIds(
-        String[] blockIds,
-        int shuffleId,
-        int shuffleMergeId) {
-      final int[] reduceIdAndChunkIds = new int[2 * blockIds.length];
-      for(int i = 0; i < blockIds.length; i++) {
-        String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 5 || !blockIdParts[0].equals(SHUFFLE_CHUNK_ID)) {
-          throw new IllegalArgumentException("Unexpected shuffle chunk id format: " + blockIds[i]);
-        }
-        if (Integer.parseInt(blockIdParts[1]) != shuffleId ||
-            Integer.parseInt(blockIdParts[2]) != shuffleMergeId) {
-          throw new IllegalArgumentException(String.format("Expected shuffleId = %s"
-            + " and shuffleMergeId = %s but got %s", shuffleId, shuffleMergeId, blockIds[i]));
-        }
-        // reduceId
-        reduceIdAndChunkIds[2 * i] = Integer.parseInt(blockIdParts[3]);
-        // chunkId
-        reduceIdAndChunkIds[2 * i + 1] = Integer.parseInt(blockIdParts[4]);
-      }
-      return reduceIdAndChunkIds;
     }
 
     @Override
@@ -492,7 +456,7 @@ public class ExternalBlockHandler extends RpcHandler
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockDataForIndexFn.apply(index);
-      index += 2;
+      index++;
       metrics.blockTransferRate.mark();
       metrics.blockTransferMessageRate.mark();
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);

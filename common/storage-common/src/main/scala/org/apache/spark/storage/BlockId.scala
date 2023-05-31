@@ -21,8 +21,6 @@ import java.util.UUID
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.network.shuffle.RemoteBlockPushResolver
 
 /**
  * :: DeveloperApi ::
@@ -55,10 +53,17 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
 }
 
-// Format of the shuffle block ids (including data and index) should be kept in sync with
-// org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
+// Common fields across Shuffle Block Ids
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
+sealed trait ShuffleIdCommon {
+  def shuffleId: Int
+  def mapId: Long
+  def reduceId: Int
+}
+
+@DeveloperApi
+case class ShuffleBlockId(shuffleId: Int, mapId: Long, reduceId: Int)
+    extends BlockId with ShuffleIdCommon {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
@@ -68,10 +73,12 @@ case class ShuffleBlockBatchId(
     shuffleId: Int,
     mapId: Long,
     startReduceId: Int,
-    endReduceId: Int) extends BlockId {
+    endReduceId: Int) extends BlockId with ShuffleIdCommon {
   override def name: String = {
     "shuffle_" + shuffleId + "_" + mapId + "_" + startReduceId + "_" + endReduceId
   }
+
+  override def reduceId: Int = startReduceId
 }
 
 @Since("3.2.0")
@@ -86,18 +93,21 @@ case class ShuffleBlockChunkId(
 }
 
 @DeveloperApi
-case class ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
+case class ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int)
+    extends BlockId with ShuffleIdCommon {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
 }
 
 @DeveloperApi
-case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
+case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int)
+    extends BlockId with ShuffleIdCommon {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
 @Since("3.2.0")
 @DeveloperApi
-case class ShuffleChecksumBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
+case class ShuffleChecksumBlockId(shuffleId: Int, mapId: Long, reduceId: Int)
+    extends BlockId with ShuffleIdCommon {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum"
 }
 
@@ -129,7 +139,7 @@ case class ShuffleMergedDataBlockId(
     shuffleId: Int,
     shuffleMergeId: Int,
     reduceId: Int) extends BlockId {
-  override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
+  override def name: String = BlockId.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
     appId + "_" + shuffleId + "_" + shuffleMergeId + "_" + reduceId + ".data"
 }
 
@@ -140,7 +150,7 @@ case class ShuffleMergedIndexBlockId(
     shuffleId: Int,
     shuffleMergeId: Int,
     reduceId: Int) extends BlockId {
-  override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
+  override def name: String = BlockId.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
     appId + "_" + shuffleId + "_" + shuffleMergeId + "_" + reduceId + ".index"
 }
 
@@ -151,7 +161,7 @@ case class ShuffleMergedMetaBlockId(
     shuffleId: Int,
     shuffleMergeId: Int,
     reduceId: Int) extends BlockId {
-  override def name: String = RemoteBlockPushResolver.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
+  override def name: String = BlockId.MERGED_SHUFFLE_FILE_NAME_PREFIX + "_" +
     appId + "_" + shuffleId + "_" + shuffleMergeId + "_" + reduceId + ".meta"
 }
 
@@ -196,6 +206,7 @@ case class CacheId(userId: String, sessionId: String, hash: String) extends Bloc
 
 @DeveloperApi
 object BlockId {
+  val MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
@@ -256,6 +267,6 @@ object BlockId {
       TempShuffleBlockId(UUID.fromString(uuid))
     case TEST(value) =>
       TestBlockId(value)
-    case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)
+    case _ => throw new UnrecognizedBlockId(name)
   }
 }

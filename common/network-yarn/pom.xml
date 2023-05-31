@@ -99,9 +99,7 @@
             <includes>
               <include>*:*</include>
             </includes>
-            <excludes>
-              <exclude>org.scala-lang:scala-library</exclude>
-            </excludes>
+            <!-- scala-library is needed because network-yarn depends on ExternalBlockHandler which depends on BlockId -->
           </artifactSet>
           <filters>
             <filter>

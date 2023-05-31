@@ -135,9 +135,20 @@ network_common = Module(
     ],
 )
 
+storage_common = Module(
+    name="storage-common",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/storage-common/",
+    ],
+    sbt_test_goals=[
+        "storage-common/test",
+    ],
+)
+
 network_shuffle = Module(
     name="network-shuffle",
-    dependencies=[tags],
+    dependencies=[tags, storage_common],
     source_file_regexes=[
         "common/network-shuffle/",
     ],
@@ -170,7 +181,7 @@ launcher = Module(
 
 core = Module(
     name="core",
-    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, storage_common],
     source_file_regexes=[
         "core/",
     ],

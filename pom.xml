@@ -78,6 +78,7 @@
   <modules>
     <module>common/sketch</module>
     <module>common/kvstore</module>
+    <module>common/storage-common</module>
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>

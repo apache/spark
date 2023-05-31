@@ -130,9 +130,9 @@ public class OneForOneBlockFetcherSuite {
   @Test
   public void testFetchThree() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("b2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("rdd_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("rdd_1_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
+    blocks.put("rdd_2_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = fetchBlocks(
@@ -141,17 +141,18 @@ public class OneForOneBlockFetcherSuite {
       new OpenBlocks("app-id", "exec-id", blockIds),
       conf);
 
-    for (int i = 0; i < 3; i ++) {
-      verify(listener, times(1)).onBlockFetchSuccess("b" + i, blocks.get("b" + i));
+    for (int i = 0; i < 3; i++) {
+      String blockName = String.format("rdd_%d_%d", i, i);
+      verify(listener, times(1)).onBlockFetchSuccess(blockName, blocks.get(blockName));
     }
   }
 
   @Test
   public void testFailure() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", null);
-    blocks.put("b2", null);
+    blocks.put("rdd_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("rdd_1_1", null);
+    blocks.put("rdd_2_2", null);
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = fetchBlocks(
@@ -161,17 +162,17 @@ public class OneForOneBlockFetcherSuite {
       conf);
 
     // Each failure will cause a failure to be invoked in all remaining block fetches.
-    verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
+    verify(listener, times(1)).onBlockFetchSuccess("rdd_0_0", blocks.get("rdd_0_0"));
+    verify(listener, times(1)).onBlockFetchFailure(eq("rdd_1_1"), any());
+    verify(listener, times(2)).onBlockFetchFailure(eq("rdd_2_2"), any());
   }
 
   @Test
   public void testFailureAndSuccess() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", null);
-    blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[21])));
+    blocks.put("rdd_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("rdd_1_1", null);
+    blocks.put("rdd_2_2", new NioManagedBuffer(ByteBuffer.wrap(new byte[21])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = fetchBlocks(
@@ -181,10 +182,10 @@ public class OneForOneBlockFetcherSuite {
       conf);
 
     // We may call both success and failure for the same block.
-    verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(1)).onBlockFetchSuccess("b2", blocks.get("b2"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b2"), any());
+    verify(listener, times(1)).onBlockFetchSuccess("rdd_0_0", blocks.get("rdd_0_0"));
+    verify(listener, times(1)).onBlockFetchFailure(eq("rdd_1_1"), any());
+    verify(listener, times(1)).onBlockFetchSuccess("rdd_2_2", blocks.get("rdd_2_2"));
+    verify(listener, times(1)).onBlockFetchFailure(eq("rdd_2_2"), any());
   }
 
   @Test
@@ -274,11 +275,13 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testInvalidShuffleBlockIds() {
-    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+    assertThrows(org.apache.spark.storage.UnrecognizedBlockId.class, () -> fetchBlocks(
+      new LinkedHashMap<>(),
       new String[]{"shuffle_0_0"},
       new FetchShuffleBlocks("app-id", "exec-id", 0, new long[] { 0 },
         new int[][] {{ 0 }}, false), conf));
-    assertThrows(IllegalArgumentException.class, () -> fetchBlocks(new LinkedHashMap<>(),
+    assertThrows(org.apache.spark.storage.UnrecognizedBlockId.class, () -> fetchBlocks(
+      new LinkedHashMap<>(),
       new String[]{"shuffleChunk_0_0_0_0_0"},
       new FetchShuffleBlockChunks("app-id", "exec-id", 0, 0, new int[] { 0 },
         new int[][] {{ 0 }}), conf));

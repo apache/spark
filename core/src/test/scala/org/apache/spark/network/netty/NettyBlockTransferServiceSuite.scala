@@ -125,7 +125,7 @@ class NettyBlockTransferServiceSuite
     clientFactoryField.set(service0, clientFactory)
 
     service0.fetchBlocks("localhost", port, "exec1",
-      Array("block1"), listener, mock(classOf[DownloadFileManager]))
+      Array("rdd_0_0"), listener, mock(classOf[DownloadFileManager]))
     assert(createClientCount === 1)
     assert(hitExecutorDeadException)
   }

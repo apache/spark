@@ -78,6 +78,7 @@ CORE:
   - "common/network-shuffle/**/*"
   - "python/pyspark/*.py"
   - "python/pyspark/tests/**/*.py"
+  - "common/storage-common/**/*"
 SPARK SUBMIT:
   - "bin/spark-submit*"
 SPARK SHELL:

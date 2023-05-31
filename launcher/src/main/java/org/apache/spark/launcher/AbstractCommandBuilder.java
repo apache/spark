@@ -148,6 +148,7 @@ abstract class AbstractCommandBuilder {
         "common/network-shuffle",
         "common/network-yarn",
         "common/sketch",
+        "common/storage-common",
         "common/tags",
         "common/unsafe",
         "core",

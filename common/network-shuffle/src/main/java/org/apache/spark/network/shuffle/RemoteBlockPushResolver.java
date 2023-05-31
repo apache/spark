@@ -85,6 +85,10 @@ import org.apache.spark.network.util.DBProvider;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.storage.ShuffleMergedDataBlockId;
+import org.apache.spark.storage.ShuffleMergedIndexBlockId;
+import org.apache.spark.storage.ShuffleMergedMetaBlockId;
+import org.apache.spark.storage.ShufflePushBlockId;
 
 /**
  * An implementation of {@link MergedShuffleFileManager} that provides the most essential shuffle
@@ -96,7 +100,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
 
-  public static final String MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
   public static final String SHUFFLE_META_DELIMITER = ":";
   public static final String MERGE_DIR_KEY = "mergeDir";
   public static final String ATTEMPT_ID_KEY = "attemptId";
@@ -619,8 +622,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
     // Use string concatenation here to avoid the overhead with String.format on every
     // pushed block.
-    final String streamId = OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX + "_"
-      + msg.shuffleId + "_" + msg.shuffleMergeId + "_" + msg.mapIndex + "_" + msg.reduceId;
+    final String streamId = new ShufflePushBlockId(
+      msg.shuffleId, msg.shuffleMergeId, msg.mapIndex, msg.reduceId).name();
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
@@ -2045,22 +2048,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return targetFile;
     }
 
-    private String generateFileName(
-        String appId,
-        int shuffleId,
-        int shuffleMergeId,
-        int reduceId) {
-      return String.format(
-        "%s_%s_%d_%d_%d", MERGED_SHUFFLE_FILE_NAME_PREFIX, appId, shuffleId,
-          shuffleMergeId, reduceId);
-    }
-
     public File getMergedShuffleDataFile(
         int shuffleId,
         int shuffleMergeId,
         int reduceId) {
-      String fileName = String.format("%s.data", generateFileName(appId, shuffleId,
-        shuffleMergeId, reduceId));
+      String fileName = new ShuffleMergedDataBlockId(appId, shuffleId,
+        shuffleMergeId, reduceId).name();
       return new File(getFilePath(fileName));
     }
 
@@ -2068,8 +2061,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         int shuffleId,
         int shuffleMergeId,
         int reduceId) {
-      String indexName = String.format("%s.index", generateFileName(appId, shuffleId,
-        shuffleMergeId, reduceId));
+      String indexName = new ShuffleMergedIndexBlockId(appId, shuffleId,
+        shuffleMergeId, reduceId).name();
       return getFilePath(indexName);
     }
 
@@ -2077,8 +2070,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         int shuffleId,
         int shuffleMergeId,
         int reduceId) {
-      String metaName = String.format("%s.meta", generateFileName(appId, shuffleId,
-        shuffleMergeId, reduceId));
+      String metaName = new ShuffleMergedMetaBlockId(appId, shuffleId,
+        shuffleMergeId, reduceId).name();
       return new File(getFilePath(metaName));
     }
   }

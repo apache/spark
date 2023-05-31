@@ -73,7 +73,42 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.AnalysisException$"),
     // [SPARK-44535][CONNECT][SQL] Move required Streaming API to sql/api
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.GroupStateTimeout"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.OutputMode"),
+    // [SPARK-43905][CORE] Consolidate BlockId parsing and creation
+    // These classes have all been moved to the common-storage module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.BlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.BlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.BroadcastBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.BroadcastBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.RDDBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.RDDBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleBlockBatchId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleBlockBatchId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleBlockChunkId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleBlockChunkId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleChecksumBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleChecksumBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleDataBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleDataBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleIndexBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleIndexBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedDataBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedDataBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedIndexBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedIndexBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedMetaBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShuffleMergedMetaBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShufflePushBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ShufflePushBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StreamBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StreamBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.TaskResultBlockId"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.TaskResultBlockId$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.UnrecognizedBlockId")
   )
 
   // Default exclude rules
