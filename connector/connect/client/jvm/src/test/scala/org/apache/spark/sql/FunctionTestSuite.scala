@@ -238,12 +238,16 @@ class FunctionTestSuite extends ConnectFunSuite {
       Collections.emptyMap[String, String]))
   testEquals(
     "from_protobuf",
-    pbFn.from_protobuf(a, "FakeMessage", "fakePath", Map.empty[String, String].asJava),
-    pbFn.from_protobuf(a, "FakeMessage", "fakePath"))
+    pbFn.from_protobuf(
+      a,
+      "FakeMessage",
+      "fakeBytes".getBytes(),
+      Map.empty[String, String].asJava),
+    pbFn.from_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
   testEquals(
     "to_protobuf",
-    pbFn.to_protobuf(a, "FakeMessage", "fakePath", Map.empty[String, String].asJava),
-    pbFn.to_protobuf(a, "FakeMessage", "fakePath"))
+    pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes(), Map.empty[String, String].asJava),
+    pbFn.to_protobuf(a, "FakeMessage", "fakeBytes".getBytes()))
 
   test("assert_true no message") {
     val e = assert_true(a).expr

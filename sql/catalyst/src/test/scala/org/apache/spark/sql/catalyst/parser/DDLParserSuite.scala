@@ -42,6 +42,10 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
+  private def internalException(sqlText: String): SparkThrowable = {
+    super.internalException(parsePlan)(sqlText)
+  }
+
   test("create/replace table using - schema") {
     val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
     val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
@@ -2142,8 +2146,8 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "analyze table a.b.c compute statistics xxxx"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      parameters = Map("ctx" -> "xxxx"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -2152,8 +2156,8 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = "analyze table a.b.c partition (a) compute statistics xxxx"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      parameters = Map("ctx" -> "xxxx"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -2169,8 +2173,8 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "ANALYZE TABLES IN a.b.c COMPUTE STATISTICS xxxx"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      parameters = Map("ctx" -> "xxxx"),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      parameters = Map("ctx" -> "XXXX"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
@@ -2844,5 +2848,21 @@ class DDLParserSuite extends AnalysisTest {
       context =
         ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)
     )
+  }
+
+  test("AstBuilder don't support `INSERT OVERWRITE DIRECTORY`") {
+    val insertDirSql =
+      s"""
+         | INSERT OVERWRITE LOCAL DIRECTORY
+         | USING parquet
+         | OPTIONS (
+         |  path 'xxx'
+         | )
+         | SELECT i from t1""".stripMargin
+
+    checkError(
+      exception = internalException(insertDirSql),
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
   }
 }

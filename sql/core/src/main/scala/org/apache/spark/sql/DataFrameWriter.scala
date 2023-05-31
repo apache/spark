@@ -658,11 +658,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
-            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(tableName)
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
+              qualifiedIdent)
           // check hive table relation when overwrite mode
           case relation: HiveTableRelation
               if srcRelations.contains(relation.tableMeta.identifier) =>
-            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(tableName)
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
+              qualifiedIdent)
           case _ => // OK
         }
 

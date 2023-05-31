@@ -256,8 +256,7 @@ object SparkBuild extends PomBuild {
           // see `scalac -Wconf:help` for details
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
-          // "-Wunused:imports",
+          "-Wunused:imports",
           "-Wconf:cat=lint-multiarg-infix:wv",
           "-Wconf:cat=other-nullary-override:wv",
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
@@ -283,7 +282,11 @@ object SparkBuild extends PomBuild {
           // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
           "-Wconf:cat=unchecked&msg=outer reference:s",
           "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
+          // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
+          // from the corresponding files when Scala 2.12 is no longer supported.
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
         )
       }
     }
@@ -1583,6 +1586,7 @@ object TestSettings {
     (Test / javaOptions) += "-ea",
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")
       val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -1598,12 +1602,13 @@ object TestSettings {
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
         "-Djdk.reflect.useDirectMethodHandle=false").mkString(" ")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
+      s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")
+      s"-Xmx$heapSize -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean

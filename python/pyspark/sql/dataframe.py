@@ -3062,9 +3062,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = df.withColumn('id2', lit(3))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
         ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+
+        Don't include columns that are not valid python identifiers.
+
+        >>> df = df.withColumn('1', lit(4))
+        >>> df = df.withColumn('name 1', lit(5))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't include 1 or name 1
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
         """
         attrs = set(super().__dir__())
-        attrs.update(self.columns)
+        attrs.update(filter(lambda s: s.isidentifier(), self.columns))
         return sorted(attrs)
 
     @overload

@@ -967,10 +967,10 @@ ORDER BY salary DESC
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX",
+  "errorClass" : "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
   "sqlState" : "42000",
   "messageParameters" : {
-    "inputString" : "The definition of window `w` is repetitive."
+    "windowName" : "`w`"
   },
   "queryContext" : [ {
     "objectType" : "",

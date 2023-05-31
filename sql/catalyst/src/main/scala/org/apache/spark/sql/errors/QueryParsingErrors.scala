@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.antlr.v4.runtime.ParserRuleContext
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -36,8 +37,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
 
-  def insertOverwriteDirectoryUnsupportedError(ctx: InsertIntoContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0002", ctx)
+  def insertOverwriteDirectoryUnsupportedError(): Throwable = {
+    SparkException.internalError("INSERT OVERWRITE DIRECTORY is not supported.")
   }
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
@@ -73,9 +74,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" -> s"Partition key ${toSQLId(key)} must set value (can't be empty)."),
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
+      messageParameters = Map("partKey" -> toSQLId(key)),
       ctx)
   }
 
@@ -129,34 +129,28 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          s"${toSQLStmt("LATERAL")} can only be used with subquery and table-valued functions."),
+      errorClass = "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC",
       ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" -> s"The definition of window ${toSQLId(name)} is repetitive."),
+      errorClass = "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
+      messageParameters = Map("windowName" -> toSQLId(name)),
       ctx)
   }
 
   def invalidWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" -> s"Window reference ${toSQLId(name)} is not a window specification."),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_WINDOW_REFERENCE",
+      messageParameters = Map("windowName" -> toSQLId(name)),
       ctx)
   }
 
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" -> s"Cannot resolve window reference ${toSQLId(name)}."),
+      errorClass = "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
+      messageParameters = Map("windowName" -> toSQLId(name)),
       ctx)
   }
 
@@ -204,9 +198,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def functionNameUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" -> s"Unsupported function name ${toSQLId(functionName)}"),
+      errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_FUNC_NAME",
+      messageParameters = Map("funcName" -> toSQLId(functionName)),
       ctx)
   }
 
@@ -311,20 +304,23 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def partitionTransformNotExpectedError(
-      name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
+      name: String, expr: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_COLUMN_REFERENCE",
       messageParameters = Map(
-        "inputString" ->
-          s"Expected a column reference for transform ${toSQLId(name)}: $describe"),
+        "transform" -> toSQLId(name),
+        "expr" -> expr),
       ctx)
   }
 
-  def tooManyArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
+  def wrongNumberArgumentsForTransformError(
+      name: String, actualNum: Int, ctx: ApplyTransformContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.TRANSFORM_WRONG_NUM_ARGS",
       messageParameters = Map(
-        "inputString" -> s"Too many arguments for transform ${toSQLId(name)}"),
+        "transform" -> toSQLId(name),
+      "expectedNum" -> "1",
+      "actualNum" -> actualNum.toString),
       ctx)
   }
 
@@ -399,19 +395,10 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def incompletePartitionSpecificationError(
-      key: String, ctx: DescribeRelationContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" -> s"PARTITION specification is incomplete: ${toSQLId(key)}"),
-      ctx)
-  }
-
   def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      messageParameters = Map("ctx" -> ctx.getText),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      messageParameters = Map("ctx" -> toSQLStmt(ctx.getText)),
       ctx)
   }
 
@@ -425,20 +412,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          s"${toSQLStmt("SHOW")} ${toSQLId(identifier)} ${toSQLStmt("FUNCTIONS")} not supported"),
+      errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",
+      messageParameters = Map("scope" -> toSQLId(identifier)),
       ctx)
   }
 
   def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          (s"Invalid pattern in ${toSQLStmt("SHOW FUNCTIONS")}: ${toSQLId(pattern)}. " +
-          s"It must be a ${toSQLType(StringType)} literal.")),
+      errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_PATTERN",
+      messageParameters = Map("pattern" -> toSQLId(pattern)),
       ctx)
   }
 
@@ -558,29 +540,22 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          (s"${toSQLStmt("CREATE FUNCTION")} with both ${toSQLStmt("IF NOT EXISTS")} " +
-          s"and ${toSQLStmt("REPLACE")} is not allowed.")),
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_IF_NOT_EXISTS_AND_REPLACE",
       ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          (s"It is not allowed to define a ${toSQLStmt("TEMPORARY FUNCTION")}" +
-          s" with ${toSQLStmt("IF NOT EXISTS")}.")),
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS",
       ctx)
   }
 
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters = Map(
-        "inputString" -> s"Unsupported function name ${toSQLId(funcName)}"),
+        "statement" -> toSQLStmt("CREATE TEMPORARY FUNCTION"),
+        "funcName" -> toSQLId(funcName)),
       ctx)
   }
 
@@ -588,11 +563,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       databaseName: String,
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          (s"Specifying a database in ${toSQLStmt("CREATE TEMPORARY FUNCTION")} is not allowed: " +
-          toSQLId(databaseName))),
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
+      messageParameters = Map("database" -> toSQLId(databaseName)),
       ctx)
   }
 
@@ -600,10 +572,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       name: Seq[String],
       ctx: TableValuedFunctionContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Map(
-        "inputString" ->
-          ("table valued function cannot specify database name: " + toSQLId(name))),
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      messageParameters = Map("funcName" -> toSQLId(name)),
       ctx)
   }
 
@@ -625,11 +595,10 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX",
+      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       messageParameters = Map(
-        "inputString" ->
-          (s"${toSQLStmt("DROP TEMPORARY FUNCTION")} requires a single part name but got: " +
-          toSQLId(name))),
+        "statement" -> toSQLStmt("DROP TEMPORARY FUNCTION"),
+        "funcName" -> toSQLId(name)),
       ctx)
   }
 

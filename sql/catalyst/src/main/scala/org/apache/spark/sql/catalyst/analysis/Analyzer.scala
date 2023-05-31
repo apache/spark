@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, AUTO_GENERATED_ALIAS, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -55,8 +55,7 @@ import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssig
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
-import org.apache.spark.util.collection.{Utils => CUtils}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and
@@ -280,7 +279,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
-      ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
       ResolveRelations ::
       ResolvePartitionSpec ::
@@ -313,7 +311,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
-      ResolveDefaultColumns(ResolveRelations.resolveRelationOrTempView) ::
       ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
@@ -1080,7 +1077,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
@@ -1113,6 +1110,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }.getOrElse(write)
           case _ => write
         }
+
+      case PlanWithUnresolvedIdentifier(expr, builder) if expr.resolved =>
+         builder(IdentifierClauseUtil.evalIdentifierClause(expr))
 
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews).getOrElse(u)
@@ -1169,8 +1169,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
         }
         if (isTimeTravel) {
-          val target = if (tempViewPlan.isStreaming) "streams" else "views"
-          throw QueryCompilationErrors.timeTravelUnsupportedError(target)
+          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
         }
         tempViewPlan
       }
@@ -1278,53 +1277,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   }
 
   /** Handle INSERT INTO for DSv2 */
-  object ResolveInsertInto extends Rule[LogicalPlan] {
-
-    /** Add a project to use the table column names for INSERT INTO BY NAME */
-    private def createProjectForByNameQuery(i: InsertIntoStatement): LogicalPlan = {
-      SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
-
-      if (i.userSpecifiedCols.size != i.query.output.size) {
-        throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
-          i.userSpecifiedCols.size, i.query.output.size, i.query)
-      }
-      val projectByName = i.userSpecifiedCols.zip(i.query.output)
-        .map { case (userSpecifiedCol, queryOutputCol) =>
-          val resolvedCol = i.table.resolve(Seq(userSpecifiedCol), resolver)
-            .getOrElse(
-              throw QueryCompilationErrors.unresolvedAttributeError(
-                "UNRESOLVED_COLUMN", userSpecifiedCol, i.table.output.map(_.name), i.origin))
-          (queryOutputCol.dataType, resolvedCol.dataType) match {
-            case (input: StructType, expected: StructType) =>
-              // Rename inner fields of the input column to pass the by-name INSERT analysis.
-              Alias(Cast(queryOutputCol, renameFieldsInStruct(input, expected)), resolvedCol.name)()
-            case _ =>
-              Alias(queryOutputCol, resolvedCol.name)()
-          }
-        }
-      Project(projectByName, i.query)
-    }
-
-    private def renameFieldsInStruct(input: StructType, expected: StructType): StructType = {
-      if (input.length == expected.length) {
-        val newFields = input.zip(expected).map { case (f1, f2) =>
-          (f1.dataType, f2.dataType) match {
-            case (s1: StructType, s2: StructType) =>
-              f1.copy(name = f2.name, dataType = renameFieldsInStruct(s1, s2))
-            case _ =>
-              f1.copy(name = f2.name)
-          }
-        }
-        StructType(newFields)
-      } else {
-        input
-      }
-    }
-
+  object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _)
-          if i.query.resolved =>
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
@@ -1527,6 +1483,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
+      // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
+      case i: InsertIntoStatement => ResolveColumnDefaultInInsert(i)
+
       // Wait for other rules to resolve child plans first
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -1645,6 +1605,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
+
+      case u: UpdateTable => ResolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -1796,7 +1758,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               case MergeResolvePolicy.SOURCE => Project(Nil, mergeInto.sourceTable)
               case MergeResolvePolicy.TARGET => Project(Nil, mergeInto.targetTable)
             }
-            resolveMergeExprOrFail(c, resolvePlan)
+            val resolvedExpr = resolveExprInAssignment(c, resolvePlan)
+            val withDefaultResolved = if (conf.enableDefaultColumns) {
+              resolveColumnDefaultInAssignmentValue(
+                resolvedKey,
+                resolvedExpr,
+                QueryCompilationErrors
+                  .defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates())
+            } else {
+              resolvedExpr
+            }
+            checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
+            withDefaultResolved
           case o => o
         }
         Assignment(resolvedKey, resolvedValue)
@@ -1804,15 +1777,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
 
     private def resolveMergeExprOrFail(e: Expression, p: LogicalPlan): Expression = {
-      val resolved = resolveExpressionByPlanChildren(e, p)
-      resolved.references.filter { attribute: Attribute =>
-        !attribute.resolved &&
-          // We exclude attribute references named "DEFAULT" from consideration since they are
-          // handled exclusively by the ResolveDefaultColumns analysis rule. That rule checks the
-          // MERGE command for such references and either replaces each one with a corresponding
-          // value, or returns a custom error message.
-          normalizeFieldName(attribute.name) != normalizeFieldName(CURRENT_DEFAULT_COLUMN_NAME)
-      }.foreach { a =>
+      val resolved = resolveExprInAssignment(e, p)
+      checkResolvedMergeExpr(resolved, p)
+      resolved
+    }
+
+    private def checkResolvedMergeExpr(e: Expression, p: LogicalPlan): Unit = {
+      e.references.filter(!_.resolved).foreach { a =>
         // Note: This will throw error only on unresolved attribute issues,
         // not other resolution errors like mismatched data types.
         val cols = p.inputSet.toSeq.map(_.sql).mkString(", ")
@@ -1821,10 +1792,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           messageParameters = Map(
             "sqlExpr" -> a.sql,
             "cols" -> cols))
-      }
-      resolved match {
-        case Alias(child: ExtractValue, _) => child
-        case other => other
       }
     }
 
@@ -2067,7 +2034,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES,
+        UNRESOLVED_IDENTIFIER_CLAUSE), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts)
@@ -2128,9 +2096,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case q: LogicalPlan =>
         q.transformExpressionsWithPruning(
-          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
+          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_IDENTIFIER_CLAUSE),
+          ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
-              if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
+            if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
@@ -2145,6 +2114,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 u.origin)
             }
           }
+
+          // Resolve IDENTIFIER clause.
+          case u@UnresolvedAttributeIdentifierClause(expr) if expr.resolved =>
+            UnresolvedAttribute(IdentifierClauseUtil.evalIdentifierClause(expr))
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
@@ -2167,6 +2140,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 resolveV2Function(catalog.asFunctionCatalog, ident, arguments, u)
               }
             }
+          }
+          case u@UnresolvedFunctionIdentifierClause(identExpr, arguments, isDistinct,
+          filter, ignoreNulls)  if identExpr.resolved => withPosition(u) {
+            val nameParts = IdentifierClauseUtil.evalIdentifierClause(identExpr)
+            UnresolvedFunction(nameParts, arguments, isDistinct, filter, ignoreNulls)
           }
         }
     }
@@ -3343,53 +3321,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           v2Write
         }
-    }
-  }
-
-  /**
-   * A special rule to reorder columns for DSv1 when users specify a column list in INSERT INTO.
-   * DSv2 is handled by [[ResolveInsertInto]] separately.
-   */
-  object ResolveUserSpecifiedColumns extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      case i: InsertIntoStatement if !i.table.isInstanceOf[DataSourceV2Relation] &&
-          i.table.resolved && i.query.resolved && i.userSpecifiedCols.nonEmpty =>
-        val resolved = resolveUserSpecifiedColumns(i)
-        val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
-        i.copy(userSpecifiedCols = Nil, query = projection)
-    }
-
-    private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
-      SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
-
-      i.userSpecifiedCols.map { col =>
-        i.table.resolve(Seq(col), resolver).getOrElse {
-          val candidates = i.table.output.map(_.qualifiedName)
-          val orderedCandidates = StringUtils.orderSuggestedIdentifiersBySimilarity(col, candidates)
-          throw QueryCompilationErrors
-            .unresolvedAttributeError("UNRESOLVED_COLUMN", col, orderedCandidates, i.origin)
-        }
-      }
-    }
-
-    private def addColumnListOnQuery(
-        tableOutput: Seq[Attribute],
-        cols: Seq[NamedExpression],
-        query: LogicalPlan): LogicalPlan = {
-      if (cols.size != query.output.size) {
-        throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
-          cols.size, query.output.size, query)
-      }
-      val nameToQueryExpr = CUtils.toMap(cols, query.output)
-      // Static partition columns in the table output should not appear in the column list
-      // they will be handled in another rule ResolveInsertInto
-      val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }
-      if (reordered == query.output) {
-        query
-      } else {
-        Project(reordered, query)
-      }
     }
   }
 

@@ -25,7 +25,7 @@
     <version>18</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.12</artifactId>
+  <artifactId>spark-parent_2.13</artifactId>
   <version>3.5.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -151,7 +151,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.17</codahale.metrics.version>
+    <codahale.metrics.version>4.2.18</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -159,7 +159,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.11</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.14</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -167,8 +167,8 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.17</scala.version>
-    <scala.binary.version>2.12</scala.binary.version>
+    <scala.version>2.13.8</scala.version>
+    <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <!-- dont update scala-maven-plugin to version 4.8.1 SPARK-42809 and SPARK-43595 -->   
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
@@ -179,13 +179,13 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.15.0</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.15.0</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.9.1</snappy.version>
+    <fasterxml.jackson.version>2.15.1</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.15.1</fasterxml.jackson.databind.version>
+    <snappy.version>1.1.10.0</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
-    <commons-io.version>2.11.0</commons-io.version>
+    <commons-io.version>2.12.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -203,9 +203,9 @@
     <!-- Please don't upgrade the version to 4.10+, it depends on JDK 11 -->
     <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.7.2</selenium.version>
-    <htmlunit-driver.version>4.7.2</htmlunit-driver.version>
-    <htmlunit.version>2.67.0</htmlunit.version>
+    <selenium.version>4.9.1</selenium.version>
+    <htmlunit-driver.version>4.9.1</htmlunit-driver.version>
+    <htmlunit.version>2.70.0</htmlunit.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
@@ -390,12 +390,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-7_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-9_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -422,13 +422,13 @@
         <version>${project.version}</version>
         <type>test-jar</type>
       </dependency>
-      <!-- #if scala-2.13 --><!--
+      <!-- #if scala-2.13 -->
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
         <version>1.0.4</version>
       </dependency>
-      --><!-- #endif scala-2.13 -->
+      <!-- #endif scala-2.13 -->
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
@@ -1073,7 +1073,7 @@
         <exclusions>
           <exclusion>
             <groupId>org.scala-lang.modules</groupId>
-            <artifactId>scala-xml_2.12</artifactId>
+            <artifactId>scala-xml_2.13</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1100,37 +1100,49 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.15</version>
+        <version>3.2.16</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
-        <version>3.2.15.0</version>
+        <version>3.2.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-6_${scala.binary.version}</artifactId>
-        <version>3.2.15.0</version>
+        <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
+        <version>3.2.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-7_${scala.binary.version}</artifactId>
-        <version>3.2.15.0</version>
+        <artifactId>selenium-4-9_${scala.binary.version}</artifactId>
+        <version>3.2.16.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.6.1</version>
+        <version>4.11.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>4.6.1</version>
+        <version>4.11.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy</artifactId>
+        <version>1.14.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy-agent</artifactId>
+        <version>1.14.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2854,9 +2866,49 @@
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-target:jvm-1.8</arg>
-              <arg>-Xfatal-warnings</arg>
-              <arg>-Ywarn-unused:imports</arg>
-              <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
+              <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+              <arg>-Wunused:imports</arg>
+              <!--
+                TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
+              -->
+              <arg>-Wconf:cat=scaladoc:wv</arg>
+              <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
+              <arg>-Wconf:cat=other-nullary-override:wv</arg>
+              <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
+              <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
+              <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.&lt;local OutputCommitCoordinatorSuite&gt;.futureAction:wv</arg>
+              <!--
+                SPARK-33775 Suppress compilation warnings that contain the following contents.
+                TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
+              -->
+              <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
+              <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
+              <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+              <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
+              <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
+              <!--
+                SPARK-35574 Prevent the recurrence of compilation warnings related to
+                `procedure syntax is deprecated`
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
+              <!--
+                SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+                1. `The outer reference in this type test cannot be checked at run time`
+                2. `the type test for pattern TypeA cannot be checked at runtime because it
+                  has type parameters eliminated by erasure`
+                3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+                Seq[TypeA]) is unchecked since it is eliminated by erasure`
+                4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+              -->
+              <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
+              <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
+              <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
+              <!--
+                TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
+                from the corresponding files when Scala 2.12 is no longer supported.
+              -->
+              <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
+              <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
@@ -2872,13 +2924,6 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
             </javacArgs>
-            <compilerPlugins>
-              <compilerPlugin>
-                <groupId>com.github.ghik</groupId>
-                <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.10</version>
-              </compilerPlugin>
-            </compilerPlugins>
           </configuration>
         </plugin>
         <plugin>
@@ -3287,7 +3332,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.2.2</version>
+        <version>3.3.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -3405,7 +3450,7 @@
       <plugin>
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-maven-plugin</artifactId>
-        <version>2.7.6</version>
+        <version>2.7.9</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -3530,6 +3575,13 @@
     </profile>
 
     <profile>
+      <id>scala-2.13</id>
+      <properties>
+        <scala.version>2.13.8</scala.version>
+      </properties>
+    </profile>
+
+    <profile>
       <id>scala-2.12</id>
       <properties>
         <!--
@@ -3537,20 +3589,6 @@
          property correctly.
         -->
         <scala.version>2.12.17</scala.version>
-      </properties>
-      <build>
-        <pluginManagement>
-          <plugins>
-          </plugins>
-        </pluginManagement>
-      </build>
-    </profile>
-
-    <profile>
-      <id>scala-2.13</id>
-      <properties>
-        <scala.version>2.13.8</scala.version>
-        <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
         <pluginManagement>
@@ -3565,45 +3603,16 @@
                   <arg>-feature</arg>
                   <arg>-explaintypes</arg>
                   <arg>-target:jvm-1.8</arg>
-                  <arg>-Wconf:cat=deprecation:wv,any:e</arg>
-                  <!--
-                    TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
-                    <arg>-Wunused:imports</arg>
-                  -->
-                  <arg>-Wconf:cat=scaladoc:wv</arg>
-                  <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
-                  <arg>-Wconf:cat=other-nullary-override:wv</arg>
-                  <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
-                  <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
-                  <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.&lt;local OutputCommitCoordinatorSuite&gt;.futureAction:wv</arg>
-                  <!--
-                    SPARK-33775 Suppress compilation warnings that contain the following contents.
-                    TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
-                  -->
-                  <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
-                  <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
-                  <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
-                  <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
-                  <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
-                  <!--
-                    SPARK-35574 Prevent the recurrence of compilation warnings related to
-                    `procedure syntax is deprecated`
-                  -->
-                  <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
-                  <!--
-                    SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
-                    1. `The outer reference in this type test cannot be checked at run time`
-                    2. `the type test for pattern TypeA cannot be checked at runtime because it
-                     has type parameters eliminated by erasure`
-                    3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
-                    Seq[TypeA]) is unchecked since it is eliminated by erasure`
-                    4. `fruitless type test: a value of TypeA cannot also be a TypeB`
-                  -->
-                  <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
-                  <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
-                  <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
+                  <arg>-Xfatal-warnings</arg>
+                  <arg>-Ywarn-unused:imports</arg>
+                  <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
                 </args>
                 <compilerPlugins combine.self="override">
+                  <compilerPlugin>
+                    <groupId>com.github.ghik</groupId>
+                    <artifactId>silencer-plugin_${scala.version}</artifactId>
+                    <version>1.7.10</version>
+                  </compilerPlugin>
                 </compilerPlugins>
               </configuration>
             </plugin>

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
@@ -114,6 +116,22 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         .saveAsTable("part_datasrc")
 
       assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
+    }
+  }
+
+  test("show partitions of non-partitioned table") {
+    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
+      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
+      val sqlText = s"SHOW PARTITIONS $t"
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        parameters = Map("name" -> tableName))
     }
   }
 

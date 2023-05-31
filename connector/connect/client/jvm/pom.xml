@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
+    <artifactId>spark-parent_2.13</artifactId>
     <version>3.5.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-connect-client-jvm_2.12</artifactId>
+  <artifactId>spark-connect-client-jvm_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Connect Client</name>
   <url>https://spark.apache.org/</url>
@@ -34,7 +34,7 @@
     <sbt.project.name>connect-client-jvm</sbt.project.name>
     <guava.version>31.0.1-jre</guava.version>
     <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <mima.version>1.1.0</mima.version>
+    <mima.version>1.1.2</mima.version>
   </properties>
 
   <dependencies>
