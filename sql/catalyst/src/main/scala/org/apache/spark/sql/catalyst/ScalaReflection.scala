@@ -154,17 +154,6 @@ object ScalaReflection extends ScalaReflection {
     case _ => "array"
   }
 
-  private[sql] def defaultValueFor(enc: AgnosticEncoder[_]): Any = enc match {
-      case PrimitiveBooleanEncoder => null.asInstanceOf[Boolean]
-      case PrimitiveByteEncoder => null.asInstanceOf[Byte]
-      case PrimitiveShortEncoder => null.asInstanceOf[Short]
-      case PrimitiveIntEncoder => null.asInstanceOf[Int]
-      case PrimitiveLongEncoder => null.asInstanceOf[Long]
-      case PrimitiveFloatEncoder => null.asInstanceOf[Float]
-      case PrimitiveDoubleEncoder => null.asInstanceOf[Double]
-      case _ => null
-    }
-
   /**
    * Returns an expression for deserializing the Spark SQL representation of an object into its
    * external form. The mapping between the internal and external representations is
