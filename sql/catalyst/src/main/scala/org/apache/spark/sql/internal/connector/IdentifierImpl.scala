@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
-import java.util.StringJoiner
+import java.util.{Objects, StringJoiner}
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
@@ -27,11 +27,15 @@ import org.apache.spark.sql.connector.catalog.Identifier
  * An {@link Identifier} implementation.
  */
 @Evolving
-case class IdentifierImpl(namespace: Array[String], name: String)
+class IdentifierImpl(namespace: Array[String], name: String)
   extends Identifier {
 
   assert(namespace != null, "Identifier namespace cannot be null")
   assert(name != null, "Identifier name cannot be null")
+
+  override def namespace(): Array[String] = namespace
+
+  override def name(): String = name
 
   override def toString: String = {
     val joiner = new StringJoiner(".")
@@ -40,6 +44,18 @@ case class IdentifierImpl(namespace: Array[String], name: String)
     }
     joiner.add(quoteIfNeeded(name))
     joiner.toString
+  }
+
+  override def equals(o: Any): Boolean = {
+    o match {
+      case other: IdentifierImpl => (namespace sameElements other.namespace) &&
+        name.equals(other.name)
+      case _ => false
+    }
+  }
+
+  override def hashCode: Int = {
+    Objects.hash(name, namespace)
   }
 
 }
