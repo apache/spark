@@ -27,7 +27,7 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -133,7 +133,7 @@ trait Logging {
       if (Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
-        Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
+        Option(SparkClassUtils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
             val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
             context.setConfigLocation(url.toURI)
@@ -197,7 +197,7 @@ private[spark] object Logging {
   try {
     // We use reflection here to handle the case where users remove the
     // slf4j-to-jul bridge order to route their logs to JUL.
-    val bridgeClass = Utils.classForName("org.slf4j.bridge.SLF4JBridgeHandler")
+    val bridgeClass = SparkClassUtils.classForName("org.slf4j.bridge.SLF4JBridgeHandler")
     bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
     val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]
     if (!installed) {
