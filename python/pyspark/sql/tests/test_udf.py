@@ -872,6 +872,21 @@ class UDFInitializationTests(unittest.TestCase):
         ):
             udf(lambda x: x, "integer")
 
+    def test_nested_structs(self):
+        df = self.spark.range(1).selectExpr(
+            "struct(1, struct('John', 30, ('value', 10))) as nested_struct"
+        )
+        # Input
+        row = df.select(udf(lambda x: str(x))("nested_struct")).first()
+        self.assertEquals(
+            row[0], "Row(col1=1, col2=Row(col1='John', col2=30, col3=Row(col1='value', col2=10)))"
+        )
+        # Output
+        row = df.select(udf(lambda x: x, returnType=df.dtypes[0][1])("nested_struct")).first()
+        self.assertEquals(
+            row[0], Row(col1=1, col2=Row(col1="John", col2=30, col3=Row(col1="value", col2=10)))
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_udf import *  # noqa: F401
