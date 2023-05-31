@@ -176,13 +176,22 @@ class RocksDB(
   }
 
   /**
+   * Check if the check exists in the database.
+   */
+  private def keyExists(key: Array[Byte]): Boolean = {
+    if (!db.keyMayExist(readOptions, key, null)) {
+      false
+    } else {
+      db.get(readOptions, key) != null
+    }
+  }
+
+  /**
    * Put the given value for the given key.
-   * @note This update is not committed to disk until commit() is called.
    */
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
     if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(readOptions, key)
-      if (oldValue == null) {
+      if (!keyExists(key)) {
         numKeysOnWritingVersion += 1
       }
     }
@@ -191,12 +200,10 @@ class RocksDB(
 
   /**
    * Remove the key if present.
-   * @note This update is not committed to disk until commit() is called.
    */
   def remove(key: Array[Byte]): Unit = {
     if (conf.trackTotalNumberOfRows) {
-      val value = db.get(readOptions, key)
-      if (value != null) {
+      if (keyExists(key)) {
         numKeysOnWritingVersion -= 1
       }
     }
