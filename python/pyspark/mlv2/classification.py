@@ -95,6 +95,9 @@ def _train_logistic_regression_model_worker_fn(
     import torch.distributed
     import torch.optim as optim
 
+    # TODO: add a setting seed param.
+    torch.manual_seed(0)
+
     # TODO: support training on GPU
     # TODO: support L1 / L2 regularization
     torch.distributed.init_process_group("gloo")
