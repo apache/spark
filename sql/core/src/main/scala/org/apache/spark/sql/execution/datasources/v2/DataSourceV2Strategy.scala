@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable, ResolveTableSpec}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -103,7 +103,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
-    tableSpec.withNewLocation(tableSpec.location.map(makeQualifiedDBObjectPath(_)))
+    val resolvedTableSpec = tableSpec match {
+      case u: UnresolvedTableSpec => ResolveTableSpec(u)
+      case r: ResolvedTableSpec => r
+    }
+    resolvedTableSpec.withNewLocation(resolvedTableSpec.location.map(makeQualifiedDBObjectPath(_)))
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
