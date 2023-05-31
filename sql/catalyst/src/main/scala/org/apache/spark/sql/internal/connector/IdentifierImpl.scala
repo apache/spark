@@ -15,30 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.catalog;
+package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.connector.IdentifierImpl;
+import java.util.Objects
+import java.util.StringJoiner
+
+import com.google.common.base.Preconditions
+
+import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.connector.catalog.Identifier
 
 /**
- * Identifies an object in a catalog.
- *
- * @since 3.0.0
+ * An {@link Identifier} implementation.
  */
 @Evolving
-public interface Identifier {
+case class IdentifierImpl(namespace: Array[String], name: String)
+  extends Identifier {
 
-  static Identifier of(String[] namespace, String name) {
-    return new IdentifierImpl(namespace, name);
+  Preconditions.checkNotNull(namespace, "Identifier namespace cannot be null")
+  Preconditions.checkNotNull(name, "Identifier name cannot be null")
+
+  override def toString: String = {
+    val joiner = new StringJoiner(".")
+    for (p <- namespace) {
+      joiner.add(quoteIfNeeded(p))
+    }
+    joiner.add(quoteIfNeeded(name))
+    joiner.toString
   }
 
-  /**
-   * @return the namespace in the catalog
-   */
-  String[] namespace();
-
-  /**
-   * @return the object name
-   */
-  String name();
 }
