@@ -196,6 +196,11 @@ object LogicalPlan {
   //    3, resolve this expression with the matching node. If any error occurs, analyzer fallbacks
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
+
+  /**
+   * A tag declaring that the plan beneath must not contain any parameter markers
+   */
+  private[spark] val NO_PARAM_ALLOWED_TAG = TreeNodeTag[String]("no_param_allowed")
 }
 
 /**

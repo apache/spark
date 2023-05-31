@@ -488,6 +488,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     } else {
       LocalTempView
     }
+    val qPlan: LogicalPlan = plan(ctx.query)
+    qPlan.setTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG, "CREATE VIEW body")
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,
@@ -498,7 +500,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         visitCommentSpecList(ctx.commentSpec()),
         properties,
         Some(originalText),
-        plan(ctx.query),
+        qPlan,
         ctx.EXISTS != null,
         ctx.REPLACE != null)
     } else {
@@ -522,7 +524,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           visitCommentSpecList(ctx.commentSpec()),
           properties,
           Option(source(ctx.query)),
-          plan(ctx.query),
+          qPlan,
           ctx.EXISTS != null,
           ctx.REPLACE != null,
           viewType = viewType)

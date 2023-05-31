@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, DeleteFromTable, InsertIntoStatement, LogicalPlan, MergeIntoTable, UnaryNode, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -68,41 +68,41 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       assert(parameterizedQueries.length == 1)
     }
 
+    plan.foreach {
+      case p: LogicalPlan if (p.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG).isDefined &&
+        p.expressions.exists(_.containsPattern(PARAMETER))) =>
+        p.failAnalysis(
+          errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+          messageParameters = Map("statement"
+            -> p.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG).get))
+      case _ => // OK
+    }
+
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
       case p @ ParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
-        // Some commands may store the original SQL text, like CREATE VIEW, GENERATED COLUMN, etc.
-        // We can't store the original SQL text with parameters, as we don't store the arguments and
-        // are not able to resolve it after parsing it back. Since parameterized query is mostly
-        // used to avoid SQL injection for SELECT queries, we simply forbid non-DML commands here.
-        child match {
-          case _: InsertIntoStatement => // OK
-          case _: UpdateTable => // OK
-          case _: DeleteFromTable => // OK
-          case _: MergeIntoTable => // OK
-          case cmd: Command =>
-            child.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-              messageParameters = Map("statement" -> cmd.nodeName)
-            )
-          case _ => // OK
-        }
-
         args.find(!_._2.isInstanceOf[Literal]).foreach { case (name, expr) =>
           expr.failAnalysis(
             errorClass = "INVALID_SQL_ARG",
             messageParameters = Map("name" -> name))
         }
 
-        def bind(p: LogicalPlan): LogicalPlan = {
+        def bind(p: LogicalPlan, noParamAllowedCause: Option[String]): LogicalPlan = {
           p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) {
+            case Parameter(_) if noParamAllowedCause.isDefined =>
+              child.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+              messageParameters = Map("statement" -> noParamAllowedCause.get)
+            )
             case Parameter(name) if args.contains(name) =>
               args(name)
-            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan))
+            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan,
+              noParamAllowedCause.orElse(sub.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG))
+            ))
           }
         }
-        val res = bind(child)
+        val res = bind(child, child.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG))
         res.copyTagsFrom(p)
         res
 
