@@ -108,7 +108,7 @@ case class InsertIntoHadoopFsRelationCommand(
       customPartitionLocations = getCustomPartitionLocations(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
-    val catalogPartLocations = customPartitionLocations.map { case (p, l) => (p, l._1) }
+    val existedPartLocations = customPartitionLocations.map { case (p, l) => (p, l._1) }
     val newPartLocations = customPartitionLocations.map { case (p, l) => (p, l._2) }
 
     val jobId = java.util.UUID.randomUUID().toString
@@ -132,7 +132,7 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
-            deleteMatchingPartitions(fs, qualifiedOutputPath, catalogPartLocations, committer)
+            deleteMatchingPartitions(fs, qualifiedOutputPath, existedPartLocations, committer)
             true
           }
         case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -148,34 +148,34 @@ case class InsertIntoHadoopFsRelationCommand(
 
       def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
         val partSpecs = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
-        val addParts: ArrayBuffer[(TablePartitionSpec, Option[String])] = ArrayBuffer.empty
-        val deleteParts: ArrayBuffer[TablePartitionSpec] = ArrayBuffer.empty
 
+        val addedParts: ArrayBuffer[(TablePartitionSpec, Option[String])] = ArrayBuffer.empty
+        val deletedParts: ArrayBuffer[TablePartitionSpec] = ArrayBuffer.empty
         updatedPartitionPaths.foreach { p =>
           val updatePartSpec = PartitioningUtils.parsePathFragment(p)
           val newPartLocation = outputPath + "/" + p
-          val catalogPartLocation = catalogPartLocations.get(updatePartSpec)
-          catalogPartLocation match {
+          val existedPartLocation = existedPartLocations.get(updatePartSpec)
+          existedPartLocation match {
             case Some(v) if !newPartLocation.equals(v) =>
               // add new partition & delete old partition
-              addParts.append((updatePartSpec, Some(newPartLocation)))
-              deleteParts.append(updatePartSpec)
+              addedParts.append((updatePartSpec, Some(newPartLocation)))
+              deletedParts.append(updatePartSpec)
             case _ =>
               // add new partition
-              addParts.append((updatePartSpec, Some(newPartLocation)))
+              addedParts.append((updatePartSpec, Some(newPartLocation)))
           }
         }
 
         if (partitionsTrackedByCatalog) {
-          if (deleteParts.nonEmpty) {
+          if (deletedParts.nonEmpty) {
             AlterTableDropPartitionCommand(
-              catalogTable.get.identifier, deleteParts,
+              catalogTable.get.identifier, deletedParts,
               ifExists = true, purge = false,
               retainData = false).run(sparkSession)
           }
-          if (addParts.nonEmpty) {
+          if (addedParts.nonEmpty) {
             AlterTableAddPartitionCommand(
-              catalogTable.get.identifier, addParts, ifNotExists = true).run(sparkSession)
+              catalogTable.get.identifier, addedParts, ifNotExists = true).run(sparkSession)
           }
 
           // For dynamic partition overwrite, we never remove partitions but only update existing
