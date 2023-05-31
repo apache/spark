@@ -837,41 +837,6 @@ class BaseUDFTestsMixin(object):
             len(self.spark.range(10).select(udf(lambda x: x, DoubleType())(rand())).collect()), 10
         )
 
-
-class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(BaseUDFTestsMixin, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
-
-
-class UDFInitializationTests(unittest.TestCase):
-    def tearDown(self):
-        if SparkSession._instantiatedSession is not None:
-            SparkSession._instantiatedSession.stop()
-
-        if SparkContext._active_spark_context is not None:
-            SparkContext._active_spark_context.stop()
-
-    def test_udf_init_should_not_initialize_context(self):
-        UserDefinedFunction(lambda x: x, StringType())
-
-        self.assertIsNone(
-            SparkContext._active_spark_context,
-            "SparkContext shouldn't be initialized when UserDefinedFunction is created.",
-        )
-        self.assertIsNone(
-            SparkSession._instantiatedSession,
-            "SparkSession shouldn't be initialized when UserDefinedFunction is created.",
-        )
-
-    def test_err_parse_type_when_no_sc(self):
-        with self.assertRaisesRegex(
-            RuntimeError,
-            "SparkContext or SparkSession should be created first",
-        ):
-            udf(lambda x: x, "integer")
-
     def test_nested_struct(self):
         df = self.spark.range(1).selectExpr(
             "struct(1, struct('John', 30, ('value', 10))) as nested_struct"
@@ -914,6 +879,41 @@ class UDFInitializationTests(unittest.TestCase):
 
         row = df.select(f("nested_array")).first()
         self.assertEquals(row[0], [[1, 2], [3, 4], [4, 5]])
+
+
+class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(BaseUDFTestsMixin, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+
+
+class UDFInitializationTests(unittest.TestCase):
+    def tearDown(self):
+        if SparkSession._instantiatedSession is not None:
+            SparkSession._instantiatedSession.stop()
+
+        if SparkContext._active_spark_context is not None:
+            SparkContext._active_spark_context.stop()
+
+    def test_udf_init_should_not_initialize_context(self):
+        UserDefinedFunction(lambda x: x, StringType())
+
+        self.assertIsNone(
+            SparkContext._active_spark_context,
+            "SparkContext shouldn't be initialized when UserDefinedFunction is created.",
+        )
+        self.assertIsNone(
+            SparkSession._instantiatedSession,
+            "SparkSession shouldn't be initialized when UserDefinedFunction is created.",
+        )
+
+    def test_err_parse_type_when_no_sc(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "SparkContext or SparkSession should be created first",
+        ):
+            udf(lambda x: x, "integer")
 
 
 if __name__ == "__main__":
