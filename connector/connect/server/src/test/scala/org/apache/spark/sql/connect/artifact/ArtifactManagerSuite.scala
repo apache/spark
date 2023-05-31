@@ -145,4 +145,23 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
     }
   }
+
+  test("Forward artifact file to cloud storage path") {
+    val copyDir = Utils.createTempDir().toPath
+    val destFSDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val stagingPath = copyDir.resolve("smallClassFile.class")
+    val remotePath = Paths.get(
+      "forward_to_fs", destFSDir.toString, "smallClassFileCopied.class"
+    )
+    assert(stagingPath.toFile.exists())
+    artifactManager.uploadArtifactToFs(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
+
+    val classFileDirectory = artifactManager.classArtifactDir
+    val copiedClassFile = Paths.get(
+      destFSDir.toString, "smallClassFileCopied.class"
+    ).toFile
+    assert(copiedClassFile.exists())
+  }
 }
