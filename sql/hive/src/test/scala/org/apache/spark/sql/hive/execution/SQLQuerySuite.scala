@@ -226,8 +226,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         "routineName" -> "`abcadf`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
+        fragment = "abcadf",
+        start = 18,
         stop = 23))
 
     checkKeywordsExist(sql("describe functioN  `~`"),

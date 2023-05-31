@@ -48,6 +48,7 @@ from pyspark.sql.types import (
     MapType,
     DateType,
     BinaryType,
+    YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
@@ -461,6 +462,8 @@ class ScalarPandasUDFTestsMixin:
             self.check_vectorized_udf_nested_struct()
 
     def check_vectorized_udf_nested_struct(self):
+        df = self.spark.range(2)
+
         nested_type = StructType(
             [
                 StructField("id", IntegerType()),
@@ -470,9 +473,34 @@ class ScalarPandasUDFTestsMixin:
                 ),
             ]
         )
-        for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-            with self.assertRaisesRegex(Exception, "Invalid return type with scalar Pandas UDFs"):
-                pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
+
+        def func_dict(pser: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"id": pser, "nested": pser.apply(lambda x: {"foo": str(x), "bar": float(x)})}
+            )
+
+        def func_row(pser: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"id": pser, "nested": pser.apply(lambda x: Row(foo=str(x), bar=float(x)))}
+            )
+
+        expected = [
+            Row(udf=Row(id=0, nested=Row(foo="0", bar=0.0))),
+            Row(udf=Row(id=1, nested=Row(foo="1", bar=1.0))),
+        ]
+
+        for f in [func_dict, func_row]:
+            for udf_type, func in [
+                (PandasUDFType.SCALAR, f),
+                (PandasUDFType.SCALAR_ITER, lambda iter: (f(pser) for pser in iter)),
+            ]:
+                with self.subTest(udf_type=udf_type, udf=f.__name__):
+                    result = df.select(
+                        pandas_udf(func, returnType=nested_type, functionType=udf_type)(
+                            col("id")
+                        ).alias("udf")
+                    ).collect()
+                    self.assertEqual(result, expected)
 
     def test_vectorized_udf_map_type(self):
         data = [({},), ({"a": 1},), ({"a": 1, "b": 2},), ({"a": 1, "b": 2, "c": 3},)]
@@ -621,9 +649,9 @@ class ScalarPandasUDFTestsMixin:
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             with self.assertRaisesRegex(
                 NotImplementedError,
-                "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
+                "Invalid return type.*scalar Pandas UDF.*ArrayType.*YearMonthIntervalType",
             ):
-                pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
+                pandas_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         with QuietTest(self.sc):
@@ -939,9 +967,9 @@ class ScalarPandasUDFTestsMixin:
             self.nondeterministic_vectorized_udf,
             self.nondeterministic_vectorized_iter_udf,
         ]:
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                 df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                 df.agg(sum(random_udf(df.id))).collect()
 
     def test_register_vectorized_udf_basic(self):

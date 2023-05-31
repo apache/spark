@@ -273,15 +273,16 @@ class WindowPandasUDFTestsMixin:
         self.assertEqual(result1.first()["v2"], [1.0, 2.0])
 
     def test_invalid_args(self):
+        with QuietTest(self.sc):
+            self.check_invalid_args()
+
+    def check_invalid_args(self):
         df = self.data
         w = self.unbounded_window
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                AnalysisException, ".*not supported within a window function"
-            ):
-                foo_udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
-                df.withColumn("v2", foo_udf(df["v"]).over(w))
+        with self.assertRaisesRegex(AnalysisException, ".*not supported within a window function"):
+            foo_udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
+            df.withColumn("v2", foo_udf(df["v"]).over(w))
 
     def test_bounded_simple(self):
         from pyspark.sql.functions import mean, max, min, count

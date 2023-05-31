@@ -184,7 +184,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
     messageParameters = Map("sqlExpr" -> "\"0\""))
 
-  errorTest(
+  errorClassTest(
     "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
@@ -193,7 +193,12 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    "Distinct window functions are not supported" :: Nil)
+    errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+    messageParameters = Map("windowExpr" ->
+      s"""
+         |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
+         | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+         |""".stripMargin.replaceAll("\n", "")))
 
   errorTest(
     "window aggregate function with filter predicate",
@@ -356,10 +361,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
     messageParameters = Map("sqlExpr" -> "\"1\"", "filter" -> "\"1\"", "type" -> "\"INT\""))
 
-  errorTest(
+  errorClassTest(
     "non-boolean join conditions",
     testRelation.join(testRelation, condition = Some(Literal(1))),
-    "condition" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
+    errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+    messageParameters = Map("joinCondition" -> "\"1\"", "conditionType" -> "\"INT\""))
 
   errorClassTest(
     "missing group by",
@@ -784,7 +790,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("check grouping expression data types") {
-    def checkDataType(dataType: DataType, shouldSuccess: Boolean): Unit = {
+    def checkDataType(
+        dataType: DataType, shouldSuccess: Boolean, dataTypeMsg: String = ""): Unit = {
       val plan =
         Aggregate(
           AttributeReference("a", dataType)(exprId = ExprId(2)) :: Nil,
@@ -796,7 +803,14 @@ class AnalysisErrorSuite extends AnalysisTest {
       if (shouldSuccess) {
         assertAnalysisSuccess(plan, true)
       } else {
-        assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
+        assertAnalysisErrorClass(
+          inputPlan = plan,
+          expectedErrorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+          expectedMessageParameters = Map(
+            "sqlExpr" -> "\"a\"",
+            "dataType" -> dataTypeMsg
+          )
+        )
       }
     }
 
@@ -824,8 +838,11 @@ class AnalysisErrorSuite extends AnalysisTest {
         .add("f1", FloatType, nullable = true)
         .add("f2", MapType(StringType, LongType), nullable = true),
       new UngroupableUDT())
-    unsupportedDataTypes.foreach { dataType =>
-      checkDataType(dataType, shouldSuccess = false)
+    val expectedDataTypeParameters =
+      Seq("\"MAP<STRING, BIGINT>\"", "\"STRUCT<f1: FLOAT, f2: MAP<STRING, BIGINT>>\"")
+    unsupportedDataTypes.zip(expectedDataTypeParameters).foreach {
+      case (dataType, dataTypeMsg) =>
+        checkDataType(dataType, shouldSuccess = false, dataTypeMsg)
     }
   }
 
@@ -959,10 +976,17 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("SPARK-33909: Check rand functions seed is legal at analyzer side") {
-    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
-      val plan = Project(Seq(r.as("r")), testRelation)
-      assertAnalysisError(plan,
-        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    Seq((Rand("a".attr), "\"rand(a)\""),
+      (Randn("a".attr), "\"randn(a)\"")).foreach {
+      case (r, expectedArg) =>
+        val plan = Project(Seq(r.as("r")), testRelation)
+        assertAnalysisErrorClass(plan,
+          expectedErrorClass = "SEED_EXPRESSION_IS_UNFOLDABLE",
+          expectedMessageParameters = Map(
+            "seedExpr" -> "\"a\"",
+            "exprWithSeed" -> expectedArg),
+          caseSensitive = false
+        )
     }
     Seq(
       Rand(1.0) -> ("\"rand(1.0)\"", "\"1.0\"", "\"DOUBLE\""),
@@ -1012,10 +1036,11 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter($"t1.c1" === $"t2.c1",
             t.as("t2")))
       ).as("sub") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
-      "neither present in the group by, nor in an aggregate function. Add it to group by " +
-      "using ordinal position or wrap it in first() (or first_value) if you don't care " +
-      "which value you get." :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
   errorTest(

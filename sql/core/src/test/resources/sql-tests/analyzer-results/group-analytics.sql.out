@@ -348,7 +348,7 @@ SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course,
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2407",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

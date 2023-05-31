@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.antlr.v4.runtime.ParserRuleContext
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -36,8 +37,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0001", ctx)
   }
 
-  def insertOverwriteDirectoryUnsupportedError(ctx: InsertIntoContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0002", ctx)
+  def insertOverwriteDirectoryUnsupportedError(): Throwable = {
+    SparkException.internalError("INSERT OVERWRITE DIRECTORY is not supported.")
   }
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
@@ -396,8 +397,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0036",
-      messageParameters = Map("ctx" -> ctx.getText),
+      errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+      messageParameters = Map("ctx" -> toSQLStmt(ctx.getText)),
       ctx)
   }
 
