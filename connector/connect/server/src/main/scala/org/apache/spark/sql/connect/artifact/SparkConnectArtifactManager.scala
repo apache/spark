@@ -26,6 +26,8 @@ import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.{Path => FSPath}
+
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
@@ -157,9 +159,33 @@ class SparkConnectArtifactManager private[connect] {
       }
     }
   }
+
+  private[connect] def uploadArtifactToFs(
+      sessionHolder: SessionHolder,
+      remoteRelativePath: Path,
+      serverLocalStagingPath: Path): Unit = {
+    val hadoopConf = sessionHolder.session.sparkContext.hadoopConfiguration
+    assert(remoteRelativePath.startsWith(
+      SparkConnectArtifactManager.forwardToFSPrefix + File.separator)
+    )
+    val destFSPath = new FSPath(
+      Paths.get("/").resolve(
+        remoteRelativePath.subpath(1, remoteRelativePath.getNameCount)).toString
+    )
+    val localPath = serverLocalStagingPath
+    val fs = destFSPath.getFileSystem(hadoopConf)
+    fs.copyFromLocalFile(
+      false,
+      true,
+      new FSPath(localPath.toString),
+      destFSPath
+    )
+  }
 }
 
 object SparkConnectArtifactManager {
+
+  val forwardToFSPrefix = "forward_to_fs"
 
   private var _activeArtifactManager: SparkConnectArtifactManager = _
 

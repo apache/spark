@@ -281,7 +281,7 @@ class ArtifactTests(ReusedConnectTestCase):
                 with open(file_path, "w") as f:
                     f.write(file_content)
 
-                self.spark.copyFromLocalToFS(file_path, dest_path)
+                self.spark.copyFromLocalToFs(file_path, dest_path)
 
                 with open(dest_path, "r") as f:
                     self.assertEqual(f.read(), file_content)

@@ -625,9 +625,10 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
-    def copyFromLocalToFS(self, local_path: str, dest_path: str) -> None:
+    def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
-        copy file from local to FS.
+        Copy file from local to cloud storage file system.
+        If the file already exits in destination path, old file is overwritten.
 
         Parameters
         ----------
@@ -636,12 +637,13 @@ class SparkSession:
             The path can be either an absolute path or a relative path.
 
         dest_path: str
-            The FS path to the destination the file will be copied to.
+            The cloud storage path to the destination the file will
+            be copied to.
             The path must be an an absolute path.
 
         .. versionadded:: 3.5.0
         """
-        self._client.copy_from_local_to_FS(local_path, dest_path)
+        self._client.copy_from_local_to_fs(local_path, dest_path)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:
