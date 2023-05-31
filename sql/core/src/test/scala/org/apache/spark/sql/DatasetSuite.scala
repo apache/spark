@@ -2212,7 +2212,7 @@ class DatasetSuite extends QueryTest
           sqlState = None,
           parameters = Map(
             "objectName" -> s"`${colName.replace(".", "`.`")}`",
-            "proposal" -> "`field`.`1`, `field 2`"))
+            "proposal" -> "`field.1`, `field 2`"))
       }
     }
   }
@@ -2226,7 +2226,7 @@ class DatasetSuite extends QueryTest
       sqlState = None,
       parameters = Map(
         "objectName" -> "`the`.`id`",
-        "proposal" -> "`the`.`id`"))
+        "proposal" -> "`the.id`"))
   }
 
   test("SPARK-39783: backticks in error message for map candidate key with dots") {
@@ -2240,7 +2240,7 @@ class DatasetSuite extends QueryTest
       sqlState = None,
       parameters = Map(
         "objectName" -> "`nonexisting`",
-        "proposal" -> "`map`, `other`.`column`"))
+        "proposal" -> "`map`, `other.column`"))
   }
 
   test("groupBy.as") {

@@ -82,27 +82,25 @@ object StringUtils extends Logging {
 
   private[spark] def orderSuggestedIdentifiersBySimilarity(
       baseString: String,
-      testStrings: Seq[String]): Seq[String] = {
-    val testParts = testStrings
-      .map(UnresolvedAttribute.parseAttributeName)
+      candidates: Seq[Seq[String]]): Seq[String] = {
     val baseParts = UnresolvedAttribute.parseAttributeName(baseString)
-    val candidates =
+    val strippedCandidates =
       // Group by the qualifier. If all identifiers have the same qualifier, strip it.
       // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
-      if (baseParts.size == 1 && testParts.groupBy(_.dropRight(1)).size == 1) {
-        testParts.map(_.takeRight(1))
+      if (baseParts.size == 1 && candidates.groupBy(_.dropRight(1)).size == 1) {
+        candidates.map(_.takeRight(1))
       // Group by the qualifier excluding table name. If all identifiers have the same prefix
       // (namespace) excluding table names, strip this prefix.
       // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
-      } else if (baseParts.size <= 2 && testParts.groupBy(_.dropRight(2)).size == 1) {
-        testParts.map(_.takeRight(2))
+      } else if (baseParts.size <= 2 && candidates.groupBy(_.dropRight(2)).size == 1) {
+        candidates.map(_.takeRight(2))
       } else {
         // Some candidates have different qualifiers
-        testParts
+        candidates
       }
 
-    candidates
-      .map(_.mkString("."))
+    strippedCandidates
+      .map(quoteNameParts)
       .sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 

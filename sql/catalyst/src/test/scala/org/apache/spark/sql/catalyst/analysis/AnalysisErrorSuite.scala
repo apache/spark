@@ -464,7 +464,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `b`, `c`, `d`, `e`"))
+    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
   errorClassTest(
     "slide duration greater than window in time window",
@@ -1036,7 +1036,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
       "`bad_column` cannot be resolved. Did you mean one of the following? " +
-      "[`a`, `b`, `c`, `d`, `e`]"
+      "[`a`, `c`, `d`, `b`, `e`]"
       :: Nil)
 
   errorClassTest(
@@ -1047,7 +1047,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
     messageParameters = Map(
       "objectName" -> "`the`.`id`",
-      "proposal" -> "`the`.`id`"))
+      "proposal" -> "`the.id`"))
 
   errorClassTest(
     "SPARK-39783: backticks in error message for candidate struct column",
