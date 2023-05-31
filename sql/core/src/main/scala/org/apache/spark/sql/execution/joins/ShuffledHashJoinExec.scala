@@ -338,7 +338,7 @@ case class ShuffledHashJoinExec(
     case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
     case LeftOuter if buildSide == BuildLeft => false
     case RightOuter if buildSide == BuildRight => false
-    case _ => super.supportCodegen
+    case _ => true
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
