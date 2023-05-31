@@ -143,8 +143,6 @@ case class CreateDataSourceTableAsSelectCommand(
     outputColumnNames: Seq[String])
   extends UnaryRunnableCommand {
   assert(query.resolved)
-  override def innerChildren: Seq[LogicalPlan] = query :: Nil
-
   override def child: LogicalPlan = query
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {

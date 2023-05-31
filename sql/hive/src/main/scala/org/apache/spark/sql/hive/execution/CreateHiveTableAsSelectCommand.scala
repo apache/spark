@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -40,10 +41,7 @@ case class CreateHiveTableAsSelectCommand(
     mode: SaveMode)
   extends UnaryRunnableCommand {
   assert(query.resolved)
-  override def innerChildren: Seq[LogicalPlan] = query :: Nil
-
-  protected val tableIdentifier = tableDesc.identifier
-
+  protected val tableIdentifier: TableIdentifier = tableDesc.identifier
   override def child: LogicalPlan = query
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {

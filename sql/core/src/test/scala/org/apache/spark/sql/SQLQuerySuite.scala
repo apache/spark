@@ -4670,8 +4670,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-43883: CTAS commands are unary nodes") {
     withTable("t") {
-      val ctasQuery = sql("CREATE TABLE t AS SELECT 1")
-      assert(ctasQuery.queryExecution.executedPlan.containsChild.size == 1)
+      val ctasQuery = sql("CREATE TABLE t USING parquet AS SELECT 1")
+      assert(ctasQuery.logicalPlan.containsChild.size == 1)
     }
   }
 }
