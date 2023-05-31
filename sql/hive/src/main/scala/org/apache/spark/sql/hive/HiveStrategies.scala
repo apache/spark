@@ -232,10 +232,8 @@ case class RelationConversions(
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             (!r.isPartitioned || conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
             && isConvertible(r) =>
-        // SPARK-42750: Temporary assert while the feature's in development - this isn't yet supported
-        assert(!byName)
         InsertIntoStatement(metastoreCatalog.convert(r, isWrite = true), partition, cols,
-          query, overwrite, ifPartitionNotExists)
+          query, overwrite, ifPartitionNotExists, byName)
 
       // Read path
       case relation: HiveTableRelation
