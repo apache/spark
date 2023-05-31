@@ -3032,6 +3032,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             message_parameters={"attr_name": "_jreader"},
         )
 
+    def test_df_caache(self):
+        df = self.connect.range(10)
+        df.cache()
+        self.assert_eq(10, df.count())
+        self.assertTrue(df.is_cached)
+
 
 class SparkConnectSessionTests(SparkConnectSQLTestCase):
     def _check_no_active_session_error(self, e: PySparkException):
