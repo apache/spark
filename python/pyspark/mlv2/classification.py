@@ -214,7 +214,9 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         )
         torch_model.load_state_dict(model_state_dict)
 
-        lor_model = LogisticRegressionModel(torch_model)
+        lor_model = LogisticRegressionModel(
+            torch_model, num_features=num_features, num_classes=num_classes
+        )
         lor_model._resetUid(self.uid)
         return self._copyValues(lor_model)
 
@@ -226,6 +228,12 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
         self.torch_model = torch_model
         self.num_features = num_features
         self.num_classes = num_classes
+
+    def numFeatures(self) -> int:
+        return self.num_features
+
+    def numClasses(self) -> int:
+        return self.num_classes
 
     def _input_column_name(self) -> str:
         return self.getOrDefault(self.featuresCol)

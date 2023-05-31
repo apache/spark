@@ -256,7 +256,7 @@ class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
 
 
 @inherit_doc
-class Predictor(Estimator[M], Generic[M], _PredictorParams, metaclass=ABCMeta):
+class Predictor(Estimator[M], _PredictorParams, metaclass=ABCMeta):
     """
     Estimator for prediction tasks (regression and classification).
     """
