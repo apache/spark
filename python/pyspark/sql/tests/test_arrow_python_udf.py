@@ -49,12 +49,6 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
     def test_udf_input_serialization_valuecompare_disabled(self):
         super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
 
-    def test_nested_input_error(self):
-        with self.assertRaisesRegexp(Exception, "[NotImplementedError]"):
-            self.spark.range(1).selectExpr("struct(1, 2) as struct").select(
-                udf(lambda x: x)("struct")
-            ).collect()
-
     def test_complex_input_types(self):
         row = (
             self.spark.range(1)

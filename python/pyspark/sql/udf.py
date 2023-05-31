@@ -134,9 +134,8 @@ def _create_py_udf(
         is_func_with_args = len(getfullargspec(f).args) > 0
     except TypeError:
         is_func_with_args = False
-    is_output_atomic_or_struct = (
-        not isinstance(return_type, MapType)
-        and not isinstance(return_type, ArrayType)
+    is_output_atomic_or_struct = not isinstance(return_type, MapType) and not isinstance(
+        return_type, ArrayType
     )
     if is_arrow_enabled:
         if is_output_atomic_or_struct and is_func_with_args:
