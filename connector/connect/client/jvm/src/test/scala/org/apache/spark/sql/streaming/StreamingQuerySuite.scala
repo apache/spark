@@ -171,27 +171,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
-  class TestForeachWriter[T] extends ForeachWriter[T] {
-    var fileWriter: FileWriter = _
-    var path: File = _
-
-    def open(partitionId: Long, version: Long): Boolean = {
-      path = Utils.createTempDir()
-      fileWriter = new FileWriter(path, true)
-      true
-    }
-
-    def process(row: T): Unit = {
-      fileWriter.write(row.toString)
-      fileWriter.write("\n")
-    }
-
-    def close(errorOrNull: Throwable): Unit = {
-      fileWriter.close()
-      Utils.deleteRecursively(path)
-    }
-  }
-
   test("foreach Row") {
     val writer = new TestForeachWriter[Row]
 
@@ -291,5 +270,26 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
     q.stop()
     assert(!q1.isActive)
+  }
+}
+
+class TestForeachWriter[T] extends ForeachWriter[T] {
+  var fileWriter: FileWriter = _
+  var path: File = _
+
+  def open(partitionId: Long, version: Long): Boolean = {
+    path = Utils.createTempDir()
+    fileWriter = new FileWriter(path, true)
+    true
+  }
+
+  def process(row: T): Unit = {
+    fileWriter.write(row.toString)
+    fileWriter.write("\n")
+  }
+
+  def close(errorOrNull: Throwable): Unit = {
+    fileWriter.close()
+    Utils.deleteRecursively(path)
   }
 }
