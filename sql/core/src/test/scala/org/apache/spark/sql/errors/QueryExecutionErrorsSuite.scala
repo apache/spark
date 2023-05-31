@@ -640,7 +640,7 @@ class QueryExecutionErrorsSuite
         StructType.fromString(raw)
       },
       errorClass = "FAILED_PARSE_STRUCT_TYPE",
-      parameters = Map("raw" -> raw))
+      parameters = Map("raw" -> s"'$raw'"))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {
