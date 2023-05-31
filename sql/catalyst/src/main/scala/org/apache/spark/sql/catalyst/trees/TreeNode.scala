@@ -931,10 +931,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       t.copy(properties = Utils.redact(t.properties).toMap,
         options = Utils.redact(t.options).toMap) :: Nil
     case t: UnresolvedTableSpec =>
-      val newOptions: scala.collection.immutable.Map[String, Expression] =
-        t.optionsExpressions.mapValues(v => Literal(v.sql))
       t.copy(properties = Utils.redact(t.properties).toMap,
-        optionsExpressions = newOptions) :: Nil
+        optionsExpressions = t.optionsExpressions.map { case (key, value) =>
+          (key, Literal(value.sql))
+        }) :: Nil
     case table: CatalogTable =>
       stringArgsForCatalogTable(table)
 
