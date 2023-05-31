@@ -20,11 +20,11 @@ from pyspark.mlv2.base import _PredictorParams
 from pyspark.ml.param.shared import HasProbabilityCol
 
 import logging
-from typing import Any, Union
+from typing import Any, Union, List, Tuple, Callable
 import numpy as np
 import pandas as pd
 import math
-from pyspark.mlv2.base import Estimator, Model
+from pyspark.mlv2.base import Estimator, Model, Predictor, PredictionModel
 
 from pyspark.sql import DataFrame
 
@@ -48,29 +48,8 @@ import torch.nn as torch_nn
 import torch.nn.functional as torch_fn
 
 
-class _ClassifierParams(_PredictorParams):
-    """
-    Classifier Params for classification tasks.
-
-    .. versionadded:: 3.5.0
-    """
-
-    pass
-
-
-class _ProbabilisticClassifierParams(HasProbabilityCol, _ClassifierParams):
-    """
-    Params for :py:class:`ProbabilisticClassifier` and
-    :py:class:`ProbabilisticClassificationModel`.
-
-    .. versionadded:: 3.5.0
-    """
-
-    pass
-
-
 class _LogisticRegressionParams(
-    _ProbabilisticClassifierParams,
+    _PredictorParams,
     HasMaxIter,
     HasFitIntercept,
     HasTol,
@@ -79,6 +58,7 @@ class _LogisticRegressionParams(
     HasBatchSize,
     HasLearningRate,
     HasMomentum,
+    HasProbabilityCol,
 ):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
@@ -90,9 +70,9 @@ class _LogisticRegressionParams(
 
 
 class _LinearNet(torch_nn.Module):
-    def __init__(self, num_features, num_labels, bias) -> None:
+    def __init__(self, num_features, num_classes, bias) -> None:
         super(_LinearNet, self).__init__()
-        output_dim = num_labels
+        output_dim = num_classes
         self.fc = torch_nn.Linear(num_features, output_dim, bias=bias, dtype=torch.float32)
 
     def forward(self, x: Any) -> Any:
@@ -105,7 +85,7 @@ def _train_logistic_regression_model_worker_fn(
         num_features,
         batch_size,
         max_iter,
-        num_labels,
+        num_classes,
         learning_rate,
         momentum,
         fit_intercept,
@@ -121,7 +101,7 @@ def _train_logistic_regression_model_worker_fn(
 
     ddp_model = DDP(_LinearNet(
         num_features=num_features,
-        num_labels=num_labels,
+        num_classes=num_classes,
         bias=fit_intercept
     ))
 
@@ -160,7 +140,7 @@ def _train_logistic_regression_model_worker_fn(
     return None
 
 
-class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressionParams):
+class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressionParams):
 
     def __init__(
             self,
@@ -200,14 +180,14 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
         )
 
         # TODO: check label values are in range of [0, label_count)
-        num_rows, num_labels = dataset.agg(count(lit(1)), countDistinct(self.getLabelCol())).head()
+        num_rows, num_classes = dataset.agg(count(lit(1)), countDistinct(self.getLabelCol())).head()
 
         num_batches_per_worker = math.ceil(num_rows / num_train_workers / batch_size)
         num_samples_per_worker = num_batches_per_worker * batch_size
 
         num_features = len(dataset.select(self.getFeaturesCol()).head()[0])
 
-        if num_labels < 2:
+        if num_classes < 2:
             raise ValueError("Training dataset distinct labels must >= 2.")
 
         # TODO: support GPU.
@@ -221,7 +201,7 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
             num_features=num_features,
             batch_size=batch_size,
             max_iter=self.getMaxIter(),
-            num_labels=num_labels,
+            num_classes=num_classes,
             learning_rate=self.getLearningRate(),
             momentum=self.getMomentum(),
             fit_intercept=self.getFitIntercept(),
@@ -230,7 +210,7 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
         dataset.unpersist()
 
         torch_model = _LinearNet(
-            num_features=num_features, num_labels=num_labels, bias=self.getFitIntercept()
+            num_features=num_features, num_classes=num_classes, bias=self.getFitIntercept()
         )
         torch_model.load_state_dict(model_state_dict)
 
@@ -239,8 +219,54 @@ class LogisticRegression(Estimator["LogisticRegressionModel"], _LogisticRegressi
         return self._copyValues(lor_model)
 
 
-class LogisticRegressionModel(Model, _LogisticRegressionParams):
+class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
 
-    def __init__(self, torch_model):
+    def __init__(self, torch_model, num_features, num_classes):
         super().__init__()
         self.torch_model = torch_model
+        self.num_features = num_features
+        self.num_classes = num_classes
+
+    def _input_column_name(self) -> str:
+        return self.getOrDefault(self.featuresCol)
+
+    def _output_columns(self) -> List[Tuple[str, str]]:
+        output_cols = [(self.getOrDefault(self.labelCol), "bigint")]
+        prob_col = self.getOrDefault(self.probabilityCol)
+        if prob_col:
+            output_cols += [(prob_col, "array<double>")]
+        return output_cols
+
+    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
+
+        model_state_dict = self.torch_model.state_dict()
+        num_features = self.num_features
+        num_classes = self.num_classes
+        fit_intercept = self.getFitIntercept()
+
+        def transform_fn(input_series: "pd.Series") -> Any:
+            torch_model = _LinearNet(
+                num_features=num_features, num_classes=num_classes,
+                bias=fit_intercept
+            )
+            # TODO: Use spark broadast for `model_state_dict`,
+            #  it can improve performance when model is large.
+            torch_model.load_state_dict(model_state_dict)
+
+            input_array = np.stack(input_series.values)
+
+            with torch.inference_mode():
+                result = torch_model(input_array)
+                predictions = torch.argmax(result, dim=1).numpy()
+
+            if self.getProbabilityCol():
+                probabilities = torch.softmax(result, dim=1).numpy()
+
+                return pd.DataFrame({
+                    self.getPredictionCol(): list(predictions),
+                    self.getProbabilityCol(): list(probabilities),
+                }, index=input_series.index.copy())
+            else:
+                return pd.Series(data=list(predictions), index=input_series.index.copy())
+
+        return transform_fn
