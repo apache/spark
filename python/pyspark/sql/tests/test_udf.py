@@ -887,6 +887,20 @@ class UDFInitializationTests(unittest.TestCase):
             row[0], Row(col1=1, col2=Row(col1="John", col2=30, col3=Row(col1="value", col2=10)))
         )
 
+    def test_nested_map(self):
+        df = self.spark.range(1).selectExpr("map('a', map('b', 'c')) as nested_map")
+        # Input
+        row = df.select(udf(lambda x: str(x))("nested_map")).first()
+        self.assertEquals(row[0], "{'a': {'b': 'c'}}")
+        # Output
+        @udf(returnType=df.dtypes[0][1])
+        def f(x):
+            x["a"]["b"] = "d"
+            return x
+
+        row = df.select(f("nested_map")).first()
+        self.assertEquals(row[0], {"a": {"b": "d"}})
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_udf import *  # noqa: F401
