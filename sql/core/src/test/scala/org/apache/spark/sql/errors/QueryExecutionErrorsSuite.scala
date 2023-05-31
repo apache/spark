@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.{FileSystemBasedCheckpointFileManager, HDFSMetadataLog}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
@@ -897,6 +897,28 @@ class QueryExecutionErrorsSuite
         errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
       )
+    }
+  }
+
+  test("CANNOT_FIND_BATCH: cannot find batchMetadataFile") {
+    withTempPath { p =>
+      withSQLConf(
+        "spark.sql.streaming.checkpointFileManagerClass" ->
+          classOf[FileSystemBasedCheckpointFileManager].getName,
+        "fs.file.impl" -> classOf[FakeFileSystemNeverExists].getName,
+        "fs.file.impl.disable.cache" -> "true"
+      ) {
+        val checkpointLocation = p.getAbsolutePath
+        val batchMetadataFileName = new Path(checkpointLocation, "0")
+        val metadataLog = new HDFSMetadataLog[String](spark, checkpointLocation)
+        val e = intercept[SparkFileNotFoundException] (metadataLog.get(0))
+
+        checkError(
+          exception = e,
+          errorClass = "CANNOT_FIND_BATCH",
+          parameters = Map("batchMetadataFile" -> batchMetadataFileName.toString())
+        )
+      }
     }
   }
 }
