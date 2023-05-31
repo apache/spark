@@ -428,7 +428,8 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {sql(query)},
       errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
-      parameters = Map("objectName" -> "`a`",
+      parameters = Map(
+        "objectName" -> "`a`",
         "proposal" -> "`m`, `a.a`"),
       context = ExpectedContext(
         fragment = "a",

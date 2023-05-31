@@ -185,7 +185,7 @@ object Project {
           createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
         } else {
           if (columnPath.isEmpty) {
-            val candidates = fields.map(_._1)
+            val candidates = fields.map(field => Seq(field._1))
             val orderedCandidates =
               StringUtils.orderSuggestedIdentifiersBySimilarity(f.name, candidates)
             throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
