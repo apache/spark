@@ -147,8 +147,18 @@ class ScalarPandasUDFTestsMixin:
             ]
         )
         data = [("1", {"personal": {"name": "John", "city": "New York"}})]
-        df = self.spark.createDataFrame(data, schema)
-        return df
+        return self.spark.createDataFrame(data, schema)
+
+    @property
+    def df_with_nested_arrays(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), nullable=False),
+                StructField("nested_array", ArrayType(ArrayType(IntegerType())), nullable=False),
+            ]
+        )
+        data = [(1, [[1, 2, 3], [4, 5]])]
+        return self.spark.createDataFrame(data, schema)
 
     def test_pandas_udf_tokenize(self):
         tokenize = pandas_udf(
@@ -195,6 +205,15 @@ class ScalarPandasUDFTestsMixin:
         self.assertEquals(
             df.select(extract_name(df.attributes).alias("res")).first(),
             Row(res="John"),
+        )
+
+    def test_input_nested_arrays(self):
+        df = self.df_with_nested_arrays
+
+        str_repr = pandas_udf(lambda s: s.astype(str), StringType())
+        self.assertEquals(
+            df.select(str_repr(df.nested_array).alias("res")).first(),
+            Row(res="[array([1, 2, 3], dtype=int32) array([4, 5], dtype=int32)]"),
         )
 
     @unittest.skipIf(
