@@ -315,24 +315,23 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
 
-        struct_in_pandas = (
-            "row" if self._eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
-        )
-
-        if self._df_for_struct and types.is_struct(arrow_column.type):
-            import pandas as pd
-
-            series = [
-                super(ArrowStreamPandasUDFSerializer, self)
-                .arrow_to_pandas(column, struct_in_pandas)
-                .rename(field.name)
-                for column, field in zip(arrow_column.flatten(), arrow_column.type)
-            ]
-            s = pd.concat(series, axis=1)
+        if self._eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
+            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column, "row")
         else:
-            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
-                arrow_column, struct_in_pandas
-            )
+            if self._df_for_struct and types.is_struct(arrow_column.type):
+                import pandas as pd
+
+                series = [
+                    super(ArrowStreamPandasUDFSerializer, self)
+                    .arrow_to_pandas(column, "dict")
+                    .rename(field.name)
+                    for column, field in zip(arrow_column.flatten(), arrow_column.type)
+                ]
+                s = pd.concat(series, axis=1)
+            else:
+                s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
+                    arrow_column, "dict"
+                )
         return s
 
     def _create_batch(self, series):
@@ -362,8 +361,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         arrs = []
+        is_arrow_py_udf = self._eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
         for s, t in series:
-            if t is not None and pa.types.is_struct(t):
+            if not is_arrow_py_udf and t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
                     raise PySparkValueError(
                         "A field of type StructType expects a pandas.DataFrame, "
