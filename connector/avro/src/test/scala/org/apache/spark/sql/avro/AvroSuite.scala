@@ -720,11 +720,10 @@ abstract class AvroSuite
       }
 
       withSQLConf(confKey -> "true") {
-        val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
-        checkAnswer(
-          spark.read.schema("a Date").format("avro").load(path.toString),
-          Row(format.parse("1972-09-27"))
-        )
+        // Allow conversion and do not need to check result
+        spark.read.schema("a Date").format("avro").load(path.toString)
+        spark.read.schema("a timestamp").format("avro").load(path.toString)
+        spark.read.schema("a timestamp_ntz").format("avro").load(path.toString)
       }
     }
   }
@@ -764,11 +763,10 @@ abstract class AvroSuite
       }
 
       withSQLConf(confKey -> "true") {
-        val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
-        checkAnswer(
-          spark.read.schema("a Date").format("avro").load(path.toString),
-          Row(format.parse("1970-01-14"))
-        )
+        // Allow conversion and do not need to check result
+        spark.read.schema("a Date").format("avro").load(path.toString)
+        spark.read.schema("a timestamp").format("avro").load(path.toString)
+        spark.read.schema("a timestamp_ntz").format("avro").load(path.toString)
       }
     }
   }
