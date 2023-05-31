@@ -179,7 +179,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
                 .persist()
         )
 
-        # TODO: check label values are in range of [0, label_count)
+        # TODO: check label values are in range of [0, num_classes)
         num_rows, num_classes = dataset.agg(count(lit(1)), countDistinct(self.getLabelCol())).head()
 
         num_batches_per_worker = math.ceil(num_rows / num_train_workers / batch_size)
@@ -239,14 +239,13 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
         return self.getOrDefault(self.featuresCol)
 
     def _output_columns(self) -> List[Tuple[str, str]]:
-        output_cols = [(self.getOrDefault(self.labelCol), "bigint")]
+        output_cols = [(self.getOrDefault(self.predictionCol), "bigint")]
         prob_col = self.getOrDefault(self.probabilityCol)
         if prob_col:
             output_cols += [(prob_col, "array<double>")]
         return output_cols
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
-
         model_state_dict = self.torch_model.state_dict()
         num_features = self.num_features
         num_classes = self.num_classes
@@ -264,7 +263,7 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
             input_array = np.stack(input_series.values)
 
             with torch.inference_mode():
-                result = torch_model(input_array)
+                result = torch_model(torch.tensor(input_array, dtype=torch.float32))
                 predictions = torch.argmax(result, dim=1).numpy()
 
             if self.getProbabilityCol():
