@@ -169,13 +169,13 @@ case class InsertIntoHadoopFsRelationCommand(
         if (partitionsTrackedByCatalog) {
           if (deletedParts.nonEmpty) {
             AlterTableDropPartitionCommand(
-              catalogTable.get.identifier, deletedParts,
+              catalogTable.get.identifier, deletedParts.toSeq,
               ifExists = true, purge = false,
               retainData = false).run(sparkSession)
           }
           if (addedParts.nonEmpty) {
             AlterTableAddPartitionCommand(
-              catalogTable.get.identifier, addedParts, ifNotExists = true).run(sparkSession)
+              catalogTable.get.identifier, addedParts.toSeq, ifNotExists = true).run(sparkSession)
           }
 
           // For dynamic partition overwrite, we never remove partitions but only update existing
