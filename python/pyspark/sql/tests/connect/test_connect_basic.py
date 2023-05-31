@@ -3212,7 +3212,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.range(10)
         df.cache()
         self.assert_eq(10, df.count())
-        self.assertTrue(df.is_cached())
+        self.assertTrue(df.is_cached)
 
 
 class SparkConnectSessionTests(ReusedConnectTestCase):

@@ -1826,7 +1826,7 @@ class DataFrame:
     def cache(self) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot cache on empty plan.")
-        return self.persist(storageLevel=StorageLevel.MEMORY_AND_DISK)
+        return self.persist()
 
     cache.__doc__ = PySparkDataFrame.cache.__doc__
 
