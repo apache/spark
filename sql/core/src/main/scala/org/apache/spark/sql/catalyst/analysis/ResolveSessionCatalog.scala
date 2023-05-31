@@ -158,30 +158,35 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, _, _) =>
+    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _)
+      if u.allOptionExpressionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u)
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
+        c.tableSpec.provider, resolvedTableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (!isV2Provider(provider)) {
-        constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
+        constructV1TableCmd(None, resolvedTableSpec, ident, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        c
+        c.copy(tableSpec = resolvedTableSpec)
       }
 
-    case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _, _) =>
+    case c @ CreateTableAsSelect(
+        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, writeOptions, _, _)
+      if u.allOptionExpressionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
-        c.tableSpec.options ++ writeOptions,
+        resolvedTableSpec.options ++ writeOptions,
         c.tableSpec.location,
         c.tableSpec.serde,
         ctas = true)
 
       if (!isV2Provider(provider)) {
-        constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
+        constructV1TableCmd(Some(c.query), resolvedTableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        c
+        c.copy(tableSpec = resolvedTableSpec)
       }
 
     case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
@@ -192,22 +197,27 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, _, _) =>
-      val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
+    case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _)
+      if u.allOptionExpressionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u)
+      val provider = resolvedTableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE")
       } else {
-        c
+        c.copy(tableSpec = resolvedTableSpec)
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
-      val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
+    case c @ ReplaceTableAsSelect(
+        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _, _, _)
+      if u.allOptionExpressionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u)
+      val provider = resolvedTableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE AS SELECT")
       } else {
-        c
+        c.copy(tableSpec = resolvedTableSpec)
       }
 
     case DropTable(ResolvedV1Identifier(ident), ifExists, purge) =>

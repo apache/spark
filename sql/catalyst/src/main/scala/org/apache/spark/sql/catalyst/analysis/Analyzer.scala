@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWin
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, OptimizeUpdateFields}
+import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -300,7 +300,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-      ResolveTableSpec(ResolveTableSpecOption) ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -2404,15 +2403,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
       val aggregator = V2Aggregator(aggFunc, arguments)
       aggregator.toAggregateExpression(u.isDistinct, u.filter)
-    }
-  }
-
-  /** Helper method to resolve function calls within expressions of TableSpec options. */
-  def ResolveTableSpecOption(expression: Expression): Expression = {
-    val analyzed = executeSameContext(Project(Seq(Alias(expression, "col")()), OneRowRelation()))
-    val folded = ConstantFolding(analyzed)
-    folded match {
-      case Project(Seq(Alias(expression, _)), _) => expression
     }
   }
 

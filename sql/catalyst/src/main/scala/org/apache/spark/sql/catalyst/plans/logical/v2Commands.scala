@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -32,6 +31,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -456,6 +456,12 @@ case class CreateTable(
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
+
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = super.getTreePatternBits
+    bits.union(tableSpec.treePatternBits)
+    bits
+  }
 }
 
 /**
@@ -482,6 +488,12 @@ case class CreateTableAsSelect(
       newQuery: LogicalPlan): CreateTableAsSelect = {
     copy(name = newName, query = newQuery)
   }
+
+  override lazy val treePatternBits: BitSet = {
+    val bits = super.getTreePatternBits
+    bits.union(tableSpec.treePatternBits)
+    bits
+  }
 }
 
 /**
@@ -506,6 +518,12 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override lazy val treePatternBits: BitSet = {
+    val bits = super.getTreePatternBits
+    bits.union(tableSpec.treePatternBits)
+    bits
   }
 }
 
@@ -535,6 +553,12 @@ case class ReplaceTableAsSelect(
       newName: LogicalPlan,
       newQuery: LogicalPlan): ReplaceTableAsSelect = {
     copy(name = newName, query = newQuery)
+  }
+
+  override lazy val treePatternBits: BitSet = {
+    val bits = super.getTreePatternBits
+    bits.union(tableSpec.treePatternBits)
+    bits
   }
 }
 
@@ -1386,19 +1410,12 @@ case class DropIndex(
 trait TableSpec {
   def properties: Map[String, String]
   def provider: Option[String]
-  def options: Map[String, String]
   def location: Option[String]
   def comment: Option[String]
   def serde: Option[SerdeInfo]
   def external: Boolean
-  def copy(
-      properties: Map[String, String] = properties,
-      provider: Option[String] = provider,
-      options: Map[String, String] = options,
-      location: Option[String] = location,
-      comment: Option[String] = comment,
-      serde: Option[SerdeInfo] = serde,
-      external: Boolean = external): TableSpec
+  def withNewLocation(newLocation: Option[String]): TableSpec
+  def treePatternBits: BitSet
 }
 
 case class UnresolvedTableSpec(
@@ -1409,19 +1426,27 @@ case class UnresolvedTableSpec(
     comment: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean) extends TableSpec {
-  override def options: Map[String, String] = {
-    throw SparkException.internalError("Invalid call to 'options' method for unresolved TableSpec")
+  override def withNewLocation(loc: Option[String]): TableSpec = {
+    UnresolvedTableSpec(properties, provider, optionsExpressions, loc, comment, serde, external)
   }
-  override def copy(
-      properties: Map[String, String],
-      provider: Option[String],
-      options: Map[String, String],
-      location: Option[String],
-      comment: Option[String],
-      serde: Option[SerdeInfo],
-      external: Boolean = external): TableSpec = {
-    UnresolvedTableSpec(
-      properties, provider, optionsExpressions, location, comment, serde, external)
+
+  /**
+   * Helper to check if we have resolved all OPTIONS expressions. If so, we're ready to convert this
+   * to a ResolvedTableSpec during analysis.
+   */
+  def allOptionExpressionsResolved: Boolean = {
+    optionsExpressions.values.forall(_.resolved)
+  }
+
+  /** Implement treePatternBits so bitmap checks on expressions on operators work properly. */
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    optionsExpressions.foreach { case (_, optValue) =>
+      if (optValue != null) {
+        bits.union(optValue.treePatternBits)
+      }
+    }
+    bits
   }
 }
 
@@ -1433,14 +1458,8 @@ case class ResolvedTableSpec(
     comment: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean) extends TableSpec {
-  override def copy(
-      properties: Map[String, String],
-      provider: Option[String],
-      options: Map[String, String],
-      location: Option[String],
-      comment: Option[String],
-      serde: Option[SerdeInfo],
-      external: Boolean = external): TableSpec = {
-    ResolvedTableSpec(properties, provider, options, location, comment, serde, external)
+  override def withNewLocation(newLocation: Option[String]): TableSpec = {
+    ResolvedTableSpec(properties, provider, options, newLocation, comment, serde, external)
   }
+  override lazy val treePatternBits: BitSet = new BitSet(TreePattern.maxId)
 }

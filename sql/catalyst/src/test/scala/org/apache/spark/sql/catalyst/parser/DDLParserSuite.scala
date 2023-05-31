@@ -17,22 +17,18 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, Hex, Literal}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
-import org.apache.spark.sql.catalyst.plans.logical.{ResolvedTableSpec => LogicalTableSpec, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -888,72 +884,6 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None),
         expectedIfNotExists = false)
-    }
-    // Test some cases where the provided option value is a constant but non-literal expression.
-    val prefix = "create table t (col int) using json options "
-    val schema = new StructType().add("col", IntegerType)
-    val analyzer = getAnalyzer
-    def inputPlan(options: String): LogicalPlan = {
-      val sqlText = s"$prefix ($options)"
-      val parsed = parsePlan(sqlText)
-      val analyzed = analyzer.execute(parsed)
-      val folded = ConstantFolding(analyzed)
-      folded
-    }
-    def expectedTableExprOption(option: Expression): LogicalPlan = {
-      expectedTableStringOption(option.toString)
-    }
-    def expectedTableStringOption(option: String): LogicalPlan = {
-      CreateTable(
-        ResolvedIdentifier(
-          analyzer.currentCatalog,
-          Identifier.of(Array("default"), "t")),
-        schema, Seq.empty[Transform],
-        LogicalTableSpec(
-          Map.empty[String, String], Some("json"), Map("k" -> option), None, None,
-          None, false),
-        false)
-    }
-    comparePlans(inputPlan("'k' = 1 + 2"),
-      expectedTableExprOption(Literal(3)))
-    comparePlans(inputPlan("'k' = 'a' || 'b'"),
-      expectedTableExprOption(Literal("ab")))
-    comparePlans(inputPlan("'k' = true or false"),
-      expectedTableExprOption(Literal(true)))
-    comparePlans(inputPlan("'k' = null"),
-      expectedTableExprOption(Literal(null)))
-    comparePlans(inputPlan("'k' = cast(array('9', '9') as array<byte>)"),
-      expectedTableStringOption("[9,9]"))
-    comparePlans(inputPlan("'k' = cast(map('9', '9') as map<string, string>)"),
-      expectedTableStringOption("map(keys: [9], values: [9])"))
-    comparePlans(inputPlan("'k' = cast('11 23:4:0' as interval day to second)"),
-      expectedTableStringOption("INTERVAL '11 23:04:00' DAY TO SECOND"))
-    comparePlans(inputPlan("'k' = date_diff(current_date(), current_date())"),
-      expectedTableExprOption(Literal(0)))
-    comparePlans(inputPlan("'k' = date_sub(date'2022-02-02', 1)"),
-      expectedTableExprOption(Literal(Date.valueOf("2022-02-01"))))
-    comparePlans(inputPlan("'k' = timestampadd(microsecond, 5, timestamp'2022-02-28 00:00:00')"),
-      expectedTableExprOption(Literal(Timestamp.valueOf("2022-02-28 00:00:00.000005"))))
-    comparePlans(inputPlan("'k' = round(cast(2.25 as decimal(5, 3)), 1)"),
-      expectedTableExprOption(Literal(Decimal(BigDecimal(23, 1), precision = 4, scale = 1))))
-    // The result of invoking this "ROUND" function call is NULL, since the target decimal type is
-    // too narrow to contain the result of the cast.
-    comparePlans(inputPlan("'k' = round(cast(2.25 as decimal(3, 3)), 1)"),
-      expectedTableExprOption(Literal(null, DecimalType(2, 1))))
-    // Test some cases where the provided option value is a non-constant or invalid expression.
-    Seq(
-      " 1 + 2 + unresolvedAttribute",
-      "true or false or unresolvedAttribute",
-      "date_diff(date'2023-01-02', unresolvedAttribute)",
-      "raise_error('failure')"
-    ).foreach { option =>
-      checkError(
-        exception = intercept[AnalysisException](
-          ConstantFolding(analyzer.execute(parsePlan(s"$prefix ('optKey' = $option)")))),
-        errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
-        parameters = Map(
-          "key" -> "optKey",
-          "supported" -> "constant expressions"))
     }
   }
 

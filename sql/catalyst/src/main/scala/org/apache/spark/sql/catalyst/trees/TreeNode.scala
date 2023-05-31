@@ -927,14 +927,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
     case map: Map[_, _] =>
       redactMapString(map, maxFields)
-    case t: UnresolvedTableSpec =>
-      val newOptionsList = Utils.redact(t.optionsExpressions.map { case (key, value) =>
-        (key, value.sql)
-      }).toMap
-      ResolvedTableSpec(
-        t.properties, t.provider, newOptionsList, t.location, t.comment, t.serde, t.external) :: Nil
     case t: ResolvedTableSpec =>
-      t.copy(options = Utils.redact(t.options).toMap) :: Nil
+      t.copy(properties = Utils.redact(t.properties).toMap,
+        options = Utils.redact(t.options).toMap) :: Nil
+    case t: UnresolvedTableSpec =>
+      val newOptions: scala.collection.immutable.Map[String, Expression] =
+        t.optionsExpressions.mapValues(v => Literal(v.sql))
+      t.copy(properties = Utils.redact(t.properties).toMap,
+        optionsExpressions = newOptions) :: Nil
     case table: CatalogTable =>
       stringArgsForCatalogTable(table)
 

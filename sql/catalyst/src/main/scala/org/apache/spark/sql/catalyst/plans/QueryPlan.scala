@@ -22,11 +22,13 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.UnresolvedTableSpec
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.collection.BitSet
@@ -61,7 +63,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def outputOrdering: Seq[SortOrder] = Nil
 
   // Override `treePatternBits` to propagate bits for its expressions.
-  override lazy val treePatternBits: BitSet = {
+  override lazy val treePatternBits: BitSet = getTreePatternBits
+
+  protected def getTreePatternBits: BitSet = {
     val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
@@ -221,6 +225,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case d: DataType => d // Avoid unpacking Structs
       case stream: Stream[_] => stream.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
+      case t: UnresolvedTableSpec =>
+        t.copy(optionsExpressions = t.optionsExpressions.map { case (key, value) =>
+          try {
+            (key, Option(value).map(transformExpression).getOrElse(null))
+          } catch {
+            case e: AnalysisException =>
+              throw QueryCompilationErrors.optionMustBeConstant(key, Some(e))
+          }
+        })
       case other: AnyRef => other
       case null => null
     }
