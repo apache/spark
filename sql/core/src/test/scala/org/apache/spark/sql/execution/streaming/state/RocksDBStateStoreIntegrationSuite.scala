@@ -27,6 +27,8 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWra
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.OutputMode.Update
+import org.apache.spark.util.Utils
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
   with AlsoTestWithChangelogCheckpointingEnabled {
@@ -209,5 +211,54 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         }
       }
     }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "Streaming aggregation RocksDB State Store backward compatibility.") {
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    checkpointDir.delete()
+
+    val dirForPartition0 = new File(checkpointDir.getAbsolutePath, "/state/0/0")
+    val inputData = MemoryStream[Int]
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    // Run the stream with changelog checkpointing disabled.
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(rocksdbChangelogCheckpointingConfKey -> "false")),
+      AddData(inputData, 3),
+      CheckLastBatch((3, 1)),
+      AddData(inputData, 3, 2),
+      CheckLastBatch((3, 2), (2, 1)),
+      StopStream
+    )
+    assert(changelogVersionsPresent(dirForPartition0).isEmpty)
+    assert(snapshotVersionsPresent(dirForPartition0) == List(1L, 2L))
+
+    // Run the stream with changelog checkpointing enabled.
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(rocksdbChangelogCheckpointingConfKey -> "true")),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch((3, 3), (2, 2), (1, 1)),
+      // By default we run in new tuple mode.
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch((4, 4))
+    )
+    assert(changelogVersionsPresent(dirForPartition0) == List(3L, 4L))
+
+    // Run the stream with changelog checkpointing disabled.
+    testStream(aggregated, Update)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
+        additionalConfs = Map(rocksdbChangelogCheckpointingConfKey -> "false")),
+      AddData(inputData, 4),
+      CheckLastBatch((4, 5))
+    )
+    assert(changelogVersionsPresent(dirForPartition0) == List(3L, 4L))
+    assert(snapshotVersionsPresent(dirForPartition0).contains(5L))
   }
 }

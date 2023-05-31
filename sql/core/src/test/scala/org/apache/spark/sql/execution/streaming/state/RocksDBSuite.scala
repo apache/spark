@@ -34,19 +34,40 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
+trait RocksDBStateStoreChangelogCheckpointingTestUtil {
+  val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
+    ".changelogCheckpointing.enabled"
 
-trait AlsoTestWithChangelogCheckpointingEnabled extends SQLTestUtils {
+  def isChangelogCheckpointingEnabled: Boolean =
+    SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
+
+  def snapshotVersionsPresent(dir: File): Seq[Long] = {
+    dir.listFiles.filter(_.getName.endsWith(".zip"))
+      .map(_.getName.stripSuffix(".zip"))
+      .map(_.toLong)
+      .sorted
+  }
+
+  def changelogVersionsPresent(dir: File): Seq[Long] = {
+    dir.listFiles.filter(_.getName.endsWith(".changelog"))
+      .map(_.getName.stripSuffix(".changelog"))
+      .map(_.toLong)
+      .sorted
+  }
+}
+
+
+trait AlsoTestWithChangelogCheckpointingEnabled
+  extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
+
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
-    super.test(testName, testTags: _*) {
-      withSQLConf(rocksdbChangelogCheckpointingConfKey -> "false",
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
-        testBody
-      }
-      // in case tests have any code that needs to execute after every test
-      super.afterEach()
-    }
+    testWithChangelogCheckpointingEnabled(testName, testTags: _*)(testBody)
+    testWithChangelogCheckpointingDisabled(testName, testTags: _*)(testBody)
+  }
 
+  def testWithChangelogCheckpointingEnabled(testName: String, testTags: Tag*)
+                                        (testBody: => Any): Unit = {
     super.test(testName + " (with changelog checkpointing)", testTags: _*) {
       // in case tests have any code that needs to execute before every test
       super.beforeEach()
@@ -57,31 +78,25 @@ trait AlsoTestWithChangelogCheckpointingEnabled extends SQLTestUtils {
     }
   }
 
-  def rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
-    ".changelogCheckpointing.enabled"
-
-  def isChangelogCheckpointingEnabled: Boolean =
-    SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
+  def testWithChangelogCheckpointingDisabled(testName: String, testTags: Tag*)
+                                           (testBody: => Any): Unit = {
+    super.test(testName + " (without changelog checkpointing)", testTags: _*) {
+      // in case tests have any code that needs to execute before every test
+      super.beforeEach()
+      withSQLConf(rocksdbChangelogCheckpointingConfKey -> "false",
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+        testBody
+      }
+    }
+  }
 }
 
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
 
   sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
 
-  def snapshotVersionsPresent(dir: String): Seq[Long] = {
-    dir.listFiles.filter(_.getName.endsWith(".zip"))
-      .map(_.getName.stripSuffix(".zip"))
-      .map(_.toLong)
-      .sorted
-  }
-  def changelogVersionsPresent(dir: String): Seq[Long] = {
-    dir.listFiles.filter(_.getName.endsWith(".changelog"))
-      .map(_.getName.stripSuffix(".changelog"))
-      .map(_.toLong)
-      .sorted
-  }
-
-  test("RocksDB: check changelog and snapshot version") {
+  testWithChangelogCheckpointingEnabled(
+    "RocksDB: check changelog and snapshot version") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 1)
     new File(remoteDir).delete()  // to make sure that the directory gets created
@@ -112,7 +127,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: purge changelog and snapshots") {
+  testWithChangelogCheckpointingEnabled(
+    "RocksDB: purge changelog and snapshots") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true,
@@ -152,7 +168,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: minDeltasForSnapshot") {
+  testWithChangelogCheckpointingEnabled(
+    "RocksDB: minDeltasForSnapshot") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true, minDeltasForSnapshot = 3)
@@ -194,7 +211,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
-  test("RocksDB: changelog checkpointing backward compatibility") {
+  testWithChangelogCheckpointingEnabled(
+    "RocksDB: changelog checkpointing backward compatibility") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     val disableChangelogCheckpointingConf =
@@ -245,7 +263,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   // A rocksdb instance with changelog checkpointing disabled should be able to load
   // an existing checkpoint with changelog.
-  test("RocksDB: changelog checkpointing forward compatibility") {
+  testWithChangelogCheckpointingEnabled(
+    "RocksDB: changelog checkpointing forward compatibility") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()  // to make sure that the directory gets created
     val enableChangelogCheckpointingConf =
@@ -395,7 +414,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDBFileManager: read and write changelog") {
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
@@ -822,6 +841,28 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         verifyMetrics(putCount = 2, getCount = 3, metrics = db.metrics)
       }
     }
+
+    // force compaction and check the compaction metrics
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        db.load(1)
+        db.put("a", "10")
+        db.put("b", "25")
+        db.commit()
+
+        val metrics = db.metrics
+        assert(metrics.nativeOpsHistograms("compaction").count > 0)
+        assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
+        assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
+        assert(metrics.pinnedBlocksMemUsage >= 0)
+      }
+    }
   }
 
   // Add tests to check valid and invalid values for max_open_files passed to the underlying
@@ -1076,7 +1117,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  private def sqlConf = SQLConf.get
+  private def sqlConf = SQLConf.get.clone()
 
   private def dbConf = RocksDBConf(StateStoreConf(sqlConf))
 
