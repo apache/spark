@@ -674,7 +674,8 @@ object SparkConnectCommon {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -688,7 +689,8 @@ object SparkConnectCommon {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -753,7 +755,8 @@ object SparkConnect {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -767,7 +770,8 @@ object SparkConnect {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -842,7 +846,8 @@ object SparkConnectClient {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -851,7 +856,8 @@ object SparkConnectClient {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
