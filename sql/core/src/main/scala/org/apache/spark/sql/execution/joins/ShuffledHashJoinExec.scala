@@ -56,6 +56,9 @@ case class ShuffledHashJoinExec(
   override def outputPartitioning: Partitioning = super[ShuffledJoin].outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
+    // For outer joins where the outer side is build-side, order cannot be guaranteed.
+    // The algorithm performs an additional un-ordered iteration on build-side (HashedRelation)
+    // to find unmatched rows to satisfy the outer join semantic.
     case FullOuter => Nil
     case LeftOuter if buildSide == BuildLeft => Nil
     case RightOuter if buildSide == BuildRight => Nil
@@ -163,18 +166,18 @@ case class ShuffledHashJoinExec(
    *    by checking key index from bit set.
    */
   private def buildSideOuterJoinUniqueKey(
-      streamIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation,
-      joinKeys: UnsafeProjection,
-      joinRowWithStream: InternalRow => JoinedRow,
-      joinRowWithBuild: InternalRow => JoinedRow,
-      streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow,
-      full: Boolean): Iterator[InternalRow] = {
+                                           streamIter: Iterator[InternalRow],
+                                           hashedRelation: HashedRelation,
+                                           joinKeys: UnsafeProjection,
+                                           joinRowWithStream: InternalRow => JoinedRow,
+                                           joinRowWithBuild: InternalRow => JoinedRow,
+                                           streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
+                                           buildNullRow: GenericInternalRow,
+                                           isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
     longMetric("buildDataSize") += matchedKeys.capacity / 8
 
-    def noMatch = if (full) {
+    def noMatch = if (isFullOuterJoin) {
       Some(joinRowWithBuild(buildNullRow))
     } else {
       None
