@@ -105,11 +105,12 @@ case class ShuffledHashJoinExec(
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
       joinType match {
-        case FullOuter => buildSideOuterJoin(streamIter, hashed, numOutputRows, full = true)
+        case FullOuter => buildSideOuterJoin(streamIter, hashed, numOutputRows,
+          isFullOuterJoin = true)
         case LeftOuter if buildSide.equals(BuildLeft) =>
-          buildSideOuterJoin(streamIter, hashed, numOutputRows, full = false)
+          buildSideOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
         case RightOuter if buildSide.equals(BuildRight) =>
-          buildSideOuterJoin(streamIter, hashed, numOutputRows, full = false)
+          buildSideOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
         case _ => join(streamIter, hashed, numOutputRows)
       }
     }
@@ -119,7 +120,7 @@ case class ShuffledHashJoinExec(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       numOutputRows: SQLMetric,
-      full: Boolean): Iterator[InternalRow] = {
+      isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
     val joinRow = new JoinedRow
     val (joinRowWithStream, joinRowWithBuild) = {
@@ -143,10 +144,10 @@ case class ShuffledHashJoinExec(
 
     val iter = if (hashedRelation.keyIsUnique) {
       buildSideOuterJoinUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, full)
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
     } else {
       buildSideOuterJoinNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, full)
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
     }
 
     val resultProj = UnsafeProjection.create(output, output)
@@ -166,14 +167,14 @@ case class ShuffledHashJoinExec(
    *    by checking key index from bit set.
    */
   private def buildSideOuterJoinUniqueKey(
-                                           streamIter: Iterator[InternalRow],
-                                           hashedRelation: HashedRelation,
-                                           joinKeys: UnsafeProjection,
-                                           joinRowWithStream: InternalRow => JoinedRow,
-                                           joinRowWithBuild: InternalRow => JoinedRow,
-                                           streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-                                           buildNullRow: GenericInternalRow,
-                                           isFullOuterJoin: Boolean): Iterator[InternalRow] = {
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation,
+      joinKeys: UnsafeProjection,
+      joinRowWithStream: InternalRow => JoinedRow,
+      joinRowWithBuild: InternalRow => JoinedRow,
+      streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
+      buildNullRow: GenericInternalRow,
+      isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
     longMetric("buildDataSize") += matchedKeys.capacity / 8
 
@@ -246,7 +247,7 @@ case class ShuffledHashJoinExec(
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
-      full: Boolean): Iterator[InternalRow] = {
+      isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
     TaskContext.get().addTaskCompletionListener[Unit](_ => {
       // At the end of the task, update the task's memory usage for this
@@ -273,7 +274,7 @@ case class ShuffledHashJoinExec(
       val keys = joinKeys(srow)
       if (keys.anyNull) {
         // return row with build side NULL row to satisfy full outer join semantics if enabled
-        if (full) {
+        if (isFullOuterJoin) {
           Iterator.single(joinRowWithBuild(buildNullRow))
         } else {
           Iterator.empty
@@ -298,7 +299,7 @@ case class ShuffledHashJoinExec(
             // When we reach here, it means no match is found for this key.
             // So we need to return one row with build side NULL row,
             // to satisfy the full outer join semantic if enabled.
-            if (!found && full) {
+            if (!found && isFullOuterJoin) {
               joinRowWithBuild(buildNullRow)
               // Set `found` to be true as we only need to return one row
               // but no more.
