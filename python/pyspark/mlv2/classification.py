@@ -34,6 +34,7 @@ from pyspark.ml.param.shared import (
     HasFitIntercept,
     HasTol,
     HasWeightCol,
+    HasSeed,
 )
 from pyspark.mlv2.common_params import (
     HasNumTrainWorkers,
@@ -59,6 +60,7 @@ class _LogisticRegressionParams(
     HasLearningRate,
     HasMomentum,
     HasProbabilityCol,
+    HasSeed,
 ):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
@@ -89,6 +91,7 @@ def _train_logistic_regression_model_worker_fn(
         learning_rate,
         momentum,
         fit_intercept,
+        seed,
 ):
     from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
     from torch.nn.parallel import DistributedDataParallel as DDP
@@ -96,7 +99,7 @@ def _train_logistic_regression_model_worker_fn(
     import torch.optim as optim
 
     # TODO: add a setting seed param.
-    torch.manual_seed(0)
+    torch.manual_seed(seed)
 
     # TODO: support training on GPU
     # TODO: support L1 / L2 regularization
@@ -148,21 +151,31 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
     def __init__(
             self,
             *,
-            maxIter=100,
-            tol=1e-6,
-            numTrainWorkers=1,
-            batchSize=32,
-            learningRate=0.001,
-            momentum=0.9,
+            featuresCol: str = "features",
+            labelCol: str = "label",
+            predictionCol: str = "prediction",
+            probabilityCol: str = "probability",
+            maxIter: int = 100,
+            tol: float = 1e-6,
+            numTrainWorkers: int = 1,
+            batchSize: int = 32,
+            learningRate: float = 0.001,
+            momentum: float = 0.9,
+            seed: int = 0,
     ):
         super(_LogisticRegressionParams, self).__init__()
         self._set(
+            featuresCol=featuresCol,
+            labelCol=labelCol,
+            predictionCol=predictionCol,
+            probabilityCol=probabilityCol,
             maxIter=maxIter,
             tol=tol,
             numTrainWorkers=numTrainWorkers,
             batchSize=batchSize,
             learningRate=learningRate,
             momentum=momentum,
+            seed=seed,
         )
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "LogisticRegressionModel":
@@ -208,6 +221,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
             learning_rate=self.getLearningRate(),
             momentum=self.getMomentum(),
             fit_intercept=self.getFitIntercept(),
+            seed=self.getSeed(),
         )
 
         dataset.unpersist()
