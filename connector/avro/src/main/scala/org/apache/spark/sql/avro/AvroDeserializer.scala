@@ -147,11 +147,13 @@ private[sql] class AvroDeserializer(
             updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
           case (_: YearMonthIntervalType, _: YearMonthIntervalType) => (updater, ordinal, value) =>
             updater.setInt(ordinal, value.asInstanceOf[Int])
+          case (_: YearMonthIntervalType, _) if preventReadingIncorrectType =>
+            throw QueryCompilationErrors.avroIncorrectTypeError(
+              toFieldStr(avroPath), toFieldStr(catalystPath),
+              logicalDataType.catalogString, catalystType.catalogString, confKey.key)
           case _ if !preventReadingIncorrectType => (updater, ordinal, value) =>
             updater.setInt(ordinal, value.asInstanceOf[Int])
-          case _ => throw QueryCompilationErrors.avroIncorrectTypeError(
-            toFieldStr(avroPath), toFieldStr(catalystPath),
-            logicalDataType.catalogString, catalystType.catalogString, confKey.key)
+          case _ => throw new IncompatibleSchemaException(incompatibleMsg)
         }
       case LONG =>
         (logicalDataType, catalystType) match {
@@ -198,14 +200,15 @@ private[sql] class AvroDeserializer(
             updater.setLong(ordinal, value.asInstanceOf[Long])
           case (_: DayTimeIntervalType, _: DayTimeIntervalType) => (updater, ordinal, value) =>
             updater.setLong(ordinal, value.asInstanceOf[Long])
-          case (_: DayTimeIntervalType, DateType)
-            if !preventReadingIncorrectType => (updater, ordinal, value) =>
+          case (_: DayTimeIntervalType, _) if preventReadingIncorrectType =>
+            throw QueryCompilationErrors.avroIncorrectTypeError(
+              toFieldStr(avroPath), toFieldStr(catalystPath),
+              logicalDataType.catalogString, catalystType.catalogString, confKey.key)
+          case (_: DayTimeIntervalType, DateType) => (updater, ordinal, value) =>
             updater.setInt(ordinal, (value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt)
           case _ if !preventReadingIncorrectType => (updater, ordinal, value) =>
             updater.setLong(ordinal, value.asInstanceOf[Long])
-          case _ => throw QueryCompilationErrors.avroIncorrectTypeError(
-            toFieldStr(avroPath), toFieldStr(catalystPath),
-            logicalDataType.catalogString, catalystType.catalogString, confKey.key)
+          case _ => throw new IncompatibleSchemaException(incompatibleMsg)
         }
       case FLOAT =>
         (logicalDataType, catalystType) match {
