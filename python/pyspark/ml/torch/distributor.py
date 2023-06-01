@@ -462,7 +462,22 @@ class TorchDistributor(Distributor):
                 decoded = line.decode()
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    sys.stdout.write(decoded)
+                    if (
+                        log_streaming_client
+                        and not log_streaming_client.failed
+                        and (
+                            log_streaming_client.sock.getsockname()[0]
+                            == log_streaming_client.sock.getpeername()[0]
+                        )
+                    ):
+                        # If log_streaming_client and log_stream_server are in the same
+                        # node (typical case is spark local mode),
+                        # server side will redirect the log to STDOUT,
+                        # to avoid STDOUT outputs duplication, skip redirecting
+                        # logs to STDOUT in client side.
+                        pass
+                    else:
+                        sys.stdout.write(decoded)
                 if log_streaming_client:
                     log_streaming_client.send(decoded.rstrip())
             task.wait()
