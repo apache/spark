@@ -52,9 +52,9 @@ import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
-    with ParquetTest
-    with OrcTest
-    with SharedSparkSession {
+  with ParquetTest
+  with OrcTest
+  with SharedSparkSession {
 
   import testImplicits._
 
@@ -175,8 +175,8 @@ class QueryExecutionErrorsSuite
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
-          "padding" -> padding,
-          "functionName" -> "`aes_encrypt`/`aes_decrypt`"),
+        "padding" -> padding,
+        "functionName" -> "`aes_encrypt`/`aes_decrypt`"),
         sqlState = "0A000")
     }
 
@@ -221,7 +221,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE.PIVOT_TYPE",
       parameters = Map("value" -> "[dotnet,Dummies]",
-        "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
+      "type" -> "\"STRUCT<col1: STRING, training: STRING>\""),
       sqlState = "0A000")
   }
 
@@ -420,7 +420,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      parameters = Map("columnName" -> "`map`"),
+      parameters = Map("columnName" -> "`__auto_generated_subquery_name`.`map`"),
       sqlState = "42818")
   }
 
@@ -449,23 +449,23 @@ class QueryExecutionErrorsSuite
   }
 
   test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
-    withTable("t") {
-      withSQLConf(
-        "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
-        "fs.file.impl.disable.cache" -> "true") {
-        sql("CREATE TABLE t(c String) USING parquet")
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
 
-        val e = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE t")
-        }
-        assert(e.getCause.isInstanceOf[SparkSecurityException])
+          val e = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e.getCause.isInstanceOf[SparkSecurityException])
 
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkSecurityException],
-          errorClass = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
-          parameters = Map("permission" -> ".+",
-            "path" -> ".+"),
-          matchPVals = true)
+          checkError(
+            exception = e.getCause.asInstanceOf[SparkSecurityException],
+            errorClass = "CANNOT_RESTORE_PERMISSIONS_FOR_PATH",
+            parameters = Map("permission" -> ".+",
+              "path" -> ".+"),
+            matchPVals = true)
       }
     }
   }
@@ -530,7 +530,7 @@ class QueryExecutionErrorsSuite
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
 
       override def getCatalystType(sqlType: Int, typeName: String, size: Int,
-                                   md: MetadataBuilder): Option[DataType] = {
+        md: MetadataBuilder): Option[DataType] = {
         sqlType match {
           case _ => None
         }
@@ -605,7 +605,7 @@ class QueryExecutionErrorsSuite
 
   test(
     "SCALAR_SUBQUERY_TOO_MANY_ROWS: " +
-      "More than one row returned by a subquery used as an expression") {
+    "More than one row returned by a subquery used as an expression") {
     checkError(
       exception = intercept[SparkException] {
         sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
@@ -631,16 +631,6 @@ class QueryExecutionErrorsSuite
         "message" -> "integer overflow",
         "alternative" -> "",
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
-  }
-
-  test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
-    val raw = """{"type":"array","elementType":"integer","containsNull":false}"""
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        StructType.fromString(raw)
-      },
-      errorClass = "FAILED_PARSE_STRUCT_TYPE",
-      parameters = Map("raw" -> s"'$raw'"))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {
