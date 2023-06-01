@@ -28,6 +28,7 @@ from pyspark.mlv2.base import Estimator, Model, Predictor, PredictionModel
 
 from pyspark.sql import DataFrame
 
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
 from pyspark.ml.param.shared import (
     HasMaxIter,
@@ -115,7 +116,7 @@ def _train_logistic_regression_model_worker_fn(
 
     optimizer = optim.SGD(ddp_model.parameters(), lr=learning_rate, momentum=momentum)
     data_loader = _get_spark_partition_data_loader(
-        num_samples_per_worker, batch_size, num_workers=0
+        num_samples_per_worker, batch_size, num_workers=0, prefetch_factor=None,
     )
     for i in range(max_iter):
         ddp_model.train()
@@ -146,7 +147,13 @@ def _train_logistic_regression_model_worker_fn(
     return None
 
 
+@inherit_doc
 class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressionParams):
+    """
+    Logistic regression estimator.
+
+    .. versionadded:: 3.5.0
+    """
 
     def __init__(
             self,
@@ -237,7 +244,13 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         return self._copyValues(lor_model)
 
 
+@inherit_doc
 class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
+    """
+    Model fitted by LogisticRegression.
+
+    .. versionadded:: 3.5.0
+    """
 
     def __init__(self, torch_model, num_features, num_classes):
         super().__init__()
