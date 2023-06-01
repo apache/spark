@@ -135,7 +135,7 @@
             <groupId>com.github.os72</groupId>
             <artifactId>protoc-jar-maven-plugin</artifactId>
             <version>${protoc-jar-maven-plugin.version}</version>
-            <!-- Generates Java classes for tests. TODO(Raghu): Generate descriptor files too. -->
+            <!-- Generates Java classes and descriptor files from Protobuf files. -->
             <executions>
               <execution>
                 <phase>generate-test-sources</phase>

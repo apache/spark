@@ -248,11 +248,9 @@ private[sql] object ProtobufUtils extends Logging {
         throw QueryCompilationErrors.descriptorParseError(ex)
     }
     val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
-    val fileDescriptorList: List[Descriptors.FileDescriptor] =
-      fileDescriptorSet.getFileList.asScala.map( fileDescriptorProto =>
-        buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex)
-      ).toList
-    fileDescriptorList
+    fileDescriptorSet.getFileList.asScala.map { fileDescriptorProto =>
+      buildFileDescriptor(fileDescriptorProto, fileDescriptorProtoIndex)
+    }.toList
   }
 
   /**
