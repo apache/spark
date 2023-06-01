@@ -70,3 +70,10 @@ SELECT nt1.k, nt2.k FROM nt1 inner join nt2 using (k);
 SELECT k, nt1.k FROM nt1 inner join nt2 using (k);
 
 SELECT k, nt2.k FROM nt1 inner join nt2 using (k);
+
+WITH
+  t1 AS (select key from values ('a') t(key)),
+  t2 AS (select key from values ('a') t(key))
+SELECT t1.key
+FROM t1 FULL OUTER JOIN t2 USING (key)
+WHERE t1.key NOT LIKE 'bb.%';
