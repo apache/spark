@@ -84,15 +84,15 @@ class _LinearNet(torch_nn.Module):
 
 
 def _train_logistic_regression_model_worker_fn(
-        num_samples_per_worker,
-        num_features,
-        batch_size,
-        max_iter,
-        num_classes,
-        learning_rate,
-        momentum,
-        fit_intercept,
-        seed,
+    num_samples_per_worker,
+    num_features,
+    batch_size,
+    max_iter,
+    num_classes,
+    learning_rate,
+    momentum,
+    fit_intercept,
+    seed,
 ):
     from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
     from torch.nn.parallel import DistributedDataParallel as DDP
@@ -106,17 +106,18 @@ def _train_logistic_regression_model_worker_fn(
     # TODO: support L1 / L2 regularization
     torch.distributed.init_process_group("gloo")
 
-    ddp_model = DDP(_LinearNet(
-        num_features=num_features,
-        num_classes=num_classes,
-        bias=fit_intercept
-    ))
+    ddp_model = DDP(
+        _LinearNet(num_features=num_features, num_classes=num_classes, bias=fit_intercept)
+    )
 
     loss_fn = torch_nn.CrossEntropyLoss()
 
     optimizer = optim.SGD(ddp_model.parameters(), lr=learning_rate, momentum=momentum)
     data_loader = _get_spark_partition_data_loader(
-        num_samples_per_worker, batch_size, num_workers=0, prefetch_factor=None,
+        num_samples_per_worker,
+        batch_size,
+        num_workers=0,
+        prefetch_factor=None,
     )
     for i in range(max_iter):
         ddp_model.train()
@@ -156,19 +157,19 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
     """
 
     def __init__(
-            self,
-            *,
-            featuresCol: str = "features",
-            labelCol: str = "label",
-            predictionCol: str = "prediction",
-            probabilityCol: str = "probability",
-            maxIter: int = 100,
-            tol: float = 1e-6,
-            numTrainWorkers: int = 1,
-            batchSize: int = 32,
-            learningRate: float = 0.001,
-            momentum: float = 0.9,
-            seed: int = 0,
+        self,
+        *,
+        featuresCol: str = "features",
+        labelCol: str = "label",
+        predictionCol: str = "prediction",
+        probabilityCol: str = "probability",
+        maxIter: int = 100,
+        tol: float = 1e-6,
+        numTrainWorkers: int = 1,
+        batchSize: int = 32,
+        learningRate: float = 0.001,
+        momentum: float = 0.9,
+        seed: int = 0,
     ):
         super(_LogisticRegressionParams, self).__init__()
         self._set(
@@ -195,10 +196,8 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
 
         # We don't need to persist the dataset because the shuffling result from the repartition
         # has been cached.
-        dataset = (
-            dataset
-                .select(self.getFeaturesCol(), self.getLabelCol())
-                .repartition(num_train_workers)
+        dataset = dataset.select(self.getFeaturesCol(), self.getLabelCol()).repartition(
+            num_train_workers
         )
 
         # TODO: check label values are in range of [0, num_classes)
@@ -282,8 +281,7 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
 
         def transform_fn(input_series: "pd.Series") -> Any:
             torch_model = _LinearNet(
-                num_features=num_features, num_classes=num_classes,
-                bias=fit_intercept
+                num_features=num_features, num_classes=num_classes, bias=fit_intercept
             )
             # TODO: Use spark broadast for `model_state_dict`,
             #  it can improve performance when model is large.
@@ -298,10 +296,13 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
             if self.getProbabilityCol():
                 probabilities = torch.softmax(result, dim=1).numpy()
 
-                return pd.DataFrame({
-                    self.getPredictionCol(): list(predictions),
-                    self.getProbabilityCol(): list(probabilities),
-                }, index=input_series.index.copy())
+                return pd.DataFrame(
+                    {
+                        self.getPredictionCol(): list(predictions),
+                        self.getProbabilityCol(): list(probabilities),
+                    },
+                    index=input_series.index.copy(),
+                )
             else:
                 return pd.Series(data=list(predictions), index=input_series.index.copy())
 

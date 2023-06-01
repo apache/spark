@@ -186,8 +186,7 @@ def transform_dataframe_column(
 
     if len(output_cols) > 1:
         return result_spark_df.withColumns(
-            {col_name: col(f"{output_col_name}.{col_name}")
-             for col_name, _ in output_cols}
+            {col_name: col(f"{output_col_name}.{col_name}") for col_name, _ in output_cols}
         ).drop(output_col_name)
     else:
         return result_spark_df

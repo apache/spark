@@ -33,13 +33,9 @@ except ImportError:
 
 
 class ClassificationTestsMixin:
-
     @staticmethod
     def _check_result(result_dataframe, expected_predictions, expected_probabilities=None):
-        np.testing.assert_array_equal(
-            list(result_dataframe.prediction),
-            expected_predictions
-        )
+        np.testing.assert_array_equal(list(result_dataframe.prediction), expected_predictions)
         if "probability" in result_dataframe.columns:
             np.testing.assert_allclose(
                 list(result_dataframe.probability),
@@ -54,7 +50,8 @@ class ClassificationTestsMixin:
                 (0.0, Vectors.dense(1.0, 2.0)),
                 (1.0, Vectors.dense(2.0, 1.0)),
                 (0.0, Vectors.dense(3.0, 3.0)),
-            ] * 100,
+            ]
+            * 100,
             ["label", "features"],
         )
         eval_df1 = self.spark.createDataFrame(
@@ -95,7 +92,8 @@ class ClassificationTestsMixin:
                 (1.0, Vectors.dense(1.0, 5.0)),
                 (2.0, Vectors.dense(1.0, -2.0)),
                 (0.0, Vectors.dense(-2.0, 1.5)),
-            ] * 100,
+            ]
+            * 100,
             ["label", "features"],
         )
         eval_df1 = self.spark.createDataFrame(
