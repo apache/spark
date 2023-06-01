@@ -443,7 +443,7 @@ class TorchDistributor(Distributor):
     def _execute_command(
         cmd: List[str],
         _prctl: bool = True,
-        redirect_to_stdout: bool = None,
+        redirect_to_stdout: bool = True,
         log_streaming_client: Optional[LogStreamingClient] = None,
     ) -> None:
         _TAIL_LINES_TO_KEEP = 100
