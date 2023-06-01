@@ -11160,12 +11160,79 @@ def udf(
 
 
 def udtf(
-    f: Optional[Type] = None, *, returnType: Union[StructType, str], name: Optional[str] = None
+    f: Optional[Type] = None,
+    returnType: Union[StructType, str] = None,
 ) -> Union[UserDefinedTableFunction, functools.partial]:
+    """Creates a user defined table function (UDTF).
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    f : class
+        the Python user-defined table function handler class.
+    returnType : :class:`pyspark.sql.types.StructType` or str
+        the return type of the user-defined table function. The value can be either a
+        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+
+    Examples
+    --------
+    >>> # Implement the UDTF class
+    >>> class TestUDTF:
+    >>>     def eval(self, *args):
+    >>>         yield "hello", "world"
+    >>>
+    >>> # Create the UDTF
+    >>> from pyspark.sql.functions import udtf
+    >>> test_udtf = udtf(TestUDTF, returnType="c1: string, c2: string")
+    >>>
+    >>> # Create the UDTF using the decorator
+    >>> @udtf(returnType="c1: int, c2: int")
+    >>> class PlusOne:
+    >>>     def eval(self, x: int):
+    >>>         yield x, x + 1
+    >>>
+    >>> # Invoke the UDTF
+    >>> test_udtf().show()
+    +-----+-----+
+    |   c1|   c2|
+    +-----+-----+
+    |hello|world|
+    +-----+-----+
+    >>> # Invoke the UDTF with parameters
+    >>> from pyspark.sql.functions import lit
+    >>> PlusOne(lit(1)).show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  1|  2|
+    +---+---+
+
+    Notes
+    -----
+    User-defined table functions are considered deterministic by default.
+    Use `asNondeterministic()` to mark a function as non-deterministic. E.g.:
+
+    >>> import random
+    >>> class RandomUDTF:
+    >>>     def eval(self, a: int):
+    >>>         yield a * int(random.random() * 100)
+    >>> random_udtf = udtf(RandomUDTF, "r: int").asNondeterministic()
+
+    User-defined table functions are considered opaque to the optimizer by default.
+    As a result, operations like filters from WHERE clauses or limits from
+    LIMIT/OFFSET clauses that appear after the UDTF call will execute on the
+    UDTF's result relation. By the same token, any relations forwarded as input
+    to UDTFs will plan as full table scans in the absence of any explicit such
+    filtering or other logic explicitly written in a table subquery surrounding the
+    provided input relation.
+
+    User-defined table functions do not accept keyword arguments on the calling side.
+    """
     if f is None:
-        return functools.partial(_create_udtf, returnType=returnType, name=name)
+        return functools.partial(_create_udtf, returnType=returnType)
     else:
-        return _create_udtf(f=f, returnType=returnType, name=name)
+        return _create_udtf(f=f, returnType=returnType)
 
 
 def _test() -> None:

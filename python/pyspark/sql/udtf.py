@@ -51,7 +51,7 @@ class UserDefinedTableFunction:
     """
     User-defined table function in Python
 
-    .. versionadded:: 3.5
+    .. versionadded:: 3.5.0
 
     Notes
     -----
@@ -147,7 +147,7 @@ class UDTFRegistration:
     Wrapper for user-defined table function registration. This instance can be accessed by
     :attr:`spark.udtf` or :attr:`sqlContext.udtf`.
 
-    .. versionadded:: 3.5
+    .. versionadded:: 3.5.0
     """
 
     def __init__(self, sparkSession: "SparkSession"):
@@ -160,7 +160,7 @@ class UDTFRegistration:
     ) -> UserDefinedTableFunction:
         """Register a Python user-defined table function as a SQL table function.
 
-        .. versionadded:: 3.5
+        .. versionadded:: 3.5.0
 
         Parameters
         ----------
@@ -175,8 +175,26 @@ class UDTFRegistration:
 
         Notes
         -----
+        Spark uses the return type of the given user-defined table function as the return
+        type of the registered user-defined function.
+
         To register a nondeterministic Python table function, users need to first build
         a nondeterministic user-defined table function and then register it as a SQL function.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import udtf
+        >>> @udtf(returnType="c1: int, c2: int")
+        >>> class PlusOne:
+        >>>     def eval(self, x: int):
+        >>>         yield x, x + 1
+        >>> spark.udtf.register(name="plus_one", f=PlusOne)
+        >>> spark.sql("SELECT * FROM plus_one(1)").collect()
+        [Row(c1=1, c2=2)]
+
+        >>> # Use it with lateral join
+        >>> spark.sql("SELECT * FROM VALUES (0, 1), (1, 2) t(x, y), LATERAL plus_one(x)").collect()
+        [Row(x=0, y=1, c1=0, c2=1), Row(x=1, y=2, c1=1, c2=2)]
         """
         register_udtf = _create_udtf(
             f.func,
