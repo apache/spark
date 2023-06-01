@@ -315,11 +315,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
 
-        if (
-            self._struct_in_pandas == "dict"
-            and self._df_for_struct
-            and types.is_struct(arrow_column.type)
-        ):
+        if self._df_for_struct and types.is_struct(arrow_column.type):
             import pandas as pd
 
             series = [
