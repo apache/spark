@@ -53,6 +53,12 @@ private[spark] object Status {
     .intConf
     .createWithDefault(100000)
 
+  val MAX_REFRESHED_TASKS = ConfigBuilder("spark.ui.refreshedTasks")
+    .doc("The maximum number of live tasks that are refreshed at any given time in the UI view.")
+    .version("3.5.0")
+    .intConf
+    .createWithDefault(Int.MaxValue)
+
   val MAX_RETAINED_DEAD_EXECUTORS = ConfigBuilder("spark.ui.retainedDeadExecutors")
     .version("2.0.0")
     .intConf

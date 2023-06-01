@@ -21,7 +21,7 @@ import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, LinkedHashMap}
 import scala.collection.mutable
 
 import org.apache.spark._
@@ -68,6 +68,7 @@ private[spark] class AppStatusListener(
 
   private val maxTasksPerStage = conf.get(MAX_RETAINED_TASKS_PER_STAGE)
   private val maxGraphRootNodes = conf.get(MAX_RETAINED_ROOT_NODES)
+  private val maxRefreshedTasks = conf.get(MAX_REFRESHED_TASKS)
 
   // Keep track of live entities, so that task metrics can be efficiently updated (without
   // causing too many writes to the underlying store, and other expensive operations).
@@ -75,7 +76,7 @@ private[spark] class AppStatusListener(
   private val liveJobs = new HashMap[Int, LiveJob]()
   private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
   private[spark] val deadExecutors = new HashMap[String, LiveExecutor]()
-  private val liveTasks = new HashMap[Long, LiveTask]()
+  private val liveTasks = new LinkedHashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
@@ -588,6 +589,13 @@ private[spark] class AppStatusListener(
     val task = new LiveTask(event.taskInfo, event.stageId, event.stageAttemptId, lastUpdateTime)
     liveTasks.put(event.taskInfo.taskId, task)
     liveUpdate(task, now)
+
+    // Remove eldest live task entries to avoid memory growing indefinetly in the case of
+    // potential memory leak caused by onTaskEnd events being dropped from the queue.
+    // See SPARK-43523
+    while (liveTasks.size > maxRefreshedTasks) {
+      liveTasks -= liveTasks.head._1
+    }
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (event.taskInfo.speculative) {
