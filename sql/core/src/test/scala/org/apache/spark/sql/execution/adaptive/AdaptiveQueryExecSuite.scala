@@ -2873,6 +2873,8 @@ class AdaptiveQueryExecSuite
           }
           if (skewedPartitionNumber > 0) {
             assert(read.size == 2)
+          } else {
+            assert(read.size == 1)
           }
           assert(read.last.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
             skewedPartitionNumber)
