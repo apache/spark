@@ -1101,3 +1101,6 @@ object FlatMapGroupsWithStateSuite {
     throw new TestFailedException("Could get watermark when not expected", 20)
   }
 }
+
+class RocksDBStateStoreFlatMapGroupsWithStateSuite
+  extends FlatMapGroupsWithStateSuite with RocksDBStateStoreTest
