@@ -24,6 +24,7 @@ package spark.connect;
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // Expression used to refer to fields, functions and similar. This can be used everywhere
 // expressions in SQL appear.
