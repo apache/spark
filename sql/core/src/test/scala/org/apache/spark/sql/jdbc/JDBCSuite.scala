@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, Project
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions.JDBC_UPSERT_KEY_COLUMNS
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
@@ -1183,6 +1184,44 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
     assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
     assert(db2.getTruncateQuery(table, Some(true)) == db2Query)
+  }
+
+  Seq(
+    ("MySQL",
+      JdbcDialects.get("jdbc:mysql://127.0.0.1/db"),
+      """
+        |INSERT INTO table (`id`, `time`, `value`, `comment`)
+        |VALUES ( ?,?,?,? )
+        |ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `comment` = VALUES(`comment`)
+        |""".stripMargin),
+    ("Postgres",
+      JdbcDialects.get("jdbc:postgresql://127.0.0.1/db"),
+      """
+        |INSERT INTO table ("id", "time", "value", "comment")
+        |VALUES ( ?,?,?,? )
+        |ON CONFLICT ("id", "time")
+        |DO UPDATE SET "value" = EXCLUDED."value", "comment" = EXCLUDED."comment"
+        |""".stripMargin)
+  ).foreach { case (label, dialect, expected) =>
+    test(s"upsert table query by dialect - ${dialect.getClass.getSimpleName.stripSuffix("$")}") {
+      assert(dialect.supportsUpsert() === true)
+
+      val options = {
+        new JDBCOptions(Map(
+          JDBC_UPSERT_KEY_COLUMNS -> "id, time",
+          JDBCOptions.JDBC_URL -> url,
+          JDBCOptions.JDBC_TABLE_NAME -> "table"
+        ))
+      }
+
+      val table = "table"
+      val columns = Array("id", "time", "value", "comment")
+      val quotedColumns = columns.map(dialect.quoteIdentifier)
+      val isCaseSensitive = false
+      val stmt = dialect.getUpsertStatement(table, quotedColumns, isCaseSensitive, options)
+
+      assert(stmt === expected)
+    }
   }
 
   test("Test DataFrame.where for Date and Timestamp") {

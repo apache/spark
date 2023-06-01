@@ -214,6 +214,31 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     schemaBuilder.result()
   }
 
+  override def getTableExistsQuery(table: String): String = {
+    s"SELECT 1 FROM $table LIMIT 1"
+  }
+
+  override def supportsUpsert(): Boolean = true
+
+  override def getUpsertStatement(
+      tableName: String,
+      columns: Array[String],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String = {
+    val insertColumns = columns.mkString(", ")
+    val placeholders = columns.map(_ => "?").mkString(",")
+    val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
+    val updateColumns = columns.filterNot(upsertKeyColumns.contains)
+    val updateClause =
+      updateColumns.map(x => s"$x = VALUES($x)").mkString(", ")
+
+    s"""
+       |INSERT INTO $tableName ($insertColumns)
+       |VALUES ( $placeholders )
+       |ON DUPLICATE KEY UPDATE $updateClause
+       |""".stripMargin
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
@@ -352,7 +377,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
     } catch {
       case _: Exception =>
-        logWarning("Cannot retrieved index info.")
+        logWarning("Cannot retrieve index info.")
     }
     indexMap.values.toArray
   }
