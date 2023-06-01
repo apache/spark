@@ -26,30 +26,31 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
 class PythonStreamingQueryListener(
-      listener: proto.AddStreamingQueryListenerCommand,
-      sessionId: String,
-      pythonExec: String) extends StreamingQueryListener {
-    // Start a process to run foreachbatch python func
-    // TODO: Reuse some functions from PythonRunner.scala
-    // TODO: Handle process better: reuse process; release process; monitor process
+    listener: proto.AddStreamingQueryListenerCommand,
+    sessionId: String,
+    pythonExec: String)
+    extends StreamingQueryListener {
+  // Start a process to run foreachbatch python func
+  // TODO: Reuse some functions from PythonRunner.scala
+  // TODO: Handle process better: reuse process; release process; monitor process
   // TODO(wei) reuse process
 //    val envVars = udf.func.envVars.asScala.toMap
 
-    val pb = new ProcessBuilder()
-    val pbEnv = pb.environment()
-    val pythonPath = PythonUtils.mergePythonPaths(
-      PythonUtils.sparkPythonPath,
+  val pb = new ProcessBuilder()
+  val pbEnv = pb.environment()
+  val pythonPath = PythonUtils.mergePythonPaths(
+    PythonUtils.sparkPythonPath,
 //      envVars.getOrElse("PYTHONPATH", ""),
-      sys.env.getOrElse("PYTHONPATH", ""))
-    pbEnv.put("PYTHONPATH", pythonPath)
+    sys.env.getOrElse("PYTHONPATH", ""))
+  pbEnv.put("PYTHONPATH", pythonPath)
 //    pbEnv.putAll(envVars.asJava)
 
-    pb.command(pythonExec)
+  pb.command(pythonExec)
 
-    // Encode serialized func as string so that it can be passed into the process through
-    // arguments
-    val onQueryStartedBytes = listener.getOnQueryStarted.toByteArray
-    val onQueryStartedStr = Base64.getEncoder().encodeToString(onQueryStartedBytes)
+  // Encode serialized func as string so that it can be passed into the process through
+  // arguments
+  val onQueryStartedBytes = listener.getOnQueryStarted.toByteArray
+  val onQueryStartedStr = Base64.getEncoder().encodeToString(onQueryStartedBytes)
 
   // Output for debug for now.
   // TODO: redirect the output stream
@@ -67,9 +68,9 @@ class PythonStreamingQueryListener(
        |}
        """.stripMargin
 
-    override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
-      val eventJson = toJSON(event)
-      val pythonScript = s"""
+  override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {
+    val eventJson = toJSON(event)
+    val pythonScript = s"""
       |print('###### Start running onQueryStarted ######')
       |from pyspark.sql import SparkSession
       |from pyspark.serializers import CloudPickleSerializer
@@ -97,27 +98,27 @@ class PythonStreamingQueryListener(
       |func(startEvent)
       |exit()
       """.stripMargin
-      pb.command(pythonExec, "-c", pythonScript)
-      val process = pb.start()
-      // Output for debug for now.
-      // TODO: redirect the output stream
-      // TODO: handle error
-      // TODO(WEI): python ver?
-      val is = process.getInputStream()
-      // scalastyle:off println
-      val out = Source.fromInputStream(is).mkString
-      println(s"##### Python out for query start event is: out=$out")
+    pb.command(pythonExec, "-c", pythonScript)
+    val process = pb.start()
+    // Output for debug for now.
+    // TODO: redirect the output stream
+    // TODO: handle error
+    // TODO(WEI): python ver?
+    val is = process.getInputStream()
+    // scalastyle:off println
+    val out = Source.fromInputStream(is).mkString
+    println(s"##### Python out for query start event is: out=$out")
 
-      val es = process.getErrorStream
-      val errorOut = Source.fromInputStream(es).mkString
-      println(s"##### Python error for query start event is: error=$errorOut")
+    val es = process.getErrorStream
+    val errorOut = Source.fromInputStream(es).mkString
+    println(s"##### Python error for query start event is: error=$errorOut")
 
-      val exitCode = process.waitFor()
-      println(s"##### End processing query start event exitCode=$exitCode")
-      // scalastyle:on println
-    }
+    val exitCode = process.waitFor()
+    println(s"##### End processing query start event exitCode=$exitCode")
+    // scalastyle:on println
+  }
 
-    override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
+  override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
 
-    override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
+  override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
 }

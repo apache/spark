@@ -295,7 +295,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`mydb1`.`t1`",
-    "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+    "proposal" : "`t1`.`i1`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -336,7 +336,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`",
-    "proposal" : "`spark_catalog`.`mydb1`.`t1`.`i1`"
+    "proposal" : "`i1`"
   },
   "queryContext" : [ {
     "objectType" : "",

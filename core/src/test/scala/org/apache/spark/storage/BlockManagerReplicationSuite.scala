@@ -75,9 +75,10 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       memoryManager: Option[UnifiedMemoryManager] = None): BlockManager = {
     conf.set(TEST_MEMORY, maxMem)
     conf.set(MEMORY_OFFHEAP_SIZE, maxMem)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
     val serializerManager = new SerializerManager(serializer, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
@@ -274,7 +275,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
       // create 1 faulty block manager by injecting faulty memory manager
       val memManager = UnifiedMemoryManager(conf, numCores = 1)
-      val mockedMemoryManager = spy(memManager)
+      val mockedMemoryManager = spy[UnifiedMemoryManager](memManager)
       doAnswer(_ => false).when(mockedMemoryManager).acquireStorageMemory(any(), any(), any())
       val store2 = makeBlockManager(10000, "host-2", Some(mockedMemoryManager))
 

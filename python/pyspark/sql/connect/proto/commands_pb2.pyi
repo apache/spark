@@ -698,6 +698,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
+    FOREACH_WRITER_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -721,6 +722,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query_name: builtins.str
     path: builtins.str
     table_name: builtins.str
+    @property
+    def foreach_writer(self) -> global___StreamingForeachWriter: ...
     def __init__(
         self,
         *,
@@ -736,6 +739,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
+        foreach_writer: global___StreamingForeachWriter | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -744,6 +748,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_writer",
+            b"foreach_writer",
             "input",
             b"input",
             "once",
@@ -767,6 +773,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach_writer",
+            b"foreach_writer",
             "format",
             b"format",
             "input",
@@ -805,6 +813,35 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     ] | None: ...
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
+
+class StreamingForeachWriter(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PYTHON_WRITER_FIELD_NUMBER: builtins.int
+    @property
+    def python_writer(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF: ...
+    def __init__(
+        self,
+        *,
+        python_writer: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["writer", b"writer"]
+    ) -> typing_extensions.Literal["python_writer"] | None: ...
+
+global___StreamingForeachWriter = StreamingForeachWriter
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1283,13 +1320,13 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["timeout_ms"] | None: ...
 
     ACTIVE_FIELD_NUMBER: builtins.int
-    GET_FIELD_NUMBER: builtins.int
+    GET_QUERY_FIELD_NUMBER: builtins.int
     AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
     RESET_TERMINATED_FIELD_NUMBER: builtins.int
     ADD_LISTENER_FIELD_NUMBER: builtins.int
     active: builtins.bool
     """active() API, returns a list of active queries."""
-    get: builtins.str
+    get_query: builtins.str
     """get() API, returns the StreamingQuery identified by id."""
     @property
     def await_any_termination(
@@ -1305,7 +1342,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         self,
         *,
         active: builtins.bool = ...,
-        get: builtins.str = ...,
+        get_query: builtins.str = ...,
         await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
         | None = ...,
         reset_terminated: builtins.bool = ...,
@@ -1322,8 +1359,8 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             b"await_any_termination",
             "command",
             b"command",
-            "get",
-            b"get",
+            "get_query",
+            b"get_query",
             "reset_terminated",
             b"reset_terminated",
         ],
@@ -1339,8 +1376,8 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
             b"await_any_termination",
             "command",
             b"command",
-            "get",
-            b"get",
+            "get_query",
+            b"get_query",
             "reset_terminated",
             b"reset_terminated",
         ],
@@ -1348,7 +1385,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> typing_extensions.Literal[
-        "active", "get", "await_any_termination", "reset_terminated", "add_listener"
+        "active", "get_query", "await_any_termination", "reset_terminated", "add_listener"
     ] | None: ...
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
@@ -1394,12 +1431,19 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             self,
             *,
             id: global___StreamingQueryInstanceId | None = ...,
-            name: builtins.str = ...,
+            name: builtins.str | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing_extensions.Literal["id", b"id"]) -> builtins.bool: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["id", b"id", "name", b"name"]
+            self,
+            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_name", b"_name"]
+        ) -> typing_extensions.Literal["name"] | None: ...
 
     class AwaitAnyTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

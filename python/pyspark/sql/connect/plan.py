@@ -38,16 +38,12 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
-from pyspark.errors import PySparkNotImplementedError
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.udf import UserDefinedFunction
-
-
-class InputValidationError(Exception):
-    pass
 
 
 class LogicalPlan:
@@ -433,8 +429,9 @@ class Project(LogicalPlan):
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._columns:
             if not isinstance(c, (Column, str)):
-                raise InputValidationError(
-                    f"Only Column or String can be used for projections: '{c}'."
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "columns"},
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -667,7 +664,8 @@ class Drop(LogicalPlan):
         columns: List[Union[Column, str]],
     ) -> None:
         super().__init__(child)
-        assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
+        if len(columns) > 0:
+            assert all(isinstance(c, (Column, str)) for c in columns)
         self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1959,11 +1957,15 @@ class SetCurrentCatalog(LogicalPlan):
 
 
 class ListCatalogs(LogicalPlan):
-    def __init__(self) -> None:
+    def __init__(self, pattern: Optional[str] = None) -> None:
         super().__init__(None)
+        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+        plan = proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
+        if self._pattern is not None:
+            plan.catalog.list_catalogs.pattern = self._pattern
+        return plan
 
 
 class MapPartitions(LogicalPlan):

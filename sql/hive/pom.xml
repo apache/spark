@@ -85,17 +85,6 @@
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
     --><!-- #endif scala-2.13 -->
-<!--
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
-    </dependency>
--->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
@@ -170,7 +159,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <dependency>

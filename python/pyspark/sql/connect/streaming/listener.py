@@ -100,6 +100,7 @@ class StreamingQueryListener(ABC):
         """
         pass
 
+
 class QueryStartedEvent:
     """
     Event representing the start of a query.
@@ -149,7 +150,7 @@ class QueryStartedEvent:
         return self._timestamp
 
     @classmethod
-    def fromJson(cls, j) -> 'QueryStartedEvent':
+    def fromJson(cls, j) -> "QueryStartedEvent":
         return cls(j["id"], j["runId"], j["name"], j["timestamp"])
 
 
@@ -195,8 +196,9 @@ class QueryIdleEvent:
         return self._timestamp
 
     @classmethod
-    def fromJson(cls, j) -> 'QueryStartedEvent':
+    def fromJson(cls, j) -> "QueryStartedEvent":
         return cls(j["id"], j["runId"], j["name"], j["timestamp"])
+
 
 # class QueryProgressEvent:
 #     """

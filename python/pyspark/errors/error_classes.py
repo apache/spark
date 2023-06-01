@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` is not supported."
     ]
   },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -84,9 +89,24 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_DETERMINE_TYPE": {
+    "message": [
+      "Some of types cannot be determined after inferring."
+    ]
+  },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_EMPTY_SCHEMA": {
+    "message": [
+      "Can not infer schema from empty dataset."
     ]
   },
   "CANNOT_INFER_SCHEMA_FOR_TYPE": {
@@ -111,7 +131,7 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_PARSE_DATATYPE": {
     "message": [
-      "Unable to parse datatype from schema. <error>."
+      "Unable to parse datatype. <msg>."
     ]
   },
   "CANNOT_PROVIDE_METADATA": {
@@ -147,6 +167,11 @@ ERROR_CLASSES_JSON = """
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
+    ]
+  },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
   "EXCEED_RETRY" : {
@@ -185,6 +210,11 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_NDARRAY_DIMENSION": {
+    "message": [
+      "NumPy array input should be of <dimensions> dimensions."
+    ]
+  },
   "INVALID_PANDAS_UDF" : {
     "message" : [
       "Invalid function: <detail>"
@@ -203,6 +233,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_TYPE" : {
+    "message" : [
+      "Argument `<arg_name>` should not be a <data_type>."
     ]
   },
   "INVALID_TYPENAME_CALL" : {
@@ -390,6 +425,11 @@ ERROR_CLASSES_JSON = """
       "<feature> is not implemented."
     ]
   },
+  "NOT_INSTANCE_OF" : {
+    "message" : [
+      "<value> is not an instance of type <data_type>."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -420,6 +460,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list[Column]."
     ]
   },
+  "NOT_LIST_OF_COLUMN_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[Column]."
+    ]
+  },
   "NOT_LIST_OF_FLOAT_OR_INT" : {
     "message" : [
       "Argument `<arg_name>` should be a list[float, int], got <arg_type>."
@@ -428,6 +473,11 @@ ERROR_CLASSES_JSON = """
   "NOT_LIST_OF_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a list[str], got <arg_type>."
+    ]
+  },
+  "NOT_LIST_OR_NONE_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
     ]
   },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
@@ -536,6 +586,26 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot start a remote Spark session because there is a regular Spark session already running."
+    ]
+  },
+  "SESSION_NOT_SAME" : {
+    "message" : [
+      "Both Datasets must belong to the same SparkSession."
+    ]
+  },
+  "SESSION_OR_CONTEXT_EXISTS" : {
+    "message" : [
+      "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
@@ -556,9 +626,19 @@ ERROR_CLASSES_JSON = """
       "pandas iterator UDF should exhaust the input iterator."
     ]
   },
+  "TOO_MANY_VALUES" : {
+    "message" : [
+      "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
+    ]
+  },
+  "UNEXPECTED_TUPLE_WITH_STRUCT" : {
+    "message" : [
+      "Unexpected tuple <tuple> with StructType."
     ]
   },
   "UNKNOWN_EXPLAIN_MODE" : {
@@ -579,6 +659,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW" : {
+    "message" : [
+      "Single data type <data_type> is not supported with Arrow."
     ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {
@@ -636,6 +721,11 @@ ERROR_CLASSES_JSON = """
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
     ]
   },
+  "VALUE_NOT_BETWEEN" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
+    ]
+  },
   "VALUE_NOT_NON_EMPTY_STR" : {
     "message" : [
       "Value for `<arg_name>` must be a non empty string, got '<arg_value>'."
@@ -658,7 +748,7 @@ ERROR_CLASSES_JSON = """
   },
   "VALUE_OUT_OF_BOUND" : {
     "message" : [
-      "Value for `<arg_name>` must be between <min> and <max>."
+      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {

@@ -53,7 +53,7 @@ from pyspark.sql.types import (
 from pyspark.errors import PySparkValueError
 
 # For Supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import is_remote, pyspark_column_op
 
 
 def _non_fractional_astype(
@@ -215,43 +215,35 @@ class NumericOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        result = pyspark_column_op("__lt__")(left, right)
         if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__lt__)(left, right)  # type: ignore[arg-type]
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        result = pyspark_column_op("__le__")(left, right)
         if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__le__)(left, right)  # type: ignore[arg-type]
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        result = pyspark_column_op("__ge__")(left, right)
         if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__ge__)(left, right)  # type: ignore[arg-type]
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        result = pyspark_column_op("__gt__")(left, right)
         if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__gt__)(left, right)  # type: ignore[arg-type]
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
 
 class IntegralOps(NumericOps):

@@ -3062,9 +3062,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = df.withColumn('id2', lit(3))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
         ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+
+        Don't include columns that are not valid python identifiers.
+
+        >>> df = df.withColumn('1', lit(4))
+        >>> df = df.withColumn('name 1', lit(5))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't include 1 or name 1
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
         """
         attrs = set(super().__dir__())
-        attrs.update(self.columns)
+        attrs.update(filter(lambda s: s.isidentifier(), self.columns))
         return sorted(attrs)
 
     @overload
@@ -5116,9 +5123,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             DataFrame without given columns.
 
+        Notes
+        -----
+        When an input is a column name, it is treated literally without further interpretation.
+        Otherwise, will try to match the equivalent expression.
+        So that dropping column by its name `drop(colName)` has different semantic with directly
+        dropping the column `drop(col(colName))`.
+
         Examples
         --------
         >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col, lit
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
@@ -5149,6 +5164,70 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | 14|    80|
         | 16|    85|
         +---+------+
+
+        >>> df3 = df.join(df2)
+        >>> df3.show()
+        +---+-----+------+----+
+        |age| name|height|name|
+        +---+-----+------+----+
+        | 14|  Tom|    80| Tom|
+        | 14|  Tom|    85| Bob|
+        | 23|Alice|    80| Tom|
+        | 23|Alice|    85| Bob|
+        | 16|  Bob|    80| Tom|
+        | 16|  Bob|    85| Bob|
+        +---+-----+------+----+
+
+        Drop two column by the same name.
+
+        >>> df3.drop("name").show()
+        +---+------+
+        |age|height|
+        +---+------+
+        | 14|    80|
+        | 14|    85|
+        | 23|    80|
+        | 23|    85|
+        | 16|    80|
+        | 16|    85|
+        +---+------+
+
+        Can not drop col('name') due to ambiguous reference.
+
+        >>> df3.drop(col("name")).show()
+        Traceback (most recent call last):
+        ...
+        pyspark.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
+
+        >>> df4 = df.withColumn("a.b.c", lit(1))
+        >>> df4.show()
+        +---+-----+-----+
+        |age| name|a.b.c|
+        +---+-----+-----+
+        | 14|  Tom|    1|
+        | 23|Alice|    1|
+        | 16|  Bob|    1|
+        +---+-----+-----+
+
+        >>> df4.drop("a.b.c").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+
+        Can not find a column matching the expression "a.b.c".
+
+        >>> df4.drop(col("a.b.c")).show()
+        +---+-----+-----+
+        |age| name|a.b.c|
+        +---+-----+-----+
+        | 14|  Tom|    1|
+        | 23|Alice|    1|
+        | 16|  Bob|    1|
+        +---+-----+-----+
         """
         column_names: List[str] = []
         java_columns: List[JavaObject] = []

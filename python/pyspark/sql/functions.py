@@ -41,7 +41,6 @@ from py4j.java_gateway import JVMView
 
 from pyspark import SparkContext
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from_numpy_type
@@ -6595,7 +6594,9 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
 
 
 @try_remote_functions
-def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+def levenshtein(
+    left: "ColumnOrName", right: "ColumnOrName", threshold: Optional[int] = None
+) -> Column:
     """Computes the Levenshtein distance of the two given strings.
 
     .. versionadded:: 1.5.0
@@ -6609,6 +6610,12 @@ def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
         first column value.
     right : :class:`~pyspark.sql.Column` or str
         second column value.
+    threshold : int, optional
+        if set when the levenshtein distance of the two given strings
+        less than or equal to a given threshold then return result distance, or -1
+
+        .. versionchanged: 3.5.0
+            Added ``threshold`` argument.
 
     Returns
     -------
@@ -6620,8 +6627,15 @@ def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> df0 = spark.createDataFrame([('kitten', 'sitting',)], ['l', 'r'])
     >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
     [Row(d=3)]
+    >>> df0.select(levenshtein('l', 'r', 2).alias('d')).collect()
+    [Row(d=-1)]
     """
-    return _invoke_function_over_columns("levenshtein", left, right)
+    if threshold is None:
+        return _invoke_function_over_columns("levenshtein", left, right)
+    else:
+        return _invoke_function(
+            "levenshtein", _to_java_column(left), _to_java_column(right), threshold
+        )
 
 
 @try_remote_functions
@@ -10398,13 +10412,10 @@ def udf(
         return functools.partial(
             _create_py_udf,
             returnType=return_type,
-            evalType=PythonEvalType.SQL_BATCHED_UDF,
             useArrow=useArrow,
         )
     else:
-        return _create_py_udf(
-            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
-        )
+        return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
 def _test() -> None:
