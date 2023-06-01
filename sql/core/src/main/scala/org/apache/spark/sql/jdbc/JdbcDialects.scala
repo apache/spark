@@ -335,6 +335,17 @@ abstract class JdbcDialect extends Serializable with Logging {
       s"TRUNCATE TABLE $table"
   }
 
+  @Since("3.5.0")
+  def supportsUpsert(): Boolean = false
+
+  @Since("3.5.0")
+  def getUpsertStatement(
+      tableName: String,
+      columns: Array[StructField],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String =
+    throw new UnsupportedOperationException("upserts are not supported")
+
   /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.

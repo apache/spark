@@ -160,8 +160,12 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // if to truncate the table from the JDBC database
   val isTruncate = parameters.getOrElse(JDBC_TRUNCATE, "false").toBoolean
-
   val isCascadeTruncate: Option[Boolean] = parameters.get(JDBC_CASCADE_TRUNCATE).map(_.toBoolean)
+  // if to upsert the table in the JDBC database
+  val isUpsert = parameters.getOrElse(JDBC_UPSERT, "false").toBoolean
+  // the columns used to identify update and insert rows in upsert mode
+  val upsertKeyColumns = parameters.getOrElse(JDBC_UPSERT_KEY_COLUMNS, "").split(",").map(_.trim)
+
   // the create table option , which can be table_options or partition_options.
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
@@ -296,6 +300,8 @@ object JDBCOptions {
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CASCADE_TRUNCATE = newOption("cascadeTruncate")
+  val JDBC_UPSERT = newOption("upsert")
+  val JDBC_UPSERT_KEY_COLUMNS = newOption("upsertKeyColumns")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
   val JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES = newOption("customSchema")

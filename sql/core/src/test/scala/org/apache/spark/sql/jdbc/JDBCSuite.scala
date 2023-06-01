@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, Project
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions.JDBC_UPSERT_KEY_COLUMNS
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
@@ -1154,6 +1155,26 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
     assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
     assert(db2.getTruncateQuery(table, Some(true)) == db2Query)
+  }
+
+  test("upsert table query by dialect") {
+    val options = {
+      new JDBCOptions(Map(
+        JDBC_UPSERT_KEY_COLUMNS -> "id, time",
+        JDBCOptions.JDBC_URL -> url,
+        JDBCOptions.JDBC_TABLE_NAME -> "table"
+      ))
+    }
+    val columns = Array("id", "time", "value", "comment")
+
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val quotedColumns = columns.map(MySQL.quoteIdentifier)
+    val isCaseSensitive = false
+    val mysqlStmt = MySQL.getUpsertStatement("table", quotedColumns, isCaseSensitive, options)
+    assert(mysqlStmt === "\n" +
+      "INSERT INTO table (`id`, `time`, `value`, `comment`)\n" +
+      "VALUES ( ?,?,?,? )\n" +
+      "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `comment` = VALUES(`comment`)\n")
   }
 
   test("Test DataFrame.where for Date and Timestamp") {

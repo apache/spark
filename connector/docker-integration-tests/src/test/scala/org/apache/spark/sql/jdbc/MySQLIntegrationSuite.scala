@@ -25,6 +25,7 @@ import java.util.Properties
 import scala.util.Using
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.ShortType
@@ -40,6 +41,8 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
+  import testImplicits._
+
   override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -97,6 +100,14 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
     conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
       .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE upsert (id INTEGER, ts TIMESTAMP, v1 DOUBLE, v2 DOUBLE, " +
+      "PRIMARY KEY pk (id, ts))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsert VALUES " +
+      "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
+      "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
+      "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
+      "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
 
   def testConnection(): Unit = {
@@ -254,7 +265,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
-    df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
+    df1.write.mode(SaveMode.Append).jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
@@ -284,7 +295,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
   }
-
 
   test("SPARK-47478: all boolean synonyms read-write roundtrip") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bools", new Properties)
@@ -358,6 +368,43 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
     assert(df.schema.fields.head.dataType === ShortType)
   }
+
+  Seq(false, true).foreach { exists =>
+    test(s"Upsert ${if (exists) "" else "non-"}existing table") {
+      val df = Seq(
+        (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568), // row unchanged
+        (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678), // updates v1
+        (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680), // updates v1 and v2
+        (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789) // inserts new row
+      ).toDF("id", "ts", "v1", "v2").repartition(10)
+
+      val table = if (exists) "upsert" else "new_table"
+      val options = Map("numPartitions" -> "10", "upsert" -> "true")
+      df.write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, table, new Properties)
+
+      val actual = spark.read.jdbc(jdbcUrl, table, new Properties).collect.toSet
+      val existing = if (exists) {
+        Set((1, Timestamp.valueOf("1996-01-01 01:23:45"), 1.234, 1.234567))
+      } else {
+        Set.empty
+      }
+      val upsertedRows = Set(
+        (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568),
+        (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678),
+        (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680),
+        (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789)
+      )
+      val expected = (existing ++ upsertedRows).map { case (id, ts, v1, v2) =>
+        Row(Integer.valueOf(id), ts, v1.doubleValue(), v2.doubleValue())
+      }
+      assert(actual === expected)
+    }
+  }
+
+  test("Write with unspecified mode with upsert") { }
+  test("Write with overwrite mode with upsert") { }
+  test("Write with error-if-exists mode with upsert") { }
+  test("Write with ignore mode with upsert") { }
 }
 
 
