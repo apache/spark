@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.connect.artifact
 
+import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
@@ -32,8 +36,8 @@ import org.apache.spark.util.Utils
  *
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
  * Currently, jars and classfile artifacts undergo additional processing:
- *   - Jars are automatically added to the underlying [[SparkContext]] and are accessible by all
- *     users of the cluster.
+ *   - Jars and pyfiles are automatically added to the underlying [[SparkContext]] and are
+ *     accessible by all users of the cluster.
  *   - Class files are moved into a common directory that is shared among all users of the
  *     cluster. Note: Under a multi-user setup, class file conflicts may occur between user
  *     classes as the class file directory is shared.
@@ -70,6 +74,7 @@ class SparkConnectArtifactManager private[connect] {
     }
 
   private val jarsList = new CopyOnWriteArrayList[Path]
+  private val pythonIncludeList = new CopyOnWriteArrayList[String]
 
   /**
    * Get the URLs of all jar artifacts added through the [[SparkConnectService]].
@@ -77,6 +82,13 @@ class SparkConnectArtifactManager private[connect] {
    * @return
    */
   def getSparkConnectAddedJars: Seq[URL] = jarsList.asScala.map(_.toUri.toURL).toSeq
+
+  /**
+   * Get the py-file names added through the [[SparkConnectService]].
+   *
+   * @return
+   */
+  def getSparkConnectPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
@@ -87,13 +99,32 @@ class SparkConnectArtifactManager private[connect] {
    * @param serverLocalStagingPath
    */
   private[connect] def addArtifact(
-      session: SparkSession,
+      sessionHolder: SessionHolder,
       remoteRelativePath: Path,
-      serverLocalStagingPath: Path): Unit = {
+      serverLocalStagingPath: Path,
+      fragment: Option[String]): Unit = {
     require(!remoteRelativePath.isAbsolute)
-    if (remoteRelativePath.startsWith("classes/")) {
+    if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
+      val tmpFile = serverLocalStagingPath.toFile
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        val blockManager = sessionHolder.session.sparkContext.env.blockManager
+        val blockId = CacheId(
+          userId = sessionHolder.userId,
+          sessionId = sessionHolder.sessionId,
+          hash = remoteRelativePath.toString.stripPrefix(s"cache${File.separator}"))
+        val updater = blockManager.TempFileBasedBlockStoreUpdater(
+          blockId = blockId,
+          level = StorageLevel.MEMORY_AND_DISK_SER,
+          classTag = implicitly[ClassTag[Array[Byte]]],
+          tmpFile = tmpFile,
+          blockSize = tmpFile.length(),
+          tellMaster = false)
+        updater.save()
+      }(catchBlock = { tmpFile.delete() })
+    } else if (remoteRelativePath.startsWith(s"classes${File.separator}")) {
       // Move class files to common location (shared among all users)
-      val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))
+      val target = classArtifactDir.resolve(
+        remoteRelativePath.toString.stripPrefix(s"classes${File.separator}"))
       Files.createDirectories(target.getParent)
       // Allow overwriting class files to capture updates to classes.
       Files.move(serverLocalStagingPath, target, StandardCopyOption.REPLACE_EXISTING)
@@ -108,10 +139,21 @@ class SparkConnectArtifactManager private[connect] {
             s"Jars cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
-      if (remoteRelativePath.startsWith("jars")) {
+      if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
         // Adding Jars to the underlying spark context (visible to all users)
-        session.sessionState.resourceLoader.addJar(target.toString)
+        sessionHolder.session.sessionState.resourceLoader.addJar(target.toString)
         jarsList.add(target)
+      } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
+        sessionHolder.session.sparkContext.addFile(target.toString)
+        val stringRemotePath = remoteRelativePath.toString
+        if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
+            ".egg") || stringRemotePath.endsWith(".jar")) {
+          pythonIncludeList.add(target.getFileName.toString)
+        }
+      } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
+        val canonicalUri =
+          fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
+        sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
       }
     }
   }

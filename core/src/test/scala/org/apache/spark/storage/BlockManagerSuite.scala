@@ -131,10 +131,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       None
     }
     val bmSecurityMgr = new SecurityManager(bmConf, encryptionKey)
-    val transfer = transferService
-      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
-    val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, bmConf)
+    val transfer = transferService.getOrElse(new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1))
+    val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
     val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", 0)
       Some(new ExternalBlockStoreClient(transConf, bmSecurityMgr,
@@ -186,8 +186,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(sc.conf).thenReturn(conf)
 
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
-    liveListenerBus = spy(new LiveListenerBus(conf))
-    master = spy(new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
+    liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
+    master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
         liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
         isDriver = true)),
@@ -873,7 +873,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       conf.set("spark.shuffle.io.maxRetries", "0")
       val sameHostBm = makeBlockManager(8000, "sameHost", master)
 
-      val otherHostTransferSrv = spy(sameHostBm.blockTransferService)
+      val otherHostTransferSrv = spy[BlockTransferService](sameHostBm.blockTransferService)
       doAnswer { _ =>
          "otherHost"
       }.when(otherHostTransferSrv).hostName
@@ -888,7 +888,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val blockId = "list"
       bmToPutBlock.putIterator(blockId, List(array).iterator, storageLevel, tellMaster = true)
 
-      val sameHostTransferSrv = spy(sameHostBm.blockTransferService)
+      val sameHostTransferSrv = spy[BlockTransferService](sameHostBm.blockTransferService)
       doAnswer { _ =>
          fail("Fetching over network is not expected when the block is requested from same host")
       }.when(sameHostTransferSrv).fetchBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
@@ -935,7 +935,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         }
       }
       val store1 = makeBlockManager(8000, "executor1", this.master, Some(mockTransferService))
-      val spiedStore1 = spy(store1)
+      val spiedStore1 = spy[BlockManager](store1)
       doAnswer { inv =>
         val blockId = inv.getArguments()(0).asInstanceOf[BlockId]
         val localDirs = inv.getArguments()(1).asInstanceOf[Array[String]]
@@ -974,7 +974,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
-    val store = spy(makeBlockManager(8000, "executor1"))
+    val store = spy[BlockManager](makeBlockManager(8000, "executor1"))
     val store2 = makeBlockManager(8000, "executor2")
     val list1 = List(new Array[Byte](4000))
     val blockId = RDDBlockId(0, 0)
@@ -1308,9 +1308,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -1357,8 +1358,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None
       val securityMgr = new SecurityManager(conf, ioEncryptionKey)
       val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
-      val transfer =
-        new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+      val transfer = new NettyBlockTransferService(
+        conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
       val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
         serializerManager, conf, memoryManager, mapOutputTracker,
@@ -2193,9 +2194,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     case class User(id: Long, name: String)
 
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
@@ -2216,9 +2218,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       = createKryoSerializerWithDiskCorruptedInputStream()
 
     conf.set(TEST_MEMORY, 1200L)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)

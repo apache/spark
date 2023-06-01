@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -353,8 +353,15 @@ abstract class StreamExecution(
 
         // Notify others
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
+        val errorClassOpt = exception.flatMap {
+          _.cause match {
+            case t: SparkThrowable => Some(t.getErrorClass)
+            case _ => None
+          }
+        }
         postEvent(
-          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
+          new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
+            errorClassOpt))
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&

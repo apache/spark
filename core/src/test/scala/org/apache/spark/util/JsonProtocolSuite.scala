@@ -809,6 +809,71 @@ class JsonProtocolSuite extends SparkFunSuite {
       JsonProtocol.taskEndReasonFromJson(exceptionFailureJson).asInstanceOf[ExceptionFailure]
     assert(exceptionFailure.description == null)
   }
+
+  test("SPARK-43237: Handle null exception message in event log") {
+    val exception = new Exception()
+    testException(exception)
+  }
+
+  test("SPARK-43052: Handle stackTrace with null file name") {
+    val ex = new Exception()
+    ex.setStackTrace(Array(new StackTraceElement("class", "method", null, -1)))
+    testException(ex)
+  }
+
+  test("SPARK-43340: Handle missing Stack Trace in event log") {
+    val exNoStackJson =
+      """
+        |{
+        |  "Message": "Job aborted"
+        |}
+        |""".stripMargin
+    val exNoStack = JsonProtocol.exceptionFromJson(exNoStackJson)
+    assert(exNoStack.getStackTrace.isEmpty)
+
+    val exEmptyStackJson =
+      """
+        |{
+        |  "Message": "Job aborted",
+        |  "Stack Trace": []
+        |}
+        |""".stripMargin
+    val exEmptyStack = JsonProtocol.exceptionFromJson(exEmptyStackJson)
+    assert(exEmptyStack.getStackTrace.isEmpty)
+
+    // test entire job failure event is equivalent
+    val exJobFailureNoStackJson =
+      """
+        |{
+        |   "Event": "SparkListenerJobEnd",
+        |   "Job ID": 31,
+        |   "Completion Time": 1616171909785,
+        |   "Job Result":{
+        |      "Result": "JobFailed",
+        |      "Exception": {
+        |         "Message": "Job aborted"
+        |      }
+        |   }
+        |}
+        |""".stripMargin
+    val exJobFailureExpectedJson =
+      """
+        |{
+        |   "Event": "SparkListenerJobEnd",
+        |   "Job ID": 31,
+        |   "Completion Time": 1616171909785,
+        |   "Job Result": {
+        |      "Result": "JobFailed",
+        |      "Exception": {
+        |         "Message": "Job aborted",
+        |         "Stack Trace": []
+        |      }
+        |   }
+        |}
+        |""".stripMargin
+    val jobFailedEvent = JsonProtocol.sparkEventFromJson(exJobFailureNoStackJson)
+    testEvent(jobFailedEvent, exJobFailureExpectedJson)
+  }
 }
 
 
@@ -921,6 +986,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
     val newValue = JsonProtocol.accumValueFromJson(name, json)
     val expectedValue = if (name.exists(_.startsWith(METRICS_PREFIX))) value else value.toString
     assert(newValue === expectedValue)
+  }
+
+  private def testException(exception: Exception): Unit = {
+    val newException = JsonProtocol.exceptionFromJson(
+      toJsonString(JsonProtocol.exceptionToJson(exception, _)))
+    assertEquals(exception, newException)
   }
 
   /** -------------------------------- *

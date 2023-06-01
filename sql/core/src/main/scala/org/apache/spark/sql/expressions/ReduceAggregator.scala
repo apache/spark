@@ -66,3 +66,9 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
     reduction._2
   }
 }
+
+private[sql] object ReduceAggregator {
+  def apply[T: Encoder](f: AnyRef): ReduceAggregator[T] = {
+    new ReduceAggregator(f.asInstanceOf[(T, T) => T])
+  }
+}

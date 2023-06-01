@@ -39,6 +39,7 @@ message Command {
     WriteStreamOperationStart write_stream_operation_start = 6;
     StreamingQueryCommand streaming_query_command = 7;
     GetResourcesCommand get_resources_command = 8;
+    StreamingQueryManagerCommand streaming_query_manager_command = 9;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -208,6 +209,14 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  StreamingForeachWriter foreach_writer = 13;
+}
+
+message StreamingForeachWriter {
+  oneof writer {
+    PythonUDF python_writer = 1;
+  }
 }
 
 message WriteStreamOperationStartResult {
@@ -244,9 +253,8 @@ message StreamingQueryCommand {
   // (Required) Query instance. See `StreamingQueryInstanceId`.
   StreamingQueryInstanceId query_id = 1;
 
+  // See documentation for the corresponding API method in StreamingQuery.
   oneof command {
-    // See documentation for the corresponding API method in StreamingQuery.
-
     // status() API.
     bool status = 2;
     // lastProgress() API.
@@ -308,11 +316,62 @@ message StreamingQueryCommandResult {
   }
 
   message ExceptionResult {
-    // Exception message as string
+    // (Optional) Exception message as string, maps to the return value of original
+    // StreamingQueryException's toString method
     optional string exception_message = 1;
+    // (Optional) Exception error class as string
+    optional string error_class = 2;
+    // (Optional) Exception stack trace as string
+    optional string stack_trace = 3;
   }
 
   message AwaitTerminationResult {
+    bool terminated = 1;
+  }
+}
+
+// Commands for the streaming query manager.
+message StreamingQueryManagerCommand {
+
+  // See documentation for the corresponding API method in StreamingQueryManager.
+  oneof command {
+    // active() API, returns a list of active queries.
+    bool active = 1;
+    // get() API, returns the StreamingQuery identified by id.
+    string get_query = 2;
+    // awaitAnyTermination() API, wait until any query terminates or timeout.
+    AwaitAnyTerminationCommand await_any_termination = 3;
+    // resetTerminated() API.
+    bool reset_terminated = 4;
+  }
+
+  message AwaitAnyTerminationCommand {
+    // (Optional) The waiting time in milliseconds to wait for any query to terminate.
+    optional int64 timeout_ms = 1;
+  }
+}
+
+// Response for commands on the streaming query manager.
+message StreamingQueryManagerCommandResult {
+  oneof result_type {
+    ActiveResult active = 1;
+    StreamingQueryInstance query = 2;
+    AwaitAnyTerminationResult await_any_termination = 3;
+    bool reset_terminated = 4;
+  }
+
+  message ActiveResult {
+    repeated StreamingQueryInstance active_queries = 1;
+  }
+
+  message StreamingQueryInstance {
+    // (Required) The id and runId of this query.
+    StreamingQueryInstanceId id = 1;
+    // (Optional) The name of this query.
+    optional string name = 2;
+  }
+
+  message AwaitAnyTerminationResult {
     bool terminated = 1;
   }
 }

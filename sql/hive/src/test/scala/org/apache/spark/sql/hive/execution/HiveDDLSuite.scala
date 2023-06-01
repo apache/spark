@@ -563,7 +563,7 @@ class HiveDDLSuite
   test("create partitioned table without specifying data type for the partition columns") {
     assertAnalysisError(
       "CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet",
-      "partition column b is not defined in table")
+      "partition column `b` is not defined in table")
   }
 
   test("add/drop partition with location - managed table") {
@@ -770,8 +770,8 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')",
-          "Attempted to unset non-existent property 'p' in table " +
-            s"'`$SESSION_CATALOG_NAME`.`default`.`view1`'")
+          "Attempted to unset non-existent properties [`p`] in table " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
       }
     }
   }
@@ -1748,7 +1748,9 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')",
-          s"${forbiddenPrefix}foo")
+          s"${(forbiddenPrefix.split(".") :+ "foo")
+            .map(part => s"`$part`")
+            .mkString(".")}")
 
         assertAnalysisError(
           s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')",
@@ -1853,11 +1855,12 @@ class HiveDDLSuite
       }
       assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
-      val e3 = intercept[AnalysisException] {
-        spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
-      }
-      assert(e3.message.contains(s"Cannot overwrite table $SESSION_CATALOG_NAME.default.t " +
-        "that is also being read from"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.table("t").write.format("hive").mode("overwrite").saveAsTable("t")
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`$SESSION_CATALOG_NAME`.`default`.`t`"))
     }
   }
 
@@ -3095,5 +3098,21 @@ class HiveDDLSuite
     assertAnalysisError(
       "CREATE TABLE tab (c1 int) PARTITIONED BY (c1) STORED AS PARQUET",
       "Cannot use all columns for partition columns")
+  }
+
+  test("SPARK-43359: Delete table not allowed") {
+    val tbl = "t1"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl(c1 INT)")
+      val e = intercept[AnalysisException] {
+        sql(s"DELETE FROM $tbl WHERE c1 = 1")
+      }
+      checkError(e,
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> s"`spark_catalog`.`default`.`$tbl`",
+          "operation" -> "DELETE")
+      )
+    }
   }
 }

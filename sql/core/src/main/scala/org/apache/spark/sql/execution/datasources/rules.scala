@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -64,7 +65,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       // so we should leave it be for now.
       try {
         resolveDataSource(u.multipartIdentifier)
-        throw QueryCompilationErrors.timeTravelUnsupportedError("path-based tables")
+        throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
       } catch {
         case _: ClassNotFoundException => r
       }
@@ -362,7 +363,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-object PreprocessTableInsertion extends Rule[LogicalPlan] {
+object PreprocessTableInsertion extends ResolveInsertionBase {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,
@@ -374,11 +375,6 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
-
-    if (expectedColumns.length != insert.query.schema.length) {
-      throw QueryCompilationErrors.mismatchedInsertedDataColumnNumberError(
-        tblName, insert, staticPartCols)
-    }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
@@ -392,8 +388,28 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       }
     }
 
-    val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, conf)
+    // Create a project if this INSERT has a user-specified column list.
+    val isByName = insert.userSpecifiedCols.nonEmpty
+    val query = if (isByName) {
+      createProjectForByNameQuery(insert)
+    } else {
+      insert.query
+    }
+    val newQuery = try {
+      TableOutputResolver.resolveOutputColumns(
+        tblName, expectedColumns, query, byName = isByName, conf, supportColDefaultValue = true)
+    } catch {
+      case e: AnalysisException if staticPartCols.nonEmpty &&
+          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH" =>
+        val newException = e.copy(
+          errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
+          messageParameters = e.messageParameters ++ Map(
+            "tableColumns" -> insert.table.output.map(c => s"'${c.name}'").mkString(", "),
+            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => s"'$c'").mkString(", ")
+          ))
+        newException.setStackTrace(e.getStackTrace)
+        throw newException
+    }
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(

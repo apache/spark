@@ -125,7 +125,7 @@ case class InsertAdaptiveSparkPlan(
   /**
    * Returns an expression-id-to-execution-plan map for all the sub-queries.
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
-   * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
+   * rule.
    */
   private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
     val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]

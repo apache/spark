@@ -38,15 +38,12 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.udf import UserDefinedFunction
-
-
-class InputValidationError(Exception):
-    pass
 
 
 class LogicalPlan:
@@ -432,8 +429,9 @@ class Project(LogicalPlan):
         """Ensures that all input arguments are instances of Expression or String."""
         for c in self._columns:
             if not isinstance(c, (Column, str)):
-                raise InputValidationError(
-                    f"Only Column or String can be used for projections: '{c}'."
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                    message_parameters={"arg_name": "columns"},
                 )
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -666,7 +664,8 @@ class Drop(LogicalPlan):
         columns: List[Union[Column, str]],
     ) -> None:
         super().__init__(child)
-        assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
+        if len(columns) > 0:
+            assert all(isinstance(c, (Column, str)) for c in columns)
         self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -804,15 +803,9 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise NotImplementedError(
-                """
-                Unsupported join type: %s. Supported join types include:
-                "inner", "outer", "full", "fullouter", "full_outer",
-                "leftouter", "left", "left_outer", "rightouter",
-                "right", "right_outer", "leftsemi", "left_semi",
-                "semi", "leftanti", "left_anti", "anti", "cross",
-                """
-                % how
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_JOIN_TYPE",
+                message_parameters={"join_type": how},
             )
         self.how = join_type
 
@@ -887,11 +880,9 @@ class SetOperation(LogicalPlan):
         elif self.set_op == "except":
             plan.set_op.set_op_type = proto.SetOperation.SET_OP_TYPE_EXCEPT
         else:
-            raise NotImplementedError(
-                """
-                Unsupported set operation type: %s.
-                """
-                % plan.set_op.set_op_type
+            raise PySparkNotImplementedError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"feature": self.set_op},
             )
 
         plan.set_op.is_all = self.is_all

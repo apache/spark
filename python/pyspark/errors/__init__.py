@@ -25,6 +25,7 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     ParseException,
     IllegalArgumentException,
     ArithmeticException,
+    UnsupportedOperationException,
     ArrayIndexOutOfBoundsException,
     DateTimeException,
     NumberFormatException,
@@ -37,7 +38,9 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     PySparkTypeError,
     PySparkValueError,
     PySparkAttributeError,
+    PySparkRuntimeError,
     PySparkAssertionError,
+    PySparkNotImplementedError,
 )
 
 
@@ -48,6 +51,7 @@ __all__ = [
     "ParseException",
     "IllegalArgumentException",
     "ArithmeticException",
+    "UnsupportedOperationException",
     "ArrayIndexOutOfBoundsException",
     "DateTimeException",
     "NumberFormatException",
@@ -60,5 +64,7 @@ __all__ = [
     "PySparkTypeError",
     "PySparkValueError",
     "PySparkAttributeError",
+    "PySparkRuntimeError",
     "PySparkAssertionError",
+    "PySparkNotImplementedError",
 ]

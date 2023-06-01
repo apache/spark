@@ -23,15 +23,14 @@ from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 
 from pyspark import StorageLevel
-from pyspark.sql import Column, DataFrame as SparkDataFrame
+from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
-from pyspark.pandas._typing import IndexOpsLike, GenericColumn
+from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-from pyspark.sql.connect.column import Column as ConnectColumn
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -59,7 +58,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         return self._data._internal.spark_column_nullable_for(self._data._column_label)
 
     @property
-    def column(self) -> Column:
+    def column(self) -> PySparkColumn:
         """
         Spark Column object representing the Series/Index.
 
@@ -68,7 +67,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func: Callable[[Column], GenericColumn]) -> IndexOpsLike:
+    def transform(self, func: Callable[[PySparkColumn], PySparkColumn]) -> IndexOpsLike:
         """
         Applies a function that takes and returns a Spark column. It allows natively
         applying a Spark function and column APIs with the Spark column internally used
@@ -106,7 +105,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         2    1.098612
         Name: a, dtype: float64
 
-        >>> df.index.spark.transform(lambda c: c + 10)
+        >>> df.index.spark.transform(lambda c: c + 10)  # doctest: +SKIP
         Int64Index([10, 11, 12], dtype='int64')
 
         >>> df.a.spark.transform(lambda c: c + df.b.spark.column)
@@ -120,7 +119,13 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         if isinstance(self._data, MultiIndex):
             raise NotImplementedError("MultiIndex does not support spark.transform yet.")
         output = func(self._data.spark.column)
-        if not isinstance(output, (Column, ConnectColumn)):
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
@@ -129,9 +134,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         # within the function, for example,
         # `df1.a.spark.transform(lambda _: F.col("non-existent"))`.
         field = InternalField.from_struct_field(
-            self._data._internal.spark_frame.select(output).schema.fields[  # type: ignore[arg-type]
-                0
-            ]
+            self._data._internal.spark_frame.select(output).schema.fields[0]
         )
         return self._data._with_new_scol(scol=output, field=field)
 
@@ -142,7 +145,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
 
 
 class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
-    def apply(self, func: Callable[[Column], Union[Column, ConnectColumn]]) -> "ps.Series":
+    def apply(self, func: Callable[[PySparkColumn], PySparkColumn]) -> "ps.Series":
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -197,16 +200,20 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
         from pyspark.pandas.internal import HIDDEN_COLUMNS
 
         output = func(self._data.spark.column)
-        if not isinstance(output, (Column, ConnectColumn)):
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
             )
         assert isinstance(self._data, Series)
 
-        sdf = self._data._internal.spark_frame.drop(*HIDDEN_COLUMNS).select(
-            output  # type: ignore[arg-type]
-        )
+        sdf = self._data._internal.spark_frame.drop(*HIDDEN_COLUMNS).select(output)
         # Lose index.
         return first_series(DataFrame(sdf)).rename(self._data.name)
 
@@ -284,13 +291,14 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
 
         Examples
         --------
+        >>> import pyspark.pandas as ps
         >>> idx = ps.Index([1, 2, 3])
-        >>> idx
+        >>> idx  # doctest: +SKIP
         Int64Index([1, 2, 3], dtype='int64')
 
         The analyzed one should return the same value.
 
-        >>> idx.spark.analyzed
+        >>> idx.spark.analyzed  # doctest: +SKIP
         Int64Index([1, 2, 3], dtype='int64')
 
         However, it won't work with the same anchor Index.
@@ -301,7 +309,7 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
 
         >>> with ps.option_context('compute.ops_on_diff_frames', True):
-        ...     (idx + idx.spark.analyzed).sort_values()
+        ...     (idx + idx.spark.analyzed).sort_values()  # doctest: +SKIP
         Int64Index([2, 4, 6], dtype='int64')
         """
         from pyspark.pandas.frame import DataFrame
@@ -390,7 +398,7 @@ class SparkFrameMethods:
         """
         self.frame(index_col).printSchema()
 
-    def frame(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+    def frame(self, index_col: Optional[Union[str, List[str]]] = None) -> PySparkDataFrame:
         """
         Return the current DataFrame as a Spark DataFrame.  :meth:`DataFrame.spark.frame` is an
         alias of  :meth:`DataFrame.to_spark`.
@@ -887,7 +895,7 @@ class SparkFrameMethods:
 
     def apply(
         self,
-        func: Callable[[SparkDataFrame], Union[SparkDataFrame, ConnectDataFrame]],
+        func: Callable[[PySparkDataFrame], PySparkDataFrame],
         index_col: Optional[Union[str, List[str]]] = None,
     ) -> "ps.DataFrame":
         """
@@ -944,7 +952,13 @@ class SparkFrameMethods:
         2  3      1
         """
         output = func(self.frame(index_col))
-        if not isinstance(output, (SparkDataFrame, ConnectDataFrame)):
+        if is_remote():
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+            SparkDataFrame = ConnectDataFrame
+        else:
+            SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+        if not isinstance(output, SparkDataFrame):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))

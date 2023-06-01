@@ -265,8 +265,13 @@ object FileFormat {
    * fields of the [[PartitionedFile]], and do have entries in the file's metadata map.
    */
   val BASE_METADATA_EXTRACTORS: Map[String, PartitionedFile => Any] = Map(
-    FILE_PATH -> { pf: PartitionedFile => pf.toPath.toString },
-    FILE_NAME -> { pf: PartitionedFile => pf.toPath.getName },
+    FILE_PATH -> { pf: PartitionedFile =>
+      // Use `new Path(Path.toString)` as a form of canonicalization
+      new Path(pf.filePath.toPath.toString).toUri.toString
+    },
+    FILE_NAME -> { pf: PartitionedFile =>
+      pf.filePath.toUri.getRawPath.split("/").lastOption.getOrElse("")
+    },
     FILE_SIZE -> { pf: PartitionedFile => pf.fileSize },
     FILE_BLOCK_START -> { pf: PartitionedFile => pf.start },
     FILE_BLOCK_LENGTH -> { pf: PartitionedFile => pf.length },

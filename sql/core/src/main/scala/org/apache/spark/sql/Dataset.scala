@@ -280,13 +280,7 @@ class Dataset[T] private[sql](
       case _ => toDF()
     }
     val castCols = newDf.logicalPlan.output.map { col =>
-      // Since binary types in top-level schema fields have a specific format to print,
-      // so we do not cast them to strings here.
-      if (col.dataType == BinaryType) {
-        Column(col)
-      } else {
-        Column(col).cast(StringType)
-      }
+      Column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -295,13 +289,9 @@ class Dataset[T] private[sql](
     // first `truncate-3` and "..."
     schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
-        val str = cell match {
-          case null => "NULL"
-          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ =>
-            // Escapes meta-characters not to break the `showString` format
-            SchemaUtils.escapeMetaCharacters(cell.toString)
-        }
+        assert(cell != null, "ToPrettyString is not nullable and should not return null value")
+        // Escapes meta-characters not to break the `showString` format
+        val str = SchemaUtils.escapeMetaCharacters(cell.toString)
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
           if (truncate < 4) str.substring(0, truncate)
@@ -2942,6 +2932,67 @@ class Dataset[T] private[sql](
    * This method can only be used to drop top level columns. the colName string is treated
    * literally without further interpretation.
    *
+   * Note: `drop(colName)` has different semantic with `drop(col(colName))`, for example:
+   * 1, multi column have the same colName:
+   * {{{
+   *   val df1 = spark.range(0, 2).withColumn("key1", lit(1))
+   *   val df2 = spark.range(0, 2).withColumn("key2", lit(2))
+   *   val df3 = df1.join(df2)
+   *
+   *   df3.show
+   *   // +---+----+---+----+
+   *   // | id|key1| id|key2|
+   *   // +---+----+---+----+
+   *   // |  0|   1|  0|   2|
+   *   // |  0|   1|  1|   2|
+   *   // |  1|   1|  0|   2|
+   *   // |  1|   1|  1|   2|
+   *   // +---+----+---+----+
+   *
+   *   df3.drop("id").show()
+   *   // output: the two 'id' columns are both dropped.
+   *   // |key1|key2|
+   *   // +----+----+
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // +----+----+
+   *
+   *   df3.drop(col("id")).show()
+   *   // ...AnalysisException: [AMBIGUOUS_REFERENCE] Reference `id` is ambiguous...
+   * }}}
+   *
+   * 2, colName contains special characters, like dot.
+   * {{{
+   *   val df = spark.range(0, 2).withColumn("a.b.c", lit(1))
+   *
+   *   df.show()
+   *   // +---+-----+
+   *   // | id|a.b.c|
+   *   // +---+-----+
+   *   // |  0|    1|
+   *   // |  1|    1|
+   *   // +---+-----+
+   *
+   *   df.drop("a.b.c").show()
+   *   // +---+
+   *   // | id|
+   *   // +---+
+   *   // |  0|
+   *   // |  1|
+   *   // +---+
+   *
+   *   df.drop(col("a.b.c")).show()
+   *   // no column match the expression 'a.b.c'
+   *   // +---+-----+
+   *   // | id|a.b.c|
+   *   // +---+-----+
+   *   // |  0|    1|
+   *   // |  1|    1|
+   *   // +---+-----+
+   * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -2980,6 +3031,9 @@ class Dataset[T] private[sql](
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
+   *
+   * Note: `drop(col(colName))` has different semantic with `drop(colName)`,
+   * please refer to `Dataset#drop(colName: String)`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -4183,7 +4237,8 @@ class Dataset[T] private[sql](
       withAction("collectAsArrowToR", queryExecution) { plan =>
         val buffer = new ByteArrayOutputStream()
         val out = new DataOutputStream(outputStream)
-        val batchWriter = new ArrowBatchStreamWriter(schema, buffer, timeZoneId)
+        val batchWriter =
+          new ArrowBatchStreamWriter(schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
@@ -4232,11 +4287,14 @@ class Dataset[T] private[sql](
    */
   private[sql] def collectAsArrowToPython: Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val errorOnDuplicatedFieldNames =
+      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
 
     PythonRDD.serveToStream("serve-Arrow") { outputStream =>
       withAction("collectAsArrowToPython", queryExecution) { plan =>
         val out = new DataOutputStream(outputStream)
-        val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
+        val batchWriter =
+          new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
@@ -4365,10 +4423,12 @@ class Dataset[T] private[sql](
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val errorOnDuplicatedFieldNames =
+      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toBatchIterator(
-        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
+        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context)
     }
   }
 

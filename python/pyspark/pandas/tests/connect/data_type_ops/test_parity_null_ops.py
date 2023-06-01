@@ -25,31 +25,15 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class NullOpsParityTests(
     NullOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43684): Fix NullOps.eq to work with Spark Connect Column.")
     def test_eq(self):
         super().test_eq()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lt(self):
-        super().test_lt()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43685): Fix NullOps.ne to work with Spark Connect Column.")
     def test_ne(self):
         super().test_ne()
 

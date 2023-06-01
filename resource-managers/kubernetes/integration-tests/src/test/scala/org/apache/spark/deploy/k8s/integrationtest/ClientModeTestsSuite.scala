@@ -16,9 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.{PodBuilder, ServiceBuilder}
 import org.scalatest.concurrent.Eventually
-import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 
@@ -53,8 +54,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .endSpec()
         .build())
     try {
-      val driverPod = testBackend
-        .getKubernetesClient
+      val driverPod = testBackend.getKubernetesClient
         .pods()
         .inNamespace(kubernetesTestComponents.namespace)
         .create(new PodBuilder()
@@ -98,6 +98,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
       Eventually.eventually(TIMEOUT, INTERVAL) {
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPodName)
           .getLog
           .contains("Pi is roughly 3"), "The application did not complete.")
