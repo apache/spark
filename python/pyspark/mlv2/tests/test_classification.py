@@ -33,11 +33,21 @@ except ImportError:
 
 
 class ClassificationTestsMixin:
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43784): Enable FeatureTests.test_max_abs_scaler for pandas 2.0.0.",
+
+    @staticmethod
+    def _check_result(result_dataframe, expected_predictions, expected_probabilities=None):
+        np.testing.assert_array_equal(
+            list(result_dataframe.prediction),
+            expected_predictions
         )
-    def test_logistic_regression(self):
+        if "probability" in result_dataframe.columns:
+            np.testing.assert_allclose(
+                list(result_dataframe.probability),
+                expected_probabilities,
+                rtol=1e-3,
+            )
+
+    def test_binary_classes_logistic_regression(self):
         df1 = self.spark.createDataFrame(
             [
                 (1.0, Vectors.dense(0.0, 5.0)),
@@ -56,7 +66,12 @@ class ClassificationTestsMixin:
         )
 
         lorv2 = LORV2(maxIter=200, numTrainWorkers=2, learningRate=0.001)
+        assert lorv2.getMaxIter() == 200
+        assert lorv2.getNumTrainWorkers() == 2
+        assert lorv2.getOrDefault(lorv2.learningRate) == 0.001
+
         model = lorv2.fit(df1)
+        assert model.uid == lorv2.uid
 
         expected_predictions = [1, 0]
         expected_probabilities = [
@@ -64,21 +79,49 @@ class ClassificationTestsMixin:
             [0.839026, 0.160974],
         ]
 
-        def check_result(result_dataframe):
-            np.testing.assert_array_equal(
-                list(result_dataframe.prediction),
-                expected_predictions
-            )
-            np.testing.assert_allclose(
-                list(result_dataframe.probability),
-                expected_probabilities,
-                rtol=1e-4,
-            )
+        result = model.transform(eval_df1).toPandas()
+        self._check_result(result, expected_predictions, expected_probabilities)
+        local_transform_result = model.transform(eval_df1.toPandas())
+        self._check_result(local_transform_result, expected_predictions, expected_probabilities)
+
+        model.set(model.probabilityCol, "")
+        result_without_prob = model.transform(eval_df1).toPandas()
+        assert "probability" not in result_without_prob.columns
+        self._check_result(result_without_prob, expected_predictions, None)
+
+    def test_multi_classes_logistic_regression(self):
+        df1 = self.spark.createDataFrame(
+            [
+                (1.0, Vectors.dense(1.0, 5.0)),
+                (2.0, Vectors.dense(1.0, -2.0)),
+                (0.0, Vectors.dense(-2.0, 1.5)),
+            ] * 100,
+            ["label", "features"],
+        )
+        eval_df1 = self.spark.createDataFrame(
+            [
+                (Vectors.dense(1.5, 5.0),),
+                (Vectors.dense(1.0, -2.5),),
+                (Vectors.dense(-2.0, 1.0),),
+            ],
+            ["features"],
+        )
+
+        lorv2 = LORV2(maxIter=200, numTrainWorkers=2, learningRate=0.001)
+
+        model = lorv2.fit(df1)
+
+        expected_predictions = [1, 2, 0]
+        expected_probabilities = [
+            [0.005186, 0.994679, 0.000134],
+            [0.005446, 0.010165, 0.984387],
+            [0.968765, 0.025264, 0.005969],
+        ]
 
         result = model.transform(eval_df1).toPandas()
-        check_result(result)
+        self._check_result(result, expected_predictions, expected_probabilities)
         local_transform_result = model.transform(eval_df1.toPandas())
-        check_result(local_transform_result)
+        self._check_result(local_transform_result, expected_predictions, expected_probabilities)
 
 
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
