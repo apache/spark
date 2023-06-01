@@ -37,7 +37,7 @@ class ProtobufCatalystDataConversionSuite
     with ExpressionEvalHelper
     with ProtobufTestBase {
 
-  private val testFileDescFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+  private val testFileDescFile = protobufDescriptorFile("catalyst_types.desc")
   private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.CatalystTypes$"
 

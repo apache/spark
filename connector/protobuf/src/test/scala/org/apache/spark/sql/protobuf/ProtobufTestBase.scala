@@ -29,18 +29,18 @@ import org.apache.spark.sql.types.{DataType, StructType}
 trait ProtobufTestBase extends SQLTestUtils {
 
   /**
-   * Returns full path to the given file in the resource folder,
-   * if the first choice throw NPE, try to return the full path of alternative.
-   * The result path doesn't contain the `file:/` protocol part.
+   * Returns path for a Protobuf descriptor file used in the tests. These files are generated
+   * during the build. Maven and SBT create the descriptor files differently. Maven creates one
+   * descriptor file for each Protobuf file, where as SBT create one descriptor file that includes
+   * all the Protobuf files. As a result actual file path returned in each case is different.
    */
-  protected def testFile(fileName: String, alternateFileName: String): String = {
+  protected def protobufDescriptorFile(fileName: String): String = {
     val dir = "target/generated-test-sources"
     if (new File(s"$dir/$fileName").exists) {
       s"$dir/$fileName"
     } else { // sbt test
       s"$dir/descriptor-set-sbt.desc"  // Single file contains all the proto files in sbt.
     }
-    // XXX Remove alternateFileName arg.
   }
 
   protected def structFromDDL(ddl: String): StructType =

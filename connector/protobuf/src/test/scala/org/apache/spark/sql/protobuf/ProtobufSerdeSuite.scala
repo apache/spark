@@ -36,12 +36,12 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   import ProtoSerdeSuite._
   import ProtoSerdeSuite.MatchType._
 
-  private val testFileDescFile = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
+  private val testFileDescFile = protobufDescriptorFile("serde_suite.desc")
   private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
 
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
-  private val proto2DescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  private val proto2DescFile = protobufDescriptorFile("proto2_messages.desc")
   private val proto2Desc = ProtobufUtils.readDescriptorFileContent(proto2DescFile)
 
   test("Test basic conversion") {
@@ -209,8 +209,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
   test("raise cannot parse and construct protobuf descriptor error") {
     // passing a Java file instead of serde_suite.desc
-    val javaFile = "org/apache/spark/sql/protobuf/protos/CatalystTypes.java"
-    var fileDescFile = testFile(javaFile, "protobuf/serde_suite.proto")
+    val fileDescFile = testFile("log4j2.properties").replace("file:/", "/")
 
     val e1 = intercept[AnalysisException] {
       ProtobufUtils.buildDescriptor(
@@ -225,7 +224,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     val basicMessageDescWithoutImports = descriptorSetWithoutImports(
       ProtobufUtils.readDescriptorFileContent(
-        testFile("basicmessage.desc", "protobuf/basicmessage.desc")
+        protobufDescriptorFile("basicmessage.desc")
       ),
       "BasicMessage"
     )
