@@ -33,7 +33,7 @@ on:
       scala:
         description: 'Scala version: 2.12 or 2.13'
         required: true
-        default: '2.13'
+        default: '2.12'
       failfast:
         description: 'Failfast: true or false'
         required: true
