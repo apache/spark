@@ -345,3 +345,19 @@ SELECT t0a, (SELECT sum(d) FROM
   FROM   t2)
 )
 FROM t0;
+
+-- SPARK-43760: the result of the subquery can be NULL.
+select *
+from
+(
+ select t1.id c1, (
+                    select sum(c)
+                    from (
+                      select t2.id * t2.id c
+                      from range (1, 2) t2 where t1.id = t2.id
+                      group by t2.id
+                    )
+                   ) c2
+ from range (1, 3) t1
+) t
+where t.c2 is not null;
