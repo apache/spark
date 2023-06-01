@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
@@ -620,10 +620,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       None
     }
 
+    val newOptions: Map[String, Expression] =
+      options.mapValues(v => Literal(v).asInstanceOf[Expression])
     val tableSpec = UnresolvedTableSpec(
       properties = Map(),
       provider = Some(source),
-      optionsExpressions = options.mapValues(v => Literal(v)),
+      optionsExpressions = newOptions,
       location = location,
       comment = { if (description.isEmpty) None else Some(description) },
       serde = None,
