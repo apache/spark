@@ -2160,7 +2160,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val name = ctx.functionName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
-    val arguments = ctx.argument.asScala.map(expression).toSeq match {
+    val arguments = ctx.argument.asScala.map { arg =>
+      if (arg.namedArgumentExpression != null) {
+        // TODO: not only could be a strictIdentifier, but also a strictNonReserved
+        // TODO: handle any quotes / backtick?
+        NamedArgumentExpression(
+          arg.namedArgumentExpression.key.strictIdentifier.getText,
+          expression(arg.namedArgumentExpression.value))
+      } else {
+        expression(arg.expression)
+      }
+    }.toSeq match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
