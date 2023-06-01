@@ -262,6 +262,19 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>upsert, upsertKeyColumns</code></td>
+    <td>
+      These options are JDBC writer related options. They describe how to
+      use UPSERT feature for different JDBC dialects. The upsert option is applicable only when <code>SaveMode.Append</code> is enabled.
+      Set <code>upsert</code> to <code>true</code> to enable upsert append mode. The database is queried for the primary index to detect
+      the upsert key columns that are used to identify rows for update. The upsert key columns can be
+      defined via the <code>upsertKeyColumns</code> as a comma-separated list of column names.
+      Be aware that if the input data set has duplicate rows, the upsert operation is
+      non-deterministic, it is documented at the [upsert(merge) wiki:](https://en.wikipedia.org/wiki/Merge_(SQL)).
+    </td>
+  </tr>
+
+  <tr>
     <td><code>customSchema</code></td>
     <td>(none)</td>
     <td>

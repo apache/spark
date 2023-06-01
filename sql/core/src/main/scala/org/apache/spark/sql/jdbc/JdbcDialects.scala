@@ -337,6 +337,17 @@ abstract class JdbcDialect extends Serializable with Logging {
       s"TRUNCATE TABLE $table"
   }
 
+  @Since("3.5.0")
+  def supportsUpsert(): Boolean = false
+
+  @Since("3.5.0")
+  def getUpsertStatement(
+      tableName: String,
+      columns: Array[StructField],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String =
+    throw new UnsupportedOperationException("upserts are not supported")
+
   /**
    * Returns the effective fetch size for reading from the JDBC source.
    * By default, returns the user-specified fetchSize from JDBCOptions.
