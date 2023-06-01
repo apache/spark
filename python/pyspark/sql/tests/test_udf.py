@@ -858,6 +858,7 @@ class BaseUDFTestsMixin(object):
         row = df.select(udf(lambda x: str(x))("nested_map")).first()
         self.assertEquals(row[0], "{'a': {'b': 'c'}}")
         # Output
+
         @udf(returnType=df.dtypes[0][1])
         def f(x):
             x["a"]["b"] = "d"
@@ -872,6 +873,7 @@ class BaseUDFTestsMixin(object):
         row = df.select(udf(lambda x: str(x))("nested_array")).first()
         self.assertEquals(row[0], "[[1, 2], [3, 4]]")
         # Output
+
         @udf(returnType=df.dtypes[0][1])
         def f(x):
             x.append([4, 5])
