@@ -146,7 +146,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
-  test("Forward artifact file to cloud storage path") {
+  test("SPARK-43790: Forward artifact file to cloud storage path") {
     val copyDir = Utils.createTempDir().toPath
     val destFSDir = Utils.createTempDir().toPath
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
