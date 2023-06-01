@@ -462,9 +462,13 @@ class TorchDistributor(Distributor):
                 decoded = line.decode()
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    if log_streaming_client and not log_streaming_client.failed and (
-                        log_streaming_client.sock.getsockname()[0] ==
-                        log_streaming_client.sock.getpeername()[0]
+                    if (
+                        log_streaming_client
+                        and not log_streaming_client.failed
+                        and (
+                            log_streaming_client.sock.getsockname()[0]
+                            == log_streaming_client.sock.getpeername()[0]
+                        )
                     ):
                         # If log_streaming_client and log_stream_server are in the same
                         # node (typical case is spark local mode),
