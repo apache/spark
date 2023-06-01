@@ -241,9 +241,8 @@ private[sql] object ProtobufUtils extends Logging {
   }
 
   private def parseFileDescriptorSet(bytes: Array[Byte]): List[Descriptors.FileDescriptor] = {
-    var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
-    try {
-      fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(bytes)
+    val fileDescriptorSet = try {
+      DescriptorProtos.FileDescriptorSet.parseFrom(bytes)
     } catch {
       case ex: InvalidProtocolBufferException =>
         throw QueryCompilationErrors.descriptorParseError(ex)
