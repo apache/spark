@@ -516,8 +516,15 @@ def read_udfs(pickleSer, infile, eval_type):
                 or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
+            struct_in_pandas = (
+                "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
+            )
             ser = ArrowStreamPandasUDFSerializer(
-                timezone, safecheck, assign_cols_by_name(runner_conf), df_for_struct, eval_type
+                timezone,
+                safecheck,
+                assign_cols_by_name(runner_conf),
+                df_for_struct,
+                struct_in_pandas,
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)
