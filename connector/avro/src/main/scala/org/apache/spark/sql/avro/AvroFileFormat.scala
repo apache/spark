@@ -171,6 +171,7 @@ private[sql] class AvroFileFormat extends FileFormat
 private[avro] object AvroFileFormat {
   val IgnoreFilesWithoutExtensionProperty = "avro.mapred.ignore.inputs.without.extension"
 
+  // Register the customized decimal type backed by long.
   LogicalTypes.register(CustomDecimal.TYPE_NAME, new LogicalTypes.LogicalTypeFactory {
     override def fromSchema(schema: Schema): LogicalType = {
       new CustomDecimal(schema)
