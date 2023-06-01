@@ -66,16 +66,16 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       // One unresolved plan can have at most one ParameterizedQuery.
       val parameterizedQueries = plan.collect { case p: ParameterizedQuery => p }
       assert(parameterizedQueries.length == 1)
-    }
-
-    plan.foreach {
-      case p: LogicalPlan if (p.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG).isDefined &&
-        p.expressions.exists(_.containsPattern(PARAMETER))) =>
-        p.failAnalysis(
-          errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-          messageParameters = Map("statement"
-            -> p.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG).get))
-      case _ => // OK
+      var noParamAllowedTag: Option[String] = None
+      plan.foreach { p =>
+        noParamAllowedTag = noParamAllowedTag
+          .orElse(p.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG))
+        if (noParamAllowedTag.isDefined && p.expressions.exists(_.containsPattern(PARAMETER))) {
+          p.failAnalysis(
+            errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+            messageParameters = Map("statement" -> noParamAllowedTag.get))
+        }
+      }
     }
 
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
@@ -88,21 +88,14 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
             messageParameters = Map("name" -> name))
         }
 
-        def bind(p: LogicalPlan, noParamAllowedCause: Option[String]): LogicalPlan = {
+        def bind(p: LogicalPlan): LogicalPlan = {
           p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-            case Parameter(_) if noParamAllowedCause.isDefined =>
-              child.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-              messageParameters = Map("statement" -> noParamAllowedCause.get)
-            )
             case Parameter(name) if args.contains(name) =>
               args(name)
-            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan,
-              noParamAllowedCause.orElse(sub.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG))
-            ))
+            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan))
           }
         }
-        val res = bind(child, child.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG))
+        val res = bind(child)
         res.copyTagsFrom(p)
         res
 

@@ -122,6 +122,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       Row(1))
   }
 
+  test("parameter in identifier clause in DDL and utility commands") {
+    spark.sql("CREATE VIEW IDENTIFIER(:p1)(c1) AS SELECT 1", args = Map("p1" -> "v"))
+    spark.sql("ALTER VIEW IDENTIFIER(:p1) AS SELECT 2 AS c1", args = Map("p1" -> "v"))
+    checkAnswer(
+      spark.sql("SHOW COLUMNS FROM IDENTIFIER(:p1)", args = Map("p1" -> "v")),
+      Row("c1"))
+    spark.sql("DROP VIEW IDENTIFIER(:p1)", args = Map("p1" -> "v"))
+  }
+
   test("parameters in INSERT") {
     withTable("t") {
       sql("CREATE TABLE t (col INT) USING json")
@@ -130,7 +139,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("parameters not allowed in DDL commands") {
+  test("parameters not allowed in view body ") {
     val sqlText = "CREATE VIEW v AS SELECT :p AS p"
     val args = Map("p" -> 1)
     checkError(
@@ -138,12 +147,28 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         spark.sql(sqlText, args)
       },
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "CreateView"),
+      parameters = Map("statement" -> "CREATE VIEW body"),
       context = ExpectedContext(
-        fragment = "CREATE VIEW v AS SELECT :p AS p",
+        fragment = "SELECT :p AS p",
+        start = 17,
+        stop = sqlText.length - 1))
+  }
+
+  test("parameters not allowed in view body - complex case") {
+    val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT :p) AS a)  SELECT a FROM cte"
+    val args = Map("p" -> 1)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(sqlText, args)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "CREATE VIEW body"),
+      context = ExpectedContext(
+        fragment = "CREATE VIEW v AS WITH cte(a) AS SELECT (SELECT :p) SELECT a FROM cte",
         start = 0,
         stop = sqlText.length - 1))
   }
+
 
   test("non-substituted parameters") {
     checkError(
