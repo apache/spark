@@ -188,7 +188,7 @@ class ArtifactManager:
             return [artifact]
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
-    def _parse_forward_to_FS_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
+    def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
         local_path = Path(local_path).absolute()
         # TODO: Support directory path.
         assert local_path.is_file(), "local path must be a file path."
@@ -235,7 +235,7 @@ class ArtifactManager:
 
     def _add_forward_to_fs_artifacts(self, local_path, dest_path):
         requests: Iterator[proto.AddArtifactsRequest] = self._add_artifacts(
-            self._parse_forward_to_FS_artifacts(local_path, dest_path)
+            self._parse_forward_to_fs_artifacts(local_path, dest_path)
         )
         self._request_add_artifacts(requests)
 
