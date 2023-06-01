@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
+import scala.collection.{mutable, IterableFactory, IterableOps}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {

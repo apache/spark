@@ -2867,9 +2867,9 @@
               <arg>-explaintypes</arg>
               <arg>-target:jvm-1.8</arg>
               <arg>-Wconf:cat=deprecation:wv,any:e</arg>
-              <arg>-Wunused:imports</arg>
               <!--
                 TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
+                <arg>-Wunused:imports</arg>
               -->
               <arg>-Wconf:cat=scaladoc:wv</arg>
               <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
@@ -2903,12 +2903,6 @@
               <arg>-Wconf:cat=unchecked&amp;msg=outer reference:s</arg>
               <arg>-Wconf:cat=unchecked&amp;msg=eliminated by erasure:s</arg>
               <arg>-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s</arg>
-              <!--
-                TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
-                from the corresponding files when Scala 2.12 is no longer supported.
-              -->
-              <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
-              <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
