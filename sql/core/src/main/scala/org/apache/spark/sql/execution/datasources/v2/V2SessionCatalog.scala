@@ -206,7 +206,18 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
-      if (loadTable(ident) != null) {
+      val table = loadTable(ident)
+      if (table != null) {
+        val v1Table = table.asInstanceOf[V1Table].v1Table
+        if (v1Table.tableType == CatalogTableType.VIEW) {
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
+            objectName = v1Table.qualifiedName,
+            foundType = v1Table.tableType.name,
+            alternative = "DROP VIEW"
+          )
+        }
         catalog.dropTable(
           ident.asTableIdentifier,
           ignoreIfNotExists = true,

@@ -1072,8 +1072,6 @@ class HiveDDLSuite
   }
 
   test("drop view using drop table") {
-    assume(false, "This test fails because of DataSource V2 Drop Table not support " +
-      "check is view or not.")
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
