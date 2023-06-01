@@ -23,22 +23,26 @@ import org.apache.avro.Schema
 import org.apache.spark.sql.types.DecimalType
 
 object CustomDecimal { val TYPE_NAME = "custom-decimal" }
-class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME) {
+
+// A customized logical type, which will be registered to Avro. This logical type is similar to
+// Avro's builtin Decimal type, but is meant to be registered for long type. It indicates that
+// the long type should be converted to Spark's Decimal type, with provided precision and scale.
+private class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME) {
   val scale : Int = {
     val obj = schema.getObjectProp("scale")
     obj match {
       case null =>
-        throw new IllegalArgumentException("Invalid long-decimal: missing scale");
+        throw new IllegalArgumentException(s"Invalid ${CustomDecimal.TYPE_NAME}: missing scale");
       case i : Integer =>
         i
       case other =>
-        throw new IllegalArgumentException("Expected int long-decimal:scale")
+        throw new IllegalArgumentException(s"Expected int ${CustomDecimal.TYPE_NAME}:scale")
     }
   }
   val precision : Int = {
     val obj = schema.getObjectProp("precision")
     if (obj == null) {
-      throw new IllegalArgumentException("Invalid long-decimal: missing precision");
+      throw new IllegalArgumentException(s"Invalid ${CustomDecimal.TYPE_NAME}: missing precision");
     }
     obj.asInstanceOf[Int]
   }
@@ -48,7 +52,7 @@ class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TYPE_NAME)
     super.validate(schema)
     if (schema.getType != Schema.Type.LONG) {
       throw new IllegalArgumentException(
-        "long-decimal can only be used with an underlying long type")
+        s"${CustomDecimal.TYPE_NAME} can only be used with an underlying long type")
     }
     if (precision <= 0) {
       throw new IllegalArgumentException(s"Invalid decimal precision: $precision" +
