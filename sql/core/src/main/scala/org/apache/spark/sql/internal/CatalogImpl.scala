@@ -620,8 +620,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       None
     }
 
-    val newOptions: Map[String, Expression] =
-      options.mapValues(v => Literal(v).asInstanceOf[Expression])
+    val newOptions: Map[String, Expression] = options.map { case (key, value) =>
+      (key, Literal(value).asInstanceOf[Expression])
+    }
     val tableSpec = UnresolvedTableSpec(
       properties = Map(),
       provider = Some(source),
