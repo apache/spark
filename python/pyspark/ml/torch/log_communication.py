@@ -52,15 +52,9 @@ class WriteLogToStdout(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         self.request.setblocking(0)  # non-blocking mode
         for bline in self._read_bline():
-            # To avoid printing duplicated logs to stdout,
-            # if the handler socket local addr equals to peer addr,
-            # it means remote task runs on the same node with log server,
-            # in this case, we should skip redirect log to stdout
-            # because remote task already does that.
-            if self.request.getsockname()[0] != self.request.getpeername()[0]:
-                with _get_log_print_lock():
-                    sys.stderr.write(bline.decode("utf-8") + "\n")
-                    sys.stderr.flush()
+            with _get_log_print_lock():
+                sys.stderr.write(bline.decode("utf-8") + "\n")
+                sys.stderr.flush()
 
 
 # What is run on the local driver
