@@ -76,7 +76,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
     }
-    val rowCount = filterCreationSidePlan.stats.rowCount
+    val rowCount = filterCreationSidePlan.stats.rowCount.map { creationRowCount =>
+      filterApplicationSidePlan.stats.rowCount.map(_.max(creationRowCount))
+        .getOrElse(creationRowCount)
+    }
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
         new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideExp)), rowCount.get.longValue)
