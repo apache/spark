@@ -721,7 +721,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
-    "_LEGACY_ERROR_TEMP_2428",
+    "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
     Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(

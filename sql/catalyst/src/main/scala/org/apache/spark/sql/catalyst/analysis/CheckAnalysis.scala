@@ -475,8 +475,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 // already pull out those nondeterministic expressions and evaluate them in
                 // a Project node.
                 expr.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2426",
-                  messageParameters = Map("sqlExpr" -> expr.sql))
+                  errorClass = "GROUP_EXPRESSION_IS_NON_DETERMINISTIC",
+                  messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))
               }
             }
 
@@ -545,8 +545,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 order.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2427",
-                  messageParameters = Map("type" -> order.dataType.catalogString))
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map("type" -> toSQLType(order.dataType)))
               }
             }
 
@@ -560,7 +560,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 val offset = offsetExpr.eval().asInstanceOf[Int]
                 if (Int.MaxValue - limit < offset) {
                   child.failAnalysis(
-                    errorClass = "_LEGACY_ERROR_TEMP_2428",
+                    errorClass = "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
                     messageParameters = Map(
                       "limit" -> limit.toString,
                       "offset" -> offset.toString))
@@ -624,8 +624,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
             if (badReferences.nonEmpty) {
               create.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2431",
-                messageParameters = Map("cols" -> badReferences.mkString(", ")))
+                errorClass = "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+                messageParameters = Map("cols" -> badReferences.map(r => s"`$r`").mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -660,7 +660,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2432",
+              errorClass = "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
               messageParameters = Map("msg" -> msg))
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>

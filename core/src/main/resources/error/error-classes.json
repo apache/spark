@@ -5507,27 +5507,27 @@
       "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2426" : {
+  "GROUP_EXPRESSION_IS_NON_DETERMINISTIC" : {
     "message" : [
       "nondeterministic expression <sqlExpr> should not appear in grouping expression."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2427" : {
+  "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "sorting is not supported for columns of type <type>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2428" : {
+  "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
     "message" : [
       "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2431" : {
+  "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
     "message" : [
       "Invalid partitioning: <cols> is missing or is in a map or array."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2432" : {
+  "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
     "message" : [
       "<msg>"
     ]
