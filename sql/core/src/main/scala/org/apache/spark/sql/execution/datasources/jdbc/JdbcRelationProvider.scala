@@ -50,6 +50,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val dialect = JdbcDialects.get(options.url)
     val conn = dialect.createConnectionFactory(options)(-1)
     try {
+      val upsert = mode == SaveMode.Append && options.isUpsert
       val tableExists = JdbcUtils.tableExists(conn, options)
       if (tableExists) {
         mode match {
@@ -58,17 +59,20 @@ class JdbcRelationProvider extends CreatableRelationProvider
               // In this case, we should truncate table and then load.
               truncateTable(conn, options)
               val tableSchema = JdbcUtils.getSchemaOption(conn, options)
-              saveTable(df, tableSchema, isCaseSensitive, options)
+              saveTable(df, tableSchema, isCaseSensitive, upsert, options)
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table, options)
               createTable(conn, options.table, df.schema, isCaseSensitive, options)
-              saveTable(df, Some(df.schema), isCaseSensitive, options)
+              saveTable(df, Some(df.schema), isCaseSensitive, upsert, options)
             }
 
           case SaveMode.Append =>
+            if (options.isUpsert && !dialect.supportsUpsert) {
+              throw QueryCompilationErrors.tableDoesNotSupportUpsertsError(options.table)
+            }
             val tableSchema = JdbcUtils.getSchemaOption(conn, options)
-            saveTable(df, tableSchema, isCaseSensitive, options)
+            saveTable(df, tableSchema, isCaseSensitive, upsert, options)
 
           case SaveMode.ErrorIfExists =>
             throw QueryCompilationErrors.tableOrViewAlreadyExistsError(options.table)
@@ -80,7 +84,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
         }
       } else {
         createTable(conn, options.table, df.schema, isCaseSensitive, options)
-        saveTable(df, Some(df.schema), isCaseSensitive, options)
+        saveTable(df, Some(df.schema), isCaseSensitive, upsert, options)
       }
     } finally {
       conn.close()
