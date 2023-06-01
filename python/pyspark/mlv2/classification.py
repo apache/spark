@@ -186,13 +186,12 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         num_train_workers = self.getNumTrainWorkers()
         batch_size = self.getBatchSize()
 
-        # Q: Shall we persist the shuffled dataset ?
-        # shuffling results are already cached
+        # We don't need to persist the dataset because the shuffling result from the repartition
+        # has been cached.
         dataset = (
             dataset
                 .select(self.getFeaturesCol(), self.getLabelCol())
                 .repartition(num_train_workers)
-                .persist()
         )
 
         # TODO: check label values are in range of [0, num_classes)
