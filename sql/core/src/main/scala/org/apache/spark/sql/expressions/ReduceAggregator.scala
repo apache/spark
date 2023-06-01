@@ -32,7 +32,7 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
 
   @transient private val encoder = implicitly[Encoder[T]]
 
-  private val _z = encoder.clsTag.runtimeClass match {
+  private val _zero = encoder.clsTag.runtimeClass match {
     case java.lang.Boolean.TYPE => false
     case java.lang.Byte.TYPE => 0.toByte
     case java.lang.Short.TYPE => 0.toShort
@@ -43,7 +43,7 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
     case _ => null
   }
 
-  override def zero: (Boolean, T) = (false, _z.asInstanceOf[T])
+  override def zero: (Boolean, T) = (false, _zero.asInstanceOf[T])
 
   override def bufferEncoder: Encoder[(Boolean, T)] =
     ExpressionEncoder.tuple(
