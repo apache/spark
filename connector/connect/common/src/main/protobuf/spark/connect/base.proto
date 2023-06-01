@@ -28,6 +28,7 @@ import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // A [[Plan]] is the structure that carries the runtime information for the execution from the
 // client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference

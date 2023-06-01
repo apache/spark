@@ -384,6 +384,14 @@ trait ColumnResolutionHelper extends Logging {
       allowOuter = allowOuter)
   }
 
+  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
+    resolveExpressionByPlanChildren(expr, hostPlan) match {
+      // Assignment key and value does not need the alias when resolving nested columns.
+      case Alias(child: ExtractValue, _) => child
+      case other => other
+    }
+  }
+
   private def resolveExpressionByPlanId(
       e: Expression,
       q: LogicalPlan): Expression = {

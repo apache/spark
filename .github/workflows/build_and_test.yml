@@ -86,7 +86,7 @@ jobs:
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build', 'scala-213', and 'java-11-17' are always true for now.
+          # 'build', 'scala-212', and 'java-11-17' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
@@ -95,7 +95,7 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"scala-213\": \"true\",
+              \"scala-212\": \"true\",
               \"java-11-17\": \"true\",
               \"connect-maven\": \"true\",
               \"lint\" : \"true\",
@@ -617,7 +617,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.19.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.20.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
@@ -781,20 +781,20 @@ jobs:
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
           # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-          # 1. Test without -Phive
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install
-          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server
-          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm
-          # 2. Test with -Phive
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl assembly -Phive
+          # 1. Test with -Phive
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -Phive
           ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server -Phive
           ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm -Phive
-          rm -rf ~/.m2/repository/org/apache/spark      
+          # 2. Test without -Phive
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl assembly
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server
+          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm
+          rm -rf ~/.m2/repository/org/apache/spark
 
-  scala-213:
+  scala-212:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
-    name: Scala 2.13 build with SBT
+    if: fromJson(needs.precondition.outputs.required).scala-212 == 'true'
+    name: Scala 2.12 build with SBT
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
@@ -824,9 +824,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: scala-212-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          scala-213-coursier-
+          scala-212-coursier-
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
@@ -834,8 +834,8 @@ jobs:
         java-version: 8
     - name: Build with SBT
       run: |
-        ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile Test/compile
+        ./dev/change-scala-version.sh 2.12
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.12 compile Test/compile
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
