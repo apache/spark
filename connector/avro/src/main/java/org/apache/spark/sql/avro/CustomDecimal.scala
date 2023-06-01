@@ -22,7 +22,9 @@ import org.apache.avro.Schema
 
 import org.apache.spark.sql.types.DecimalType
 
-object CustomDecimal { val TYPE_NAME = "custom-decimal" }
+object CustomDecimal {
+  val TYPE_NAME = "custom-decimal"
+}
 
 // A customized logical type, which will be registered to Avro. This logical type is similar to
 // Avro's builtin Decimal type, but is meant to be registered for long type. It indicates that
@@ -69,5 +71,6 @@ private class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TY
         s"precision: $precision)");
     }
   }
-  override def toString: String = s"${CustomDecimal.TYPE_NAME}<scale: $scale, precision: $precision>"
+  override def toString: String =
+    s"${CustomDecimal.TYPE_NAME}<scale: $scale, precision: $precision>"
 }
