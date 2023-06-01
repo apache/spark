@@ -21,7 +21,6 @@ from distutils.version import LooseVersion
 import numpy as np
 import pandas as pd
 
-from pyspark.ml.linalg import Vectors
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
 from pyspark.sql import SparkSession
 

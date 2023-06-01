@@ -66,8 +66,6 @@ def aggregate_dataframe(
         agg_state = local_agg_fn(dataframe)
         return agg_state_to_result(agg_state)
 
-    col_types = dict(dataframe.dtypes)
-
     dataframe = dataframe.select(*input_col_names)
 
     def compute_state(iterator: Iterable["pd.DataFrame"]) -> Iterable["pd.DataFrame"]:
@@ -163,7 +161,6 @@ def transform_dataframe_column(
         return transform_fn(s)
 
     input_col = col(input_col_name)
-    input_col_type = dict(dataframe.dtypes)[input_col_name]
 
     result_spark_df = dataframe.withColumn(output_col_name, transform_fn_pandas_udf(input_col))
 
