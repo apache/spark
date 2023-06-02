@@ -595,6 +595,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
