@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.HashSet
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
@@ -94,9 +93,7 @@ case class SubqueryBroadcastExec(
         val rows = if (broadcastRelation.keyIsUnique) {
           keyIter.toArray[InternalRow]
         } else {
-          val set = new HashSet[InternalRow]()
-          keyIter.foreach(set.add(_))
-          set.toArray[InternalRow]
+          keyIter.toSet.toArray[InternalRow]
         }
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
