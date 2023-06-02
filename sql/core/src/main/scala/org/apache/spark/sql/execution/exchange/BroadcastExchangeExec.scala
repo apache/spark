@@ -129,9 +129,9 @@ case class BroadcastExchangeExec(
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
       session, BroadcastExchangeExec.executionContext) {
           try {
-            // Setup a job group here so later it may get cancelled by groupId if necessary.
-            sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
-              interruptOnCancel = true)
+            // Setup a job tag here so later it may get cancelled by tag if necessary.
+            sparkContext.addJobTag(runId.toString)
+            sparkContext.setInterruptOnCancel(true)
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
@@ -211,7 +211,7 @@ case class BroadcastExchangeExec(
       case ex: TimeoutException =>
         logError(s"Could not execute broadcast in $timeout secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobGroup(runId.toString)
+          sparkContext.cancelJobsWithTag(runId.toString)
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))
