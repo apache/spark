@@ -2361,5 +2361,5 @@ package object config {
       .internal()
       .version("3.3.3")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 }
