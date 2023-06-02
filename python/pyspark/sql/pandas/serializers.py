@@ -20,7 +20,6 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.rdd import PythonEvalType
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
 from pyspark.sql.pandas.types import (
     from_arrow_type,
