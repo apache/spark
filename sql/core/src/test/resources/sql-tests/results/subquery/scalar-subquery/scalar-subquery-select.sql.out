@@ -559,3 +559,12 @@ struct<scalarsubquery():boolean>
 -- !query output
 false
 false
+
+
+-- !query
+select c1, c2, (select count(*) cnt from t1 t1_inner where t1_inner.c1 = t1_outer.c1 having cnt = 0) from t1 t1_outer
+-- !query schema
+struct<c1:int,c2:int,scalarsubquery(c1):bigint>
+-- !query output
+0	1	NULL
+1	2	NULL

@@ -240,3 +240,6 @@ SELECT c, (
 SELECT *, (SELECT count(1) is null FROM t2 WHERE t1.c1 = t2.c1) FROM t1;
 
 select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2;
+
+-- SPARK-43778: duplicate attribute names in the subquery and outer query.
+select c1, c2, (select count(*) cnt from t1 t1_inner where t1_inner.c1 = t1_outer.c1 having cnt = 0) from t1 t1_outer

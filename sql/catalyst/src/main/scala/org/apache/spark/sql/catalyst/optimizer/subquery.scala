@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.REASSIGN_IDS_IN_SCALAR_SUBQUERY
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-import scala.collection.mutable
 
 /*
  * This file defines optimization rules related to subqueries.
@@ -597,16 +597,23 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val joinHint = JoinHint(None, subHint)
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
-        // rename 'query' using PullOutGroupingExpressions
-        val replacementMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
-        val oldProjectList = query.output.map(x => Alias(x, x.name)(NamedExpression.newExprId))
 
+        val newQuery = if (SQLConf.get.getConf(REASSIGN_IDS_IN_SCALAR_SUBQUERY)) {
+          AssignNewExprIds(query)
+        } else {
+          query
+        }
+        val newOutput = newQuery.output.head
+        val replacementMap = AttributeMap(query.output.zip(newQuery.output).toMap)
 
+        // TODO: lookup createAttributeMapping in Optimizer.scala
+        val newConditions = conditions.map(_.transform {
+          case a: Attribute => replacementMap.getOrElse(a, a)
+        })
 
-
-        lazy val planWithoutCountBug = Project(
-          currentChild.output :+ origOutput,
-          Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
+        val planWithoutCountBug = Project(
+          currentChild.output :+ newOutput,
+          Join(currentChild, newQuery, LeftOuter, newConditions.reduceOption(And), joinHint))
 
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
@@ -614,16 +621,19 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (resultWithZeroTups.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
           // with zero tuples.
+          subqueryAttrMapping += ((origOutput, newOutput.toAttribute))
           planWithoutCountBug
         } else if (!mayHaveCountBug.getOrElse(true) &&
           !conf.getConf(SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)) {
           // Subquery guaranteed not to have the COUNT bug because it had non-empty GROUP BY clause
+          subqueryAttrMapping += ((origOutput, newOutput.toAttribute))
           planWithoutCountBug
         } else {
-          val (topPart, havingNode, aggNode) = splitSubquery(query)
+          val (topPart, havingNode, aggNode) = splitSubquery(newQuery)
           if (aggNode.isEmpty) {
             // SPARK-40862: When the aggregate node is empty, it means the subquery produces
             // at most one row and it is not subject to the COUNT bug.
+            subqueryAttrMapping += ((origOutput, newOutput.toAttribute))
             planWithoutCountBug
           } else {
             // Subquery might have the COUNT bug. Add appropriate corrections.
@@ -639,21 +649,20 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
             val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
               BooleanType)(exprId = alwaysTrueExprId)
 
-            val aggValRef = query.output.head
+            val aggValRef = newQuery.output.head
 
             if (havingNode.isEmpty) {
               // CASE 2: Subquery with no HAVING clause
               val subqueryResultExpr =
                 Alias(If(IsNull(alwaysTrueRef),
                   resultWithZeroTups.get,
-                  aggValRef), origOutput.name)()
+                  aggValRef), newOutput.name)()
               subqueryAttrMapping += ((origOutput, subqueryResultExpr.toAttribute))
               Project(
                 currentChild.output :+ subqueryResultExpr,
                 Join(currentChild,
-                  Project(query.output :+ alwaysTrueExpr, query),
-                  LeftOuter, conditions.reduceOption(And), joinHint))
-
+                  Project(newQuery.output :+ alwaysTrueExpr, newQuery),
+                  LeftOuter, newConditions.reduceOption(And), joinHint))
             } else {
               // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
               // Need to modify any operators below the join to pass through all columns
@@ -676,7 +685,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 (IsNull(alwaysTrueRef), resultWithZeroTups.get),
                 (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
                 aggValRef),
-                origOutput.name)()
+                newOutput.name)()
 
               subqueryAttrMapping += ((origOutput, caseExpr.toAttribute))
 
@@ -684,7 +693,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 currentChild.output :+ caseExpr,
                 Join(currentChild,
                   Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                  LeftOuter, conditions.reduceOption(And), joinHint))
+                  LeftOuter, newConditions.reduceOption(And), joinHint))
             }
           }
         }

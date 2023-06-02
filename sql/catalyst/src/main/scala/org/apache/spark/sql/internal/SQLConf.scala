@@ -4258,6 +4258,13 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
 
+  val REASSIGN_IDS_IN_SCALAR_SUBQUERY =
+    buildConf("spark.sql.optimizer.reassignIdsInScalarSubquery.enabled")
+      .internal()
+      .doc("Reassigns expression IDs in scalar subqueries.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
   /**
    * Holds information about keys that have been deprecated.
    *

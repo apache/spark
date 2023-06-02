@@ -1005,3 +1005,22 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
    +- View (`t2`, [c1#x,c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select c1, c2, (select count(*) cnt from t1 t1_inner where t1_inner.c1 = t1_outer.c1 having cnt = 0) from t1 t1_outer
+-- !query analysis
+Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
+:  +- Filter (cnt#xL = cast(0 as bigint))
+:     +- Aggregate [count(1) AS cnt#xL]
+:        +- Filter (c1#x = outer(c1#x))
+:           +- SubqueryAlias t1_inner
+:              +- SubqueryAlias t1
+:                 +- View (`t1`, [c1#x,c2#x])
+:                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                       +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias t1_outer
+   +- SubqueryAlias t1
+      +- View (`t1`, [c1#x,c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
