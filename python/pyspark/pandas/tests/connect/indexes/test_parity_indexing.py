@@ -27,14 +27,6 @@ class FrameParityIndexingTests(FrameIndexingMixin, PandasOnSparkTestUtils, Reuse
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("TODO(SPARK-41876): Implement DataFrame `toLocalIterator`")
-    def test_iterrows(self):
-        super().test_iterrows()
-
-    @unittest.skip("TODO(SPARK-41876): Implement DataFrame `toLocalIterator`")
-    def test_itertuples(self):
-        super().test_itertuples()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.indexes.test_parity_indexing import *  # noqa: F401

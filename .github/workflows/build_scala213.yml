@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build (master, Scala 2.12, Hadoop 3, JDK 8)"
+name: "Build (master, Scala 2.13, Hadoop 3, JDK 8)"
 
 on:
   schedule:
@@ -36,7 +36,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "SCALA_PROFILE": "scala2.12"
+          "SCALA_PROFILE": "scala2.13"
         }
       jobs: >-
         {

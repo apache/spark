@@ -1,4 +1,9 @@
 {
+  "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
+    "message" : [
+      "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
+    ]
+  },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -41,6 +46,23 @@
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22003"
+  },
+  "AS_OF_JOIN" : {
+    "message" : [
+      "Invalid as-of join."
+    ],
+    "subClass" : {
+      "TOLERANCE_IS_NON_NEGATIVE" : {
+        "message" : [
+          "The input argument `tolerance` must be non-negative."
+        ]
+      },
+      "TOLERANCE_IS_UNFOLDABLE" : {
+        "message" : [
+          "The input argument `tolerance` must be a constant."
+        ]
+      }
+    }
   },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
@@ -640,6 +662,12 @@
     ],
     "sqlState" : "38000"
   },
+  "FAILED_PARSE_STRUCT_TYPE" : {
+    "message" : [
+      "Failed parsing struct: <raw>."
+    ],
+    "sqlState" : "22018"
+  },
   "FAILED_RENAME_PATH" : {
     "message" : [
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
@@ -708,6 +736,11 @@
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
@@ -1821,6 +1854,11 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "The correlated scalar subquery '<sqlExpr>' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get."
+    ]
   },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
@@ -4569,11 +4607,6 @@
       "Do not support type <clazz>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2122" : {
-    "message" : [
-      "Failed parsing <simpleString>: <raw>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2124" : {
     "message" : [
       "Failed to merge decimal types with incompatible scale <leftScale> and <rightScale>."
@@ -5473,31 +5506,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2418" : {
-    "message" : [
-      "Input argument tolerance must be a constant."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2419" : {
-    "message" : [
-      "Input argument tolerance must be non-negative."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2421" : {
-    "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2423" : {
-    "message" : [
-      "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2425" : {
-    "message" : [
-      "expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2426" : {
