@@ -644,6 +644,11 @@
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
     ]
   },
+  "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "sorting is not supported for columns of type <type>."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
@@ -730,6 +735,11 @@
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "GROUP_EXPRESSION_IS_NON_DETERMINISTIC" : {
+    "message" : [
+      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
+    ]
   },
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
@@ -1743,6 +1753,11 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
+    "message" : [
+      "Invalid partitioning: <cols> is missing or is in a map or array."
+    ]
+  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
@@ -1834,6 +1849,11 @@
     ],
     "sqlState" : "42K05"
   },
+  "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
+    "message" : [
+      "<msg>"
+    ]
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
@@ -1917,6 +1937,11 @@
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
+    ]
+  },
+  "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
+    "message" : [
+      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
     ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
@@ -5505,31 +5530,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "GROUP_EXPRESSION_IS_NON_DETERMINISTIC" : {
-    "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
-    ]
-  },
-  "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
-    "message" : [
-      "sorting is not supported for columns of type <type>."
-    ]
-  },
-  "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
-    "message" : [
-      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
-    "message" : [
-      "Invalid partitioning: <cols> is missing or is in a map or array."
-    ]
-  },
-  "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2433" : {
