@@ -26,7 +26,7 @@ import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{Path => FSPath}
+import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -174,6 +174,14 @@ class SparkConnectArtifactManager private[connect] {
     )
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
+    if (fs.isInstanceOf[LocalFileSystem]) {
+      // To avoid security issue, we don't support upload file to local file system
+      // destination path, otherwise user is able to overwrite arbitrary file
+      // on spark driver node.
+      throw new UnsupportedOperationException(
+        "Upload artifact file to local file system destination path is not supported."
+      )
+    }
     fs.copyFromLocalFile(
       false,
       true,
