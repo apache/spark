@@ -374,14 +374,14 @@ trait JoinSelectionHelper {
 
   def canBuildShuffledHashJoinLeft(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | RightOuter | FullOuter => true
+      case _: InnerLike | LeftOuter | FullOuter | RightOuter => true
       case _ => false
     }
   }
 
   def canBuildShuffledHashJoinRight(joinType: JoinType): Boolean = {
     joinType match {
-      case _: InnerLike | LeftOuter | FullOuter |
+      case _: InnerLike | LeftOuter | FullOuter | RightOuter |
            LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
