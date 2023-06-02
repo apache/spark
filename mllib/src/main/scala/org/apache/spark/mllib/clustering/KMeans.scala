@@ -449,8 +449,9 @@ class KMeans private (
 
       bcCenters.destroy()
 
+      val driverCores = data.conf.getOption("spark.driver.cores").getOrElse("1").toInt
       val myWeights = distinctCenters.indices.map(countMap.getOrElse(_, 0L).toDouble).toArray
-      LocalKMeans.kMeansPlusPlus(0, distinctCenters, myWeights, k, 30)
+      LocalKMeans.kMeansPlusPlus(0, distinctCenters, myWeights, k, 30, driverCores)
     }
   }
 }

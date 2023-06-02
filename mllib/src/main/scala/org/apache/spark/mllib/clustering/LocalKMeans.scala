@@ -17,12 +17,14 @@
 
 package org.apache.spark.mllib.clustering
 
+import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.Random
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.util.ThreadUtils
 
 /**
  * An utility object to run K-means locally. This is private to the ML package because it's used
@@ -39,7 +41,8 @@ private[mllib] object LocalKMeans extends Logging {
       points: Array[VectorWithNorm],
       weights: Array[Double],
       k: Int,
-      maxIterations: Int
+      maxIterations: Int,
+      threadNumber: Int
   ): Array[VectorWithNorm] = {
     val rand = new Random(seed)
     val dimensions = points(0).vector.size
@@ -47,7 +50,18 @@ private[mllib] object LocalKMeans extends Logging {
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
-    val pointsParVector = new ParVector(points.toVector)
+
+    val pointsParVector: Seq[VectorWithNorm] = threadNumber match {
+      case 1 => points
+      case _ =>
+        logInfo(s"kMeansPlusPlus run in thread nums: $threadNumber.")
+        val pointsPar = new ParVector(points.toVector)
+        val taskSupport = new ForkJoinTaskSupport(
+          ThreadUtils.newForkJoinPool("localKMeans-task-support", threadNumber))
+        pointsPar.tasksupport = taskSupport
+        pointsPar.seq
+    }
+
     val costArray = pointsParVector.map(
       EuclideanDistanceMeasure.fastSquaredDistance(_, centers(0))).toArray
 
