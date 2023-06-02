@@ -54,13 +54,15 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       throw new IllegalStateException(
         s"Illegal operation type ${request.getPlan.getOpTypeCase} to be handled here.")
     }
-
-    // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(sessionHolder)
+    val tracker = executeHolder.events.createQueryPlanningTracker
     val dataframe =
-      Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
+      Dataset.ofRows(
+        sessionHolder.session,
+        planner.transformRelation(request.getPlan.getRoot),
+        tracker)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
-    processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
+    processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(
       MetricGenerator.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
@@ -87,10 +89,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     batches.map(b => b -> batches.rowCountInLastBatch)
   }
 
-  private def processAsArrowBatches(
-      sessionId: String,
+  def processAsArrowBatches(
       dataframe: DataFrame,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      executePlan: ExecuteHolder): Unit = {
+    val sessionId = executePlan.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
@@ -120,6 +123,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
+        executePlan.events.postFinished()
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
@@ -157,6 +161,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
             // Collect errors and propagate them to the main thread.
             future.onComplete { result =>
+              executePlan.events.postFinished()
               result.failed.foreach { throwable =>
                 signal.synchronized {
                   error = Some(throwable)

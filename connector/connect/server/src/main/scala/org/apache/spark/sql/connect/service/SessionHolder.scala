@@ -33,6 +33,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.util.{SystemClock}
 import org.apache.spark.util.Utils
 
 /**
@@ -43,6 +44,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   val executions: ConcurrentMap[String, ExecuteHolder] =
     new ConcurrentHashMap[String, ExecuteHolder]()
+
+  val events: SessionEvents = SessionEvents(this, new SystemClock())
 
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
   // foreachBatch() in Streaming. Lazy since most sessions don't need it.
@@ -98,12 +101,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   def classloader: ClassLoader = artifactManager.classloader
 
+  private[connect] def initializeSession(): Unit = {
+    events.postStarted()
+  }
+
   /**
    * Expire this session and trigger state cleanup mechanisms.
    */
   private[connect] def expireSession(): Unit = {
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
+    events.postClosed()
   }
 
   /**

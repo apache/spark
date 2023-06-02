@@ -40,6 +40,8 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
         // Detached before execution finished.
         // TODO this doesn't happen yet without reattachable execution.
         responseObserver.onCompleted()
+      } else {
+        executeHolder.events.postClosed()
       }
     } finally {
       // TODO this will change with detachable execution.

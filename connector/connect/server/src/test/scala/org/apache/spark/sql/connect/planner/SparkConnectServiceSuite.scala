@@ -19,25 +19,38 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import com.google.protobuf
+import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+import org.scalatest.Tag
+import org.scalatestplus.mockito.MockitoSugar
 
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.CreateDataFrameViewCommand
+import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService}
+import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationAnalyzed, SparkListenerConnectOperationCanceled, SparkListenerConnectOperationClosed, SparkListenerConnectOperationFailed, SparkListenerConnectOperationFinished, SparkListenerConnectOperationReadyForExecution, SparkListenerConnectOperationStarted, SparkListenerConnectSessionClosed, SparkListenerConnectSessionStarted}
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.util.Utils
 
 /**
  * Testing Connect Service implementation.
  */
-class SparkConnectServiceSuite extends SharedSparkSession {
+class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with Logging {
 
   private def sparkSessionHolder = SessionHolder.forTesting(spark)
 
@@ -131,126 +144,265 @@ class SparkConnectServiceSuite extends SharedSparkSession {
   }
 
   test("SPARK-41224: collect data using arrow") {
-    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
-    val instance = new SparkConnectService(false)
-    val connect = new MockRemoteSession()
-    val context = proto.UserContext
-      .newBuilder()
-      .setUserId("c1")
-      .build()
-    val plan = proto.Plan
-      .newBuilder()
-      .setRoot(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
-      .build()
-    val request = proto.ExecutePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setUserContext(context)
-      .build()
+    withEvents { verifyEvents =>
+      // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+      assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
+      val instance = new SparkConnectService(false)
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .build()
 
-    // Execute plan.
-    @volatile var done = false
-    val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-    instance.executePlan(
-      request,
-      new StreamObserver[proto.ExecutePlanResponse] {
-        override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            responses += v
+            verifyEvents.onNext(v)
+          }
 
-        override def onError(throwable: Throwable): Unit = throw throwable
+          override def onError(throwable: Throwable): Unit = {
+            verifyEvents.onError(throwable)
+            throw throwable
+          }
 
-        override def onCompleted(): Unit = done = true
-      })
+          override def onCompleted(): Unit = {
+            done = true
+          }
+        })
+      verifyEvents.onCompleted()
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
 
-    // The current implementation is expected to be blocking. This is here to make sure it is.
-    assert(done)
+      // 4 Partitions + Metrics
+      assert(responses.size == 6)
 
-    // 4 Partitions + Metrics
-    assert(responses.size == 6)
+      // Make sure the first response is schema only
+      val head = responses.head
+      assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
-    // Make sure the first response is schema only
-    val head = responses.head
-    assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
+      // Make sure the last response is metrics only
+      val last = responses.last
+      assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
 
-    // Make sure the last response is metrics only
-    val last = responses.last
-    assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
+      val allocator = new RootAllocator()
 
-    val allocator = new RootAllocator()
+      // Check the 'data' batches
+      var expectedId = 0L
+      var previousEId = 0.0d
+      responses.tail.dropRight(1).foreach { response =>
+        assert(response.hasArrowBatch)
+        val batch = response.getArrowBatch
+        assert(batch.getData != null)
+        assert(batch.getRowCount == 25)
 
-    // Check the 'data' batches
-    var expectedId = 0L
-    var previousEId = 0.0d
-    responses.tail.dropRight(1).foreach { response =>
-      assert(response.hasArrowBatch)
-      val batch = response.getArrowBatch
-      assert(batch.getData != null)
-      assert(batch.getRowCount == 25)
+        val reader = new ArrowStreamReader(batch.getData.newInput(), allocator)
+        while (reader.loadNextBatch()) {
+          val root = reader.getVectorSchemaRoot
+          val idVector = root.getVector(0).asInstanceOf[BigIntVector]
+          val eidVector = root.getVector(1).asInstanceOf[Float8Vector]
+          val numRows = root.getRowCount
+          var i = 0
+          while (i < numRows) {
+            assert(idVector.get(i) == expectedId)
+            expectedId += 1
+            val eid = eidVector.get(i)
+            assert(eid > previousEId)
+            previousEId = eid
+            i += 1
+          }
+        }
+        reader.close()
+      }
+      allocator.close()
+    }
+  }
 
-      val reader = new ArrowStreamReader(batch.getData.newInput(), allocator)
-      while (reader.loadNextBatch()) {
-        val root = reader.getVectorSchemaRoot
-        val idVector = root.getVector(0).asInstanceOf[BigIntVector]
-        val eidVector = root.getVector(1).asInstanceOf[Float8Vector]
-        val numRows = root.getRowCount
-        var i = 0
-        while (i < numRows) {
-          assert(idVector.get(i) == expectedId)
-          expectedId += 1
-          val eid = eidVector.get(i)
-          assert(eid > previousEId)
-          previousEId = eid
-          i += 1
+  gridTest("SPARK-43923: commands send events")(
+    Seq(
+      proto.Command
+        .newBuilder()
+        .setSqlCommand(proto.SqlCommand.newBuilder().setSql("select 1").build()),
+      proto.Command
+        .newBuilder()
+        .setSqlCommand(proto.SqlCommand.newBuilder().setSql("show tables").build()),
+      proto.Command
+        .newBuilder()
+        .setWriteOperation(
+          proto.WriteOperation
+            .newBuilder()
+            .setInput(
+              proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))
+            .setPath("my/test/path")
+            .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE)),
+      proto.Command
+        .newBuilder()
+        .setWriteOperationV2(
+          proto.WriteOperationV2
+            .newBuilder()
+            .setInput(proto.Relation.newBuilder.setRange(
+              proto.Range.newBuilder().setStart(0).setEnd(2).setStep(1L)))
+            .setTableName("testcat.testtable")
+            .setMode(proto.WriteOperationV2.Mode.MODE_CREATE)),
+      proto.Command
+        .newBuilder()
+        .setCreateDataframeView(
+          CreateDataFrameViewCommand
+            .newBuilder()
+            .setName("testview")
+            .setInput(
+              proto.Relation.newBuilder().setSql(proto.SQL.newBuilder().setQuery("select 1")))),
+      proto.Command
+        .newBuilder()
+        .setGetResourcesCommand(proto.GetResourcesCommand.newBuilder()),
+      proto.Command
+        .newBuilder()
+        .setExtension(
+          protobuf.Any.pack(
+            proto.ExamplePluginCommand
+              .newBuilder()
+              .setCustomField("Martin")
+              .build())),
+      proto.Command
+        .newBuilder()
+        .setRegisterFunction(
+          proto.CommonInlineUserDefinedFunction
+            .newBuilder()
+            .setFunctionName("function")
+            .setPythonUdf(
+              proto.PythonUDF
+                .newBuilder()
+                .setEvalType(100)
+                .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType))
+                .setCommand(ByteString.copyFrom("command".getBytes()))
+                .setPythonVer("3.10")
+                .build())))) { command =>
+    withView("testview") {
+      withTable("testcat.testtable") {
+        withSparkConf(
+          "spark.sql.catalog.testcat" -> classOf[InMemoryPartitionTableCatalog].getName,
+          Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES.key ->
+            "org.apache.spark.sql.connect.plugin.ExampleCommandPlugin") {
+          withEvents { verifyEvents =>
+            val instance = new SparkConnectService(false)
+            val context = proto.UserContext
+              .newBuilder()
+              .setUserId("c1")
+              .build()
+            val plan = proto.Plan
+              .newBuilder()
+              .setCommand(command)
+              .build()
+
+            val request = proto.ExecutePlanRequest
+              .newBuilder()
+              .setPlan(plan)
+              .setSessionId("s1")
+              .setUserContext(context)
+              .build()
+
+            // Execute plan.
+            @volatile var done = false
+            val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+            instance.executePlan(
+              request,
+              new StreamObserver[proto.ExecutePlanResponse] {
+                override def onNext(v: proto.ExecutePlanResponse): Unit = {
+                  responses += v
+                  verifyEvents.onNext(v)
+                }
+
+                override def onError(throwable: Throwable): Unit = {
+                  verifyEvents.onError(throwable)
+                  throw throwable
+                }
+
+                override def onCompleted(): Unit = {
+                  done = true
+                }
+              })
+            verifyEvents.onCompleted()
+            // The current implementation is expected to be blocking.
+            // This is here to make sure it is.
+            assert(done)
+
+            // Result + Metrics
+            if (responses.size > 1) {
+              assert(responses.size == 2)
+
+              // Make sure the first response result only
+              val head = responses.head
+              assert(head.hasSqlCommandResult && !head.hasMetrics)
+
+              // Make sure the last response is metrics only
+              val last = responses.last
+              assert(last.hasMetrics && !last.hasSqlCommandResult)
+            }
+          }
         }
       }
-      reader.close()
     }
-    allocator.close()
   }
 
   test("SPARK-41165: failures in the arrow collect path should not cause hangs") {
-    val instance = new SparkConnectService(false)
+    withEvents { verifyEvents =>
+      val instance = new SparkConnectService(false)
 
-    // Add an always crashing UDF
-    val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
-    val instaKill: Long => Long = { _ =>
-      throw new Exception("Kaboom")
+      // Add an always crashing UDF
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
+      val instaKill: Long => Long = { _ =>
+        throw new Exception("Kaboom")
+      }
+      session.udf.register("insta_kill", instaKill)
+
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(connect.sql("select insta_kill(id) from range(10)"))
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .setSessionId("session")
+        .build()
+
+      // The observer is executed inside this thread. So
+      // we can perform the checks inside the observer.
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = {
+            fail("this should not receive responses")
+          }
+
+          override def onError(throwable: Throwable): Unit = {
+            assert(throwable.isInstanceOf[StatusRuntimeException])
+            verifyEvents.onError(throwable)
+          }
+
+          override def onCompleted(): Unit = {
+            fail("this should not complete")
+          }
+        })
     }
-    session.udf.register("insta_kill", instaKill)
-
-    val connect = new MockRemoteSession()
-    val context = proto.UserContext
-      .newBuilder()
-      .setUserId("c1")
-      .build()
-    val plan = proto.Plan
-      .newBuilder()
-      .setRoot(connect.sql("select insta_kill(id) from range(10)"))
-      .build()
-    val request = proto.ExecutePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setUserContext(context)
-      .setSessionId("session")
-      .build()
-
-    // The observer is executed inside this thread. So
-    // we can perform the checks inside the observer.
-    instance.executePlan(
-      request,
-      new StreamObserver[proto.ExecutePlanResponse] {
-        override def onNext(v: proto.ExecutePlanResponse): Unit = {
-          fail("this should not receive responses")
-        }
-
-        override def onError(throwable: Throwable): Unit = {
-          assert(throwable.isInstanceOf[StatusRuntimeException])
-        }
-
-        override def onCompleted(): Unit = {
-          fail("this should not complete")
-        }
-      })
   }
 
   test("Test explain mode in analyze response") {
@@ -376,6 +528,177 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       val valuesList = observedMetric.getValuesList.asScala
       assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
       assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
+    }
+  }
+
+  protected def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    pairs.foreach { kv => conf.set(kv._1, kv._2) }
+    try f
+    finally {
+      pairs.foreach { kv => conf.remove(kv._1) }
+    }
+  }
+
+  protected def withEvents(f: VerifyEvents => Unit): Unit = {
+    val verifyEvents = new VerifyEvents(spark.sparkContext)
+    spark.sparkContext.addSparkListener(verifyEvents.listener)
+    Utils.tryWithSafeFinally({
+      f(verifyEvents)
+      SparkConnectService.invalidateAllSessions()
+      verifyEvents.onSessionClosed()
+    }) {
+      verifyEvents.waitUntilEmpty()
+      spark.sparkContext.removeSparkListener(verifyEvents.listener)
+      SparkConnectService.invalidateAllSessions()
+    }
+  }
+
+  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+      testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
+    }
+  }
+
+  sealed abstract class Status(value: Int)
+
+  object Status {
+    case object Pending extends Status(0)
+    case object SessionStarted extends Status(1)
+    case object Started extends Status(2)
+    case object Analyzed extends Status(3)
+    case object ReadyForExecution extends Status(4)
+    case object Finished extends Status(5)
+    case object Failed extends Status(6)
+    case object Canceled extends Status(7)
+    case object Closed extends Status(8)
+    case object SessionClosed extends Status(9)
+  }
+
+  class VerifyEvents(val sparkContext: SparkContext) {
+    val listener: MockSparkListener = new MockSparkListener()
+    val listenerBus = sparkContext.listenerBus
+    val LISTENER_BUS_TIMEOUT = 30000
+    def onNext(v: proto.ExecutePlanResponse): Unit = {
+      if (v.hasSchema) {
+        waitUntilEmpty()
+        assert(listener.status == Status.Analyzed)
+      }
+      if (v.hasMetrics) {
+        waitUntilEmpty()
+        assert(listener.status == Status.Finished)
+      }
+      assertNoErrors()
+    }
+    def onError(throwable: Throwable): Unit = {
+      waitUntilEmpty()
+      assert(listener.status == Status.Failed)
+      assertNoErrors()
+    }
+    def onCompleted(): Unit = {
+      waitUntilEmpty()
+      assert(listener.status == Status.Closed)
+      assertNoErrors()
+    }
+    def onSessionClosed(): Unit = {
+      waitUntilEmpty()
+      assert(listener.status == Status.SessionClosed)
+      assertNoErrors()
+    }
+    def onSessionStarted(): Unit = {
+      waitUntilEmpty()
+      assert(listener.status == Status.SessionStarted)
+      assertNoErrors()
+    }
+    def waitUntilEmpty(): Unit = {
+      listenerBus.waitUntilEmpty(LISTENER_BUS_TIMEOUT)
+    }
+    def assertNoErrors(): Unit = {
+      if (listener.error.isDefined) {
+        throw listener.error.get
+      }
+    }
+  }
+
+  class MockSparkListener() extends SparkListener {
+    var status: Status = Status.Pending
+    var error: Option[Throwable] = None
+    override def onOtherEvent(event: SparkListenerEvent): Unit = {
+      try {
+        _onOtherEvent(event)
+      } catch {
+        case e: Throwable =>
+          logError("Failed MockSparkListener assertion", e)
+          error = Some(e)
+      }
+    }
+    def _onOtherEvent(event: SparkListenerEvent): Unit = {
+      val prevStatus = status
+      event match {
+        case e: SparkListenerConnectSessionStarted =>
+          logInfo(s"$e")
+          status = Status.SessionStarted
+          assert(prevStatus == Status.Pending, s"$e")
+        case e: SparkListenerConnectOperationStarted =>
+          logInfo(s"$e")
+          status = Status.Started
+          assert(prevStatus == Status.SessionStarted, s"$e")
+        case e: SparkListenerConnectOperationAnalyzed =>
+          logInfo(s"$e")
+          status = Status.Analyzed
+          assert(
+            List(Status.Started, Status.Analyzed)
+              .find(s => s == prevStatus)
+              .isDefined,
+            s"$e")
+        case e: SparkListenerConnectOperationReadyForExecution =>
+          logInfo(s"$e")
+          status = Status.ReadyForExecution
+          assert(prevStatus == Status.Analyzed, s"$e")
+        case e: SparkListenerConnectOperationFinished =>
+          logInfo(s"$e")
+          status = Status.Finished
+          assert(
+            List(Status.Started, Status.ReadyForExecution)
+              .find(s => s == prevStatus)
+              .isDefined,
+            s"$e")
+        case e: SparkListenerConnectOperationFailed =>
+          logInfo(s"$e")
+          status = Status.Failed
+          assert(
+            List(Status.Started, Status.Analyzed, Status.ReadyForExecution, Status.Finished)
+              .find(s => s == prevStatus)
+              .isDefined,
+            s"$e")
+        case e: SparkListenerConnectOperationCanceled =>
+          logInfo(s"$e")
+          status = Status.Canceled
+          assert(
+            List(
+              Status.Started,
+              Status.Analyzed,
+              Status.ReadyForExecution,
+              Status.Finished,
+              Status.Failed)
+              .find(s => s == prevStatus)
+              .isDefined,
+            s"$e")
+        case e: SparkListenerConnectOperationClosed =>
+          logInfo(s"$e")
+          status = Status.Closed
+          assert(prevStatus == Status.Finished, s"$e")
+        case e: SparkListenerConnectSessionClosed =>
+          logInfo(s"$e")
+          status = Status.SessionClosed
+          assert(
+            List(Status.Failed, Status.Canceled, Status.Closed)
+              .find(s => s == prevStatus)
+              .isDefined,
+            s"$e")
+        case _ =>
+      }
     }
   }
 }
