@@ -43,10 +43,15 @@ private class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TY
   }
   val precision : Int = {
     val obj = schema.getObjectProp("precision")
-    if (obj == null) {
-      throw new IllegalArgumentException(s"Invalid ${CustomDecimal.TYPE_NAME}: missing precision");
+    obj match {
+      case null =>
+        throw new IllegalArgumentException(
+          s"Invalid ${CustomDecimal.TYPE_NAME}: missing precision");
+      case i: Integer =>
+        i
+      case other =>
+        throw new IllegalArgumentException(s"Expected int ${CustomDecimal.TYPE_NAME}:precision")
     }
-    obj.asInstanceOf[Int]
   }
   val className : String = schema.getProp("className")
 
@@ -71,6 +76,4 @@ private class CustomDecimal(schema: Schema) extends LogicalType(CustomDecimal.TY
         s"precision: $precision)");
     }
   }
-  override def toString: String =
-    s"${CustomDecimal.TYPE_NAME}<scale: $scale, precision: $precision>"
 }

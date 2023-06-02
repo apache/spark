@@ -491,7 +491,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-43901:LogicalType: Decimal for Long Type Exception Cases") {
+  test("SPARK-43901: LogicalType: Decimal for Long Type Exception Cases") {
     // Avro appears to catch all exceptions when creating a customized logical type and turn the
     // logical null and we can't distinguish with the case where the logical type isn't given.
     Seq(
