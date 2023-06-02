@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.22.3"
+  val protoVersion = "3.23.2"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
