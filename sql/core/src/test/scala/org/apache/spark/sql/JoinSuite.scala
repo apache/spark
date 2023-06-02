@@ -1249,6 +1249,83 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
+  test("SPARK-36612: Support left outer join build left or right outer join build right in " +
+    "shuffled hash join") {
+    val inputDFs = Seq(
+      // Test unique join key
+      (spark.range(10).selectExpr("id as k1"),
+        spark.range(30).selectExpr("id as k2"),
+        $"k1" === $"k2"),
+      // Test non-unique join key
+      (spark.range(10).selectExpr("id % 5 as k1"),
+        spark.range(30).selectExpr("id % 5 as k2"),
+        $"k1" === $"k2"),
+      // Test empty build side
+      (spark.range(10).selectExpr("id as k1").filter("k1 < -1"),
+        spark.range(30).selectExpr("id as k2"),
+        $"k1" === $"k2"),
+      // Test empty stream side
+      (spark.range(10).selectExpr("id as k1"),
+        spark.range(30).selectExpr("id as k2").filter("k2 < -1"),
+        $"k1" === $"k2"),
+      // Test empty build and stream side
+      (spark.range(10).selectExpr("id as k1").filter("k1 < -1"),
+        spark.range(30).selectExpr("id as k2").filter("k2 < -1"),
+        $"k1" === $"k2"),
+      // Test string join key
+      (spark.range(10).selectExpr("cast(id * 3 as string) as k1"),
+        spark.range(30).selectExpr("cast(id as string) as k2"),
+        $"k1" === $"k2"),
+      // Test build side at right
+      (spark.range(30).selectExpr("cast(id / 3 as string) as k1"),
+        spark.range(10).selectExpr("cast(id as string) as k2"),
+        $"k1" === $"k2"),
+      // Test NULL join key
+      (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr("value as k1"),
+        spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr("value as k2"),
+        $"k1" === $"k2"),
+      (spark.range(10).map(i => if (i % 3 == 0) i else null).selectExpr("value as k1"),
+        spark.range(30).map(i => if (i % 5 == 0) i else null).selectExpr("value as k2"),
+        $"k1" === $"k2"),
+      // Test multiple join keys
+      (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr(
+        "value as k1", "cast(value % 5 as short) as k2", "cast(value * 3 as long) as k3"),
+        spark.range(30).map(i => if (i % 3 == 0) i else null).selectExpr(
+          "value as k4", "cast(value % 5 as short) as k5", "cast(value * 3 as long) as k6"),
+        $"k1" === $"k4" && $"k2" === $"k5" && $"k3" === $"k6")
+    )
+
+    // test left outer with left side build
+    inputDFs.foreach { case (df1, df2, joinExprs) =>
+      val smjDF = df1.hint("SHUFFLE_MERGE").join(df2, joinExprs, "leftouter")
+      assert(collect(smjDF.queryExecution.executedPlan) {
+        case _: SortMergeJoinExec => true }.size === 1)
+      val smjResult = smjDF.collect()
+
+      val shjDF = df1.hint("SHUFFLE_HASH").join(df2, joinExprs, "leftouter")
+      assert(collect(shjDF.queryExecution.executedPlan) {
+        case _: ShuffledHashJoinExec => true
+      }.size === 1)
+      // Same result between shuffled hash join and sort merge join
+      checkAnswer(shjDF, smjResult)
+    }
+
+    // test right outer with right side build
+    inputDFs.foreach { case (df2, df1, joinExprs) =>
+      val smjDF = df2.join(df1.hint("SHUFFLE_MERGE"), joinExprs, "rightouter")
+      assert(collect(smjDF.queryExecution.executedPlan) {
+        case _: SortMergeJoinExec => true }.size === 1)
+      val smjResult = smjDF.collect()
+
+      val shjDF = df2.join(df1.hint("SHUFFLE_HASH"), joinExprs, "rightouter")
+      assert(collect(shjDF.queryExecution.executedPlan) {
+        case _: ShuffledHashJoinExec => true
+      }.size === 1)
+      // Same result between shuffled hash join and sort merge join
+      checkAnswer(shjDF, smjResult)
+    }
+  }
+
   test("SPARK-32649: Optimize BHJ/SHJ inner/semi join with empty hashed relation") {
     val inputDFs = Seq(
       // Test empty build side for inner join
