@@ -148,6 +148,10 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
         Literal(null).eval())))) :: Nil,
     "")
 
+  filterTest("SPARK-43866 cast string to int",
+    (Cast(a("stringcol", StringType), IntegerType) === Literal(20200202)) :: Nil,
+    "stringcol = \"20200202\"")
+
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
   filterTest("SPARK-24879 IN predicates with only NULLs will not cause a NPE",
