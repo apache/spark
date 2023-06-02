@@ -252,15 +252,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("it is not allowed to write to a table while querying it.") {
-    val message = intercept[AnalysisException] {
-      sql(
-        s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
-      """.stripMargin)
-    }.getMessage
-    assert(
-      message.contains("Cannot overwrite a path that is also being read from."),
-      "INSERT OVERWRITE to a table while querying it should not be allowed.")
+    checkErrorMatchPVals(
+      exception = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable")
+      },
+      errorClass = "UNSUPPORTED_OVERWRITE.PATH",
+      parameters = Map("path" -> ".*"))
   }
 
   test("SPARK-30112: it is allowed to write to a table while querying it for " +
@@ -296,16 +293,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             checkAnswer(spark.table("insertTable"),
               Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
           } else {
-            val message = intercept[AnalysisException] {
-              sql(
-                """
-                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
-                  |SELECT i + 1, part2 FROM insertTable
-                """.stripMargin)
-            }.getMessage
-            assert(
-              message.contains("Cannot overwrite a path that is also being read from."),
-              "INSERT OVERWRITE to a table while querying it should not be allowed.")
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(
+                  """
+                    |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
+                    |SELECT i + 1, part2 FROM insertTable
+                  """.stripMargin)
+              },
+              errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+              parameters = Map("table" -> "`spark_catalog`.`default`.`inserttable`"))
           }
         }
       }
@@ -2373,6 +2370,41 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t2 (x Decimal(9, 0)) using parquet")
       sql("insert into t2 select 0 - (case when x = 1 then 1 else x end) from t1 where x = 1")
       checkAnswer(spark.table("t2"), Row(-1))
+    }
+  }
+
+  test("UNSUPPORTED_OVERWRITE.TABLE: Can't overwrite a table that is also being read from") {
+    val tableName = "t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.table(tableName).write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+        },
+        errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`spark_catalog`.`default`.`$tableName`")
+      )
+    }
+  }
+
+  test("UNSUPPORTED_OVERWRITE.PATH: Can't overwrite a path that is also being read from") {
+    val tableName = "t1"
+    withTable(tableName) {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        sql(s"CREATE TABLE $tableName(i int) USING parquet LOCATION '$path'")
+        val insertDirSql =
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '$path'
+             |USING parquet
+             |SELECT i from $tableName""".stripMargin
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(insertDirSql)
+          },
+          errorClass = "UNSUPPORTED_OVERWRITE.PATH",
+          parameters = Map("path" -> ("file:" + path)))
+      }
     }
   }
 }
