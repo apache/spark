@@ -837,15 +837,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"Schema did not match for query #$i\n${expected.sql}: $output") {
         output.schema
       }
-      assertResult(normalizeOwner(expected.output), s"Result did not match" +
+      assertResult(expected.output, s"Result did not match" +
         s" for query #$i\n${expected.sql}") {
         output.output
       }
     }
-  }
-
-  private def normalizeOwner(plan: String): String = {
-    plan.replaceAll("""Owner\t\{runner}""", "Owner\t" + Utils.getCurrentUserName)
   }
 
   /** A single SQL query's output. */
