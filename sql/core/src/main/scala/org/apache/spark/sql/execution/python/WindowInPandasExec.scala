@@ -185,6 +185,7 @@ case class WindowInPandasExec(
     val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     val spillThreshold = conf.windowExecBufferSpillThreshold
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
+    val largeVarTypes = conf.arrowUseLargeVarTypes
 
     // Extract window expressions and window functions
     val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
@@ -385,6 +386,7 @@ case class WindowInPandasExec(
         argOffsets,
         pythonInputSchema,
         sessionLocalTimeZone,
+        largeVarTypes,
         pythonRunnerConf,
         pythonMetrics).compute(pythonInput, context.partitionId(), context)
 

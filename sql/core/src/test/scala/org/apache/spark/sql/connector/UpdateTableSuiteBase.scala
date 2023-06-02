@@ -493,6 +493,21 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("update with nondeterministic assignments") {
+    createAndInitTable("pk INT NOT NULL, id INT, value DOUBLE, dep STRING",
+      """{ "pk": 1, "id": 1, "value": 2.0, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "value": 2.0,  "dep": "software" }
+        |{ "pk": 3, "id": 3, "value": 2.0, "dep": "hr" }
+        |""".stripMargin)
+
+    // rand() always generates values in [0, 1) range
+    sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
+
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
+  }
+
   test("update with nondeterministic conditions") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }

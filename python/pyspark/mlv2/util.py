@@ -16,17 +16,16 @@
 #
 
 import pandas as pd
-import cloudpickle  # type: ignore[import]
-from collections.abc import Callable, Iterable
-from typing import Any, Union
+from typing import Any, Union, List, Tuple, Callable, Iterable
 
+from pyspark import cloudpickle
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, pandas_udf
 
 
 def aggregate_dataframe(
     dataframe: Union["DataFrame", "pd.DataFrame"],
-    input_col_names: list[str],
+    input_col_names: List[str],
     local_agg_fn: Callable[["pd.DataFrame"], Any],
     merge_agg_state: Callable[[Any, Any], Any],
     agg_state_to_result: Callable[[Any], Any],
@@ -115,7 +114,7 @@ def transform_dataframe_column(
     dataframe: Union["DataFrame", "pd.DataFrame"],
     input_col_name: str,
     transform_fn: Callable[["pd.Series"], Any],
-    output_cols: list[tuple[str, str]],
+    output_cols: List[Tuple[str, str]],
 ) -> Union["DataFrame", "pd.DataFrame"]:
     """
     Transform specified column of the input spark dataframe or pandas dataframe,

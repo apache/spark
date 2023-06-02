@@ -42,6 +42,10 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
+  private def internalException(sqlText: String): SparkThrowable = {
+    super.internalException(parsePlan)(sqlText)
+  }
+
   test("create/replace table using - schema") {
     val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
     val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL) USING parquet"
@@ -2844,5 +2848,21 @@ class DDLParserSuite extends AnalysisTest {
       context =
         ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)
     )
+  }
+
+  test("AstBuilder don't support `INSERT OVERWRITE DIRECTORY`") {
+    val insertDirSql =
+      s"""
+         | INSERT OVERWRITE LOCAL DIRECTORY
+         | USING parquet
+         | OPTIONS (
+         |  path 'xxx'
+         | )
+         | SELECT i from t1""".stripMargin
+
+    checkError(
+      exception = internalException(insertDirSql),
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
   }
 }

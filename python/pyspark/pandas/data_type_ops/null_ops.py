@@ -30,8 +30,8 @@ from pyspark.pandas.data_type_ops.base import (
 )
 from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.typedef import pandas_on_spark_type
-from pyspark.sql import Column
 from pyspark.sql.types import BooleanType, StringType
+from pyspark.sql.utils import pyspark_column_op, is_remote
 
 
 class NullOps(DataTypeOps):
@@ -44,28 +44,36 @@ class NullOps(DataTypeOps):
         return "nulls"
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        result = pyspark_column_op("__lt__")(left, right)
+        if is_remote():
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        result = pyspark_column_op("__le__")(left, right)
+        if is_remote():
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        result = pyspark_column_op("__ge__")(left, right)
+        if is_remote():
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        result = pyspark_column_op("__gt__")(left, right)
+        if is_remote():
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

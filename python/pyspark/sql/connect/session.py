@@ -331,8 +331,12 @@ class SparkSession:
 
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
+            spark_types: List[Optional[DataType]]
+            arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
-                arrow_schema = to_arrow_schema(cast(StructType, _deduplicate_field_names(schema)))
+                deduped_schema = cast(StructType, _deduplicate_field_names(schema))
+                spark_types = [field.dataType for field in deduped_schema.fields]
+                arrow_schema = to_arrow_schema(deduped_schema)
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
@@ -342,14 +346,15 @@ class SparkSession:
                 )
             else:
                 # Any timestamps must be coerced to be compatible with Spark
-                arrow_types = [
-                    to_arrow_type(TimestampType())
+                spark_types = [
+                    TimestampType()
                     if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
-                    else to_arrow_type(DayTimeIntervalType())
+                    else DayTimeIntervalType()
                     if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
                 ]
+                arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
 
             timezone, safecheck = self._client.get_configs(
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
@@ -358,7 +363,14 @@ class SparkSession:
             ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
 
             _table = pa.Table.from_batches(
-                [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
+                [
+                    ser._create_batch(
+                        [
+                            (c, at, st)
+                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
+                        ]
+                    )
+                ]
             )
 
             if isinstance(schema, StructType):
