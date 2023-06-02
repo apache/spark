@@ -80,6 +80,12 @@
     ],
     "sqlState" : "22546"
   },
+  "CANNOT_FIND_BATCH" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>."
+    ],
+    "sqlState" : "42K03"
+  },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
       "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
@@ -869,12 +875,6 @@
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
-    ],
-    "sqlState" : "XX000"
-  },
-  "INTERNAL_ERROR_BATCH" : {
-    "message" : [
-      "Unable to find batch <batchMetadataFile>."
     ],
     "sqlState" : "XX000"
   },
