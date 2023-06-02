@@ -906,6 +906,14 @@ object functions {
    * Aggregate function: alias for `stddev_samp`.
    *
    * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
    * @since 1.6.0
    */
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
@@ -1996,6 +2004,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -2058,6 +2082,14 @@ object functions {
    * @since 3.3.0
    */
   def csc(e: Column): Column = withExpr { Csc(e.expr) }
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = withExpr { EulerNumber() }
 
   /**
    * Computes the exponential of the given value.
@@ -2257,6 +2289,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 1.4.0
    */
   def log(e: Column): Column = withExpr { Log(e.expr) }
@@ -2334,6 +2374,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = withExpr { UnaryMinus(e.expr) }
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = withExpr { Pi() }
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = withExpr { UnaryPositive(e.expr) }
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2396,6 +2460,14 @@ object functions {
    * @since 1.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2528,6 +2600,14 @@ object functions {
   def shiftrightunsigned(e: Column, numBits: Int): Column = withExpr {
     ShiftRightUnsigned(e.expr, lit(numBits).expr)
   }
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2688,6 +2768,23 @@ object functions {
    * @since 2.1.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
+
+  /**
+   * Returns the bucket number into which the value of this expression would fall
+   * after being evaluated. Note that input arguments must follow conditions listed below;
+   * otherwise, the method will return null.
+   *
+   * @param v value to compute a bucket number in the histogram
+   * @param min minimum value of the histogram
+   * @param max maximum value of the histogram
+   * @param numBucket the number of buckets
+   * @return the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column = withExpr {
+    WidthBucket(v.expr, min.expr, max.expr, numBucket.expr)
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
