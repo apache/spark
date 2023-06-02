@@ -420,7 +420,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      parameters = Map("columnName" -> "`__auto_generated_subquery_name`.`map`"),
+      parameters = Map("columnName" -> "`map`"),
       sqlState = "42818")
   }
 
