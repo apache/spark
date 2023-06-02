@@ -183,9 +183,15 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         val cols = Seq("c1", "c2", "c3")
         Seq((3, 2, 1)).toDF(cols.reverse: _*).createTempView("tmp_view")
         createTable("t1", cols, Seq("int", "int", "int"))
-        assertThrows[IllegalArgumentException] {
-          sql("INSERT INTO TABLE t1 BY NAME (c1,c2) SELECT * FROM tmp_view")
-        }
+        checkError(
+          exception = intercept[ParseException](
+            sql("INSERT INTO TABLE t1 BY NAME (c1,c2) SELECT * FROM tmp_view")
+          ),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map(
+            "error" -> "'c1'",
+            "hint" -> "")
+        )
       }
     }
   }

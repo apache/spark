@@ -27,7 +27,6 @@ import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.resolveOutputColumns
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
@@ -1291,16 +1290,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Create a project if this is an INSERT INTO BY NAME query.
         val projectByName = if (i.userSpecifiedCols.nonEmpty) {
           Some(createProjectForByNameQuery(i))
-        } else if (i.byName) {
-          val partition = i.partitionSpec.filter(p => p._2.isDefined).keySet
-          val output = i.table.output.filter(col => {
-            !partition.exists(p => conf.resolver(col.name, p))
-          })
-          Some(resolveOutputColumns(r.table.name, output, i.query, i.byName, conf))
         } else {
           None
         }
-        val isByName = projectByName.nonEmpty
+        val isByName = projectByName.nonEmpty || i.byName
 
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
