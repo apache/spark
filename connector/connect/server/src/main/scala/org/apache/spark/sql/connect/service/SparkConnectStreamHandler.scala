@@ -63,10 +63,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         }
 
       val executeHolder = sessionHolder.createExecutePlanHolder(v)
-      session.sparkContext.setJobGroup(
-        executeHolder.jobGroupId,
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
-        interruptOnCancel = true)
+      session.sparkContext.addJobTag(executeHolder.jobTag)
+      session.sparkContext.setInterruptOnCancel(true)
 
       try {
         // Add debug information to the query execution so that the jobs are traceable.
@@ -89,6 +87,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
         }
       } finally {
+        session.sparkContext.removeJobTag(executeHolder.jobTag)
         sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }
