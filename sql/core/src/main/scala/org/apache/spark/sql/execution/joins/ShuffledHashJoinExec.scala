@@ -88,7 +88,7 @@ case class ShuffledHashJoinExec(
       iter,
       buildBoundKeys,
       taskMemoryManager = context.taskMemoryManager(),
-      // build-side outer join needs support for NULL key in HashedRelation.
+      // build-side or full outer join needs support for NULL key in HashedRelation.
       allowsNullKey = joinType == FullOuter ||
         (joinType == LeftOuter && buildSide == BuildLeft) ||
         (joinType == RightOuter && buildSide == BuildRight),
@@ -105,18 +105,18 @@ case class ShuffledHashJoinExec(
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
       joinType match {
-        case FullOuter => buildSideOuterJoin(streamIter, hashed, numOutputRows,
+        case FullOuter => buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows,
           isFullOuterJoin = true)
         case LeftOuter if buildSide.equals(BuildLeft) =>
-          buildSideOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
+          buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
         case RightOuter if buildSide.equals(BuildRight) =>
-          buildSideOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
+          buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
         case _ => join(streamIter, hashed, numOutputRows)
       }
     }
   }
 
-  private def buildSideOuterJoin(
+  private def buildSideOrFullOuterJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       numOutputRows: SQLMetric,
@@ -143,10 +143,10 @@ case class ShuffledHashJoinExec(
     }
 
     val iter = if (hashedRelation.keyIsUnique) {
-      buildSideOuterJoinUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+      buildSideOrFullOuterJoinUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
         joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
     } else {
-      buildSideOuterJoinNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+      buildSideOrFullOuterJoinNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
         joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
     }
 
@@ -166,7 +166,7 @@ case class ShuffledHashJoinExec(
    *    Filter out rows from build side being matched already,
    *    by checking key index from bit set.
    */
-  private def buildSideOuterJoinUniqueKey(
+  private def buildSideOrFullOuterJoinUniqueKey(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
@@ -239,7 +239,7 @@ case class ShuffledHashJoinExec(
    * the value indices of its tuples will be 0, 1 and 2.
    * Note that value indices of tuples with different keys are incomparable.
    */
-  private def buildSideOuterJoinNonUniqueKey(
+  private def buildSideOrFullOuterJoinNonUniqueKey(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
