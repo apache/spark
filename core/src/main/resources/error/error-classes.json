@@ -42,6 +42,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BATCH_METADATA_NOT_FOUND" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>."
+    ],
+    "sqlState" : "42K03"
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow."
@@ -79,12 +85,6 @@
       "Cannot decode url : <url>."
     ],
     "sqlState" : "22546"
-  },
-  "CANNOT_FIND_BATCH" : {
-    "message" : [
-      "Unable to find batch <batchMetadataFile>."
-    ],
-    "sqlState" : "42K03"
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
