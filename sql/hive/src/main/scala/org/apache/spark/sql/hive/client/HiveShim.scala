@@ -1054,7 +1054,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         Some(s"$value ${op.symbol} $name")
 
       case EqualTo(ExtractStringAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name = $value")
+        Some(s"$name = " + ("\"" + value + "\""))
 
       case Contains(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name like " + (("\".*" + value.drop(1)).dropRight(1) + ".*\""))
