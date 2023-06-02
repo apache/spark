@@ -158,6 +158,32 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     case _ => None
   }
 
+  override def getTableExistsQuery(table: String): String = {
+    s"SELECT 1 FROM $table LIMIT 1"
+  }
+
+  override def supportsUpsert(): Boolean = true
+
+  override def getUpsertStatement(
+      tableName: String,
+      columns: Array[String],
+      isCaseSensitive: Boolean,
+      options: JDBCOptions): String = {
+    val insertColumns = columns.mkString(", ")
+    val placeholders = columns.map(_ => "?").mkString(",")
+    val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
+    val updateColumns = columns.filterNot(upsertKeyColumns.contains)
+    val updateClause =
+      updateColumns.map(x => s"$x = EXCLUDED.$x").mkString(", ")
+
+    s"""
+       |INSERT INTO $tableName ($insertColumns)
+       |VALUES ( $placeholders )
+       |ON CONFLICT (${upsertKeyColumns.mkString(", ")})
+       |DO UPDATE SET $updateClause
+       |""".stripMargin
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   /**

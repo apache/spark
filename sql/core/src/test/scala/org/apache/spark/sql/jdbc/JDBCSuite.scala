@@ -1157,24 +1157,42 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(db2.getTruncateQuery(table, Some(true)) == db2Query)
   }
 
-  test("upsert table query by dialect") {
-    val options = {
-      new JDBCOptions(Map(
-        JDBC_UPSERT_KEY_COLUMNS -> "id, time",
-        JDBCOptions.JDBC_URL -> url,
-        JDBCOptions.JDBC_TABLE_NAME -> "table"
-      ))
-    }
-    val columns = Array("id", "time", "value", "comment")
+  Seq(
+    ("MySQL",
+      JdbcDialects.get("jdbc:mysql://127.0.0.1/db"),
+      """
+        |INSERT INTO table (`id`, `time`, `value`, `comment`)
+        |VALUES ( ?,?,?,? )
+        |ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `comment` = VALUES(`comment`)
+        |""".stripMargin),
+    ("Postgres",
+      JdbcDialects.get("jdbc:postgresql://127.0.0.1/db"),
+      """
+        |INSERT INTO table ("id", "time", "value", "comment")
+        |VALUES ( ?,?,?,? )
+        |ON CONFLICT ("id", "time")
+        |DO UPDATE SET "value" = EXCLUDED."value", "comment" = EXCLUDED."comment"
+        |""".stripMargin)
+  ).foreach { case (label, dialect, expected) =>
+    test(s"upsert table query by dialect - ${dialect.getClass.getSimpleName.stripSuffix("$")}") {
+      assert(dialect.supportsUpsert() === true)
 
-    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val quotedColumns = columns.map(MySQL.quoteIdentifier)
-    val isCaseSensitive = false
-    val mysqlStmt = MySQL.getUpsertStatement("table", quotedColumns, isCaseSensitive, options)
-    assert(mysqlStmt === "\n" +
-      "INSERT INTO table (`id`, `time`, `value`, `comment`)\n" +
-      "VALUES ( ?,?,?,? )\n" +
-      "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `comment` = VALUES(`comment`)\n")
+      val options = {
+        new JDBCOptions(Map(
+          JDBC_UPSERT_KEY_COLUMNS -> "id, time",
+          JDBCOptions.JDBC_URL -> url,
+          JDBCOptions.JDBC_TABLE_NAME -> "table"
+        ))
+      }
+
+      val table = "table"
+      val columns = Array("id", "time", "value", "comment")
+      val quotedColumns = columns.map(dialect.quoteIdentifier)
+      val isCaseSensitive = false
+      val stmt = dialect.getUpsertStatement(table, quotedColumns, isCaseSensitive, options)
+
+      assert(stmt === expected)
+    }
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
