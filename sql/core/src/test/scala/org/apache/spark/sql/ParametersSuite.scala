@@ -154,7 +154,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = sqlText.length - 1))
   }
 
-  test("parameters not allowed in view body - complex case") {
+  test("parameters not allowed in view body - WITH and scalar subquery") {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT :p) AS a)  SELECT a FROM cte"
     val args = Map("p" -> 1)
     checkError(
@@ -164,11 +164,34 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       parameters = Map("statement" -> "CREATE VIEW body"),
       context = ExpectedContext(
-        fragment = "CREATE VIEW v AS WITH cte(a) AS SELECT (SELECT :p) SELECT a FROM cte",
-        start = 0,
+        fragment = "WITH cte(a) AS SELECT (SELECT :p) SELECT a FROM cte",
+        start = 17,
         stop = sqlText.length - 1))
   }
 
+  test("parameters not allowed in view body - nested WITH and EXIST") {
+    val sqlText =
+      """CREATE VIEW v AS
+        | SELECT *
+        |   FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END)
+        |         SELECT a FROM cte)
+        |"""".stripMargin
+    val args = Map("p" -> 1)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(sqlText, args)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "CREATE VIEW body"),
+      context = ExpectedContext(
+        fragment =
+          """SELECT *
+            |   FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END)
+            |         SELECT a FROM cte)
+            |"""".stripMargin,
+        start = 17,
+        stop = sqlText.length - 1))
+  }
 
   test("non-substituted parameters") {
     checkError(

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.execution.command._
@@ -440,6 +441,17 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
 
+  private def checkInvalidParameter(ctx: ParserRuleContext, plan: LogicalPlan): Unit = {
+    plan.foreach { p =>
+      if (p.expressions.exists(_.containsPattern(PARAMETER))) {
+        throw QueryParsingErrors.parameterMarkerNotAllowed("CREATE VIEW body", ctx)
+      }
+    }
+    plan.innerChildren.collect {
+      case child: LogicalPlan => checkInvalidParameter(ctx, child)
+    }
+  }
+
   /**
    * Create or replace a view. This creates a [[CreateViewCommand]].
    *
@@ -489,7 +501,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       LocalTempView
     }
     val qPlan: LogicalPlan = plan(ctx.query)
-    qPlan.setTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG, "CREATE VIEW body")
+    checkInvalidParameter(ctx.query, qPlan)
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,

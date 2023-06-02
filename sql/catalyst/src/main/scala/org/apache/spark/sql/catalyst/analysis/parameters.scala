@@ -66,16 +66,6 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       // One unresolved plan can have at most one ParameterizedQuery.
       val parameterizedQueries = plan.collect { case p: ParameterizedQuery => p }
       assert(parameterizedQueries.length == 1)
-      var noParamAllowedTag: Option[String] = None
-      plan.foreach { p =>
-        noParamAllowedTag = noParamAllowedTag
-          .orElse(p.getTagValue(LogicalPlan.NO_PARAM_ALLOWED_TAG))
-        if (noParamAllowedTag.isDefined && p.expressions.exists(_.containsPattern(PARAMETER))) {
-          p.failAnalysis(
-            errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-            messageParameters = Map("statement" -> noParamAllowedTag.get))
-        }
-      }
     }
 
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
