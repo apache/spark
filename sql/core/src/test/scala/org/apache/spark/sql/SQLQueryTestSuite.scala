@@ -595,7 +595,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
@@ -838,11 +837,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"Schema did not match for query #$i\n${expected.sql}: $output") {
         output.schema
       }
-      assertResult(expected.output, s"Result did not match" +
+      assertResult(normalizeOwner(expected.output), s"Result did not match" +
         s" for query #$i\n${expected.sql}") {
         output.output
       }
     }
+  }
+
+  private def normalizeOwner(plan: String): String = {
+    plan.replaceAll("""Owner\t\{runner}""", "Owner\t" + Utils.getCurrentUserName)
   }
 
   /** A single SQL query's output. */
