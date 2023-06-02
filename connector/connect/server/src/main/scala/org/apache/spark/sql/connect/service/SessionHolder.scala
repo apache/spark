@@ -32,6 +32,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.util.{SystemClock}
 import org.apache.spark.util.Utils
 
 /**
@@ -40,6 +41,7 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
+  val events: Events = Events(this, new SystemClock())
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
 

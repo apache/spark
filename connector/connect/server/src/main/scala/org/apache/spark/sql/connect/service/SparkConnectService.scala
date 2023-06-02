@@ -121,31 +121,49 @@ class SparkConnectService(debug: Boolean)
       observer: StreamObserver[V],
       userId: String,
       sessionId: String): PartialFunction[Throwable, Unit] = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
-        .session
+    val sessionHolder = SparkConnectService
+      .getOrCreateIsolatedSession(userId, sessionId)
+    val session = sessionHolder.session
     val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
 
     {
+      case e: UnsupportedOperationException =>
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
+        val throwable = Status.INVALID_ARGUMENT.withDescription(e.getMessage).asRuntimeException()
+        postFailed(opType, sessionHolder.events, throwable)
+        observer.onError(throwable)
+
       case se: SparkException if isPythonExecutionException(se) =>
         logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
+        val throwable = StatusProto.toStatusRuntimeException(
+          buildStatusFromThrowable(se.getCause, stackTraceEnabled))
+        postFailed(opType, sessionHolder.events, throwable)
+        observer.onError(throwable)
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
         logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
+        val throwable =
+          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled))
+        postFailed(opType, sessionHolder.events, throwable)
+        observer.onError(throwable)
 
       case e: Throwable =>
         logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        observer.onError(
-          Status.UNKNOWN
-            .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-            .asRuntimeException())
+        val throwable = Status.UNKNOWN
+          .withCause(e)
+          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+          .asRuntimeException()
+        postFailed(opType, sessionHolder.events, throwable)
+        observer.onError(throwable)
+    }
+  }
+
+  /**
+   * Post failed for opType execute as these are the only statements being tracked
+   */
+  private def postFailed(opType: String, events: Events, throwable: Throwable) = {
+    if (opType.equals("execute")) {
+      events.postFailed(throwable.getMessage)
     }
   }
 

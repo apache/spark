@@ -19,6 +19,18 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
 
+object ExecutePlanHolder {
+  val JOB_GROUP_ID_PATTERN = "User_(\\d*)_Session_([a-z0-9\\-]*)_Request_([a-z0-9\\-]*)".r
+  def getQueryOperationId(jobGroupId: String): Option[String] = {
+    jobGroupId match {
+      case JOB_GROUP_ID_PATTERN(userId: String, sessionId: String, queryId: String) =>
+        Some(queryId)
+      case _ =>
+        None
+    }
+  }
+}
+
 /**
  * Object used to hold the Spark Connect execution state.
  */
@@ -37,6 +49,9 @@ case class ExecutePlanHolder(
     // But if the query is not running a Spark job, but executing code on Spark driver, this
     // would be a noop and the execution will keep running.
     sessionHolder.session.sparkContext.cancelJobsWithTag(jobTag)
+
+    // TODO: The above does not cancel the Connect query and it continues executing.
+    // events.postCanceled()
   }
 
 }
