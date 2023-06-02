@@ -821,14 +821,6 @@ object functions {
   def mean(columnName: String): Column = avg(columnName)
 
   /**
-   * Aggregate function: returns the median of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 3.4.0
-   */
-  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
-
-  /**
    * Aggregate function: returns the minimum value of the expression in a group.
    *
    * @group agg_funcs
@@ -851,6 +843,87 @@ object functions {
    * @since 3.3.0
    */
   def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr)
+    }
+  }
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(
+      e: Column,
+      percentage: Column,
+      frequency: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr, frequency.expr)
+    }
+  }
+
+  /**
+   * Aggregate function: returns the median of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
+
+  /**
+   * Aggregate function: returns a percentile value based on a continuous distribution of
+   * numeric or ANSI interval column at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_cont(e: Column, percentage: Column): Column =
+    withAggregateFunction { PercentileCont(e.expr, percentage.expr) }
+
+  /**
+   * Aggregate function: returns a percentile value based on a continuous distribution of
+   * numeric or ANSI interval column at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * Note: reverse used to specify whether to reverse calculate percentile value.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_cont(e: Column, percentage: Column, reverse: Boolean): Column =
+    withAggregateFunction { PercentileCont(e.expr, percentage.expr, reverse) }
+
+  /**
+   * Aggregate function: returns the percentile(s) based on a discrete distribution of
+   * numeric column `expr` at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_disc(e: Column, percentage: Column): Column =
+    withAggregateFunction { PercentileDisc(e.expr, percentage.expr) }
+
+  /**
+   * Aggregate function: returns the percentile(s) based on a discrete distribution of
+   * numeric column `expr` at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * Note: reverse used to specify whether to reverse calculate percentile value.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_disc(e: Column, percentage: Column, reverse: Boolean): Column =
+    withAggregateFunction { PercentileDisc(e.expr, percentage.expr, reverse) }
 
   /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
