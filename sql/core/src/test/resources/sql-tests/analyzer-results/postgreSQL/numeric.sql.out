@@ -3844,10 +3844,10 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
   "sqlState" : "21S01",
   "messageParameters" : {
-    "insertedColumns" : "5",
-    "staticPartCols" : "0",
-    "tableName" : "`spark_catalog`.`default`.`num_result`",
-    "targetColumns" : "3"
+    "dataColumns" : "'id', 'id', 'val', 'val', '(val * val)'",
+    "reason" : "too many data columns",
+    "tableColumns" : "'id1', 'id2', 'result'",
+    "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }
 

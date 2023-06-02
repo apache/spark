@@ -420,7 +420,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      parameters = Map("columnName" -> "`__auto_generated_subquery_name`.`map`"),
+      parameters = Map("columnName" -> "`map`"),
       sqlState = "42818")
   }
 
@@ -631,6 +631,16 @@ class QueryExecutionErrorsSuite
         "message" -> "integer overflow",
         "alternative" -> "",
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
+  }
+
+  test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
+    val raw = """{"type":"array","elementType":"integer","containsNull":false}"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        StructType.fromString(raw)
+      },
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
+      parameters = Map("raw" -> s"'$raw'"))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {
@@ -885,6 +895,19 @@ class QueryExecutionErrorsSuite
       },
       errorClass = "_LEGACY_ERROR_TEMP_2249",
       parameters = Map("maxBroadcastTableBytes" -> "1024.0 MiB", "dataSize" -> "2048.0 MiB"))
+  }
+
+  test("V1 table don't support time travel") {
+    withTable("t") {
+      sql("CREATE TABLE t(c String) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect()
+        },
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        parameters = Map("relationId" -> "`spark_catalog`.`default`.`t`")
+      )
+    }
   }
 }
 
