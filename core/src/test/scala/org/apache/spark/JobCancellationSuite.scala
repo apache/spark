@@ -31,7 +31,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -151,6 +151,74 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     // Once A is cancelled, job B should finish fairly quickly.
     assert(jobB.get() === 100)
+  }
+
+  test("job tags") {
+    sc = new SparkContext("local[2]", "test")
+
+    // Add a listener to release the semaphore once jobs are launched.
+    val sem = new Semaphore(0)
+    val jobEnded = new AtomicInteger(0)
+
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        sem.release()
+      }
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        sem.release()
+        jobEnded.incrementAndGet()
+      }
+    })
+
+    // Note: since tags are added in the Future threads, they don't need to be cleared in between.
+    val jobA = Future {
+      sc.addJobTag("two")
+      sc.clearJobTags() // check that clearing all tags works
+      sc.addJobTag("one")
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+    }
+    val jobB = Future {
+      sc.addJobTag("one")
+      sc.addJobTag("two")
+      sc.addJobTag("one")
+      sc.addJobTag("two") // duplicates shouldn't matter
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+    }
+    val jobC = Future {
+      sc.addJobTag("two")
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+    }
+    val jobD = Future {
+      sc.addJobTag("one")
+      sc.addJobTag("two")
+      sc.addJobTag("two")
+      sc.removeJobTag("two") // check that remove works, despite duplicate add
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+    }
+
+    // Block until three jobs have started.
+    sem.acquire(3)
+
+    sc.cancelJobsWithTag("two")
+    val eB = intercept[SparkException] { ThreadUtils.awaitResult(jobB, 1.minute) }.getCause
+    assert(eB.getMessage contains "cancel")
+    val eC = intercept[SparkException] { ThreadUtils.awaitResult(jobC, 1.minute) }.getCause
+    assert(eC.getMessage contains "cancel")
+
+    // two jobs cancelled
+    sem.acquire(2)
+    assert(jobEnded.intValue == 2)
+
+    // this cancels the remaining two jobs
+    sc.cancelJobsWithTag("one")
+    val eA = intercept[SparkException] { ThreadUtils.awaitResult(jobA, 1.minute) }.getCause
+    assert(eA.getMessage contains "cancel")
+    val eD = intercept[SparkException] { ThreadUtils.awaitResult(jobD, 1.minute) }.getCause
+    assert(eD.getMessage contains "cancel")
+
+    // another two jobs cancelled
+    sem.acquire(2)
+    assert(jobEnded.intValue == 4)
   }
 
   test("inherited job group (SPARK-6629)") {
