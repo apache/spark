@@ -378,9 +378,7 @@ class QueryExecutionErrorsSuite
   }
 
   test("CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS: parse json arrays as structs") {
-    val jsonStr =
-      """[{"a":1, "b":0.8}]
-        |""".stripMargin
+    val jsonStr = """[{"a":1, "b":0.8}]"""
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql(s"SELECT from_json('$jsonStr', 'a INT, b DOUBLE', map('mode','FAILFAST') )")
