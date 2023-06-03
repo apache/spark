@@ -646,7 +646,7 @@
   },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
-      "sorting is not supported for columns of type <type>."
+      "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -735,11 +735,6 @@
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
-  },
-  "GROUP_EXPRESSION_IS_NON_DETERMINISTIC" : {
-    "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
-    ]
   },
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
@@ -1753,11 +1748,6 @@
     ],
     "sqlState" : "428FT"
   },
-  "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
-    "message" : [
-      "Invalid partitioning: <cols> is missing or is in a map or array."
-    ]
-  },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
       "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
@@ -2290,6 +2280,11 @@
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
           "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
+        ]
+      },
+      "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
+        "message" : [
+          "Invalid partitioning: <cols> is missing or is in a map or array."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
