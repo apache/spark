@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 from distutils.version import LooseVersion
 
 import numpy as np
@@ -64,6 +65,10 @@ class CategoricalTestsMixin:
         with self.assertRaisesRegex(ValueError, "Cannot call CategoricalAccessor on type int64"):
             ps.Series([1, 2, 3]).cat
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43566): Enable CategoricalTests.test_categories_setter for pandas 2.0.0.",
+    )
     def test_categories_setter(self):
         pdf, psdf = self.df_pair
 
@@ -98,6 +103,10 @@ class CategoricalTestsMixin:
         self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))
         self.assertRaises(ValueError, lambda: psser.cat.add_categories([5, 5]))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43605): Enable CategoricalTests.test_remove_categories for pandas 2.0.0.",
+    )
     def test_remove_categories(self):
         pdf, psdf = self.df_pair
 
@@ -159,6 +168,10 @@ class CategoricalTestsMixin:
         self.assertRaises(TypeError, lambda: psser.cat.reorder_categories(1))
         self.assertRaises(TypeError, lambda: psdf.b.cat.reorder_categories("abcd"))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43565): Enable CategoricalTests.test_as_ordered_unordered for pandas 2.0.0.",
+    )
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 
@@ -219,6 +232,10 @@ class CategoricalTestsMixin:
 
         self.assert_eq(pscser.astype(str), pcser.astype(str))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43564): Enable CategoricalTests.test_factorize for pandas 2.0.0.",
+    )
     def test_factorize(self):
         pser = pd.Series(["a", "b", "c", None], dtype=CategoricalDtype(["c", "a", "d", "b"]))
         psser = ps.from_pandas(pser)
@@ -362,6 +379,11 @@ class CategoricalTestsMixin:
         #     psdf.groupby("a").apply(len).sort_index(), pdf.groupby("a").apply(len).sort_index(),
         # )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43813): Enable CategoricalTests.test_groupby_apply_without_shortcut "
+        "for pandas 2.0.0.",
+    )
     def test_groupby_apply_without_shortcut(self):
         with ps.option_context("compute.shortcut_limit", 0):
             self.test_groupby_apply()

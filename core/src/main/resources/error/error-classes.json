@@ -1,4 +1,9 @@
 {
+  "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
+    "message" : [
+      "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
+    ]
+  },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -42,6 +47,33 @@
     ],
     "sqlState" : "22003"
   },
+  "AS_OF_JOIN" : {
+    "message" : [
+      "Invalid as-of join."
+    ],
+    "subClass" : {
+      "TOLERANCE_IS_NON_NEGATIVE" : {
+        "message" : [
+          "The input argument `tolerance` must be non-negative."
+        ]
+      },
+      "TOLERANCE_IS_UNFOLDABLE" : {
+        "message" : [
+          "The input argument `tolerance` must be a constant."
+        ]
+      }
+    }
+  },
+  "AVRO_INCORRECT_TYPE" : {
+    "message" : [
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer. To allow reading this field, enable the SQL configuration: <key>."
+    ]
+  },
+  "AVRO_LOWER_PRECISION" : {
+    "message" : [
+      "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: <key>."
+    ]
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow."
@@ -53,11 +85,6 @@
       "Cannot cast <sourceType> to <targetType>."
     ],
     "sqlState" : "42846"
-  },
-  "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR" : {
-    "message" : [
-      "Error constructing FileDescriptor for <descFilePath>."
-    ]
   },
   "CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE" : {
     "message" : [
@@ -132,7 +159,7 @@
   },
   "CANNOT_PARSE_PROTOBUF_DESCRIPTOR" : {
     "message" : [
-      "Error parsing file <descFilePath> descriptor byte[] into Descriptor object."
+      "Error parsing descriptor bytes into Protobuf FileDescriptorSet."
     ]
   },
   "CANNOT_PARSE_TIMESTAMP" : {
@@ -268,6 +295,11 @@
       "The value <str> (<fmt>) cannot be converted to <targetType> because it is malformed. Correct the value as per the syntax, or change its format. Use <suggestion> to tolerate malformed input and return NULL instead."
     ],
     "sqlState" : "22018"
+  },
+  "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
+    "message" : [
+      "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
+    ]
   },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
@@ -617,6 +649,11 @@
       "Not found an encoder of the type <typeName> to Spark SQL internal representation. Consider to change the input type to one of supported at '<docroot>/sql-ref-datatypes.html'."
     ]
   },
+  "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
+    "message" : [
+      "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
@@ -628,6 +665,12 @@
       "Failed preparing of the function <funcName> for call. Please, double check function's arguments."
     ],
     "sqlState" : "38000"
+  },
+  "FAILED_PARSE_STRUCT_TYPE" : {
+    "message" : [
+      "Failed parsing struct: <raw>."
+    ],
+    "sqlState" : "22018"
   },
   "FAILED_RENAME_PATH" : {
     "message" : [
@@ -697,6 +740,11 @@
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
@@ -829,7 +877,18 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+      "Cannot write to '<tableName>', <reason>:",
+      "Table columns: <tableColumns>.",
+      "Data columns: <dataColumns>."
+    ],
+    "sqlState" : "21S01"
+  },
+  "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "Cannot write to '<tableName>', <reason>:",
+      "Table columns: <tableColumns>.",
+      "Partition columns with static values: <staticPartCols>.",
+      "Data columns: <dataColumns>."
     ],
     "sqlState" : "21S01"
   },
@@ -904,6 +963,23 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_BOUNDARY" : {
+    "message" : [
+      "The boundary <boundary> is invalid: <invalidValue>."
+    ],
+    "subClass" : {
+      "END" : {
+        "message" : [
+          "Expected the value is '0', '<longMaxValue>', '[<intMinValue>, <intMaxValue>]'."
+        ]
+      },
+      "START" : {
+        "message" : [
+          "Expected the value is '0', '<longMinValue>', '[<intMinValue>, <intMaxValue>]'."
+        ]
+      }
+    }
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
@@ -925,6 +1001,28 @@
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_DEFAULT_VALUE" : {
+    "message" : [
+      "Failed to execute <statement> command because the destination table column <colName> has a DEFAULT value <defaultValue>,"
+    ],
+    "subClass" : {
+      "DATA_TYPE" : {
+        "message" : [
+          "which requires <expectedType> type, but the statement provided a value of incompatible <actualType> type."
+        ]
+      },
+      "SUBQUERY_EXPRESSION" : {
+        "message" : [
+          "which contains subquery expressions."
+        ]
+      },
+      "UNRESOLVED_EXPRESSION" : {
+        "message" : [
+          "which fails to resolve as a valid expression."
+        ]
+      }
+    }
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
@@ -1376,6 +1474,11 @@
     ],
     "sqlState" : "42903"
   },
+  "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
+    "message" : [
+      "Cannot specify ORDER BY or a window frame for <aggFunc>."
+    ]
+  },
   "INVALID_WRITE_DISTRIBUTION" : {
     "message" : [
       "The requested write distribution is invalid."
@@ -1397,6 +1500,11 @@
         ]
       }
     }
+  },
+  "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
+    "message" : [
+      "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
+    ]
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -1718,6 +1826,11 @@
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
     ]
   },
+  "RECURSIVE_VIEW" : {
+    "message" : [
+      "Recursive view <viewIdent> detected (cycle: <newPath>)."
+    ]
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found."
@@ -1750,6 +1863,11 @@
       "To tolerate the error on drop use DROP FUNCTION IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "The correlated scalar subquery '<sqlExpr>' is neither present in GROUP BY, nor in an aggregate function. Add it to GROUP BY using ordinal position or wrap it in `first()` (or `first_value`) if you don't care which value you get."
+    ]
   },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
@@ -1784,6 +1902,11 @@
       "The second argument of <functionName> function needs to be an integer."
     ],
     "sqlState" : "22023"
+  },
+  "SEED_EXPRESSION_IS_UNFOLDABLE" : {
+    "message" : [
+      "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
+    ]
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
@@ -2250,6 +2373,23 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ]
   },
+  "UNSUPPORTED_OVERWRITE" : {
+    "message" : [
+      "Can't overwrite the target that is also being read from."
+    ],
+    "subClass" : {
+      "PATH" : {
+        "message" : [
+          "The target path is <path>."
+        ]
+      },
+      "TABLE" : {
+        "message" : [
+          "The target table is <table>."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -2405,11 +2545,6 @@
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0002" : {
-    "message" : [
-      "INSERT OVERWRITE DIRECTORY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0004" : {
@@ -3430,20 +3565,6 @@
       "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1202" : {
-    "message" : [
-      "Cannot write to '<tableName>', too many data columns:",
-      "Table columns: <tableColumns>.",
-      "Data columns: <dataColumns>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1203" : {
-    "message" : [
-      "Cannot write to '<tableName>', not enough data columns:",
-      "Table columns: <tableColumns>.",
-      "Data columns: <dataColumns>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1204" : {
     "message" : [
       "Cannot write incompatible data to table '<tableName>':",
@@ -3613,11 +3734,6 @@
       "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1254" : {
-    "message" : [
-      "Cannot overwrite a path that is also being read from."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1255" : {
     "message" : [
       "Cannot drop built-in function '<functionName>'."
@@ -3738,16 +3854,6 @@
       "It is not allowed to create a persisted view from the Dataset API."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1281" : {
-    "message" : [
-      "Recursive view <viewIdent> detected (cycle: <newPath>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1282" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1285" : {
     "message" : [
       "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
@@ -3830,16 +3936,6 @@
       "Unable to find the column `<colName>` given [<actualColumns>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1301" : {
-    "message" : [
-      "Boundary start is not a valid integer: <start>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1302" : {
-    "message" : [
-      "Boundary end is not a valid integer: <end>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1304" : {
     "message" : [
       "Unexpected type <className> of the relation <tableName>."
@@ -3883,11 +3979,6 @@
   "_LEGACY_ERROR_TEMP_1313" : {
     "message" : [
       "'<operation>' does not support bucketBy and sortBy right now."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1315" : {
-    "message" : [
-      "Cannot overwrite table <tableName> that is also being read from."
     ]
   },
   "_LEGACY_ERROR_TEMP_1316" : {
@@ -3976,16 +4067,6 @@
       "Cannot specify both version and timestamp when time travelling the table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1335" : {
-    "message" : [
-      "<expr> is not a valid timestamp expression for time travel."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1337" : {
-    "message" : [
-      "Table <tableName> does not support time travel."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
@@ -4029,11 +4110,6 @@
   "_LEGACY_ERROR_TEMP_1346" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1347" : {
-    "message" : [
-      "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
   },
   "_LEGACY_ERROR_TEMP_2000" : {
@@ -4538,11 +4614,6 @@
   "_LEGACY_ERROR_TEMP_2121" : {
     "message" : [
       "Do not support type <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2122" : {
-    "message" : [
-      "Failed parsing <simpleString>: <raw>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2124" : {
@@ -5449,56 +5520,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2411" : {
-    "message" : [
-      "Cannot specify order by or frame for '<aggFunc>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2413" : {
-    "message" : [
-      "Input argument to <argName> must be a constant."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2414" : {
-    "message" : [
-      "Event time must be defined on a window or a timestamp, but <evName> is of type <evType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2416" : {
-    "message" : [
-      "join condition '<join>' of type <type> is not a boolean."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2417" : {
-    "message" : [
-      "join condition '<condition>' of type <dataType> is not a boolean."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2418" : {
-    "message" : [
-      "Input argument tolerance must be a constant."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2419" : {
-    "message" : [
-      "Input argument tolerance must be non-negative."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2421" : {
-    "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2423" : {
-    "message" : [
-      "Correlated scalar subquery '<sqlExpr>' is neither present in the group by, nor in an aggregate function. Add it to group by using ordinal position or wrap it in first() (or first_value) if you don't care which value you get."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2425" : {
-    "message" : [
-      "expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_2426" : {

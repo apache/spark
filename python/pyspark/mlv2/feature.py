@@ -15,10 +15,9 @@
 # limitations under the License.
 #
 
-from collections.abc import Callable
 import numpy as np
 import pandas as pd
-from typing import Any, Union
+from typing import Any, Union, List, Tuple, Callable
 
 from pyspark.sql import DataFrame
 from pyspark.mlv2.base import Estimator, Model
@@ -60,7 +59,7 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
     def _input_column_name(self) -> str:
         return self.getInputCol()
 
-    def _output_columns(self) -> list[tuple[str, str]]:
+    def _output_columns(self) -> List[Tuple[str, str]]:
         return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
@@ -108,7 +107,7 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol):
     def _input_column_name(self) -> str:
         return self.getInputCol()
 
-    def _output_columns(self) -> list[tuple[str, str]]:
+    def _output_columns(self) -> List[Tuple[str, str]]:
         return [(self.getOutputCol(), "array<double>")]
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:

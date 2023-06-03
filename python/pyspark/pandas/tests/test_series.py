@@ -643,6 +643,10 @@ class SeriesTestsMixin:
         self.assertEqual(ps.Series(range(100)).nunique(approx=True), 103)
         self.assertEqual(ps.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43464): Enable SeriesTests.test_value_counts for pandas 2.0.0.",
+    )
     def test_value_counts(self):
         # this is also containing test for Index & MultiIndex
         pser = pd.Series(
@@ -1232,6 +1236,10 @@ class SeriesTestsMixin:
     def test_to_list(self):
         self.assert_eq(self.psser.tolist(), self.pser.tolist())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43465): Enable SeriesTests.test_append for pandas 2.0.0.",
+    )
     def test_append(self):
         pser1 = pd.Series([1, 2, 3], name="0")
         pser2 = pd.Series([4, 5, 6], name="0")
@@ -1421,6 +1429,10 @@ class SeriesTestsMixin:
         with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).median(accuracy="a")
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43463): Enable SeriesTests.test_rank for pandas 2.0.0.",
+    )
     def test_rank(self):
         pser = pd.Series([1, 2, 3, 1], name="x")
         psser = ps.from_pandas(pser)
@@ -1474,6 +1486,10 @@ class SeriesTestsMixin:
         with self.assertRaisesRegex(TypeError, msg):
             psser.round(1.5)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43469): Enable SeriesTests.test_quantile for pandas 2.0.0.",
+    )
     def test_quantile(self):
         pser = pd.Series([])
         psser = ps.from_pandas(pser)
@@ -1641,6 +1657,10 @@ class SeriesTestsMixin:
             self._check_extension(psser.astype(Float32Dtype()), pser.astype(Float32Dtype()))
             self._check_extension(psser.astype(Float64Dtype()), pser.astype(Float64Dtype()))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43466): Enable SeriesTests.test_astype for pandas 2.0.0.",
+    )
     def test_astype(self):
         psers = [pd.Series([10, 20, 15, 30, 45], name="x")]
 
@@ -2391,6 +2411,10 @@ class SeriesTestsMixin:
         self.assert_eq(pser // 0, psser // 0)
         self.assert_eq(pser.floordiv(np.nan), psser.floordiv(np.nan))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43468): Enable SeriesTests.test_mad for pandas 2.0.0.",
+    )
     def test_mad(self):
         pser = pd.Series([1, 2, 3, 4], name="Koalas")
         psser = ps.from_pandas(pser)
@@ -2564,6 +2588,10 @@ class SeriesTestsMixin:
         self.assert_eq(psser[4], pser[4])
         self.assert_eq(psdf, pdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43480): Enable SeriesTests.test_iteritems for pandas 2.0.0.",
+    )
     def test_iteritems(self):
         pser = pd.Series(["A", "B", "C"])
         psser = ps.from_pandas(pser)
@@ -2661,6 +2689,10 @@ class SeriesTestsMixin:
         with self.assertRaisesRegex(TypeError, "bad operand type for unary -: 'str'"):
             psser.tail("10")
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43481): Enable SeriesTests.test_product for pandas 2.0.0.",
+    )
     def test_product(self):
         pser = pd.Series([10, 20, 30, 40, 50])
         psser = ps.from_pandas(pser)
@@ -2776,6 +2808,10 @@ class SeriesTestsMixin:
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.first_valid_index(), psser.first_valid_index())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43550): Enable SeriesTests.test_factorize for pandas 2.0.0.",
+    )
     def test_factorize(self):
         pser = pd.Series(["a", "b", "a", "b"])
         psser = ps.from_pandas(pser)
@@ -3139,6 +3175,10 @@ class SeriesTestsMixin:
         self.assert_eq(pser.rpow(np.nan), psser.rpow(np.nan))
         self.assert_eq(1**pser, 1**psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43467): Enable SeriesTests.test_between for pandas 2.0.0.",
+    )
     def test_between(self):
         pser = pd.Series([np.nan, 1, 2, 3, 4])
         psser = ps.from_pandas(pser)
@@ -3163,6 +3203,10 @@ class SeriesTestsMixin:
         with self.assertWarns(FutureWarning):
             psser.between(1, 4, inclusive=True)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43479): Enable SeriesTests.test_between_time for pandas 2.0.0.",
+    )
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)

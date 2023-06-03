@@ -370,7 +370,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitInsertOverwriteDir(
       ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
-    throw QueryParsingErrors.insertOverwriteDirectoryUnsupportedError(ctx)
+    throw QueryParsingErrors.insertOverwriteDirectoryUnsupportedError()
   }
 
   /**
@@ -378,7 +378,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
-    throw QueryParsingErrors.insertOverwriteDirectoryUnsupportedError(ctx)
+    throw QueryParsingErrors.insertOverwriteDirectoryUnsupportedError()
   }
 
   private def getTableAliasWithoutColumnAlias(

@@ -324,7 +324,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             if (attrMappingForCurrentPlan.nonEmpty) {
               assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
                 .exists(_._2.map(_._2.exprId).distinct.length > 1),
-                "Found duplicate rewrite attributes")
+                s"Found duplicate rewrite attributes.\n$plan")
 
               val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
               // Using attrMapping from the children plans to rewrite their parent node.

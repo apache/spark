@@ -17,26 +17,30 @@
 #
 
 import unittest
+from distutils.version import LooseVersion
 import numpy as np
+import pandas as pd
 
-from pyspark.ml.linalg import Vectors
-from pyspark.ml.functions import vector_to_array
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.sql import SparkSession
 
 
 class SummarizerTestsMixin:
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43788): Enable SummarizerTests.test_summarize_dataframe for pandas 2.0.0.",
+    )
     def test_summarize_dataframe(self):
         df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense([2.0, -1.5]),),
-                (Vectors.dense([-3.0, 0.5]),),
-                (Vectors.dense([1.0, 3.5]),),
+                ([2.0, -1.5],),
+                ([-3.0, 0.5],),
+                ([1.0, 3.5],),
             ],
             schema=["features"],
         )
 
-        df1_local = df1.withColumn("features", vector_to_array("features")).toPandas()
+        df1_local = df1.toPandas()
 
         result = summarize_dataframe(df1, "features", ["min", "max", "sum", "mean", "std"])
         result_local = summarize_dataframe(

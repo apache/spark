@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.22.3"
+  val protoVersion = "3.23.2"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -256,8 +256,7 @@ object SparkBuild extends PomBuild {
           // see `scalac -Wconf:help` for details
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
-          // "-Wunused:imports",
+          "-Wunused:imports",
           "-Wconf:cat=lint-multiarg-infix:wv",
           "-Wconf:cat=other-nullary-override:wv",
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
@@ -283,7 +282,11 @@ object SparkBuild extends PomBuild {
           // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
           "-Wconf:cat=unchecked&msg=outer reference:s",
           "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
+          // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
+          // from the corresponding files when Scala 2.12 is no longer supported.
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
         )
       }
     }

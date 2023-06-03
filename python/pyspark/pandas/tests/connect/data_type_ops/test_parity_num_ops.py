@@ -38,22 +38,6 @@ class NumOpsParityTests(
     def test_eq(self):
         super().test_eq()
 
-    @unittest.skip("TODO(SPARK-43687): Enable NumOpsParityTests.test_ge.")
-    def test_ge(self):
-        super().test_ge()
-
-    @unittest.skip("TODO(SPARK-43688): Enable NumOpsParityTests.test_gt.")
-    def test_gt(self):
-        super().test_gt()
-
-    @unittest.skip("TODO(SPARK-43689): Enable NumOpsParityTests.test_le.")
-    def test_le(self):
-        super().test_le()
-
-    @unittest.skip("TODO(SPARK-43690): Enable NumOpsParityTests.test_lt.")
-    def test_lt(self):
-        super().test_lt()
-
     @unittest.skip(
         "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
     )

@@ -742,7 +742,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`c1`",
-    "proposal" : "`spark_catalog`.`default`.`t2`.`c1`, `spark_catalog`.`default`.`t2`.`c2`"
+    "proposal" : "`t2`.`c1`, `t2`.`c2`"
   },
   "queryContext" : [ {
     "objectType" : "",

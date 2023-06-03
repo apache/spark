@@ -1117,15 +1117,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO $t1(data, data) VALUES(5)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2305",
-        parameters = Map(
-          "numCols" -> "3",
-          "rowSize" -> "2",
-          "ri" -> "0"),
-        context = ExpectedContext(
-          fragment = s"INSERT INTO $t1(data, data)",
-          start = 0,
-          stop = 26))
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -1151,15 +1144,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2305",
-        parameters = Map(
-          "numCols" -> "3",
-          "rowSize" -> "2",
-          "ri" -> "0"),
-        context = ExpectedContext(
-          fragment = s"INSERT OVERWRITE $t1(data, data)",
-          start = 0,
-          stop = 31))
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -1186,15 +1172,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2305",
-        parameters = Map(
-          "numCols" -> "4",
-          "rowSize" -> "3",
-          "ri" -> "0"),
-        context = ExpectedContext(
-          fragment = s"INSERT OVERWRITE $t1(data, data)",
-          start = 0,
-          stop = 31))
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -2086,7 +2065,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> "`name`, `age`, `id`, `p`"
+          "proposal" -> "`age`, `id`, `name`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy='abc'",
@@ -2097,7 +2076,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> "`name`, `age`, `id`, `p`"
+          "proposal" -> "`age`, `id`, `name`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy",

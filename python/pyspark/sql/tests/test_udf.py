@@ -174,9 +174,9 @@ class BaseUDFTestsMixin(object):
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
 
-        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+        with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
             df.groupby("id").agg(sum(udf_random_col())).collect()
-        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+        with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
             df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):

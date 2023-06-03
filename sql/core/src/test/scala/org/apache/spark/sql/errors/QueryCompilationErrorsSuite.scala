@@ -428,7 +428,8 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {sql(query)},
       errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
-      parameters = Map("objectName" -> "`a`",
+      parameters = Map(
+        "objectName" -> "`a`",
         "proposal" -> "`m`, `a.a`"),
       context = ExpectedContext(
         fragment = "a",
@@ -485,13 +486,14 @@ class QueryCompilationErrorsSuite
         sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "proposal" -> "`__auto_generated_subquery_name`.`i`"),
+          "proposal" -> "`i`"),
         context = ExpectedContext(
           fragment = "v.i",
           start = 7,
           stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
     }
   }
 
@@ -881,6 +883,33 @@ class QueryCompilationErrorsSuite
         parameters = Map(
           "properties" -> "`test_prop1`, `test_prop2`",
           "table" -> "`spark_catalog`.`default`.`test_table`")
+      )
+    }
+  }
+
+  test("SPARK-43841: Unresolved attribute in select of full outer join with USING") {
+    withTempView("v1", "v2") {
+      sql("create or replace temp view v1 as values (1, 2) as (c1, c2)")
+      sql("create or replace temp view v2 as values (2, 3) as (c1, c2)")
+
+      val query =
+        """select b
+          |from v1
+          |full outer join v2
+          |using (c1)
+          |""".stripMargin
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query)
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "proposal" -> "`c1`, `v1`.`c2`, `v2`.`c2`",
+          "objectName" -> "`b`"),
+        context = ExpectedContext(
+          fragment = "b",
+          start = 7, stop = 7)
       )
     }
   }
