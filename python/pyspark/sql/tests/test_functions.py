@@ -773,12 +773,12 @@ class FunctionsTestsMixin:
         )
 
         expected = [
-            "percentile_cont(0.5) WITHIN GROUP (ORDER BY v)",
-            "percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)",
-            "percentile_cont(array(0.25, 0.5, 0.75)) WITHIN GROUP (ORDER BY v)",
-            "percentile_cont(array(0.05, 0.95)) WITHIN GROUP (ORDER BY v DESC)",
-            "percentile_cont(0.5) WITHIN GROUP (ORDER BY v)",
-            "percentile_cont(array(0.1, 0.9)) WITHIN GROUP (ORDER BY v DESC)",
+            "percentile_cont(0.5) WITHIN GROUP (ORDER BY foo)",
+            "percentile_cont(0.25) WITHIN GROUP (ORDER BY bar DESC)",
+            "percentile_cont(array(0.25, 0.5, 0.75)) WITHIN GROUP (ORDER BY bar)",
+            "percentile_cont(array(0.05, 0.95)) WITHIN GROUP (ORDER BY foo DESC)",
+            "percentile_cont(0.5) WITHIN GROUP (ORDER BY foo)",
+            "percentile_cont(array(0.1, 0.9)) WITHIN GROUP (ORDER BY bar DESC)",
         ]
 
         self.assertListEqual(actual, expected)
@@ -801,12 +801,12 @@ class FunctionsTestsMixin:
         )
 
         expected = [
-            "percentile_disc(0.5) WITHIN GROUP (ORDER BY v)",
-            "percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)",
-            "percentile_disc(array(0.25, 0.5, 0.75)) WITHIN GROUP (ORDER BY v)",
-            "percentile_disc(array(0.05, 0.95)) WITHIN GROUP (ORDER BY v DESC)",
-            "percentile_disc(0.5) WITHIN GROUP (ORDER BY v)",
-            "percentile_disc(array(0.1, 0.9)) WITHIN GROUP (ORDER BY v DESC)",
+            "percentile_disc(0.5) WITHIN GROUP (ORDER BY foo)",
+            "percentile_disc(0.25) WITHIN GROUP (ORDER BY bar DESC)",
+            "percentile_disc(array(0.25, 0.5, 0.75)) WITHIN GROUP (ORDER BY bar)",
+            "percentile_disc(array(0.05, 0.95)) WITHIN GROUP (ORDER BY foo DESC)",
+            "percentile_disc(0.5) WITHIN GROUP (ORDER BY foo)",
+            "percentile_disc(array(0.1, 0.9)) WITHIN GROUP (ORDER BY bar DESC)",
         ]
 
         self.assertListEqual(actual, expected)
