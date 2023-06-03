@@ -62,6 +62,14 @@ class FunctionsTestsMixin:
             "negate",  # equivalent to python -expression
             "not",  # equivalent to python ~expression
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            # The percentile_cont in PySpark output like
+            # 'percentile_cont(0.5) WITHIN GROUP (ORDER BY col)',
+            # but in connect output like 'percentile_cont(col, 0.5)'.
+            "percentile_cont",
+            # The percentile_disc in PySpark output like
+            # 'percentile_disc(0.5) WITHIN GROUP (ORDER BY col)',
+            # but in connect output like 'percentile_cont(col, 0.5)'.
+            "percentile_disc",
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)

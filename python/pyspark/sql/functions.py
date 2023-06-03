@@ -3636,7 +3636,7 @@ def percentile_cont(
      |    |-- element: double (containsNull = false)
 
     >>> df.groupBy("key").agg(
-    ...     percentile_cont("value", 0.5, true).alias("median")
+    ...     percentile_cont("value", 0.5, True).alias("median")
     ... ).printSchema()
     root
      |-- key: long (nullable = true)
@@ -3699,7 +3699,7 @@ def percentile_disc(
      |    |-- element: double (containsNull = false)
 
     >>> df.groupBy("key").agg(
-    ...     percentile_disc("value", 0.5, true).alias("median")
+    ...     percentile_disc("value", 0.5, True).alias("median")
     ... ).printSchema()
     root
      |-- key: long (nullable = true)

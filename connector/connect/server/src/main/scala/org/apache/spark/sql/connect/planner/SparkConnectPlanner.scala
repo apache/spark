@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIden
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -1657,6 +1658,24 @@ class SparkConnectPlanner(val session: SparkSession) {
           extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
         Some(
           CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
+
+      case "percentile_cont" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        if (fun.getArgumentsCount == 2) {
+          Some(PercentileCont(children.head, children.last).toAggregateExpression())
+        } else {
+          val reverse = extractBoolean(children(2), "reverse")
+          Some(PercentileCont(children.head, children(1), reverse).toAggregateExpression())
+        }
+
+      case "percentile_disc" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        if (fun.getArgumentsCount == 2) {
+          Some(PercentileDisc(children.head, children.last).toAggregateExpression())
+        } else {
+          val reverse = extractBoolean(children(2), "reverse")
+          Some(PercentileDisc(children.head, children(1), reverse).toAggregateExpression())
+        }
 
       case _ => None
     }

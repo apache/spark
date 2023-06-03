@@ -967,6 +967,72 @@ def mode(col: "ColumnOrName") -> Column:
 mode.__doc__ = pysparkfuncs.mode.__doc__
 
 
+def percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    frequency: Union[Column, int] = 1,
+) -> Column:
+    if isinstance(percentage, Column):
+        percentage_col = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        percentage_col = lit(list(percentage))
+    else:
+        # Probably scalar
+        percentage_col = lit(percentage)
+
+    return _invoke_function("percentile", _to_col(col), percentage_col, lit(frequency))
+
+
+percentile.__doc__ = pysparkfuncs.percentile.__doc__
+
+
+def percentile_cont(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    reverse: Optional[bool] = None,
+) -> Column:
+    if isinstance(percentage, Column):
+        percentage_col = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        percentage_col = lit(list(percentage))
+    else:
+        # Probably scalar
+        percentage_col = lit(percentage)
+
+    if reverse is None:
+        return _invoke_function("percentile_cont", _to_col(col), percentage_col)
+    else:
+        return _invoke_function("percentile_cont", _to_col(col), percentage_col, lit(reverse))
+
+
+percentile_cont.__doc__ = pysparkfuncs.percentile_cont.__doc__
+
+
+def percentile_disc(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    reverse: Optional[bool] = None,
+) -> Column:
+    if isinstance(percentage, Column):
+        percentage_col = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        percentage_col = lit(list(percentage))
+    else:
+        # Probably scalar
+        percentage_col = lit(percentage)
+
+    if reverse is None:
+        return _invoke_function("percentile_disc", _to_col(col), percentage_col)
+    else:
+        return _invoke_function("percentile_disc", _to_col(col), percentage_col, lit(reverse))
+
+
+percentile_disc.__doc__ = pysparkfuncs.percentile_disc.__doc__
+
+
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],

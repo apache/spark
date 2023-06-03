@@ -813,6 +813,69 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = Column.fn("percentile", e, percentage)
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column, frequency: Column): Column =
+    Column.fn("percentile", e, percentage, frequency)
+
+  /**
+   * Aggregate function: returns a percentile value based on a continuous distribution of numeric
+   * or ANSI interval column at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_cont(e: Column, percentage: Column): Column =
+    Column.fn("percentile_cont", e, percentage)
+
+  /**
+   * Aggregate function: returns a percentile value based on a continuous distribution of numeric
+   * or ANSI interval column at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * Note: reverse used to specify whether to reverse calculate percentile value.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_cont(e: Column, percentage: Column, reverse: Boolean): Column =
+    Column.fn("percentile_cont", e, percentage, lit(reverse))
+
+  /**
+   * Aggregate function: returns the percentile(s) based on a discrete distribution of numeric
+   * column `expr` at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_disc(e: Column, percentage: Column): Column =
+    Column.fn("percentile_disc", e, percentage)
+
+  /**
+   * Aggregate function: returns the percentile(s) based on a discrete distribution of numeric
+   * column `expr` at the given percentage(s) with value range in [0.0, 1.0].
+   *
+   * Note: reverse used to specify whether to reverse calculate percentile value.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile_disc(e: Column, percentage: Column, reverse: Boolean): Column =
+    Column.fn("percentile_disc", e, percentage, lit(reverse))
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
    * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
    * more than `percentage` of `col` values is less than the value or equal to that value.

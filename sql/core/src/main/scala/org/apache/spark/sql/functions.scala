@@ -821,6 +821,14 @@ object functions {
   def mean(columnName: String): Column = avg(columnName)
 
   /**
+   * Aggregate function: returns the median of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 3.4.0
+   */
+  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
+
+  /**
    * Aggregate function: returns the minimum value of the expression in a group.
    *
    * @group agg_funcs
@@ -872,14 +880,6 @@ object functions {
       new Percentile(e.expr, percentage.expr, frequency.expr)
     }
   }
-
-  /**
-   * Aggregate function: returns the median of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 3.4.0
-   */
-  def median(e: Column): Column = withAggregateFunction { Median(e.expr) }
 
   /**
    * Aggregate function: returns a percentile value based on a continuous distribution of
