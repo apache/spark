@@ -3546,15 +3546,11 @@ def percentile(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
-        input column.
+    col : :class:`~pyspark.sql.Column` or str input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
-        A single percentage value or an array of percentage values. Each percentage value
-        must be in the range [0.0, 1.0].
-    frequency : :class:`~pyspark.sql.Column` or int
-        is a positive numeric literal which controls frequency.
-        The value of frequency should be positive integral.
+    frequency : :class:`~pyspark.sql.Column` or int is a positive numeric literal which
+        controls frequency.
 
     Returns
     -------
@@ -3616,12 +3612,9 @@ def percentile_cont(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
-        input column.
+    col : :class:`~pyspark.sql.Column` or str input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
-        A single percentage value or an array of percentage values. Each percentage value
-        must be in the range [0.0, 1.0].
     reverse : bool, optional
         Whether to reverse calculate percentile value.
 
@@ -3673,7 +3666,7 @@ def percentile_cont(
 def percentile_disc(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
-    reverse: Optional[bool] = False,
+    reverse: Optional[bool] = None,
 ) -> Column:
     """Returns the percentile(s) based on a discrete distribution of numeric column `expr`
     at the given percentage(s) with value range in [0.0, 1.0].
@@ -3682,19 +3675,16 @@ def percentile_disc(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
-        input column.
+    col : :class:`~pyspark.sql.Column` or str input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
-        A single percentage value or an array of percentage values. Each percentage value
-        must be in the range [0.0, 1.0].
     reverse : bool, optional
         Whether to reverse calculate percentile value.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the exact `percentile` of the numeric column.
+        the discrete `percentile` of the numeric column.
 
     Examples
     --------
@@ -3729,7 +3719,10 @@ def percentile_disc(
         # Probably scalar
         percentage = _create_column_from_literal(percentage)
 
-    return _invoke_function("percentile_disc", _to_java_column(col), percentage, reverse)
+    if reverse is None:
+        return _invoke_function("percentile_disc", _to_java_column(col), percentage)
+    else:
+        return _invoke_function("percentile_disc", _to_java_column(col), percentage, reverse)
 
 
 @try_remote_functions

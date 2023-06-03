@@ -256,7 +256,10 @@ Aggregate Functions
     min
     min_by
     mode
+    percentile
     percentile_approx
+    percentile_cont
+    percentile_disc
     product
     regr_avgx
     regr_avgy
