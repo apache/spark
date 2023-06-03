@@ -23,15 +23,14 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, TreePattern}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.collection.BitSet
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -446,7 +445,9 @@ case class CreateTable(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
-    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    ignoreIfExists: Boolean,
+    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
+  extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
 
@@ -455,12 +456,6 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
-  }
-
-  override lazy val treePatternBits: BitSet = {
-    val bits: BitSet = super.getTreePatternBits
-    bits.union(tableSpec.treePatternBits)
-    bits
   }
 }
 
@@ -474,7 +469,8 @@ case class CreateTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
@@ -487,12 +483,6 @@ case class CreateTableAsSelect(
       newName: LogicalPlan,
       newQuery: LogicalPlan): CreateTableAsSelect = {
     copy(name = newName, query = newQuery)
-  }
-
-  override lazy val treePatternBits: BitSet = {
-    val bits = super.getTreePatternBits
-    bits.union(tableSpec.treePatternBits)
-    bits
   }
 }
 
@@ -509,7 +499,9 @@ case class ReplaceTable(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
-    orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    orCreate: Boolean,
+    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
+  extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
 
@@ -518,12 +510,6 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
-  }
-
-  override lazy val treePatternBits: BitSet = {
-    val bits = super.getTreePatternBits
-    bits.union(tableSpec.treePatternBits)
-    bits
   }
 }
 
@@ -540,7 +526,8 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
@@ -553,12 +540,6 @@ case class ReplaceTableAsSelect(
       newName: LogicalPlan,
       newQuery: LogicalPlan): ReplaceTableAsSelect = {
     copy(name = newName, query = newQuery)
-  }
-
-  override lazy val treePatternBits: BitSet = {
-    val bits = super.getTreePatternBits
-    bits.union(tableSpec.treePatternBits)
-    bits
   }
 }
 
@@ -1415,39 +1396,42 @@ trait TableSpec {
   def serde: Option[SerdeInfo]
   def external: Boolean
   def withNewLocation(newLocation: Option[String]): TableSpec
-  def treePatternBits: BitSet
 }
 
 case class UnresolvedTableSpec(
     properties: Map[String, String],
     provider: Option[String],
-    optionsExpressions: Map[String, Expression],
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
     external: Boolean) extends TableSpec {
   override def withNewLocation(loc: Option[String]): TableSpec = {
-    UnresolvedTableSpec(properties, provider, optionsExpressions, loc, comment, serde, external)
+    UnresolvedTableSpec(properties, provider, loc, comment, serde, external)
   }
+}
 
-  /**
-   * Helper to check if we have resolved all OPTIONS expressions. If so, we're ready to convert this
-   * to a ResolvedTableSpec during analysis.
-   */
-  def allOptionExpressionsResolved: Boolean = {
-    optionsExpressions.values.forall(_.resolved)
-  }
+/**
+ * This contains the information for a parsed OPTIONS list. We store it alongside anywhere the above
+ * UnresolvedTableSpec lives. We use a separate object here so that tree traversals in analyzer
+ * rules can descend into the child expressions naturally with no extra treatment.
+ */
+case class UnresolvedOptionsList(options: Seq[(String, Expression)])
+  extends Expression with Unevaluable {
+  override def nullable: Boolean = true
+  override def dataType: DataType = MapType(StringType, StringType)
+  override def children: Seq[Expression] = options.map(_._2)
 
-  /** Implement treePatternBits so bitmap checks on expressions on operators work properly. */
-  override lazy val treePatternBits: BitSet = {
-    val bits: BitSet = new BitSet(TreePattern.maxId)
-    optionsExpressions.foreach { case (_, optValue) =>
-      if (optValue != null) {
-        bits.union(optValue.treePatternBits)
-      }
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    assert(options.length == newChildren.length)
+    val newOptions = options.zip(newChildren).map {
+      case ((key: String, _), newChild: Expression) =>
+        (key, newChild)
     }
-    bits
+    UnresolvedOptionsList(newOptions)
   }
+
+  lazy val allOptionsResolved: Boolean = options.map(_._2).forall(_.resolved)
 }
 
 case class ResolvedTableSpec(
@@ -1461,5 +1445,4 @@ case class ResolvedTableSpec(
   override def withNewLocation(newLocation: Option[String]): TableSpec = {
     ResolvedTableSpec(properties, provider, options, newLocation, comment, serde, external)
   }
-  override lazy val treePatternBits: BitSet = new BitSet(TreePattern.maxId)
 }

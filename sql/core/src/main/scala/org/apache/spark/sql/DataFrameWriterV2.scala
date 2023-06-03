@@ -110,7 +110,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val tableSpec = UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
-      optionsExpressions = Map.empty,
       location = None,
       comment = None,
       serde = None,
@@ -199,7 +198,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val tableSpec = UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
-      optionsExpressions = Map.empty,
       location = None,
       comment = None,
       serde = None,

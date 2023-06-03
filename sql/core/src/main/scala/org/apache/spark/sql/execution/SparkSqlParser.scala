@@ -333,7 +333,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       withIdentClause(identCtx, ident => {
         val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
         val optionsList: Map[String, String] =
-          options.map { case (key, value) =>
+          options.options.map { case (key, value) =>
             val newValue: String =
               if (value == null) {
                 null
@@ -342,7 +342,7 @@ class SparkSqlAstBuilder extends AstBuilder {
                 case _ => throw QueryCompilationErrors.optionMustBeLiteralString(key)
               }
             (key, newValue)
-          }
+          }.toMap
         val optionsWithLocation =
           location.map(l => optionsList + ("path" -> l)).getOrElse(optionsList)
         CreateTempViewUsing(table, schema, replace = false, global = false, provider,

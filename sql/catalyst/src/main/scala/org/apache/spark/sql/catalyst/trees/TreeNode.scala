@@ -931,10 +931,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       t.copy(properties = Utils.redact(t.properties).toMap,
         options = Utils.redact(t.options).toMap) :: Nil
     case t: UnresolvedTableSpec =>
-      t.copy(properties = Utils.redact(t.properties).toMap,
-        optionsExpressions = t.optionsExpressions.map { case (key, value) =>
-          (key, Literal(value.sql))
-        }) :: Nil
+      t.copy(properties = Utils.redact(t.properties).toMap) :: Nil
     case table: CatalogTable =>
       stringArgsForCatalogTable(table)
 

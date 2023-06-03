@@ -158,9 +158,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _)
-      if u.allOptionExpressionsResolved =>
-      val resolvedTableSpec = ResolveTableSpec(u)
+    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _,
+        options: UnresolvedOptionsList)
+      if options.allOptionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u, options)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, resolvedTableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
@@ -172,9 +173,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case c @ CreateTableAsSelect(
-        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, writeOptions, _, _)
-      if u.allOptionExpressionsResolved =>
-      val resolvedTableSpec = ResolveTableSpec(u)
+        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, writeOptions, _, _,
+        options: UnresolvedOptionsList)
+      if options.allOptionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u, options)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         resolvedTableSpec.options ++ writeOptions,
@@ -197,9 +199,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _)
-      if u.allOptionExpressionsResolved =>
-      val resolvedTableSpec = ResolveTableSpec(u)
+    case c @ ReplaceTable(
+        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _,
+        options: UnresolvedOptionsList)
+      if options.allOptionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u, options)
       val provider = resolvedTableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -209,9 +213,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case c @ ReplaceTableAsSelect(
-        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _, _, _)
-      if u.allOptionExpressionsResolved =>
-      val resolvedTableSpec = ResolveTableSpec(u)
+        ResolvedV1Identifier(ident), _, _, u: UnresolvedTableSpec, _, _, _,
+        options: UnresolvedOptionsList)
+      if options.allOptionsResolved =>
+      val resolvedTableSpec = ResolveTableSpec(u, options)
       val provider = resolvedTableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(

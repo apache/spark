@@ -31,8 +31,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * convenience.
  */
 object ResolveTableSpec {
-  def apply(u: UnresolvedTableSpec): ResolvedTableSpec = {
-    val newOptions: Map[String, String] = u.optionsExpressions.map {
+  def apply(u: UnresolvedTableSpec, opts: UnresolvedOptionsList): ResolvedTableSpec = {
+    val newOptions: Seq[(String, String)] = opts.options.map {
       case (key: String, null) =>
         (key, null)
       case (key: String, value: Expression) =>
@@ -52,7 +52,7 @@ object ResolveTableSpec {
     ResolvedTableSpec(
       properties = u.properties,
       provider = u.provider,
-      options = newOptions,
+      options = newOptions.toMap,
       location = u.location,
       comment = u.comment,
       serde = u.serde,

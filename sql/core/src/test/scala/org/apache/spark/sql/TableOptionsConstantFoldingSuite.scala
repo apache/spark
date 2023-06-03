@@ -36,13 +36,7 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  def checkInvalid(createOption: String): Unit = {
-    checkError(
-      exception = intercept[AnalysisException](sql(s"$prefix ('k' = $createOption)")),
-      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
-      parameters = Map(
-        "key" -> "k",
-        "supported" -> "constant expressions"))
+  def checkInvalidUnresolvedColumn(createOption: String): Unit = {
   }
 
 
@@ -65,9 +59,26 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkOption("round(cast(2.25 as decimal(3, 3)), 1)", "null")
 
     // Test some cases where the provided option value is a non-constant or invalid expression.
-    checkInvalid(" 1 + 2 + unresolvedAttribute")
-    checkInvalid("true or false or unresolvedAttribute")
-    checkInvalid("date_diff(date'2023-01-02', unresolvedAttribute)")
-    checkInvalid("raise_error('failure')")
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"$prefix ('k' = 1 + 2 + unresolvedAttribute)")),
+      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`unresolvedAttribute`"),
+      queryContext = Array(ExpectedContext("", "", 60, 78, "unresolvedAttribute")))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"$prefix ('k' = true or false or unresolvedAttribute)")),
+      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`unresolvedAttribute`"),
+      queryContext = Array(ExpectedContext("", "", 69, 87, "unresolvedAttribute")))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"$prefix ('k' = raise_error('failure'))")),
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map(
+        "key" -> "k",
+        "supported" -> "constant expressions"))
   }
 }

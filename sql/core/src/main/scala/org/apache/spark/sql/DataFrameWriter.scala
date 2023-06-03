@@ -329,7 +329,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               val tableSpec = UnresolvedTableSpec(
                 properties = Map.empty,
                 provider = Some(source),
-                optionsExpressions = Map.empty,
                 location = extraOptions.get("path"),
                 comment = extraOptions.get(TableCatalog.PROP_COMMENT),
                 serde = None,
@@ -594,7 +593,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         val tableSpec = UnresolvedTableSpec(
           properties = Map.empty,
           provider = Some(source),
-          optionsExpressions = Map.empty,
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
           serde = None,
@@ -614,7 +612,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         val tableSpec = UnresolvedTableSpec(
           properties = Map.empty,
           provider = Some(source),
-          optionsExpressions = Map.empty,
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
           serde = None,
