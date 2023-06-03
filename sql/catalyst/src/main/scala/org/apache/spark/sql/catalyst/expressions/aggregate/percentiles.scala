@@ -369,7 +369,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     val direction = if (reverse) " DESC" else ""
-    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY v$direction)"
+    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PercentileCont =
@@ -409,7 +409,7 @@ case class PercentileDisc(
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     val direction = if (reverse) " DESC" else ""
-    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY v$direction)"
+    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
 
   override protected def withNewChildrenInternal(
