@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
