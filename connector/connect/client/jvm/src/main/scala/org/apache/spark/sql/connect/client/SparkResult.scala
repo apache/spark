@@ -49,12 +49,6 @@ private[sql] class SparkResult[T](
   private[this] var nextBatchIndex: Int = 0
   private[this] val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
-  // Exposed for UT.
-  private[sql] def existingBatches(): Seq[ColumnarBatch] = {
-    // Sort by key to get stable results.
-    idxToBatches.toSeq.sortBy(_._1).map(_._2)
-  }
-
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
     val agnosticEncoder = if (encoder == UnboundRowEncoder) {
       // Create a row encoder based on the schema.

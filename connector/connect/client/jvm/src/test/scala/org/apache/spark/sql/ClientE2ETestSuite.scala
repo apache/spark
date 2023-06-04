@@ -31,13 +31,14 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
@@ -46,7 +47,17 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
-class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
+  // Helper methods for accessing private methods/fields
+  private val _idxToBatches =
+    PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+
+  private def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
+    val idxToBatches = result invokePrivate _idxToBatches()
+
+    // Sort by key to get stable results.
+    idxToBatches.toSeq.sortBy(_._1).map(_._2)
+  }
 
   // Spark Result
   test("spark result schema") {
@@ -902,13 +913,13 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
         // build and verify the destructive iterator
         val iterator = result.destructiveIterator
         // batches is empty before traversing the result iterator
-        assert(result.existingBatches().isEmpty)
+        assert(getColumnarBatches(result).isEmpty)
         var previousBatch: ColumnarBatch = null
         val buffer = mutable.Buffer.empty[Long]
         while (iterator.hasNext) {
           // always having 1 batch, since a columnar batch will be removed and closed after
           // its data got consumed.
-          val batches = result.existingBatches()
+          val batches = getColumnarBatches(result)
           assert(batches.size === 1)
           assert(batches.head != previousBatch)
           previousBatch = batches.head
@@ -916,7 +927,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
           buffer.append(iterator.next())
         }
         // Batches should be closed and removed after traversing all the records.
-        assert(result.existingBatches().isEmpty)
+        assert(getColumnarBatches(result).isEmpty)
 
         val expectedResult = Seq(6L, 7L, 8L)
         assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
