@@ -1525,6 +1525,25 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_ATTRIBUTES" : {
+    "message" : [
+      "Operator missing attributes."
+    ],
+    "subClass" : {
+      "RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION" : {
+        "message" : [
+          "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>.",
+          "Attribute(s) with the same name appear in the operation: <operation>.",
+          "Please check if the right attribute(s) are used."
+        ]
+      },
+      "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
+        "message" : [
+          "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>."
+        ]
+      }
+    }
+  },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
@@ -1838,11 +1857,6 @@
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."
     ],
     "sqlState" : "42K05"
-  },
-  "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
-    "message" : [
-      "<msg>"
-    ]
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [

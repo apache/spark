@@ -627,7 +627,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             if (badReferences.nonEmpty) {
               create.failAnalysis(
                 errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-                messageParameters = Map("cols" -> badReferences.map(r => s"`$r`").mkString(", ")))
+                messageParameters = Map(
+                  "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -643,27 +644,33 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.mkString(",")
-            val input = o.inputSet.mkString(",")
-            val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
-              s"from $input in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}."
+            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(",")
+            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(",")
 
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
 
-            val msg = if (attrsWithSameName.nonEmpty) {
-              val sameNames = attrsWithSameName.map(_.name).mkString(",")
-              s"$msgForMissingAttributes Attribute(s) with the same name appear in the " +
-                s"operation: $sameNames. Please check if the right attribute(s) are used."
+            if (attrsWithSameName.nonEmpty) {
+              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(",")
+              o.failAnalysis(
+                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+                messageParameters = Map(
+                  "missingAttributes" -> missingAttributes,
+                  "input" -> input,
+                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
+                  "operation" -> sameNames
+                ))
             } else {
-              msgForMissingAttributes
+              o.failAnalysis(
+                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+                messageParameters = Map(
+                  "missingAttributes" -> missingAttributes,
+                  "input" -> input,
+                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
+                ))
             }
-
-            o.failAnalysis(
-              errorClass = "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-              messageParameters = Map("msg" -> msg))
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             p.failAnalysis(
