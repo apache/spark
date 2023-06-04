@@ -47,7 +47,7 @@ private[sql] class SparkResult[T](
   private[this] var structType: StructType = _
   private[this] var boundEncoder: ExpressionEncoder[T] = _
   private[this] var nextBatchIndex: Int = 0
-  private[this] val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
+  private val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
     val agnosticEncoder = if (encoder == UnboundRowEncoder) {
