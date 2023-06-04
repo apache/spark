@@ -1501,6 +1501,11 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
+  "LOCAL_MUST_WITH_SCHEMA_FILE" : {
+    "message" : [
+      "`Local` must be used together with the schema of `file`, but got: `<actualSchema>`"
+    ]
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -1826,6 +1831,11 @@
       "Recursive view <viewIdent> detected (cycle: <newPath>)."
     ]
   },
+  "REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION" : {
+    "message" : [
+      "References to DEFAULT column values are not allowed within the PARTITION clause."
+    ]
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found."
@@ -2131,6 +2141,23 @@
       "Unsupported data type <typeName>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DEFAULT_VALUE" : {
+    "message" : [
+      "DEFAULT column values is not supported."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Enable it by setting `spark.sql.defaultColumn.enabled` to `true`."
+        ]
+      }
+    }
   },
   "UNSUPPORTED_DESERIALIZER" : {
     "message" : [
@@ -2692,11 +2719,6 @@
       "Directory path and 'path' in OPTIONS should be specified one, but not both."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0050" : {
-    "message" : [
-      "LOCAL is supported only with file: scheme."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0051" : {
     "message" : [
       "Empty set in <element> grouping sets is not supported."
@@ -2715,21 +2737,6 @@
   "_LEGACY_ERROR_TEMP_0056" : {
     "message" : [
       "Invalid time travel spec: <reason>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0057" : {
-    "message" : [
-      "Support for DEFAULT column values is not implemented yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0058" : {
-    "message" : [
-      "Support for DEFAULT column values is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0059" : {
-    "message" : [
-      "References to DEFAULT column values are not allowed within the PARTITION clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_0060" : {
