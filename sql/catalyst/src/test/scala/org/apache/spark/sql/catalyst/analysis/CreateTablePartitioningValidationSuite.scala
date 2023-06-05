@@ -59,7 +59,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     assert(!plan.resolved)
     assertAnalysisErrorClass(plan,
       expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-      expectedMessageParameters = Map("cols" -> "`does_not_exist.z`"))
+      expectedMessageParameters = Map("cols" -> "`does_not_exist`.`z`"))
   }
 
   test("CreateTableAsSelect: fail missing nested column") {
@@ -76,7 +76,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     assert(!plan.resolved)
     assertAnalysisErrorClass(plan,
       expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-      expectedMessageParameters = Map("cols" -> "`point.z`"))
+      expectedMessageParameters = Map("cols" -> "`point`.`z`"))
   }
 
   test("CreateTableAsSelect: fail with multiple errors") {
@@ -93,7 +93,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
     assert(!plan.resolved)
     assertAnalysisErrorClass(plan,
       expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-      expectedMessageParameters = Map("cols" -> "`does_not_exist`, `point.z`"))
+      expectedMessageParameters = Map("cols" -> "`does_not_exist`, `point`.`z`"))
   }
 
   test("CreateTableAsSelect: success with top-level column") {
