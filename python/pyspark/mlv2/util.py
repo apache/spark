@@ -163,9 +163,7 @@ def transform_dataframe_column(
     def transform_fn_pandas_udf(s: "pd.Series") -> "pd.Series":
         return transform_fn(s)
 
-    result_spark_df = dataframe.withColumn(
-        output_col_name, transform_fn_pandas_udf(*input_cols)
-    )
+    result_spark_df = dataframe.withColumn(output_col_name, transform_fn_pandas_udf(*input_cols))
 
     if len(output_cols) > 1:
         return result_spark_df.withColumns(
