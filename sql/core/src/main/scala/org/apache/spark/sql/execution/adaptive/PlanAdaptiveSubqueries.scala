@@ -26,13 +26,13 @@ import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, SparkPlan}
 
 case class PlanAdaptiveSubqueries(
-    subqueryMap: Map[Long, BaseSubqueryExec]) extends Rule[SparkPlan] {
+    subqueryMap: Map[Long, () => BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
       _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       case expressions.ScalarSubquery(_, _, exprId, _, _, _) =>
-        execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
+        execution.ScalarSubquery(subqueryMap(exprId.id).apply(), exprId)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
@@ -43,9 +43,9 @@ case class PlanAdaptiveSubqueries(
             }
           )
         }
-        InSubqueryExec(expr, subqueryMap(exprId.id), exprId, shouldBroadcast = true)
+        InSubqueryExec(expr, subqueryMap(exprId.id).apply(), exprId, shouldBroadcast = true)
       case expressions.DynamicPruningSubquery(value, _, _, _, _, exprId, _) =>
-        DynamicPruningExpression(InSubqueryExec(value, subqueryMap(exprId.id), exprId))
+        DynamicPruningExpression(InSubqueryExec(value, subqueryMap(exprId.id).apply(), exprId))
     }
   }
 }
