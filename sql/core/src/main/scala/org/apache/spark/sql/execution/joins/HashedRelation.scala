@@ -127,7 +127,6 @@ private[execution] object HashedRelation {
    * Create a HashedRelation from an Iterator of InternalRow.
    *
    * @param allowsNullKey        Allow NULL keys in HashedRelation.
-   *                             This is used for full outer join in `ShuffledHashJoinExec` only.
    * @param ignoresDuplicatedKey Ignore rows with duplicated keys in HashedRelation.
    *                             This is only used for semi and anti join without join condition in
    *                             `ShuffledHashJoinExec` only.

@@ -2743,7 +2743,11 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformListDatabases(getListDatabases: proto.ListDatabases): LogicalPlan = {
-    session.catalog.listDatabases().logicalPlan
+    if (getListDatabases.hasPattern) {
+      session.catalog.listDatabases(getListDatabases.getPattern).logicalPlan
+    } else {
+      session.catalog.listDatabases().logicalPlan
+    }
   }
 
   private def transformListTables(getListTables: proto.ListTables): LogicalPlan = {
