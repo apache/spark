@@ -508,7 +508,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition,
-      _, query, _, _, _) =>
+          _, query, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
