@@ -774,7 +774,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       inputPlan = plan,
       expectedErrorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
       expectedMessageParameters = Map(
-        "missingAttributes" -> "\"a\",\"c\"",
+        "missingAttributes" -> "\"a\", \"c\"",
         "input" -> "\"a\"",
         "operator" -> s"!Aggregate [${aliases.mkString(", ")}]",
         "operation" -> "\"a\""
