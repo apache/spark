@@ -151,7 +151,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoStatement(l@LogicalRelation(_: InsertableRelation, _, _, _),
+    case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
     parts, _, query, overwrite, false, _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
