@@ -31,7 +31,7 @@ from pyspark.sql.functions import (
     pandas_udf,
     PandasUDFType,
 )
-from pyspark.sql.types import ArrayType, TimestampType
+from pyspark.sql.types import ArrayType, YearMonthIntervalType
 from pyspark.errors import AnalysisException, PySparkNotImplementedError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -182,16 +182,20 @@ class GroupedAggPandasUDFTestsMixin:
     def check_unsupported_types(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
             pandas_udf(
-                lambda x: x, ArrayType(ArrayType(TimestampType())), PandasUDFType.GROUPED_AGG
+                lambda x: x,
+                ArrayType(ArrayType(YearMonthIntervalType())),
+                PandasUDFType.GROUPED_AGG,
             )
+
         self.check_error(
             exception=pe.exception,
             error_class="NOT_IMPLEMENTED",
             message_parameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-                "ArrayType(ArrayType(TimestampType(), True), True)"
+                "ArrayType(ArrayType(YearMonthIntervalType(0, 1), True), True)"
             },
         )
+
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
             @pandas_udf("mean double, std double", PandasUDFType.GROUPED_AGG)
@@ -207,9 +211,10 @@ class GroupedAggPandasUDFTestsMixin:
                 "StructField('std', DoubleType(), True)])"
             },
         )
+
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
-            @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
+            @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
             def mean_and_std_udf(v):  # noqa: F811
                 return {v.mean(): v.std()}
 
@@ -218,7 +223,7 @@ class GroupedAggPandasUDFTestsMixin:
             error_class="NOT_IMPLEMENTED",
             message_parameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
-                "ArrayType(TimestampType(), True)"
+                "ArrayType(YearMonthIntervalType(0, 1), True)"
             },
         )
 

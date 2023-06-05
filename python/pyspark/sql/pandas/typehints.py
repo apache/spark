@@ -145,7 +145,7 @@ def check_tuple_annotation(
     # Tuple has _name but other types have __name__
     # Check if the name is Tuple first. After that, check the generic types.
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
-    return name == "Tuple" and (
+    return name in ("Tuple", "tuple") and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))
     )
 

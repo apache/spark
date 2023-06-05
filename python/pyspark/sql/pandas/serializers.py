@@ -27,7 +27,7 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
-from pyspark.sql.types import StringType, StructType, BinaryType, StructField, LongType
+from pyspark.sql.types import DataType, StringType, StructType, BinaryType, StructField, LongType
 
 
 class SpecialLengths:
@@ -189,7 +189,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         )
         return converter(s)
 
-    def _create_array(self, series, arrow_type):
+    def _create_array(self, series, arrow_type, spark_type=None):
         """
         Create an Arrow Array from the given pandas.Series and optional type.
 
@@ -199,6 +199,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             A single series
         arrow_type : pyarrow.DataType, optional
             If None, pyarrow's inferred type will be used
+        spark_type : DataType, optional
+            If None, spark type converted from arrow_type will be used
 
         Returns
         -------
@@ -211,10 +213,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             series = series.astype(series.dtypes.categories.dtype)
 
         if arrow_type is not None:
-            spark_type = from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
+            dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
             # TODO(SPARK-43579): cache the converter for reuse
             conv = _create_converter_from_pandas(
-                spark_type, timezone=self._timezone, error_on_duplicated_field_names=False
+                dt, timezone=self._timezone, error_on_duplicated_field_names=False
             )
             series = conv(series)
 
@@ -261,14 +263,24 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         import pyarrow as pa
 
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], pa.DataType)
+        # Make input conform to
+        # [(series1, arrow_type1, spark_type1), (series2, arrow_type2, spark_type2), ...]
+        if (
+            not isinstance(series, (list, tuple))
+            or (len(series) == 2 and isinstance(series[1], pa.DataType))
+            or (
+                len(series) == 3
+                and isinstance(series[1], pa.DataType)
+                and isinstance(series[2], DataType)
+            )
         ):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
+        series = ((s[0], s[1], None) if len(s) == 2 else s for s in series)
 
-        arrs = [self._create_array(s, t) for s, t in series]
+        arrs = [
+            self._create_array(s, arrow_type, spark_type) for s, arrow_type, spark_type in series
+        ]
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
     def dump_stream(self, iterator, stream):

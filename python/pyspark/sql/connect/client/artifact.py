@@ -38,6 +38,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
+ARCHIVE_PREFIX: str = "archives"
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -102,6 +103,10 @@ def new_pyfile_artifact(file_name: str, storage: LocalData) -> Artifact:
     return _new_artifact(PYFILE_PREFIX, "", file_name, storage)
 
 
+def new_archive_artifact(file_name: str, storage: LocalData) -> Artifact:
+    return _new_artifact(ARCHIVE_PREFIX, "", file_name, storage)
+
+
 def _new_artifact(
     prefix: str, required_suffix: str, file_name: str, storage: LocalData
 ) -> Artifact:
@@ -136,12 +141,16 @@ class ArtifactManager:
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
 
-    def _parse_artifacts(self, path_or_uri: str, pyfile: bool) -> List[Artifact]:
+    def _parse_artifacts(self, path_or_uri: str, pyfile: bool, archive: bool) -> List[Artifact]:
         # Currently only local files with .jar extension is supported.
-        uri = path_or_uri
-        if urlparse(path_or_uri).scheme == "":  # Is path?
-            uri = Path(path_or_uri).absolute().as_uri()
-        parsed = urlparse(uri)
+        parsed = urlparse(path_or_uri)
+        # Check if it is a file from the scheme
+        if parsed.scheme == "":
+            # Similar with Utils.resolveURI.
+            fragment = parsed.fragment
+            parsed = urlparse(Path(url2pathname(parsed.path)).absolute().as_uri())
+            parsed = parsed._replace(fragment=fragment)
+
         if parsed.scheme == "file":
             local_path = url2pathname(parsed.path)
             name = Path(local_path).name
@@ -154,16 +163,37 @@ class ArtifactManager:
                 sys.path.insert(1, local_path)
                 artifact = new_pyfile_artifact(name, LocalFile(local_path))
                 importlib.invalidate_caches()
+            elif archive and (
+                name.endswith(".zip")
+                or name.endswith(".jar")
+                or name.endswith(".tar.gz")
+                or name.endswith(".tgz")
+                or name.endswith(".tar")
+            ):
+                assert any(name.endswith(s) for s in (".zip", ".jar", ".tar.gz", ".tgz", ".tar"))
+
+                if parsed.fragment != "":
+                    # Minimal fix for the workaround of fragment handling in URI.
+                    # This has a limitation - hash(#) in the file name would not work.
+                    if "#" in local_path:
+                        raise ValueError("'#' in the path is not supported for adding an archive.")
+                    name = f"{name}#{parsed.fragment}"
+
+                artifact = new_archive_artifact(name, LocalFile(local_path))
             elif name.endswith(".jar"):
                 artifact = new_jar_artifact(name, LocalFile(local_path))
             else:
                 raise RuntimeError(f"Unsupported file format: {local_path}")
             return [artifact]
-        raise RuntimeError(f"Unsupported scheme: {uri}")
+        raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
-    def _create_requests(self, *path: str, pyfile: bool) -> Iterator[proto.AddArtifactsRequest]:
+    def _create_requests(
+        self, *path: str, pyfile: bool, archive: bool
+    ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
-        return self._add_artifacts(chain(*(self._parse_artifacts(p, pyfile=pyfile) for p in path)))
+        return self._add_artifacts(
+            chain(*(self._parse_artifacts(p, pyfile=pyfile, archive=archive) for p in path))
+        )
 
     def _retrieve_responses(
         self, requests: Iterator[proto.AddArtifactsRequest]
@@ -171,12 +201,14 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
-    def add_artifacts(self, *path: str, pyfile: bool) -> None:
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
         """
         Add a single artifact to the session.
         Currently only local files with .jar extension is supported.
         """
-        requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(*path, pyfile=pyfile)
+        requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
+            *path, pyfile=pyfile, archive=archive
+        )
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
         summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
 

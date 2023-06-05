@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions._
@@ -394,7 +395,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     val newExpression = expression.transformWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.plan.output.head
+        // Results of scalar subqueries are nullable (as they get connected to the rest of the
+        // query via left outer join)
+        s.plan.output.head.withNullability(true)
     }
     newExpression.asInstanceOf[E]
   }
@@ -603,7 +606,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         } else {
           query
         }
-        val newOutput = newQuery.output.head
+        val newOutput = newQuery.output.head.withNullability(true)
         val replacementMap = AttributeMap(query.output.zip(newQuery.output).toMap)
 
         // TODO: lookup createAttributeMapping in Optimizer.scala
@@ -649,7 +652,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
             val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
               BooleanType)(exprId = alwaysTrueExprId)
 
-            val aggValRef = newQuery.output.head
+            val aggValRef = newOutput
 
             if (havingNode.isEmpty) {
               // CASE 2: Subquery with no HAVING clause

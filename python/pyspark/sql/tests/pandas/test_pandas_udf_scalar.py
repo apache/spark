@@ -48,6 +48,7 @@ from pyspark.sql.types import (
     MapType,
     DateType,
     BinaryType,
+    YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
@@ -96,6 +97,69 @@ class ScalarPandasUDFTestsMixin:
         random_udf = random_udf.asNondeterministic()
         return random_udf
 
+    @property
+    def df_with_nested_structs(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), False),
+                StructField(
+                    "info",
+                    StructType(
+                        [
+                            StructField("name", StringType(), False),
+                            StructField("age", IntegerType(), False),
+                            StructField(
+                                "details",
+                                StructType(
+                                    [
+                                        StructField("field1", StringType(), False),
+                                        StructField("field2", IntegerType(), False),
+                                    ]
+                                ),
+                                False,
+                            ),
+                        ]
+                    ),
+                    False,
+                ),
+            ]
+        )
+        data = [(1, ("John", 30, ("Value1", 10)))]
+        df = self.spark.createDataFrame(data, schema)
+        struct_df = df.select(struct(df.columns).alias("struct"))
+        # struct_df.dtype:
+        # [(
+        #   'struct',
+        #   'struct<id:int,info:
+        #     struct<name:string,age:int,details:
+        #       struct<field1:string, field2:int>>>'
+        # )]
+        return struct_df
+
+    @property
+    def df_with_nested_maps(self):
+        schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField(
+                    "attributes", MapType(StringType(), MapType(StringType(), StringType())), True
+                ),
+            ]
+        )
+        data = [("1", {"personal": {"name": "John", "city": "New York"}})]
+        return self.spark.createDataFrame(data, schema)
+
+    @property
+    def df_with_nested_arrays(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), nullable=False),
+                StructField("nested_array", ArrayType(ArrayType(IntegerType())), nullable=False),
+            ]
+        )
+        data = [(1, [[1, 2, 3], [4, 5]])]
+        return self.spark.createDataFrame(data, schema)
+
     def test_pandas_udf_tokenize(self):
         tokenize = pandas_udf(
             lambda s: s.apply(lambda str: str.split(" ")), ArrayType(StringType())
@@ -114,34 +178,42 @@ class ScalarPandasUDFTestsMixin:
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
 
-    def test_pandas_udf_nested_maps(self):
-        schema = StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField(
-                    "attributes", MapType(StringType(), MapType(StringType(), StringType())), True
-                ),
-            ]
-        )
-        data = [("1", {"personal": {"name": "John", "city": "New York"}})]
-        df = self.spark.createDataFrame(data, schema)
+    def test_input_nested_structs(self):
+        df = self.df_with_nested_structs
 
-        @pandas_udf(StringType())
-        def f(s: pd.Series) -> pd.Series:
-            return s.astype(str)
+        mirror = pandas_udf(lambda s: s, df.dtypes[0][1])
 
         self.assertEquals(
-            df.select(f(df.attributes).alias("res")).first(),
+            df.select(mirror(df.struct).alias("res")).first(),
+            Row(
+                res=Row(
+                    id=1, info=Row(name="John", age=30, details=Row(field1="Value1", field2=10))
+                )
+            ),
+        )
+
+    def test_input_nested_maps(self):
+        df = self.df_with_nested_maps
+
+        str_repr = pandas_udf(lambda s: s.astype(str), StringType())
+        self.assertEquals(
+            df.select(str_repr(df.attributes).alias("res")).first(),
             Row(res="{'personal': {'name': 'John', 'city': 'New York'}}"),
         )
 
-        @pandas_udf(StringType())
-        def extract_name(s: pd.Series) -> pd.Series:
-            return s.apply(lambda x: x["personal"]["name"])
-
+        extract_name = pandas_udf(lambda s: s.apply(lambda x: x["personal"]["name"]), StringType())
         self.assertEquals(
             df.select(extract_name(df.attributes).alias("res")).first(),
             Row(res="John"),
+        )
+
+    def test_input_nested_arrays(self):
+        df = self.df_with_nested_arrays
+
+        str_repr = pandas_udf(lambda s: s.astype(str), StringType())
+        self.assertEquals(
+            df.select(str_repr(df.nested_array).alias("res")).first(),
+            Row(res="[array([1, 2, 3], dtype=int32) array([4, 5], dtype=int32)]"),
         )
 
     @unittest.skipIf(
@@ -461,6 +533,8 @@ class ScalarPandasUDFTestsMixin:
             self.check_vectorized_udf_nested_struct()
 
     def check_vectorized_udf_nested_struct(self):
+        df = self.spark.range(2)
+
         nested_type = StructType(
             [
                 StructField("id", IntegerType()),
@@ -470,9 +544,34 @@ class ScalarPandasUDFTestsMixin:
                 ),
             ]
         )
-        for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-            with self.assertRaisesRegex(Exception, "Invalid return type with scalar Pandas UDFs"):
-                pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
+
+        def func_dict(pser: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"id": pser, "nested": pser.apply(lambda x: {"foo": str(x), "bar": float(x)})}
+            )
+
+        def func_row(pser: pd.Series) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"id": pser, "nested": pser.apply(lambda x: Row(foo=str(x), bar=float(x)))}
+            )
+
+        expected = [
+            Row(udf=Row(id=0, nested=Row(foo="0", bar=0.0))),
+            Row(udf=Row(id=1, nested=Row(foo="1", bar=1.0))),
+        ]
+
+        for f in [func_dict, func_row]:
+            for udf_type, func in [
+                (PandasUDFType.SCALAR, f),
+                (PandasUDFType.SCALAR_ITER, lambda iter: (f(pser) for pser in iter)),
+            ]:
+                with self.subTest(udf_type=udf_type, udf=f.__name__):
+                    result = df.select(
+                        pandas_udf(func, returnType=nested_type, functionType=udf_type)(
+                            col("id")
+                        ).alias("udf")
+                    ).collect()
+                    self.assertEqual(result, expected)
 
     def test_vectorized_udf_map_type(self):
         data = [({},), ({"a": 1},), ({"a": 1, "b": 2},), ({"a": 1, "b": 2, "c": 3},)]
@@ -621,9 +720,9 @@ class ScalarPandasUDFTestsMixin:
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             with self.assertRaisesRegex(
                 NotImplementedError,
-                "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
+                "Invalid return type.*scalar Pandas UDF.*ArrayType.*YearMonthIntervalType",
             ):
-                pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
+                pandas_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         with QuietTest(self.sc):
@@ -939,9 +1038,9 @@ class ScalarPandasUDFTestsMixin:
             self.nondeterministic_vectorized_udf,
             self.nondeterministic_vectorized_iter_udf,
         ]:
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                 df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "Non-deterministic"):
                 df.agg(sum(random_udf(df.id))).collect()
 
     def test_register_vectorized_udf_basic(self):
