@@ -274,7 +274,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i@InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
     _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
