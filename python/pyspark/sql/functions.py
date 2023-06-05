@@ -11219,7 +11219,7 @@ def udtf(
     >>> class RandomUDTF:
     ...     def eval(self, a: int):
     ...         yield a * int(random.random() * 100),
-    >>> random_udtf = udtf(RandomUDTF, "r: int").asNondeterministic()
+    >>> random_udtf = udtf(RandomUDTF, returnType="r: int").asNondeterministic()
 
     User-defined table functions are considered opaque to the optimizer by default.
     As a result, operations like filters from WHERE clauses or limits from

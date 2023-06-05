@@ -148,6 +148,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             def eval(self, a: int):
                 ...
 
+        # TODO(SPARK-43967): Support Python UDTFs with empty return values
         with self.assertRaisesRegex(
             PythonException, "TypeError: 'NoneType' object is not iterable"
         ):
@@ -306,7 +307,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 yield a * int(random.random() * 100),
 
         random_udtf = udtf(RandomUDTF, returnType="x: int").asNondeterministic()
-        # TODO: support non-deterministic UDTFs
+        # TODO(SPARK-43966): support non-deterministic UDTFs
         with self.assertRaisesRegex(AnalysisException, "nondeterministic expressions"):
             random_udtf(lit(1)).collect()
 
@@ -318,7 +319,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             def eval(self, a: int):
                 yield a + 1,
 
-        # TODO: support non-deterministic UDTFs
+        # TODO(SPARK-43966): support non-deterministic UDTFs
         with self.assertRaisesRegex(AnalysisException, "nondeterministic expressions"):
             TestUDTF(rand(0) * 100).collect()
 

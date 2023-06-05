@@ -74,7 +74,7 @@ class UserDefinedTableFunction:
                 f"must be a class, but got {type(func)}."
             )
 
-        # TODO: add more checks for invalid user-defined table functions.
+        # TODO(SPARK-43968): add more compile time checks for UDTFs
 
         self.func = func
         self._returnType = returnType
