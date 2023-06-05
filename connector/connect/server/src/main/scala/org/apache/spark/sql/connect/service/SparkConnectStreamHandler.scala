@@ -96,7 +96,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(session, this)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
@@ -112,13 +112,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(session, this)
     planner.process(
       command = command,
       userId = request.getUserContext.getUserId,
-      sessionId = request.getSessionId,
-      responseObserver = responseObserver)
+      sessionId = request.getSessionId)
     responseObserver.onCompleted()
+  }
+
+  def sendResponse(response: ExecutePlanResponse): Unit = {
+    responseObserver.onNext(response)
   }
 }
 
