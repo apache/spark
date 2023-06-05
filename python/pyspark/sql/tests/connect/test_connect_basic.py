@@ -623,6 +623,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
 
+    def test_streaming_local_relation(self):
+        import random
+        import string
+        threshold = 1024 * 1024
+        with self.sql_conf({"spark.sql.session.localRelationCacheThreshold": threshold}):
+            suffix = "abcdef"
+            letters = string.ascii_lowercase
+            str = ''.join(random.choice(letters) for i in range(threshold)) + suffix
+            data = [[0, str], [1, str]]
+            cdf = self.connect.createDataFrame(data, ["a", "b"])
+            self.assert_eq(cdf.count(), len(data))
+            self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
+
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
         rows = [
