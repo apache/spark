@@ -1530,7 +1530,7 @@ object CopyDependencies {
       // Later, when the dependencies are copied, we manually copy the shaded Jar only.
       val fid = (LocalProject("connect") / assembly).value
       val fidClient = (LocalProject("connect-client-jvm") / assembly).value
-      val fidProtobuf = (LocalProject("protobuf") / assembly).value
+      val fidProtobuf = (LocalProject("protobuf-assembly") / assembly).value
 
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
