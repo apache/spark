@@ -271,6 +271,10 @@ class ArtifactTests(ReusedConnectTestCase):
             self.spark.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
 
+    def test_cache_artifact(self):
+        hash = "cache/123"
+        self.assertEqual(self.artifact_manager.is_cached_artifact(hash), False)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.client.test_artifact import *  # noqa: F401

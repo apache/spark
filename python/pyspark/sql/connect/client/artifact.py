@@ -39,6 +39,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
 ARCHIVE_PREFIX: str = "archives"
+CACHE_PREFIX: str = "cache"
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -317,3 +318,18 @@ class ArtifactManager:
                         data=chunk, crc=zlib.crc32(chunk)
                     ),
                 )
+
+    def is_cached_artifact(self, hash: str) -> bool:
+        """
+        Ask the server either any artifact with `hash` has been cached at the server side or not.
+        """
+        artifactName = CACHE_PREFIX + "/" + hash
+        request = proto.ArtifactStatusesRequest(
+            user_context=self._user_context,
+            session_id=self._session_id,
+            names=[artifactName])
+        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
+        status: proto.ArtifactStatusesResponse.ArtifactStatus = resp.statuses.get(artifactName)
+        return status.exists
+
+
