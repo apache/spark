@@ -21,8 +21,6 @@ from distutils.version import LooseVersion
 import numpy as np
 import pandas as pd
 
-from pyspark.ml.functions import vector_to_array
-from pyspark.ml.linalg import Vectors
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
 from pyspark.sql import SparkSession
 
@@ -35,8 +33,8 @@ class FeatureTestsMixin:
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense([2.0, 3.5, 1.5]),),
-                (Vectors.dense([-3.0, -0.5, -2.5]),),
+                ([2.0, 3.5, 1.5],),
+                ([-3.0, -0.5, -2.5],),
             ],
             schema=["features"],
         )
@@ -49,7 +47,7 @@ class FeatureTestsMixin:
 
         np.testing.assert_allclose(list(result.scaled_features), expected_result)
 
-        local_df1 = df1.withColumn("features", vector_to_array("features")).toPandas()
+        local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
 
@@ -62,9 +60,9 @@ class FeatureTestsMixin:
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense([2.0, 3.5, 1.5]),),
-                (Vectors.dense([-3.0, -0.5, -2.5]),),
-                (Vectors.dense([1.0, -1.5, 0.5]),),
+                ([2.0, 3.5, 1.5],),
+                ([-3.0, -0.5, -2.5],),
+                ([1.0, -1.5, 0.5],),
             ],
             schema=["features"],
         )
@@ -81,7 +79,7 @@ class FeatureTestsMixin:
 
         np.testing.assert_allclose(list(result.scaled_features), expected_result)
 
-        local_df1 = df1.withColumn("features", vector_to_array("features")).toPandas()
+        local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
 

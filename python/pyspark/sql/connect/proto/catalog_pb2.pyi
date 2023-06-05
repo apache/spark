@@ -347,9 +347,23 @@ class ListDatabases(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    PATTERN_FIELD_NUMBER: builtins.int
+    pattern: builtins.str
+    """(Optional) The pattern that the database name needs to match"""
     def __init__(
         self,
+        *,
+        pattern: builtins.str | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["_pattern", b"_pattern", "pattern", b"pattern"]
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListDatabases = ListDatabases
 

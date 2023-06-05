@@ -4875,6 +4875,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sparkSession
         )
 
+    def _ipython_key_completions_(self) -> List[str]:
+        """Returns the names of columns in this :class:`DataFrame`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df._ipython_key_completions_()
+        ['age', 'name']
+
+        Would return illegal identifiers.
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age 1", "name?1"])
+        >>> df._ipython_key_completions_()
+        ['age 1', 'name?1']
+        """
+        return self.columns
+
     def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the

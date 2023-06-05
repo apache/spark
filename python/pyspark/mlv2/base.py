@@ -16,7 +16,6 @@
 #
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Callable
 
 import pandas as pd
 
@@ -28,6 +27,8 @@ from typing import (
     TypeVar,
     Union,
     TYPE_CHECKING,
+    Tuple,
+    Callable,
 )
 
 from pyspark import since
@@ -127,7 +128,7 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def _output_columns(self) -> list[tuple[str, str]]:
+    def _output_columns(self) -> List[Tuple[str, str]]:
         """
         Return a list of output transformed columns, each elements in the list
         is a tuple of (column_name, column_spark_type)
@@ -137,7 +138,11 @@ class Transformer(Params, metaclass=ABCMeta):
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         """
         Return a transformation function that accepts an instance of `pd.Series` as input and
-        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`
+        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`.
+        If there's only one output column, the transformed result must be an
+        instance of `pd.Series`, if there are multiple output columns, the transformed result
+        must be an instance of `pd.DataFrame` with column names matching output schema
+        returned by  `_output_columns` interface.
         """
         raise NotImplementedError()
 
