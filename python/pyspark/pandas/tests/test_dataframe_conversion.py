@@ -263,7 +263,9 @@ class DataFrameConversionTestsMixin:
         )
 
 
-class DataFrameConversionTests(ComparisonTestBase, SQLTestUtils, TestUtils):
+class DataFrameConversionTests(
+    DataFrameConversionTestsMixin, ComparisonTestBase, SQLTestUtils, TestUtils
+):
     pass
 
 
