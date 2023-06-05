@@ -3659,7 +3659,20 @@ def percentile_cont(
     if reverse is None:
         return _invoke_function("percentile_cont", _to_java_column(col), _percentage)
     else:
-        return _invoke_function("percentile_cont", _to_java_column(col), _percentage, reverse)
+        if isinstance(reverse, bool):
+            _reverse = _create_column_from_literal(reverse)
+        elif isinstance(reverse, Column):
+            _reverse = _to_java_column(reverse)
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={
+                    "arg_name": "reverse",
+                    "arg_type": type(reverse).__name__,
+                },
+            )
+
+        return _invoke_function("percentile_cont", _to_java_column(col), _percentage, _reverse)
 
 
 @try_remote_functions
@@ -3722,7 +3735,20 @@ def percentile_disc(
     if reverse is None:
         return _invoke_function("percentile_disc", _to_java_column(col), _percentage)
     else:
-        return _invoke_function("percentile_disc", _to_java_column(col), _percentage, reverse)
+        if isinstance(reverse, bool):
+            _reverse = _create_column_from_literal(reverse)
+        elif isinstance(reverse, Column):
+            _reverse = _to_java_column(reverse)
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={
+                    "arg_name": "reverse",
+                    "arg_type": type(reverse).__name__,
+                },
+            )
+
+        return _invoke_function("percentile_disc", _to_java_column(col), _percentage, _reverse)
 
 
 @try_remote_functions

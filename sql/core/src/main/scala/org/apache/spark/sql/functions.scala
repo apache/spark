@@ -900,8 +900,11 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def percentile_cont(e: Column, percentage: Column, reverse: Boolean): Column =
-    withAggregateFunction { PercentileCont(e.expr, percentage.expr, reverse) }
+  def percentile_cont(e: Column, percentage: Column, reverse: Column): Column =
+    withAggregateFunction {
+      assert(reverse.expr.foldable && reverse.expr.dataType == BooleanType)
+      PercentileCont(e.expr, percentage.expr, reverse.expr.eval().asInstanceOf[Boolean])
+    }
 
   /**
    * Aggregate function: returns the percentile(s) based on a discrete distribution of
@@ -922,8 +925,11 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def percentile_disc(e: Column, percentage: Column, reverse: Boolean): Column =
-    withAggregateFunction { PercentileDisc(e.expr, percentage.expr, reverse) }
+  def percentile_disc(e: Column, percentage: Column, reverse: Column): Column =
+    withAggregateFunction {
+      assert(reverse.expr.foldable && reverse.expr.dataType == BooleanType)
+      PercentileDisc(e.expr, percentage.expr, reverse.expr.eval().asInstanceOf[Boolean])
+    }
 
   /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
