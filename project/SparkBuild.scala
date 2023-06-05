@@ -45,8 +45,10 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer,
+    tokenProviderKafka010, sqlKafka010, avro, protobuf, protobufAssembly) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro",
+    "protobuf", "protobuf-assembly"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
@@ -408,7 +410,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
-      commonUtils
+      commonUtils, protobufAssembly
     ).contains(x)
   }
 
@@ -455,6 +457,7 @@ object SparkBuild extends PomBuild {
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
+  enable(SparkProtobufAssembly.settings)(protobufAssembly)
 
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
@@ -933,9 +936,32 @@ object SparkProtobuf {
 
     (Test / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-test-sources"
-    ),
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
+}
+
+object SparkProtobufAssembly {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
 
     (assembly / test) := { },
+
+    (assembly / assemblyJarName) := s"spark-protobuf-assembly_${scalaBinaryVersion.value}-${version.value}.jar",
 
     (assembly / logLevel) := Level.Info,
 
@@ -949,7 +975,9 @@ object SparkProtobuf {
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar"
+          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar" ||
+          name.startsWith("gson-") || name.startsWith("error_prone_annotations-") ||
+          name.startsWith("jsr305-") || name.startsWith("j2objc-annotations-")
       }
     },
 
@@ -962,17 +990,8 @@ object SparkProtobuf {
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
-    },
-  ) ++ {
-    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
-      Seq(
-        PB.protocExecutable := file(sparkProtocExecPath.get)
-      )
-    } else {
-      Seq.empty
     }
-  }
+  )
 }
 
 object Unsafe {
