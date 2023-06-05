@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
-import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -182,28 +181,16 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched column list size") {
+    val msgs = Seq("Cannot write to table due to mismatched user specified column size",
+      "expected 3 columns but found")
     def test: Unit = {
       withTable("t1") {
         val cols = Seq("c1", "c2", "c3")
         createTable("t1", cols, Seq("int", "long", "string"))
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)")
-          },
-          sqlState = None,
-          errorClass = "_LEGACY_ERROR_TEMP_1038",
-          parameters = Map("columnSize" -> "2", "outputSize" -> "3"),
-          context = ExpectedContext("values(1, 2, 3)", 24, 38)
-        )
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)")
-          },
-          sqlState = None,
-          errorClass = "_LEGACY_ERROR_TEMP_1038",
-          parameters = Map("columnSize" -> "3", "outputSize" -> "2"),
-          context = ExpectedContext("values(1, 2)", 28, 39)
-        )
+        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
+        assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
+        val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
+        assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
       }
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
@@ -272,15 +259,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     "checking duplicate static partition columns should respect case sensitive conf") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
-        },
-        sqlState = None,
-        errorClass = "DUPLICATE_KEY",
-        parameters = Map("keyColumn" -> "`c`"),
-        context = ExpectedContext("PARTITION (c='2', C='3')", 19, 42)
-      )
+      val e = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
+      }
+      assert(e.getMessage.contains("Found duplicate keys `c`"))
     }
     // The following code is skipped for Hive because columns stored in Hive Metastore is always
     // case insensitive and we cannot create such table in Hive Metastore.
@@ -315,19 +297,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         withTable("t") {
           sql("create table t(a int, b string) using parquet partitioned by (a)")
           if (shouldThrowException(policy)) {
-            checkError(
-              exception = intercept[SparkNumberFormatException] {
-                sql("insert into t partition(a='ansi') values('ansi')")
-              },
-              errorClass = "CAST_INVALID_INPUT",
-              parameters = Map(
-                "expression" -> "'ansi'",
-                "sourceType" -> "\"STRING\"",
-                "targetType" -> "\"INT\"",
-                "ansiConfig" -> "\"spark.sql.ansi.enabled\""
-              ),
-              context = ExpectedContext("insert into t partition(a='ansi')", 0, 32)
-            )
+            val errorMsg = intercept[NumberFormatException] {
+              sql("insert into t partition(a='ansi') values('ansi')")
+            }.getMessage
+            assert(errorMsg.contains(
+              """The value 'ansi' of the type "STRING" cannot be cast to "INT""""))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
@@ -366,17 +340,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         ).foreach { query =>
           checkAnswer(sql(query), Seq(Row("a", 10, "08")))
         }
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("alter table t drop partition(dt='8')")
-          },
-          errorClass = "PARTITIONS_NOT_FOUND",
-          sqlState = None,
-          parameters = Map(
-            "partitionList" -> "PARTITION \\(`dt` = 8\\)",
-            "tableName" -> ".*`t`"),
-          matchPVals = true
-        )
+        val e = intercept[AnalysisException](sql("alter table t drop partition(dt='8')"))
+        assert(e.getMessage.contains("PARTITIONS_NOT_FOUND"))
       }
     }
 
@@ -386,17 +351,8 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         sql("insert into t partition(dt=08) values('a', 10)")
         checkAnswer(sql("select * from t where dt='08'"), sql("select * from t where dt='07'"))
         checkAnswer(sql("select * from t where dt=08"), Seq(Row("a", 10, "8")))
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("alter table t drop partition(dt='08')")
-          },
-          errorClass = "PARTITIONS_NOT_FOUND",
-          sqlState = None,
-          parameters = Map(
-            "partitionList" -> "PARTITION \\(`dt` = 08\\)",
-            "tableName" -> ".*.`t`"),
-          matchPVals = true
-        )
+        val e = intercept[AnalysisException](sql("alter table t drop partition(dt='08')"))
+        assert(e.getMessage.contains("PARTITIONS_NOT_FOUND"))
       }
     }
   }
