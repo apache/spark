@@ -601,6 +601,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
 
+        // Reassign expression IDs in the future right side of the join to avoid ID conflicts.
         val newQuery = if (SQLConf.get.getConf(REASSIGN_IDS_IN_SCALAR_SUBQUERY)) {
           AssignNewExprIds(query)
         } else {
@@ -609,7 +610,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val newOutput = newQuery.output.head.withNullability(true)
         val replacementMap = AttributeMap(query.output.zip(newQuery.output).toMap)
 
-        // TODO: lookup createAttributeMapping in Optimizer.scala
         val newConditions = conditions.map(_.transform {
           case a: Attribute => replacementMap.getOrElse(a, a)
         })
