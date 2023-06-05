@@ -39,11 +39,6 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(dbs.length == 2)
         assert(dbs.map(_.name) sameElements Array(db, currentDb))
         assert(dbs.map(_.catalog).distinct sameElements Array("spark_catalog"))
-        var databasesWithPattern = spark.catalog.listDatabases("def*").collect().sortBy(_.name)
-        assert(databasesWithPattern.length == 1)
-        assert(databasesWithPattern.map(_.name) sameElements Array(currentDb))
-        databasesWithPattern = spark.catalog.listDatabases("def2*").collect().sortBy(_.name)
-        assert(databasesWithPattern.length == 0)
         val database = spark.catalog.getDatabase(db)
         assert(database.name == db)
         val message = intercept[StatusRuntimeException] {

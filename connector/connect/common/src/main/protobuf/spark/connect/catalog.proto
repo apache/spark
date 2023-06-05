@@ -68,10 +68,7 @@ message SetCurrentDatabase {
 }
 
 // See `spark.catalog.listDatabases`
-message ListDatabases {
-  // (Optional) The pattern that the database name needs to match
-  optional string pattern = 1;
-}
+message ListDatabases { }
 
 // See `spark.catalog.listTables`
 message ListTables {

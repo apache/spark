@@ -42,10 +42,6 @@ class CatalogTestsMixin:
             spark.sql("CREATE DATABASE some_db")
             databases = [db.name for db in spark.catalog.listDatabases()]
             self.assertEqual(sorted(databases), ["default", "some_db"])
-            databases = [db.name for db in spark.catalog.listDatabases("def*")]
-            self.assertEqual(sorted(databases), ["default"])
-            databases = [db.name for db in spark.catalog.listDatabases("def2*")]
-            self.assertEqual(sorted(databases), [])
 
     def test_database_exists(self):
         # SPARK-36207: testing that database_exists returns correct boolean

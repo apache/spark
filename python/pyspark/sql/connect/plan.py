@@ -1636,15 +1636,11 @@ class SetCurrentDatabase(LogicalPlan):
 
 
 class ListDatabases(LogicalPlan):
-    def __init__(self, pattern: Optional[str] = None) -> None:
+    def __init__(self) -> None:
         super().__init__(None)
-        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(catalog=proto.Catalog(list_databases=proto.ListDatabases()))
-        if self._pattern is not None:
-            plan.catalog.list_databases.pattern = self._pattern
-        return plan
+        return proto.Relation(catalog=proto.Catalog(list_databases=proto.ListDatabases()))
 
 
 class ListTables(LogicalPlan):

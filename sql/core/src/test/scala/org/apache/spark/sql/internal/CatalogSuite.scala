@@ -156,10 +156,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     createDatabase("my_db2")
     assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
       Set("default", "my_db1", "my_db2"))
-    assert(spark.catalog.listDatabases("my*").collect().map(_.name).toSet ==
-      Set("my_db1", "my_db2"))
-    assert(spark.catalog.listDatabases("you*").collect().map(_.name).toSet ==
-      Set.empty[String])
     dropDatabase("my_db1")
     assert(spark.catalog.listDatabases().collect().map(_.name).toSet ==
       Set("default", "my_db2"))
