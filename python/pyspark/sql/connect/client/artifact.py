@@ -325,11 +325,8 @@ class ArtifactManager:
         """
         artifactName = CACHE_PREFIX + "/" + hash
         request = proto.ArtifactStatusesRequest(
-            user_context=self._user_context,
-            session_id=self._session_id,
-            names=[artifactName])
+            user_context=self._user_context, session_id=self._session_id, names=[artifactName]
+        )
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
         status: proto.ArtifactStatusesResponse.ArtifactStatus = resp.statuses.get(artifactName)
         return status.exists
-
-
