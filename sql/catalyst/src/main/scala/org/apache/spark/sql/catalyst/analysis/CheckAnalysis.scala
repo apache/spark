@@ -644,7 +644,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(",")
+            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(", ")
             val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(", ")
 
             val resolver = plan.conf.resolver
