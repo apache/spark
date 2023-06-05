@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
 
 /**
@@ -44,7 +48,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     // apply special dynamic filtering only for group-based row-level operations
-    case GroupBasedRowLevelOperation(replaceData, cond,
+    case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
         DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _))
         if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral =>
 
@@ -55,7 +59,8 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
           // in order to leverage a regular batch scan in the group filter query
           val originalTable = r.relation.table.asRowLevelOperationTable.table
           val relation = r.relation.copy(table = originalTable)
-          val matchingRowsPlan = buildMatchingRowsPlan(relation, cond)
+          val command = replaceData.operation.command
+          val matchingRowsPlan = buildMatchingRowsPlan(relation, cond, command)
 
           val filterAttrs = scan.filterAttributes
           val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, matchingRowsPlan)
@@ -71,9 +76,19 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   private def buildMatchingRowsPlan(
       relation: DataSourceV2Relation,
-      cond: Expression): LogicalPlan = {
+      cond: Expression,
+      command: Command): LogicalPlan = {
 
-    val matchingRowsPlan = Filter(cond, relation)
+    val matchingRowsPlan = command match {
+      case DELETE =>
+        Filter(cond, relation)
+      case UPDATE =>
+        throw new AnalysisException("Group-based UPDATE operations are currently not supported")
+      case MERGE =>
+        // rewrite the group filter subquery as joins
+        val filter = Filter(cond, relation)
+        RewritePredicateSubquery(filter)
+    }
 
     // clone the relation and assign new expr IDs to avoid conflicts
     matchingRowsPlan transformUpWithNewOutput {

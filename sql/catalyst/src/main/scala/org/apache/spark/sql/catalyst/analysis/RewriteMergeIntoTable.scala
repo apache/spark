@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Expression, IsNotNull, MetadataAttribute, MonotonicallyIncreasingID, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, UpdateAction, WriteDelta}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, Keep, ROW_ID, Split}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Instruction, Keep, ROW_ID, Split}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.OPERATION_COLUMN
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -123,12 +123,119 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
                 r, table, source, cond, matchedActions,
                 notMatchedActions, notMatchedBySourceActions)
             case _ =>
-              throw new AnalysisException("Group-based MERGE commands are not supported yet")
+              buildReplaceDataPlan(
+                r, table, source, cond, matchedActions,
+                notMatchedActions, notMatchedBySourceActions)
           }
 
         case _ =>
           m
       }
+  }
+
+  // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
+  private def buildReplaceDataPlan(
+      relation: DataSourceV2Relation,
+      operationTable: RowLevelOperationTable,
+      source: LogicalPlan,
+      cond: Expression,
+      matchedActions: Seq[MergeAction],
+      notMatchedActions: Seq[MergeAction],
+      notMatchedBySourceActions: Seq[MergeAction]): ReplaceData = {
+
+    // resolve all required metadata attrs that may be used for grouping data on write
+    // for instance, JDBC data source may cluster data by shard/host before writing
+    val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
+
+    // construct a read relation and include all required metadata columns
+    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+
+    val checkCardinality = shouldCheckCardinality(matchedActions)
+
+    // use left outer join if there is no NOT MATCHED action, unmatched source rows can be discarded
+    // use full outer join in all other cases, unmatched source rows may be needed
+    val joinType = if (notMatchedActions.isEmpty) LeftOuter else FullOuter
+    val joinPlan = join(readRelation, source, joinType, cond, checkCardinality)
+
+    val mergeRowsPlan = buildReplaceDataMergeRowsPlan(
+      readRelation, joinPlan, matchedActions, notMatchedActions,
+      notMatchedBySourceActions, metadataAttrs, checkCardinality)
+
+    // predicates of the ON condition can be used to filter the target table (planning & runtime)
+    // only if there is no NOT MATCHED BY SOURCE clause
+    val (pushableCond, groupFilterCond) = if (notMatchedBySourceActions.isEmpty) {
+      (cond, Some(toGroupFilterCondition(relation, source, cond)))
+    } else {
+      (TrueLiteral, None)
+    }
+
+    // build a plan to replace read groups in the table
+    val writeRelation = relation.copy(table = operationTable)
+    ReplaceData(writeRelation, pushableCond, mergeRowsPlan, relation, groupFilterCond)
+  }
+
+  private def buildReplaceDataMergeRowsPlan(
+      targetTable: LogicalPlan,
+      joinPlan: LogicalPlan,
+      matchedActions: Seq[MergeAction],
+      notMatchedActions: Seq[MergeAction],
+      notMatchedBySourceActions: Seq[MergeAction],
+      metadataAttrs: Seq[Attribute],
+      checkCardinality: Boolean): MergeRows = {
+
+    // target records that were read but did not match any MATCHED or NOT MATCHED BY SOURCE actions
+    // must be copied over and included in the new state of the table as groups are being replaced
+    // that's why an extra unconditional instruction that would produce the original row is added
+    // as the last MATCHED and NOT MATCHED BY SOURCE instruction
+    // this logic is specific to data sources that replace groups of data
+    val keepCarryoverRowsInstruction = Keep(TrueLiteral, targetTable.output)
+
+    val matchedInstructions = matchedActions.map { action =>
+      toInstruction(action, metadataAttrs)
+    } :+ keepCarryoverRowsInstruction
+
+    val notMatchedInstructions = notMatchedActions.map { action =>
+      toInstruction(action, metadataAttrs)
+    }
+
+    val notMatchedBySourceInstructions = notMatchedBySourceActions.map { action =>
+      toInstruction(action, metadataAttrs)
+    } :+ keepCarryoverRowsInstruction
+
+    val rowFromSourceAttr = resolveAttrRef(ROW_FROM_SOURCE, joinPlan)
+    val rowFromTargetAttr = resolveAttrRef(ROW_FROM_TARGET, joinPlan)
+
+    val outputs = matchedInstructions.flatMap(_.outputs) ++
+      notMatchedInstructions.flatMap(_.outputs) ++
+      notMatchedBySourceInstructions.flatMap(_.outputs)
+
+    val attrs = targetTable.output
+
+    MergeRows(
+      isSourceRowPresent = IsNotNull(rowFromSourceAttr),
+      isTargetRowPresent = IsNotNull(rowFromTargetAttr),
+      matchedInstructions = matchedInstructions,
+      notMatchedInstructions = notMatchedInstructions,
+      notMatchedBySourceInstructions = notMatchedBySourceInstructions,
+      checkCardinality = checkCardinality,
+      output = generateExpandOutput(attrs, outputs),
+      joinPlan)
+  }
+
+  // converts a MERGE condition into an EXISTS subquery for runtime filtering
+  private def toGroupFilterCondition(
+      relation: DataSourceV2Relation,
+      source: LogicalPlan,
+      cond: Expression): Expression = {
+
+    val condWithOuterRefs = cond transformUp {
+      case attr: Attribute if relation.outputSet.contains(attr) => OuterReference(attr)
+      case other => other
+    }
+    val outerRefs = condWithOuterRefs.collect {
+      case OuterReference(e) => e
+    }
+    Exists(Filter(condWithOuterRefs, source), outerRefs)
   }
 
   // build a rewrite plan for sources that support row deltas
@@ -307,6 +414,26 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       case Nil => false
       case Seq(DeleteAction(None)) => false
       case _ => true
+    }
+  }
+
+  // converts a MERGE action into an instruction on top of the joined plan for group-based plans
+  private def toInstruction(action: MergeAction, metadataAttrs: Seq[Attribute]): Instruction = {
+    action match {
+      case UpdateAction(cond, assignments) =>
+        val output = assignments.map(_.value) ++ metadataAttrs
+        Keep(cond.getOrElse(TrueLiteral), output)
+
+      case DeleteAction(cond) =>
+        Discard(cond.getOrElse(TrueLiteral))
+
+      case InsertAction(cond, assignments) =>
+        val metadataValues = metadataAttrs.map(attr => Literal(null, attr.dataType))
+        val output = assignments.map(_.value) ++ metadataValues
+        Keep(cond.getOrElse(TrueLiteral), output)
+
+      case other =>
+        throw new AnalysisException(s"Unexpected action: $other")
     }
   }
 
