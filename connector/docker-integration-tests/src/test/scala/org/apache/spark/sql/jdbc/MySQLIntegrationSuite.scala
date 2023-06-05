@@ -46,7 +46,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     )
     override val usesIpc = false
     override val jdbcPort: Int = 3306
-
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
   }
@@ -179,7 +178,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
-    df1.write.mode(SaveMode.Append).jdbc(jdbcUrl, "numberscopy", new Properties)
+    df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
