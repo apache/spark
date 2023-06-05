@@ -78,14 +78,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  object JdbcClientTypes {
-    val INTEGER = "INTEGER"
-    val STRING = "CHARACTER VARYING"
+  val testMergeByTempTableDialect = new JdbcDialect with MergeByTempTable {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:merge-by-temp")
   }
 
-  def defaultMetadata(
-      dataType: DataType,
-      jdbcClientType: String): Metadata = new MetadataBuilder()
+  def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
@@ -1338,6 +1335,37 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         assert(r.getString(0).contains(s"'password' = '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
       }
     }
+  }
+
+  test("MergeByTempTable: Create temp table name") {
+    val tmp1 = testMergeByTempTableDialect.createTempTableName()
+    assert(tmp1.nonEmpty)
+    val tmp2 = testMergeByTempTableDialect.createTempTableName()
+    assert(tmp2.nonEmpty)
+    assert(tmp2 !== tmp1)
+  }
+
+  test("MergeByTempTable: Create primary index") {
+    val sql = testMergeByTempTableDialect.getCreatePrimaryIndex("test", Array("id", "ts"))
+    assert(sql === """ALTER TABLE test ADD PRIMARY KEY ("id", "ts")""")
+  }
+
+  test("MergeByTempTable: MERGE table into table") {
+    val columns = Array("id", "ts", "v1", "v2")
+      .map(testMergeByTempTableDialect.quoteIdentifier)
+    val keyColumns = Array("id", "ts")
+    val sql = testMergeByTempTableDialect.getMergeQuery(
+      "source", "destination", columns, keyColumns)
+    assert(sql ===
+      """
+        |MERGE INTO destination AS dst
+        |     USING source AS src
+        |        ON (dst."id" = src."id" AND dst."ts" = src."ts")
+        |  WHEN MATCHED THEN
+        |    UPDATE SET "v1" = src."v1", "v2" = src."v2"
+        |  WHEN NOT MATCHED THEN
+        |    INSERT ("id", "ts", "v1", "v2") VALUES (src."id", src."ts", src."v1", src."v2");
+        |""".stripMargin)
   }
 
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
