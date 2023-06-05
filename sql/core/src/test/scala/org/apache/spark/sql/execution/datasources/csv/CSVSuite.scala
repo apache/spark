@@ -683,6 +683,15 @@ abstract class CSVSuite
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
+  test("Config not getting popluated in RDD") {
+    spark.conf.set("spark.sql.legacy.timeParserPolicy", "legacy")
+    spark.read
+      .option("dateFormat", "dd/MM/yy")
+      .schema("date date")
+      .csv(Seq("2/6/18").toDS())
+      .rdd.collect()
+  }
+
   test("load date types via custom date format") {
     val customSchema = new StructType(Array(StructField("date", DateType, true)))
     val options = Map(

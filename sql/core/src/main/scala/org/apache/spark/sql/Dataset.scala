@@ -3898,8 +3898,23 @@ class Dataset[T] private[sql](
    */
   lazy val rdd: RDD[T] = {
     val objectType = exprEnc.deserializer.dataType
+    populateLocalPropertiesInSparkContext(rddQueryExecution.sparkSession)
     rddQueryExecution.toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
+    }
+  }
+
+  /**
+   * Popluate Configs in SparkContext's localProperties.
+   * @param sparkSession
+   */
+  def populateLocalPropertiesInSparkContext(sparkSession: SparkSession): Unit = {
+    val sc = sparkSession.sparkContext
+    // Set all the specified SQL configs to local properties, so that they can be available at
+    // the executor side.
+    sparkSession.sessionState.conf.getAllConfs.foreach {
+      case (key, value) if key.startsWith("spark") =>
+        sc.setLocalProperty(key, value)
     }
   }
 
