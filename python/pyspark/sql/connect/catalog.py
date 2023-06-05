@@ -82,8 +82,8 @@ class Catalog:
 
     setCurrentDatabase.__doc__ = PySparkCatalog.setCurrentDatabase.__doc__
 
-    def listDatabases(self) -> List[Database]:
-        pdf = self._execute_and_fetch(plan.ListDatabases())
+    def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
+        pdf = self._execute_and_fetch(plan.ListDatabases(pattern=pattern))
         return [
             Database(
                 name=row.iloc[0],
