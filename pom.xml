@@ -123,7 +123,7 @@
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.5</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.22.3</protobuf.version>
+    <protobuf.version>3.23.2</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.3</zookeeper.version>
@@ -179,8 +179,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.15.1</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.15.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.15.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
     <snappy.version>1.1.10.0</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -221,7 +221,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.6.2</kubernetes-client.version>
+    <kubernetes-client.version>6.7.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 

@@ -93,7 +93,7 @@ case class SubqueryBroadcastExec(
         val rows = if (broadcastRelation.keyIsUnique) {
           keyIter.toArray[InternalRow]
         } else {
-          keyIter.toArray[InternalRow].distinct
+          keyIter.toSet[InternalRow].toArray
         }
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
