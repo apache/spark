@@ -1685,12 +1685,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changes" -> changesDesc))
   }
 
-  private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
+  private def tableDoesNotSupportError(cmd: String, table: Table): Throwable =
+    tableNameDoesNotSupportError(cmd, table.name)
+
+  private def tableNameDoesNotSupportError(cmd: String, table: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1121",
       messageParameters = Map(
         "cmd" -> cmd,
-        "table" -> table.name))
+        "table" -> table))
   }
 
   def tableDoesNotSupportReadsError(table: Table): Throwable = {
@@ -1715,6 +1718,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
     tableDoesNotSupportError("atomic partition management", table)
+  }
+
+  def tableDoesNotSupportUpsertError(table: String): Throwable = {
+    tableNameDoesNotSupportError("upsert", table)
+  }
+
+  def upsertKeyColumnsRequiredError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UPSERT_KEY_COLUMNS_REQUIRED",
+      messageParameters = Map.empty)
+  }
+
+  def upsertNotAllowedError(table: String, reason: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UPSERT_NOT_ALLOWED",
+      messageParameters = Map("table" -> table, "reason" -> reason))
   }
 
   def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
