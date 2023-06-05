@@ -850,8 +850,8 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def percentile_cont(e: Column, percentage: Column, reverse: Boolean): Column =
-    Column.fn("percentile_cont", e, percentage, lit(reverse))
+  def percentile_cont(e: Column, percentage: Column, reverse: Column): Column =
+    Column.fn("percentile_cont", e, percentage, reverse)
 
   /**
    * Aggregate function: returns the percentile(s) based on a discrete distribution of numeric

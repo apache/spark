@@ -973,15 +973,28 @@ def percentile(
     frequency: Union[Column, int] = 1,
 ) -> Column:
     if isinstance(percentage, Column):
-        percentage_col = percentage
+        _percentage = percentage
     elif isinstance(percentage, (list, tuple)):
         # Convert tuple to list
-        percentage_col = lit(list(percentage))
+        _percentage = lit(list(percentage))
     else:
         # Probably scalar
-        percentage_col = lit(percentage)
+        _percentage = lit(percentage)
 
-    return _invoke_function("percentile", _to_col(col), percentage_col, lit(frequency))
+    if isinstance(frequency, int):
+        _frequency = lit(frequency)
+    elif isinstance(frequency, Column):
+        _frequency = frequency
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INT",
+            message_parameters={
+                "arg_name": "frequency",
+                "arg_type": type(frequency).__name__,
+            },
+        )
+
+    return _invoke_function("percentile", _to_col(col), _percentage, _frequency)
 
 
 percentile.__doc__ = pysparkfuncs.percentile.__doc__
@@ -990,21 +1003,34 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 def percentile_cont(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
-    reverse: Optional[bool] = None,
+    reverse: Optional[Union[Column, bool]] = None,
 ) -> Column:
     if isinstance(percentage, Column):
-        percentage_col = percentage
+        _percentage = percentage
     elif isinstance(percentage, (list, tuple)):
         # Convert tuple to list
-        percentage_col = lit(list(percentage))
+        _percentage = lit(list(percentage))
     else:
         # Probably scalar
-        percentage_col = lit(percentage)
+        _percentage = lit(percentage)
 
     if reverse is None:
-        return _invoke_function("percentile_cont", _to_col(col), percentage_col)
+        return _invoke_function("percentile_cont", _to_col(col), _percentage)
     else:
-        return _invoke_function("percentile_cont", _to_col(col), percentage_col, lit(reverse))
+        if isinstance(reverse, bool):
+            _reverse = lit(reverse)
+        elif isinstance(reverse, Column):
+            _reverse = reverse
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={
+                    "arg_name": "reverse",
+                    "arg_type": type(reverse).__name__,
+                },
+            )
+
+        return _invoke_function("percentile_cont", _to_col(col), _percentage, _reverse)
 
 
 percentile_cont.__doc__ = pysparkfuncs.percentile_cont.__doc__
@@ -1013,21 +1039,34 @@ percentile_cont.__doc__ = pysparkfuncs.percentile_cont.__doc__
 def percentile_disc(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
-    reverse: Optional[bool] = None,
+    reverse: Optional[Union[Column, bool]] = None,
 ) -> Column:
     if isinstance(percentage, Column):
-        percentage_col = percentage
+        _percentage = percentage
     elif isinstance(percentage, (list, tuple)):
         # Convert tuple to list
-        percentage_col = lit(list(percentage))
+        _percentage = lit(list(percentage))
     else:
         # Probably scalar
-        percentage_col = lit(percentage)
+        _percentage = lit(percentage)
 
     if reverse is None:
-        return _invoke_function("percentile_disc", _to_col(col), percentage_col)
+        return _invoke_function("percentile_cont", _to_col(col), _percentage)
     else:
-        return _invoke_function("percentile_disc", _to_col(col), percentage_col, lit(reverse))
+        if isinstance(reverse, bool):
+            _reverse = lit(reverse)
+        elif isinstance(reverse, Column):
+            _reverse = reverse
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={
+                    "arg_name": "reverse",
+                    "arg_type": type(reverse).__name__,
+                },
+            )
+
+        return _invoke_function("percentile_disc", _to_col(col), _percentage, _reverse)
 
 
 percentile_disc.__doc__ = pysparkfuncs.percentile_disc.__doc__

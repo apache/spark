@@ -3646,20 +3646,20 @@ def percentile_cont(
 
     if isinstance(percentage, (list, tuple)):
         # A local list
-        percentage = _invoke_function(
+        _percentage = _invoke_function(
             "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
         )._jc
     elif isinstance(percentage, Column):
         # Already a Column
-        percentage = _to_java_column(percentage)
+        _percentage = _to_java_column(percentage)
     else:
         # Probably scalar
-        percentage = _create_column_from_literal(percentage)
+        _percentage = _create_column_from_literal(percentage)
 
     if reverse is None:
-        return _invoke_function("percentile_cont", _to_java_column(col), percentage)
+        return _invoke_function("percentile_cont", _to_java_column(col), _percentage)
     else:
-        return _invoke_function("percentile_cont", _to_java_column(col), percentage, reverse)
+        return _invoke_function("percentile_cont", _to_java_column(col), _percentage, reverse)
 
 
 @try_remote_functions
@@ -3709,20 +3709,20 @@ def percentile_disc(
 
     if isinstance(percentage, (list, tuple)):
         # A local list
-        percentage = _invoke_function(
+        _percentage = _invoke_function(
             "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
         )._jc
     elif isinstance(percentage, Column):
         # Already a Column
-        percentage = _to_java_column(percentage)
+        _percentage = _to_java_column(percentage)
     else:
         # Probably scalar
-        percentage = _create_column_from_literal(percentage)
+        _percentage = _create_column_from_literal(percentage)
 
     if reverse is None:
-        return _invoke_function("percentile_disc", _to_java_column(col), percentage)
+        return _invoke_function("percentile_disc", _to_java_column(col), _percentage)
     else:
-        return _invoke_function("percentile_disc", _to_java_column(col), percentage, reverse)
+        return _invoke_function("percentile_disc", _to_java_column(col), _percentage, reverse)
 
 
 @try_remote_functions
