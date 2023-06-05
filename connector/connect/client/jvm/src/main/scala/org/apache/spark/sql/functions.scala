@@ -872,8 +872,8 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def percentile_disc(e: Column, percentage: Column, reverse: Boolean): Column =
-    Column.fn("percentile_disc", e, percentage, lit(reverse))
+  def percentile_disc(e: Column, percentage: Column, reverse: Column): Column =
+    Column.fn("percentile_disc", e, percentage, reverse)
 
   /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
