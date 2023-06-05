@@ -138,10 +138,6 @@ private[sql] class AvroDeserializer(
           case _ => throw new IncompatibleSchemaException(incompatibleMsg)
         }
 
-      case (LONG, _: DecimalType) => (updater, ordinal, value) =>
-        val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
-        updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
-
       case INT =>
         (logicalDataType, catalystType) match {
           case (IntegerType, IntegerType) => (updater, ordinal, value) =>
@@ -211,6 +207,9 @@ private[sql] class AvroDeserializer(
               logicalDataType.catalogString, catalystType.catalogString, confKey.key)
           case (_: DayTimeIntervalType, DateType) => (updater, ordinal, value) =>
             updater.setInt(ordinal, (value.asInstanceOf[Long] / MILLIS_PER_DAY).toInt)
+          case (_, dt: DecimalType) => (updater, ordinal, value) =>
+            val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
+            updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
           case _ if !preventReadingIncorrectType => (updater, ordinal, value) =>
             updater.setLong(ordinal, value.asInstanceOf[Long])
           case _ => throw new IncompatibleSchemaException(incompatibleMsg)
