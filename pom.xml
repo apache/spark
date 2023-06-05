@@ -105,6 +105,7 @@
     <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
+    <module>connector/protobuf-assembly</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 

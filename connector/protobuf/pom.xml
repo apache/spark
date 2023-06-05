@@ -90,38 +90,6 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <shadeTestJar>false</shadeTestJar>
-          <artifactSet>
-            <includes>
-              <include>com.google.protobuf:*</include>
-            </includes>
-          </artifactSet>
-          <relocations>
-            <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.spark_protobuf.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
-            </relocation>
-          </relocations>
-          <filters>
-            <filter>
-              <artifact>*:*</artifact>
-              <excludes>
-                <exclude>google/protobuf/**</exclude>
-              </excludes>
-            </filter>
-          </filters>
-        </configuration>
-      </plugin>
-    </plugins>
   </build>
   <profiles>
     <profile>
