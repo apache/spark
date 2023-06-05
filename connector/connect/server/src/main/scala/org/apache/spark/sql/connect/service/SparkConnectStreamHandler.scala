@@ -30,12 +30,11 @@ import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connect.SparkConnectHandler
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.{SparkConnectHandler, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{LocalTableScanExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
@@ -44,8 +43,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SparkConnectStreamHandler(val responseObserver: StreamObserver[ExecutePlanResponse])
-    extends SparkConnectHandler[ExecutePlanResponse]
-    with Logging {
+    extends Logging {
 
   def handle(v: ExecutePlanRequest): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
     val sessionHolder = SparkConnectService
@@ -98,7 +96,7 @@ class SparkConnectStreamHandler(val responseObserver: StreamObserver[ExecutePlan
 
   private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(session, this)
+    val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     sendResponse(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
@@ -113,12 +111,16 @@ class SparkConnectStreamHandler(val responseObserver: StreamObserver[ExecutePlan
 
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(session, this)
+    val planner = new SparkConnectHandler(session, this)
     planner.process(
       command = command,
       userId = request.getUserContext.getUserId,
       sessionId = request.getSessionId)
     responseObserver.onCompleted()
+  }
+
+  def sendResponse(response: ExecutePlanResponse): Unit = {
+    responseObserver.onNext(response)
   }
 }
 

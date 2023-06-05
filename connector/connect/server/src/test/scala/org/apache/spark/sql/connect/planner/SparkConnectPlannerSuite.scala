@@ -54,11 +54,11 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   protected val sparkConnectStreamHandler = new SparkConnectStreamHandler(new MockObserver())
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(spark, sparkConnectStreamHandler).transformRelation(rel)
+    new SparkConnectPlanner(spark).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark, sparkConnectStreamHandler).process(
+    new SparkConnectHandler(spark, sparkConnectStreamHandler).process(
       cmd,
       "clientId",
       "sessionId")
@@ -113,7 +113,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
-      new SparkConnectPlanner(None.orNull, sparkConnectStreamHandler)
+      new SparkConnectPlanner(None.orNull)
         .transformRelation(
           proto.Relation.newBuilder
             .setLimit(proto.Limit.newBuilder.setLimit(10))
@@ -124,11 +124,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(None.orNull, sparkConnectStreamHandler)
+      new SparkConnectPlanner(None.orNull)
         .transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
-      new SparkConnectPlanner(None.orNull, sparkConnectStreamHandler)
+      new SparkConnectPlanner(None.orNull)
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
   }

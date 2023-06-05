@@ -24,7 +24,6 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.connect.SparkConnectHandler
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -32,8 +31,7 @@ import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, Form
 
 private[connect] class SparkConnectAnalyzeHandler(
     val responseObserver: StreamObserver[proto.AnalyzePlanResponse])
-    extends SparkConnectHandler[proto.AnalyzePlanResponse]
-    with Logging {
+    extends Logging {
 
   def handle(request: proto.AnalyzePlanRequest): Unit =
     SparkConnectArtifactManager.withArtifactClassLoader {
@@ -43,7 +41,7 @@ private[connect] class SparkConnectAnalyzeHandler(
           .session
       session.withActive {
         val response = process(request, session)
-        sendResponse(response)
+        responseObserver.onNext(response)
         responseObserver.onCompleted()
       }
     }
