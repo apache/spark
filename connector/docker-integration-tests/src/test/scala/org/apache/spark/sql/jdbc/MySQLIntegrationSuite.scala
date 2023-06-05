@@ -258,7 +258,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     val df1 = spark.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = spark.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = spark.read.jdbc(jdbcUrl, "strings", new Properties)
-    df1.write.mode(SaveMode.Append).jdbc(jdbcUrl, "numberscopy", new Properties)
+    df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
