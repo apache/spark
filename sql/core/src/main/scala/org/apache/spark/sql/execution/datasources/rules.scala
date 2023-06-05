@@ -426,7 +426,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i@InsertIntoStatement(table, _, _, query, _, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
