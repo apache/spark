@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connect.SparkConnectHandler
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -42,8 +43,9 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
-    extends Logging {
+class SparkConnectStreamHandler(val responseObserver: StreamObserver[ExecutePlanResponse])
+    extends SparkConnectHandler[ExecutePlanResponse]
+    with Logging {
 
   def handle(v: ExecutePlanRequest): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
     val sessionHolder = SparkConnectService
@@ -98,13 +100,12 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session, this)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
-    responseObserver.onNext(
+    sendResponse(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
-    responseObserver.onNext(
-      SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
+    sendResponse(SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(
+      sendResponse(
         SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
     }
     responseObserver.onCompleted()
@@ -118,10 +119,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       userId = request.getUserContext.getUserId,
       sessionId = request.getSessionId)
     responseObserver.onCompleted()
-  }
-
-  def sendResponse(response: ExecutePlanResponse): Unit = {
-    responseObserver.onNext(response)
   }
 }
 
