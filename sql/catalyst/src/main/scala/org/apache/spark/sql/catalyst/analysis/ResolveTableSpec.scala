@@ -80,7 +80,6 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
       withNewSpec(newTableSpec)
   }
 
-
   /** Helper method to constant-fold expressions of TableSpec options. */
   private def constantFold(expression: Expression): Expression = {
     val logical = Project(Seq(Alias(expression, "col")()), OneRowRelation())
