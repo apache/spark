@@ -401,7 +401,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
         (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
-          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS")=>
+          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
         val newException = e.copy(
           errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
           messageParameters = e.messageParameters ++ Map(
