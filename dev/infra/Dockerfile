@@ -64,8 +64,8 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=2.0.2' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.0.2' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN pypy3 -m pip install numpy 'pandas<=2.0.0' scipy coverage matplotlib
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.0.0' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status
