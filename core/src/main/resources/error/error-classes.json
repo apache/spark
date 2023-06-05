@@ -1527,19 +1527,18 @@
   },
   "MISSING_ATTRIBUTES" : {
     "message" : [
-      "Operator missing attributes."
+      "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>."
     ],
     "subClass" : {
       "RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION" : {
         "message" : [
-          "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>.",
           "Attribute(s) with the same name appear in the operation: <operation>.",
           "Please check if the right attribute(s) are used."
         ]
       },
       "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
         "message" : [
-          "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>."
+          ""
         ]
       }
     }

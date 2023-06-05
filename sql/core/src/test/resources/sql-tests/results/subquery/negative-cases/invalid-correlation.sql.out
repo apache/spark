@@ -73,7 +73,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
   "messageParameters" : {
-    "input" : "\"min(t2a)\",\"t2c\"",
+    "input" : "\"min(t2a)\", \"t2c\"",
     "missingAttributes" : "\"t2b\"",
     "operator" : "!Filter t2c#x IN (list#x [t2b#x])"
   },

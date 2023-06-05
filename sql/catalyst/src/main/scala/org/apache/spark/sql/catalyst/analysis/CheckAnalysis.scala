@@ -645,7 +645,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(",")
-            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(",")
+            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(", ")
 
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
@@ -653,7 +653,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
             if (attrsWithSameName.nonEmpty) {
-              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(",")
+              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(", ")
               o.failAnalysis(
                 errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
                 messageParameters = Map(
