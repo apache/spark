@@ -456,6 +456,10 @@ def assign_cols_by_name(runner_conf):
     )
 
 
+# Read and process a serialized user-defined table function (UDTF) from a socket.
+# It expects the UDTF to be in a specific format and performs various checks to
+# ensure the UDTF is valid. This function also prepares a mapper function for applying
+# the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type):
     num_udtfs = read_int(infile)
     if num_udtfs != 1:
@@ -478,10 +482,11 @@ def read_udtf(pickleSer, infile, eval_type):
     except Exception as e:
         raise RuntimeError(f"Failed to init the UDTF handler: {str(e)}") from None
 
-    # Wrap the eval method.
+    # Validate the UDTF
     if not hasattr(udtf, "eval"):
         raise RuntimeError("Python UDTF must implement the eval method.")
 
+    # Wrap the UDTF and convert the results.
     def wrap_udtf(f, return_type):
         if return_type.needConversion():
             toInternal = return_type.toInternal
@@ -489,15 +494,29 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             return lambda *a: f(*a)
 
-    f = wrap_udtf(getattr(udtf, "eval"), return_type)
+    eval = wrap_udtf(getattr(udtf, "eval"), return_type)
+
+    if hasattr(udtf, "terminate"):
+        terminate = wrap_udtf(getattr(udtf, "terminate"), return_type)
+    else:
+        terminate = None
 
     def mapper(a):
-        results = tuple(f(*[a[o] for o in arg_offsets]))
+        results = tuple(eval(*[a[o] for o in arg_offsets]))
         return results
 
     # Return an iterator of iterators.
     def func(_, it):
-        return map(mapper, it)
+        try:
+            yield from map(mapper, it)
+        finally:
+            if terminate is not None:
+                try:
+                    yield tuple(terminate())
+                except BaseException as e:
+                    raise RuntimeError(
+                        f"Failed to terminate the user defined table function: {str(e)}"
+                    ) from None
 
     ser = BatchedSerializer(CPickleSerializer(), 100)
 

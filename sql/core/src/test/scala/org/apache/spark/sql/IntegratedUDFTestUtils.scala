@@ -192,30 +192,29 @@ object IntegratedUDFTestUtils extends SQLHelper {
   }
 
   private def createPythonUDTF(funcName: String, pythonScript: String): Array[Byte] = {
-    if (shouldTestPythonUDFs) {
-      var binaryPandasFunc: Array[Byte] = null
-      withTempPath { codePath =>
-        Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
-        withTempPath { path =>
-          Process(
-            Seq(
-              pythonExec,
-              "-c",
-              "from pyspark.serializers import CloudPickleSerializer; " +
-                s"f = open('$path', 'wb');" +
-                s"exec(open('$codePath', 'r').read());" +
-                "f.write(CloudPickleSerializer().dumps(" +
-                s"($funcName, returnType)))"),
-            None,
-            "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
-          binaryPandasFunc = Files.readAllBytes(path.toPath)
-        }
-      }
-      assert(binaryPandasFunc != null)
-      binaryPandasFunc
-    } else {
+    if (!shouldTestPythonUDFs) {
       throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
+    var binaryPandasFunc: Array[Byte] = null
+    withTempPath { codePath =>
+      Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+      withTempPath { path =>
+        Process(
+          Seq(
+            pythonExec,
+            "-c",
+            "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              s"exec(open('$codePath', 'r').read());" +
+              "f.write(CloudPickleSerializer().dumps(" +
+              s"($funcName, returnType)))"),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+        binaryPandasFunc = Files.readAllBytes(path.toPath)
+      }
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
   }
 
   private lazy val pythonTableFunc: Array[Byte] = {
@@ -228,17 +227,10 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |  StructField("c", IntegerType()),
         |])
         |class SimpleUDTF:
-        |    def __init__(self):
-        |        self._count = 0
-        |
         |    def eval(self, a: int, b: int):
-        |        self._count += 1
         |        yield a, b, a + b
         |        yield a, b, a - b
         |        yield a, b, b - a
-        |
-        |    def terminate(self):
-        |        self._count = 0
         |""".stripMargin
 
     createPythonUDTF("SimpleUDTF", script)

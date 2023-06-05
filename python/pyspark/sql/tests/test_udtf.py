@@ -17,19 +17,27 @@
 
 import unittest
 
-from typing import Any, Iterator
+from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, AnalysisException
 from pyspark.sql.functions import lit, udtf
 from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class UDTFTestsMixin(ReusedSQLTestCase):
+    def test_simple_udtf(self):
+        class TestUDTF:
+            def eval(self):
+                yield "hello", "world"
 
-    def test_udtf_single_col(self):
+        func = udtf(TestUDTF, returnType="c1: string, c2: string")
+        rows = func().collect()
+        self.assertEqual(rows, [Row(c1="hello", c2="world")])
+
+    def test_udtf_yield_single_row_col(self):
         class TestUDTF:
             def eval(self, a: int):
                 yield a,
@@ -38,7 +46,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         rows = func(lit(1)).collect()
         self.assertEqual(rows, [Row(a=1)])
 
-    def test_udtf_multi_col(self):
+    def test_udtf_yield_multi_cols(self):
         class TestUDTF:
             def eval(self, a: int):
                 yield a, a + 1
@@ -47,7 +55,17 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         rows = func(lit(1)).collect()
         self.assertEqual(rows, [Row(a=1, b=2)])
 
-    def test_udtf_multi_row(self):
+    def test_udtf_yield_multi_rows(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+                yield a + 1,
+
+        func = udtf(TestUDTF, returnType="a: int")
+        rows = func(lit(1)).collect()
+        self.assertEqual(rows, [Row(a=1), Row(a=2)])
+
+    def test_udtf_yield_multi_row_col(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
                 yield a, b, a + b
@@ -57,15 +75,6 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         func = udtf(TestUDTF, returnType="a: int, b: int, c: int")
         rows = func(lit(1), lit(2)).collect()
         self.assertEqual(rows, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
-
-    def test_udtf_zero_row(self):
-        class TestUDTF:
-            def eval(self, a: int):
-                yield
-
-        func = udtf(TestUDTF, returnType="c: int")
-        with self.assertRaisesRegex(Py4JJavaError, "java.lang.NullPointerException"):
-            func(lit(1)).collect()
 
     def test_udtf_decorator(self):
         @udtf(returnType="a: int, b: int")
@@ -86,8 +95,9 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         func = udtf(TestUDTF, returnType="a: int, b: int, c: int")
         self.spark.udtf.register("testUDTF", func)
         df = self.spark.sql("SELECT * FROM testUDTF(1, 2)")
-        rows = df.collect()
-        self.assertEqual(rows, [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)])
+        self.assertEqual(
+            df.collect(), [Row(a=1, b=2, c=3), Row(a=1, b=2, c=-1), Row(a=1, b=2, c=1)]
+        )
 
     def test_udtf_with_lateral_join(self):
         class TestUDTF:
@@ -104,6 +114,76 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             [(0, 1, 1), (0, 1, -1), (1, 2, 3), (1, 2, -1)], schema=["a", "b", "c"]
         )
         self.assertEqual(df.collect(), expected.collect())
+
+    def test_udtf_eval_with_return_stmt(self):
+        class TestUDTF:
+            def eval(self, a: int, b: int):
+                return [(a, a + 1), (b, b + 1)]
+
+        func = udtf(TestUDTF, returnType="a: int, b: int")
+        rows = func(lit(1), lit(2)).collect()
+        self.assertEqual(rows, [Row(a=1, b=2), Row(a=2, b=3)])
+
+    def test_udtf_eval_returning_non_tuple(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a
+
+        func = udtf(TestUDTF, returnType="a: int")
+        with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
+            func(lit(1)).collect()
+
+    def test_udtf_eval_returning_non_generator(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                return (a,)
+
+        func = udtf(TestUDTF, returnType="a: int")
+        with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
+            func(lit(1)).collect()
+
+    def test_udtf_eval_with_no_return(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                ...
+
+        with self.assertRaisesRegex(
+            PythonException, "TypeError: 'NoneType' object is not iterable"
+        ):
+            TestUDTF(lit(1)).collect()
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                return
+
+        with self.assertRaisesRegex(
+            PythonException, "TypeError: 'NoneType' object is not iterable"
+        ):
+            TestUDTF(lit(1)).collect()
+
+    def test_udtf_with_conditional_return(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                if a > 5:
+                    yield a,
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)").collect(),
+            [Row(id=6, a=6), Row(id=7, a=7)],
+        )
+
+    def test_udtf_with_empty_yield(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield
+
+        with self.assertRaisesRegex(Py4JJavaError, "java.lang.NullPointerException"):
+            TestUDTF(lit(1)).collect()
 
     def test_udtf_with_none_output(self):
         @udtf(returnType="a: int")
@@ -130,6 +210,28 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         df = self.spark.sql("SELECT * FROM testUDTF(null)")
         self.assertEqual(df.collect(), [Row(a=None)])
 
+    def test_udtf_with_wrong_num_output(self):
+        err_msg = (
+            "java.lang.IllegalStateException: Input row doesn't have expected number of "
+            + "values required by the schema."
+        )
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+
+        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+            TestUDTF(lit(1)).collect()
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+            TestUDTF(lit(1)).collect()
+
     def test_udtf_init(self):
         @udtf(returnType="a: int, b: int, c: string")
         class TestUDTF:
@@ -143,18 +245,82 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         self.assertEqual(rows, [Row(a=1, b=2, c="test")])
 
     def test_udtf_terminate(self):
+        @udtf(returnType="key: string, value: float")
+        class TestUDTF:
+            def __init__(self):
+                self._count = 0
+                self._sum = 0
+
+            def eval(self, x: int):
+                if x > 0:
+                    self._count += 1
+                    self._sum += x
+                    yield "input", float(x)
+
+            def terminate(self):
+                yield "count", float(self._count)
+                yield "avg", self._sum / self._count
+
+        self.assertEqual(
+            TestUDTF(lit(1)).collect(),
+            [Row(key="input", value=1), Row(key="count", value=1.0), Row(key="avg", value=1.0)],
+        )
+
+        with self.assertRaisesRegex(PythonException, "division by zero"):
+            TestUDTF(lit(0)).collect()
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        df = self.spark.sql(
+            "SELECT id, key, value FROM range(0, 10, 1, 2), "
+            "LATERAL test_udtf(id) WHERE key != 'input'"
+        )
+        self.assertEqual(
+            df.collect(),
+            [
+                Row(id=0, key="count", value=4.0),
+                Row(id=0, key="avg", value=2.5),
+                Row(id=0, key="count", value=5.0),
+                Row(id=0, key="avg", value=7.0),
+            ],
+        )
+
+    def test_terminate_with_exceptions(self):
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a, a + 1
 
             def terminate(self):
-                raise ValueError("terminate")
+                raise ValueError("terminate error")
 
-        with self.assertRaisesRegex(PythonException, "Failed to terminate UDTF: terminate"):
+        with self.assertRaisesRegex(
+            PythonException, "Failed to terminate the user defined table function: terminate error"
+        ):
             TestUDTF(lit(1)).collect()
 
-    # Invalid cases
+    def test_nondeterministic_udtf(self):
+        import random
+
+        class RandomUDTF:
+            def eval(self, a: int):
+                yield a * int(random.random() * 100),
+
+        random_udtf = udtf(RandomUDTF, returnType="x: int").asNondeterministic()
+        # TODO: support non-deterministic UDTFs
+        with self.assertRaisesRegex(AnalysisException, "nondeterministic expressions"):
+            random_udtf(lit(1)).collect()
+
+    def test_udtf_with_nondeterministic_input(self):
+        from pyspark.sql.functions import rand
+
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a + 1,
+
+        # TODO: support non-deterministic UDTFs
+        with self.assertRaisesRegex(AnalysisException, "nondeterministic expressions"):
+            TestUDTF(rand(0) * 100).collect()
 
     def test_udtf_no_eval(self):
         @udtf(returnType="a: int, b: int")
@@ -165,29 +331,19 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         with self.assertRaisesRegex(PythonException, "Python UDTF must implement the eval method"):
             TestUDTF(lit(1)).collect()
 
-    def test_udtf_eval_returning_non_tuple(self):
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a
+    def test_udtf_with_no_handler_class(self):
+        err_msg = "the function handler must be a class"
+        with self.assertRaisesRegex(TypeError, err_msg):
 
-        func = udtf(TestUDTF, returnType="a: int")
-        with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
-            func(lit(1)).collect()
-
-    def test_udtf_eval_with_return_stmt(self):
-        class TestUDTF:
-            def eval(self, a: int):
-                return a,
-
-        func = udtf(TestUDTF, returnType="a: int")
-        with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
-            func(lit(1)).collect()
-
-    def test_udtf_no_handler(self):
-        with self.assertRaisesRegex(TypeError, "the function handler must be a class"):
             @udtf(returnType="a: int")
-            def eval(a: int):
+            def test_udtf(a: int):
                 yield a,
+
+        def test_udtf(a: int):
+            yield a
+
+        with self.assertRaisesRegex(TypeError, err_msg):
+            udtf(test_udtf, returnType="a: int")
 
 
 class UDTFTests(UDTFTestsMixin, ReusedSQLTestCase):

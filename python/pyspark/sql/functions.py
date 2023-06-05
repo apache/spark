@@ -11160,8 +11160,9 @@ def udf(
 
 
 def udtf(
-    f: Optional[Type] = None,
-    returnType: Union[StructType, str] = None,
+    cls: Optional[Type] = None,
+    *,
+    returnType: Union[StructType, str],
 ) -> Union[UserDefinedTableFunction, functools.partial]:
     """Creates a user defined table function (UDTF).
 
@@ -11169,7 +11170,7 @@ def udtf(
 
     Parameters
     ----------
-    f : class
+    cls : class
         the Python user-defined table function handler class.
     returnType : :class:`pyspark.sql.types.StructType` or str
         the return type of the user-defined table function. The value can be either a
@@ -11177,29 +11178,30 @@ def udtf(
 
     Examples
     --------
-    >>> # Implement the UDTF class
+    Implement the UDTF class.
     >>> class TestUDTF:
-    >>>     def eval(self, *args):
-    >>>         yield "hello", "world"
-    >>>
-    >>> # Create the UDTF
+    ...     def eval(self, *args: Any):
+    ...         yield "hello", "world"
+
+    Create the UDTF
     >>> from pyspark.sql.functions import udtf
     >>> test_udtf = udtf(TestUDTF, returnType="c1: string, c2: string")
-    >>>
-    >>> # Create the UDTF using the decorator
+
+    Create the UDTF using the decorator
     >>> @udtf(returnType="c1: int, c2: int")
-    >>> class PlusOne:
-    >>>     def eval(self, x: int):
-    >>>         yield x, x + 1
-    >>>
-    >>> # Invoke the UDTF
+    ... class PlusOne:
+    ...     def eval(self, x: int):
+    ...         yield x, x + 1
+
+    Invoke the UDTF
     >>> test_udtf().show()
     +-----+-----+
     |   c1|   c2|
     +-----+-----+
     |hello|world|
     +-----+-----+
-    >>> # Invoke the UDTF with parameters
+
+    Invoke the UDTF with parameters
     >>> from pyspark.sql.functions import lit
     >>> PlusOne(lit(1)).show()
     +---+---+
@@ -11215,8 +11217,8 @@ def udtf(
 
     >>> import random
     >>> class RandomUDTF:
-    >>>     def eval(self, a: int):
-    >>>         yield a * int(random.random() * 100)
+    ...     def eval(self, a: int):
+    ...         yield a * int(random.random() * 100),
     >>> random_udtf = udtf(RandomUDTF, "r: int").asNondeterministic()
 
     User-defined table functions are considered opaque to the optimizer by default.
@@ -11229,10 +11231,10 @@ def udtf(
 
     User-defined table functions do not accept keyword arguments on the calling side.
     """
-    if f is None:
+    if cls is None:
         return functools.partial(_create_udtf, returnType=returnType)
     else:
-        return _create_udtf(f=f, returnType=returnType)
+        return _create_udtf(cls=cls, returnType=returnType)
 
 
 def _test() -> None:

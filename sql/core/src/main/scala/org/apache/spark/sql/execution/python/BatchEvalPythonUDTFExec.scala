@@ -31,6 +31,12 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A physical plan that evaluates a [[PythonUDTF]].
+ *
+ * @param udtf the user-defined Python function
+ * @param requiredChildOutput the required output of the child plan. It's used for omitting data
+ *                            generation that will be discarded next by a projection.
+ * @param resultAttrs the output schema of the Python UDTF.
+ * @param child the child plan
  */
 case class BatchEvalPythonUDTFExec(
     udtf: PythonUDTF,
