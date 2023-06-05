@@ -1533,7 +1533,6 @@ class WriteOperation(LogicalPlan):
             f"options: '{self.options}'<br />"
             f"</li></ul>"
         )
-        pass
 
 
 class WriteOperationV2(LogicalPlan):
