@@ -278,7 +278,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i@InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
     _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
