@@ -137,6 +137,11 @@ private[sql] class AvroDeserializer(
             updater.setBoolean(ordinal, value.asInstanceOf[Boolean])
           case _ => throw new IncompatibleSchemaException(incompatibleMsg)
         }
+
+      case (LONG, _: DecimalType) => (updater, ordinal, value) =>
+        val d = avroType.getLogicalType.asInstanceOf[CustomDecimal]
+        updater.setDecimal(ordinal, Decimal(value.asInstanceOf[Long], d.precision, d.scale))
+
       case INT =>
         (logicalDataType, catalystType) match {
           case (IntegerType, IntegerType) => (updater, ordinal, value) =>
