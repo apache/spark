@@ -1655,6 +1655,22 @@ class PlanGenerationTestSuite
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
+  temporalFunctionTest("unix_date") {
+    fn.unix_date(fn.col("s"))
+  }
+
+  temporalFunctionTest("unix_seconds") {
+    fn.unix_seconds(fn.col("s"))
+  }
+
+  temporalFunctionTest("unix_millis") {
+    fn.unix_millis(fn.col("s"))
+  }
+
+  temporalFunctionTest("unix_micros") {
+    fn.unix_micros(fn.col("s"))
+  }
+
   temporalFunctionTest("trunc") {
     fn.trunc(fn.col("d"), "mm")
   }
