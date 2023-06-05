@@ -286,6 +286,21 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Create the temporary table if the table does not exist.
+   * @param statement
+   * @param tableName
+   * @param strSchema
+   * @param options
+   */
+  def createTempTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    statement.executeUpdate(s"CREATE TEMPORARY TABLE $tableName ($strSchema)")
+  }
+
+  /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can
    * override this method to return a query that works best in a particular database.
    * @param table  The name of the table.
