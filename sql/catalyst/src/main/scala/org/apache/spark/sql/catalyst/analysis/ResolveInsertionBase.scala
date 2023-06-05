@@ -28,12 +28,19 @@ abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
   def resolver: Resolver = conf.resolver
 
   /** Add a project to use the table column names for INSERT INTO BY NAME */
-  protected def createProjectForByNameQuery(i: InsertIntoStatement): LogicalPlan = {
+  protected def createProjectForByNameQuery(
+      tblName: String,
+      i: InsertIntoStatement): LogicalPlan = {
     SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
 
     if (i.userSpecifiedCols.size != i.query.output.size) {
-      throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
-        i.userSpecifiedCols.size, i.query.output.size, i.query)
+      if (i.userSpecifiedCols.size > i.query.output.size) {
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+          tblName, i.userSpecifiedCols, i.query)
+      } else {
+        throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
+          tblName, i.userSpecifiedCols, i.query)
+      }
     }
     val projectByName = i.userSpecifiedCols.zip(i.query.output)
       .map { case (userSpecifiedCol, queryOutputCol) =>
