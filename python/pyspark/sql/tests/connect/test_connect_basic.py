@@ -626,11 +626,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_streaming_local_relation(self):
         import random
         import string
+
         threshold = 1024 * 1024
         with self.sql_conf({"spark.sql.session.localRelationCacheThreshold": threshold}):
             suffix = "abcdef"
             letters = string.ascii_lowercase
-            str = ''.join(random.choice(letters) for i in range(threshold)) + suffix
+            str = "".join(random.choice(letters) for i in range(threshold)) + suffix
             data = [[0, str], [1, str]]
             cdf = self.connect.createDataFrame(data, ["a", "b"])
             self.assert_eq(cdf.count(), len(data))
