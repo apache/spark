@@ -48,16 +48,6 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
-  // Helper methods for accessing private methods/fields
-  private val _idxToBatches =
-    PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
-
-  private def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
-    val idxToBatches = result invokePrivate _idxToBatches()
-
-    // Sort by key to get stable results.
-    idxToBatches.toSeq.sortBy(_._1).map(_._2)
-  }
 
   // Spark Result
   test("spark result schema") {
@@ -904,6 +894,17 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset result destructive iterator") {
+    // Helper methods for accessing private field `idxToBatches` from SparkResult
+    val _idxToBatches =
+      PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+
+    def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
+      val idxToBatches = result invokePrivate _idxToBatches()
+
+      // Sort by key to get stable results.
+      idxToBatches.toSeq.sortBy(_._1).map(_._2)
+    }
+
     val df = spark
       .range(0, 10, 1, 10)
       .filter("id > 5 and id < 9")
