@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_IDENTIFIER
@@ -61,7 +62,7 @@ object ResolveIdentifierClause extends Rule[LogicalPlan] {
               "expr" -> expr.sql))
           case other =>
             // Parse the identifier string to name parts.
-            UnresolvedAttribute(other.toString).nameParts
+            CatalystSqlParser.parseMultipartIdentifier(other.toString)
         }
     }
   }
