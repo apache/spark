@@ -1503,7 +1503,7 @@
   },
   "LOCAL_MUST_WITH_SCHEMA_FILE" : {
     "message" : [
-      "`Local` must be used together with the schema of `file`, but got: `<actualSchema>`"
+      "LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`."
     ]
   },
   "LOCATION_ALREADY_EXISTS" : {
