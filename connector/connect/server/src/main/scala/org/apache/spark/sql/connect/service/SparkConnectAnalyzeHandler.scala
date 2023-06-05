@@ -30,7 +30,7 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 
 private[connect] class SparkConnectAnalyzeHandler(
-    val responseObserver: StreamObserver[proto.AnalyzePlanResponse])
+    responseObserver: StreamObserver[proto.AnalyzePlanResponse])
     extends Logging {
 
   def handle(request: proto.AnalyzePlanRequest): Unit =
