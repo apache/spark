@@ -4209,6 +4209,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_AVRO_ALLOW_INCOMPATIBLE_SCHEMA =
+    buildConf("spark.sql.legacy.avro.allowIncompatibleSchema")
+      .internal()
+      .doc("When set to false, if types in Avro are encoded in the same format, but " +
+        "the type in the Avro schema explicitly says that the data types are different, " +
+        "reject reading the data type in the format to avoid returning incorrect results. " +
+        "When set to true, it restores the legacy behavior of allow reading the data in the" +
+        " format, which may return incorrect results.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME =
     buildConf("spark.sql.legacy.v1IdentifierNoCatalog")
       .internal()
