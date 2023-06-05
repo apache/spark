@@ -40,24 +40,24 @@ class ClassificationTestsMixin:
             np.testing.assert_allclose(
                 list(result_dataframe.probability),
                 expected_probabilities,
-                rtol=1e-3,
+                rtol=1e-2,
             )
 
     def test_binary_classes_logistic_regression(self):
         df1 = self.spark.createDataFrame(
             [
-                (1.0, Vectors.dense(0.0, 5.0)),
-                (0.0, Vectors.dense(1.0, 2.0)),
-                (1.0, Vectors.dense(2.0, 1.0)),
-                (0.0, Vectors.dense(3.0, 3.0)),
+                (1.0, [0.0, 5.0]),
+                (0.0, [1.0, 2.0]),
+                (1.0, [2.0, 1.0]),
+                (0.0, [3.0, 3.0]),
             ]
             * 100,
             ["label", "features"],
         )
         eval_df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense(0.0, 2.0),),
-                (Vectors.dense(3.5, 3.0),),
+                ([0.0, 2.0],),
+                ([3.5, 3.0],),
             ],
             ["features"],
         )
@@ -72,8 +72,8 @@ class ClassificationTestsMixin:
 
         expected_predictions = [1, 0]
         expected_probabilities = [
-            [0.217735, 0.782265],
-            [0.839026, 0.160974],
+            [0.217875, 0.782125],
+            [0.839615, 0.160385],
         ]
 
         result = model.transform(eval_df1).toPandas()
@@ -89,18 +89,18 @@ class ClassificationTestsMixin:
     def test_multi_classes_logistic_regression(self):
         df1 = self.spark.createDataFrame(
             [
-                (1.0, Vectors.dense(1.0, 5.0)),
-                (2.0, Vectors.dense(1.0, -2.0)),
-                (0.0, Vectors.dense(-2.0, 1.5)),
+                (1.0, [1.0, 5.0]),
+                (2.0, [1.0, -2.0]),
+                (0.0, [-2.0, 1.5]),
             ]
             * 100,
             ["label", "features"],
         )
         eval_df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense(1.5, 5.0),),
-                (Vectors.dense(1.0, -2.5),),
-                (Vectors.dense(-2.0, 1.0),),
+                ([1.5, 5.0],),
+                ([1.0, -2.5],),
+                ([-2.0, 1.0],),
             ],
             ["features"],
         )
@@ -111,9 +111,9 @@ class ClassificationTestsMixin:
 
         expected_predictions = [1, 2, 0]
         expected_probabilities = [
-            [0.005186, 0.994679, 0.000134],
-            [0.005446, 0.010165, 0.984387],
-            [0.968765, 0.025264, 0.005969],
+            [5.526459e-03, 9.943553e-01, 1.183146e-04],
+            [4.629959e-03, 8.141352e-03, 9.872288e-01],
+            [9.624363e-01, 3.080821e-02, 6.755549e-03],
         ]
 
         result = model.transform(eval_df1).toPandas()

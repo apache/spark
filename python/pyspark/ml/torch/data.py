@@ -46,7 +46,11 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     sparse_array[value["indices"]] = value["values"]
                     return sparse_array
 
-        elif field_type in ["float", "double", "int", "bigint", "smallint"]:
+        elif field_type in [
+            "float", "double", "int", "bigint", "smallint",
+            "array<float>", "array<double>",
+            "array<int>", "array<bigint>", "array<smallint>",
+        ]:
 
             def converter(value: Any) -> Any:
                 return value
