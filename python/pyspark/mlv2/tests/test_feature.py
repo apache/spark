@@ -24,7 +24,6 @@ from pyspark.sql import SparkSession
 
 
 class FeatureTestsMixin:
-
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [

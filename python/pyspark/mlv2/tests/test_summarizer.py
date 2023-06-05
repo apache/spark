@@ -24,7 +24,6 @@ from pyspark.sql import SparkSession
 
 
 class SummarizerTestsMixin:
-
     def test_summarize_dataframe(self):
         df1 = self.spark.createDataFrame(
             [
