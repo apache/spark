@@ -1656,19 +1656,19 @@ class PlanGenerationTestSuite
   }
 
   temporalFunctionTest("unix_date") {
-    fn.unix_date(fn.col("s"))
+    fn.unix_date(fn.to_date(fn.col("s"), "yyyy-MM-dd"))
   }
 
   temporalFunctionTest("unix_seconds") {
-    fn.unix_seconds(fn.col("s"))
+    fn.unix_seconds(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
   }
 
   temporalFunctionTest("unix_millis") {
-    fn.unix_millis(fn.col("s"))
+    fn.unix_millis(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
   }
 
   temporalFunctionTest("unix_micros") {
-    fn.unix_micros(fn.col("s"))
+    fn.unix_micros(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
   }
 
   temporalFunctionTest("trunc") {

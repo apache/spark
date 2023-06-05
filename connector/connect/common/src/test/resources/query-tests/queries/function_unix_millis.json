@@ -15,8 +15,17 @@
       "unresolvedFunction": {
         "functionName": "unix_millis",
         "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "s"
+          "unresolvedFunction": {
+            "functionName": "to_timestamp",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "s"
+              }
+            }, {
+              "literal": {
+                "string": "yyyy-MM-dd HH:mm:ss.SSSS"
+              }
+            }]
           }
         }]
       }

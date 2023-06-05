@@ -15,8 +15,17 @@
       "unresolvedFunction": {
         "functionName": "unix_date",
         "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "s"
+          "unresolvedFunction": {
+            "functionName": "to_date",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "s"
+              }
+            }, {
+              "literal": {
+                "string": "yyyy-MM-dd"
+              }
+            }]
           }
         }]
       }
