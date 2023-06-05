@@ -389,15 +389,15 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     }
 
     // Create a project if this INSERT has a user-specified column list.
-    val isByName = insert.userSpecifiedCols.nonEmpty
-    val query = if (isByName) {
+    val hasColumnList = insert.userSpecifiedCols.nonEmpty
+    val query = if (hasColumnList) {
       createProjectForByNameQuery(insert)
     } else {
       insert.query
     }
     val newQuery = try {
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = isByName || insert.byName, conf,
+        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
         supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&

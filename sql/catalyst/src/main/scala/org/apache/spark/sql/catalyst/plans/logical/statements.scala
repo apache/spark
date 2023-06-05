@@ -165,9 +165,9 @@ case class QualifiedColType(
  *                             would have Map('a' -> Some('1'), 'b' -> None).
  * @param ifPartitionNotExists If true, only write if the partition does not exist.
  *                             Only valid for static partitions.
- * @param byName               If true, reorder the data columns to match the column names of the target table.
- *                             the field name of the datasource to ensure that the field writing
- *                             order matches the name
+ * @param byName               If true, reorder the data columns to match the column names of the
+ *                             target table. The field name of the datasource to ensure that the
+ *                             field writing order matches the name
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
