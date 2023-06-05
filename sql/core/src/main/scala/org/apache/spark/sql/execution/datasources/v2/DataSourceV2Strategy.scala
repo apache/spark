@@ -102,13 +102,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       location, session.sharedState.hadoopConf)
   }
 
-  private def qualifyLocInTableSpec(
-      tableSpec: TableSpec, options: UnresolvedOptionsList): TableSpec = {
-    val resolvedTableSpec = tableSpec match {
-      case u: UnresolvedTableSpec => ResolveTableSpec(u, options)
-      case r: ResolvedTableSpec => r
-    }
-    resolvedTableSpec.withNewLocation(resolvedTableSpec.location.map(makeQualifiedDBObjectPath(_)))
+  private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
+    tableSpec.withNewLocation(tableSpec.location.map(makeQualifiedDBObjectPath(_)))
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -186,17 +181,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         newSchema, catalog.asTableCatalog, ident, "CREATE TABLE")
 
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
-        partitioning, qualifyLocInTableSpec(tableSpec, unresolvedOptionsList), ifNotExists) :: Nil
+        partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec,
         options, ifNotExists, true, unresolvedOptionsList) =>
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(staging, ident, parts, query,
-            qualifyLocInTableSpec(tableSpec, unresolvedOptionsList), options, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
-            qualifyLocInTableSpec(tableSpec, unresolvedOptionsList), options, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>
@@ -216,12 +211,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,
-            qualifyLocInTableSpec(
-              tableSpec, unresolvedOptionsList), orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
           ReplaceTableExec(catalog.asTableCatalog, ident, v2Columns, parts,
-            qualifyLocInTableSpec(
-              tableSpec, unresolvedOptionsList), orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
@@ -233,7 +226,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             ident,
             parts,
             query,
-            qualifyLocInTableSpec(tableSpec, unresolvedOptionsList),
+            qualifyLocInTableSpec(tableSpec),
             options,
             orCreate = orCreate,
             invalidateCache) :: Nil
@@ -243,7 +236,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             ident,
             parts,
             query,
-            qualifyLocInTableSpec(tableSpec, unresolvedOptionsList),
+            qualifyLocInTableSpec(tableSpec),
             options,
             orCreate = orCreate,
             invalidateCache) :: Nil

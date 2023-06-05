@@ -437,6 +437,12 @@ trait V2CreateTablePlan extends LogicalPlan {
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 }
 
+/** A trait used for logical plan nodes that create or replace new table specifications. */
+trait HasTableSpec extends LogicalPlan {
+  def tableSpec: TableSpec
+  def unresolvedOptionsList: UnresolvedOptionsList
+}
+
 /**
  * Create a new table with a v2 catalog.
  */
@@ -447,7 +453,7 @@ case class CreateTable(
     tableSpec: TableSpec,
     ignoreIfExists: Boolean,
     unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends UnaryCommand with V2CreateTablePlan {
+  extends UnaryCommand with V2CreateTablePlan with HasTableSpec {
 
   override def child: LogicalPlan = name
 
@@ -471,7 +477,7 @@ case class CreateTableAsSelect(
     ignoreIfExists: Boolean,
     isAnalyzed: Boolean = false,
     unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends V2CreateTableAsSelectPlan {
+  extends V2CreateTableAsSelectPlan with HasTableSpec {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
@@ -501,7 +507,7 @@ case class ReplaceTable(
     tableSpec: TableSpec,
     orCreate: Boolean,
     unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends UnaryCommand with V2CreateTablePlan {
+  extends UnaryCommand with V2CreateTablePlan with HasTableSpec {
 
   override def child: LogicalPlan = name
 
@@ -528,7 +534,7 @@ case class ReplaceTableAsSelect(
     orCreate: Boolean,
     isAnalyzed: Boolean = false,
     unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends V2CreateTableAsSelectPlan {
+  extends V2CreateTableAsSelectPlan with HasTableSpec {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 

@@ -21,6 +21,8 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -30,34 +32,54 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * table specifications wherein these OPTIONS list values are represented as strings instead, for
  * convenience.
  */
-object ResolveTableSpec {
-  def apply(u: UnresolvedTableSpec, opts: UnresolvedOptionsList): ResolvedTableSpec = {
-    val newOptions: Seq[(String, String)] = opts.options.map {
-      case (key: String, null) =>
-        (key, null)
-      case (key: String, value: Expression) =>
-        val newValue: String = try {
-          constantFold(value) match {
-            case lit: Literal =>
-              lit.toString
-            case _ =>
+object ResolveTableSpec extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsAnyPattern(COMMAND), ruleId) {
+      case t: CreateTable =>
+        resolveTableSpec(t, s => t.copy(tableSpec = s))
+      case t: CreateTableAsSelect =>
+        resolveTableSpec(t, s => t.copy(tableSpec = s))
+      case t: ReplaceTable =>
+        resolveTableSpec(t, s => t.copy(tableSpec = s))
+      case t: ReplaceTableAsSelect =>
+        resolveTableSpec(t, s => t.copy(tableSpec = s))
+    }
+  }
+
+  /** Helper method to resolve the table specification within a logical plan. */
+  private def resolveTableSpec(
+      t: HasTableSpec, withNewSpec: TableSpec => LogicalPlan): LogicalPlan = t.tableSpec match {
+    case _: ResolvedTableSpec =>
+      t
+    case u: UnresolvedTableSpec =>
+      val newOptions: Seq[(String, String)] = t.unresolvedOptionsList.options.map {
+        case (key: String, null) =>
+          (key, null)
+        case (key: String, value: Expression) =>
+          val newValue: String = try {
+            constantFold(value) match {
+              case lit: Literal =>
+                lit.toString
+              case _ =>
+                throw QueryCompilationErrors.optionMustBeConstant(key)
+            }
+          } catch {
+            case _: SparkThrowable | _: java.lang.RuntimeException =>
               throw QueryCompilationErrors.optionMustBeConstant(key)
           }
-        } catch {
-          case _: SparkThrowable | _: java.lang.RuntimeException =>
-            throw QueryCompilationErrors.optionMustBeConstant(key)
-        }
-        (key, newValue)
-    }
-    ResolvedTableSpec(
-      properties = u.properties,
-      provider = u.provider,
-      options = newOptions.toMap,
-      location = u.location,
-      comment = u.comment,
-      serde = u.serde,
-      external = u.external)
+          (key, newValue)
+      }
+      val newTableSpec = ResolvedTableSpec(
+        properties = u.properties,
+        provider = u.provider,
+        options = newOptions.toMap,
+        location = u.location,
+        comment = u.comment,
+        serde = u.serde,
+        external = u.external)
+      withNewSpec(newTableSpec)
   }
+
 
   /** Helper method to constant-fold expressions of TableSpec options. */
   private def constantFold(expression: Expression): Expression = {
