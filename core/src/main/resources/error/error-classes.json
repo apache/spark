@@ -2154,7 +2154,7 @@
       },
       "WITH_SUGGESTION" : {
         "message" : [
-          "Enable it by setting `spark.sql.defaultColumn.enabled` to `true`."
+          "Enable it by setting \"spark.sql.defaultColumn.enabled\" to \"true\"."
         ]
       }
     }
