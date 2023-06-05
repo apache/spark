@@ -36,19 +36,22 @@ case class SimpleCost(value: Long) extends Cost {
 }
 
 /**
- * A skew join aware implementation of [[CostEvaluator]], which counts the number of
- * [[ShuffleExchangeLike]] nodes and skew join nodes in the plan.
+ * A skew aware implementation of [[CostEvaluator]], which counts the number of
+ * skew join nodes and skew [[AQEShuffleReadExec]] nodes in the plan.
  */
-case class SimpleCostEvaluator(forceOptimizeSkewed: Boolean) extends CostEvaluator {
+case class SimpleCostEvaluator(
+    forceOptimizeSkewedJoin: Boolean,
+    forceOptimizeSkewedShuffleRead: Boolean)
+    extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
     val numShuffles = plan.collect {
       case s: ShuffleExchangeLike => s
     }.size
 
-    if (forceOptimizeSkewed) {
+    if (forceOptimizeSkewedJoin || forceOptimizeSkewedShuffleRead) {
       val numSkews = plan.collect {
-        case j: ShuffledJoin if j.isSkewJoin => j
-        case r: AQEShuffleReadExec if r.hasSkewedPartition => r
+        case j: ShuffledJoin if forceOptimizeSkewedJoin && j.isSkewJoin => j
+        case r: AQEShuffleReadExec if forceOptimizeSkewedShuffleRead && r.hasSkewedPartition => r
       }.size
       // We put `-numSkews` in the first 32 bits of the long value, so that it's compared first
       // when comparing the cost, and larger `numSkews` means lower cost.
