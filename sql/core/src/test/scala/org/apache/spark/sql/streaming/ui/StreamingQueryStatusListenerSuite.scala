@@ -279,7 +279,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     val startEvent1 = new StreamingQueryListener.QueryStartedEvent(
       id1, runId1, "test1", "2023-01-01T20:50:00.800Z")
     listener.onQueryStarted(startEvent1)
-    val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None, None)
+    val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None)
     listener.onQueryTerminated(terminateEvent1)
 
     // failure (has exception) case
@@ -289,7 +289,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       id2, runId2, "test2", "2023-01-02T20:54:20.827Z")
     listener.onQueryStarted(startEvent2)
     val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(
-      id2, runId2, Option("ExampleException"), Option("EXAMPLE_ERROR_CLASS"))
+      id2, runId2, Option("ExampleException"))
     listener.onQueryTerminated(terminateEvent2)
 
     // check results
