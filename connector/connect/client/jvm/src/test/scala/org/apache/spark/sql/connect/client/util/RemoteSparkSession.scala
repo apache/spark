@@ -18,16 +18,18 @@ package org.apache.spark.sql.connect.client.util
 
 import java.io.{BufferedOutputStream, File}
 import java.util.concurrent.TimeUnit
-import scala.io.Source
-import org.scalatest.BeforeAndAfterAll
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.io.Source
+
+import org.scalatest.BeforeAndAfterAll
 import sys.process._
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
