@@ -30,7 +30,7 @@ _META_DATA_FILE_NAME = "metadata.json"
 
 def _get_metadata_to_save(
         instance: "Params",
-        extraMetadata: Optional[Dict[str, Any]] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Extract metadata of Estimator / Transformer / Model / Evaluator instance.
@@ -40,26 +40,26 @@ def _get_metadata_to_save(
 
     # User-supplied param values
     params = instance._paramMap
-    jsonParams = {}
+    json_params = {}
     for p in params:
-        jsonParams[p.name] = params[p]
+        json_params[p.name] = params[p]
 
     # Default param values
-    jsonDefaultParams = {}
+    json_default_params = {}
     for p in instance._defaultParamMap:
-        jsonDefaultParams[p.name] = instance._defaultParamMap[p]
+        json_default_params[p.name] = instance.json_default_params[p]
 
     metadata = {
         "class": cls,
         "timestamp": int(round(time.time() * 1000)),
         "sparkVersion": pyspark_version,
         "uid": uid,
-        "paramMap": jsonParams,
-        "defaultParamMap": jsonDefaultParams,
+        "paramMap": json_params,
+        "defaultParamMap": json_default_params,
         "type": "spark_connect",
     }
-    if extraMetadata is not None:
-        metadata.update(extraMetadata)
+    if extra_metadata is not None:
+        metadata.update(extra_metadata)
 
     return metadata
 
@@ -86,15 +86,23 @@ class ParamsReadWrite:
         """
         return _get_metadata_to_save(self)
 
+    # TODO: support saving to cloud storage file system.
     def saveToLocal(self, path):
+        """
+        Save model to provided local path.
+        """
         metadata = self._get_metadata()
 
         os.makedirs(path)
         with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
             json.dump(metadata, fp)
 
+    # TODO: support loading from cloud storage file system.
     @classmethod
     def loadFromLocal(cls, path):
+        """
+        Load model from provided local path.
+        """
         with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
             metadata = json.load(fp)
 
@@ -115,4 +123,37 @@ class ParamsReadWrite:
             paramValue = metadata["defaultParamMap"][paramName]
             instance._setDefault(**{paramName: paramValue})
 
+        return instance
+
+
+class ModelReadWrite:
+
+    def _get_core_model_filename(self):
+        """
+        Returns the name of the file for saving the core model.
+        """
+        raise NotImplementedError()
+
+    def _save_core_model(self, path):
+        """
+        Save the core model to provided path.
+        Different pyspark models contain different type of core model,
+        e.g. for LogisticRegressionModel, its core model is a pytorch model.
+        """
+        raise NotImplementedError()
+
+    def _load_core_model(self, path):
+        """
+        Load the core model from provided path.
+        """
+        raise NotImplementedError()
+
+    def saveToLocal(self, path):
+        super(ModelReadWrite, self).save(path)
+        self._save_core_model(os.path.join(path, self._get_core_model_filename()))
+
+    @classmethod
+    def loadFromLocal(cls, path):
+        instance = super(ModelReadWrite, cls).loadFromLocal(path)
+        instance._load_core_model(os.path.join(path, instance._get_core_model_filename()))
         return instance
