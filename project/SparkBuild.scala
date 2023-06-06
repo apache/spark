@@ -975,9 +975,7 @@ object SparkProtobufAssembly {
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar" ||
-          name.startsWith("gson-") || name.startsWith("error_prone_annotations-") ||
-          name.startsWith("jsr305-") || name.startsWith("j2objc-annotations-")
+          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar"
       }
     },
 
