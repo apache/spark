@@ -27,7 +27,7 @@ from typing import cast
 
 from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
-from pyspark.sql import Column
+from pyspark.sql import Column, Row
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
 from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
 from pyspark.sql.types import (
@@ -348,6 +348,13 @@ class ScalarPandasUDFTestsMixin:
             int_f = pandas_udf(lambda x: x, IntegerType(), udf_type)
             res = df.select(int_f(col("int")))
             self.assertEqual(df.collect(), res.collect())
+            str_f = pandas_udf(lambda x: x.astype(str), StringType(), udf_type)
+            res = df.select(str_f(col("int")))
+            expected = (
+                "[Row(<lambda>(int)='<NA>'), Row(<lambda>(int)='2'), "
+                "Row(<lambda>(int)='3'), Row(<lambda>(int)='4')]"
+            )
+            self.assertEqual(expected, res.collect())
 
     def test_vectorized_udf_null_long(self):
         data = [(None,), (2,), (3,), (4,)]
