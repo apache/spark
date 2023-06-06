@@ -1688,6 +1688,25 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("insert table: by name unsupported case") {
+    checkError(
+      exception = parseException("INSERT OVERWRITE TABLE t1 BY NAME SELECT * FROM tmp_view"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map(
+        "error" -> "'BY'",
+        "hint" -> "")
+    )
+
+    checkError(
+      exception = parseException(
+        "INSERT INTO TABLE t1 BY NAME (c1,c2) SELECT * FROM tmp_view"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map(
+        "error" -> "'c1'",
+        "hint" -> "")
+    )
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
