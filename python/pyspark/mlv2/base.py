@@ -32,7 +32,6 @@ from typing import (
 )
 
 from pyspark import since
-from pyspark.errors import PySparkNotImplementedError
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param import Params
@@ -73,7 +72,7 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         :class:`Transformer`
             fitted model
         """
-        raise PySparkNotImplementedError()
+        raise NotImplementedError()
 
     def fit(
         self,
@@ -127,14 +126,14 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         Return a list of input column names which are used as inputs of transformation.
         """
-        raise PySparkNotImplementedError()
+        raise NotImplementedError()
 
     def _output_columns(self) -> List[Tuple[str, str]]:
         """
         Return a list of output transformed columns, each elements in the list
         is a tuple of (column_name, column_spark_type)
         """
-        raise PySparkNotImplementedError()
+        raise NotImplementedError()
 
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         """
@@ -145,7 +144,7 @@ class Transformer(Params, metaclass=ABCMeta):
         must be an instance of `pd.DataFrame` with column names matching output schema
         returned by  `_output_columns` interface.
         """
-        raise PySparkNotImplementedError()
+        raise NotImplementedError()
 
     def transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         """
@@ -213,7 +212,7 @@ class Evaluator(Params, metaclass=ABCMeta):
         float
             metric
         """
-        raise PySparkNotImplementedError()
+        raise NotImplementedError()
 
     def evaluate(self, dataset: DataFrame, params: Optional["ParamMap"] = None) -> float:
         """
@@ -330,4 +329,4 @@ class PredictionModel(Model, _PredictorParams, metaclass=ABCMeta):
         """
         Returns the number of features the model was trained on. If unknown, returns -1
         """
-        raise PySparkNotImplementedError()
+        raise NotImplementedError()

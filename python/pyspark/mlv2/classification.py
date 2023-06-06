@@ -24,10 +24,6 @@ import numpy as np
 import pandas as pd
 import math
 
-from pyspark.errors import (
-    PySparkNotImplementedError,
-    PySparkValueError,
-)
 from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -188,7 +184,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "LogisticRegressionModel":
         if isinstance(dataset, pd.DataFrame):
             # TODO: support pandas dataframe fitting
-            raise PySparkNotImplementedError("Fitting pandas dataframe is not supported yet.")
+            raise NotImplementedError("Fitting pandas dataframe is not supported yet.")
 
         num_train_workers = self.getNumTrainWorkers()
         batch_size = self.getBatchSize()
@@ -209,7 +205,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         num_features = len(dataset.select(self.getFeaturesCol()).head()[0])  # type: ignore
 
         if num_classes < 2:
-            raise PySparkValueError("Training dataset distinct labels must >= 2.")
+            raise ValueError("Training dataset distinct labels must >= 2.")
 
         # TODO: support GPU.
         distributor = TorchDistributor(
