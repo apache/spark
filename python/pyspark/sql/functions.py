@@ -19,6 +19,7 @@
 A collections of builtin functions
 """
 import inspect
+import decimal
 import sys
 import functools
 import warnings
@@ -10016,6 +10017,212 @@ def hours(col: "ColumnOrName") -> Column:
 
     """
     return _invoke_function_over_columns("hours", col)
+
+
+@try_remote_functions
+def make_dt_interval(
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Make DayTimeIntervalType duration from days, hours, mins and secs.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]], ["day", "hour", "min", "sec"])
+    >>> df.select(make_dt_interval(df.day, df.hour, df.min, df.sec).alias('r')).show(truncate=False)
+    +------------------------------------------+
+    |r                                         |
+    +------------------------------------------+
+    |INTERVAL '1 12:30:01.001001' DAY TO SECOND|
+    +------------------------------------------+
+    """
+    if days is None:
+        days = lit(0)
+    if hours is None:
+        hours = lit(0)
+    if mins is None:
+        mins = lit(0)
+    if secs is None:
+        secs = lit(decimal.Decimal(0))
+    return _invoke_function_over_columns("make_dt_interval", days, hours, mins, secs)
+
+
+@try_remote_functions
+def make_interval(
+    year: Optional["ColumnOrName"] = None,
+    month: Optional["ColumnOrName"] = None,
+    week: Optional["ColumnOrName"] = None,
+    day: Optional["ColumnOrName"] = None,
+    hour: Optional["ColumnOrName"] = None,
+    min: Optional["ColumnOrName"] = None,
+    sec: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Make interval from years, months, weeks, days, hours, mins and secs.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    >>> df.select(make_interval(
+    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec).alias('r')
+    ... ).show(truncate=False)
+    +---------------------------------------------------------------+
+    |r                                                              |
+    +---------------------------------------------------------------+
+    |100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds|
+    +---------------------------------------------------------------+
+
+    >>> df = spark.createDataFrame([[100]], ["year"])
+    >>> df.select(make_interval(df.year).alias('r')).show(truncate=False)
+    +---------+
+    |r        |
+    +---------+
+    |100 years|
+    +---------+
+    """
+    if year is None:
+        year = lit(0)
+    if month is None:
+        month = lit(0)
+    if week is None:
+        week = lit(0)
+    if day is None:
+        day = lit(0)
+    if hour is None:
+        hour = lit(0)
+    if min is None:
+        min = lit(0)
+    if sec is None:
+        sec = lit(decimal.Decimal(0))
+    return _invoke_function_over_columns("make_interval", year, month, week, day, hour, min, sec)
+
+
+def make_timestamp(
+    year: "ColumnOrName",
+    month: "ColumnOrName",
+    day: "ColumnOrName",
+    hour: "ColumnOrName",
+    min: "ColumnOrName",
+    sec: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Create timestamp from year, month, day, hour, min, sec and timezone fields.
+    The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+    If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
+    on invalid inputs. Otherwise, it will throw an error instead.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(make_timestamp(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone).alias('r')
+    ... ).show(truncate=False)
+    +-----------------------+
+    |r                      |
+    +-----------------------+
+    |2014-12-28 13:30:45.887|
+    +-----------------------+
+    """
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "make_timestamp", year, month, day, hour, min, sec, timezone
+        )
+    else:
+        return _invoke_function_over_columns("make_timestamp", year, month, day, hour, min, sec)
+
+
+def make_timestamp_ltz(
+    year: "ColumnOrName",
+    month: "ColumnOrName",
+    day: "ColumnOrName",
+    hour: "ColumnOrName",
+    min: "ColumnOrName",
+    sec: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Create the current timestamp with local time zone from year, month, day, hour, min, sec and
+    timezone fields. If the configuration `spark.sql.ansi.enabled` is false,
+    the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(make_timestamp_ltz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone).alias('r')
+    ... ).show(truncate=False)
+    +-----------------------+
+    |r                      |
+    +-----------------------+
+    |2014-12-28 13:30:45.887|
+    +-----------------------+
+    """
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "make_timestamp_ltz", year, month, day, hour, min, sec, timezone
+        )
+    else:
+        return _invoke_function_over_columns("make_timestamp_ltz", year, month, day, hour, min, sec)
+
+
+def make_timestamp_ntz(
+    year: "ColumnOrName",
+    month: "ColumnOrName",
+    day: "ColumnOrName",
+    hour: "ColumnOrName",
+    min: "ColumnOrName",
+    sec: "ColumnOrName",
+) -> Column:
+    """
+    Create local date-time from year, month, day, hour, min, sec fields.
+    If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
+    on invalid inputs. Otherwise, it will throw an error instead.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
+    ...     ["year", "month", "day", "hour", "min", "sec"])
+    >>> df.select(make_timestamp_ntz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec).alias('r')
+    ... ).show(truncate=False)
+    +-----------------------+
+    |r                      |
+    +-----------------------+
+    |2014-12-28 06:30:45.887|
+    +-----------------------+
+    """
+    return _invoke_function_over_columns("make_timestamp_ntz", year, month, day, hour, min, sec)
+
+
+def make_ym_interval(
+    year: Optional["ColumnOrName"] = None,
+    month: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Make year-month interval from years, months.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
+    >>> df.select(make_ym_interval(df.year, df.month).alias('r')).show(truncate=False)
+    +-------------------------------+
+    |r                              |
+    +-------------------------------+
+    |INTERVAL '2015-0' YEAR TO MONTH|
+    +-------------------------------+
+    """
+    if year is None:
+        year = lit(0)
+    if month is None:
+        month = lit(0)
+    return _invoke_function_over_columns("make_ym_interval", year, month)
 
 
 @try_remote_functions

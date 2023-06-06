@@ -18,6 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import decimal
 import inspect
 import warnings
 import functools
@@ -2372,6 +2373,109 @@ def hours(col: "ColumnOrName") -> Column:
 
 
 hours.__doc__ = pysparkfuncs.hours.__doc__
+
+
+def make_dt_interval(
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function("make_dt_interval", _days, _hours, _mins, _secs)
+
+
+make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
+
+
+def make_interval(
+    year: Optional["ColumnOrName"] = None,
+    month: Optional["ColumnOrName"] = None,
+    week: Optional["ColumnOrName"] = None,
+    day: Optional["ColumnOrName"] = None,
+    hour: Optional["ColumnOrName"] = None,
+    min: Optional["ColumnOrName"] = None,
+    sec: Optional["ColumnOrName"] = None,
+) -> Column:
+    _year = lit(0) if year is None else _to_col(year)
+    _month = lit(0) if month is None else _to_col(month)
+    _week = lit(0) if week is None else _to_col(week)
+    _day = lit(0) if day is None else _to_col(day)
+    _hour = lit(0) if hour is None else _to_col(hour)
+    _min = lit(0) if min is None else _to_col(min)
+    _sec = lit(decimal.Decimal(0)) if sec is None else _to_col(sec)
+
+    return _invoke_function("make_interval", _year, _month, _week, _day, _hour, _min, _sec)
+
+
+make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
+
+
+def make_timestamp(
+    year: "ColumnOrName",
+    month: "ColumnOrName",
+    week: "ColumnOrName",
+    day: "ColumnOrName",
+    hour: "ColumnOrName",
+    min: "ColumnOrName",
+    sec: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function("make_timestamp", year, month, week, day, hour, min, sec, timezone)
+    else:
+        return _invoke_function("make_timestamp", year, month, week, day, hour, min, sec)
+
+
+make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
+
+
+def make_timestamp_ltz(
+    year: "ColumnOrName",
+    month: "ColumnOrName",
+    day: "ColumnOrName",
+    hour: "ColumnOrName",
+    min: "ColumnOrName",
+    sec: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function("make_timestamp_ltz", year, month, day, hour, min, sec, timezone)
+    else:
+        return _invoke_function("make_timestamp_ltz", year, month, day, hour, min, sec)
+
+
+make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
+
+
+def make_timestamp_ntz(
+    year: "ColumnOrName",
+    month: "ColumnOrName",
+    day: "ColumnOrName",
+    hour: "ColumnOrName",
+    min: "ColumnOrName",
+    sec: "ColumnOrName",
+) -> Column:
+    return _invoke_function("make_timestamp_ntz", year, month, day, hour, min, sec)
+
+
+make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
+
+
+def make_ym_interval(
+    year: Optional["ColumnOrName"] = None,
+    month: Optional["ColumnOrName"] = None,
+) -> Column:
+    _year = lit(0) if year is None else _to_col(year)
+    _month = lit(0) if month is None else _to_col(month)
+    return _invoke_function("make_ym_interval", _year, _month)
+
+
+make_ym_interval.__doc__ = pysparkfuncs.make_ym_interval.__doc__
 
 # Misc Functions
 

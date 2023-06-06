@@ -1486,6 +1486,57 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
+  functionTest("make_dt_interval") {
+    fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("make_interval") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_timestamp") {
+    fn.make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("make_timestamp_ltz") {
+    fn.make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("make_timestamp_ntz") {
+    fn.make_timestamp_ntz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_ym_interval") {
+    fn.make_ym_interval(fn.col("a"), fn.col("a"))
+  }
+
   functionTest("bucket") {
     fn.bucket(3, Column("a"))
   }
