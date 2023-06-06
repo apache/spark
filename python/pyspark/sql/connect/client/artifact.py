@@ -194,7 +194,7 @@ class ArtifactManager:
         assert local_path.is_file(), "local path must be a file path."
         storage = LocalFile(str(local_path))
 
-        assert Path(dest_path).is_absolute(), "destination FS path must be an absolut path."
+        assert Path(dest_path).is_absolute(), "destination FS path must be an absolute path."
 
         # The `dest_path` is an absolute path, to add the FORWARD_TO_FS_PREFIX,
         # we cannot use `os.path.join`
