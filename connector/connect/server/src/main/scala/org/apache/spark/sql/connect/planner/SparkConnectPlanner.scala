@@ -2577,16 +2577,13 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
         }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
-        if (command.getAwaitTermination.hasTimeoutMs) {
-          val terminated = handleStreamingAwaitTermination(query,
-            Some(command.getAwaitTermination.getTimeoutMs))
-          respBuilder.getAwaitTerminationBuilder
-            .setTerminated(terminated)
+        val timeout = if (command.getAwaitTermination.hasTimeoutMs) {
+          Some(command.getAwaitTermination.getTimeoutMs)
         } else {
-          handleStreamingAwaitTermination(query, None)
-          respBuilder.getAwaitTerminationBuilder
-            .setTerminated(true)
+          None
         }
+        val terminated = handleStreamingAwaitTermination(query, timeout)
+        respBuilder.getAwaitTerminationBuilder.setTerminated(terminated)
 
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
