@@ -660,6 +660,11 @@
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
     ]
   },
+  "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
+    ]
+  },
   "FAILED_EXECUTE_UDF" : {
     "message" : [
       "Failed to execute user defined function (<functionName>: (<signature>) => <result>)."
@@ -1541,6 +1546,24 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_ATTRIBUTES" : {
+    "message" : [
+      "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>."
+    ],
+    "subClass" : {
+      "RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION" : {
+        "message" : [
+          "Attribute(s) with the same name appear in the operation: <operation>.",
+          "Please check if the right attribute(s) are used."
+        ]
+      },
+      "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
+        "message" : [
+          ""
+        ]
+      }
+    }
+  },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
@@ -1945,6 +1968,11 @@
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ]
   },
+  "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
+    "message" : [
+      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
+    ]
+  },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create table or view <relationName> because it already exists.",
@@ -2308,6 +2336,11 @@
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
           "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
+        ]
+      },
+      "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
+        "message" : [
+          "Invalid partitioning: <cols> is missing or is in a map or array."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -5523,31 +5556,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2426" : {
-    "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2427" : {
-    "message" : [
-      "sorting is not supported for columns of type <type>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2428" : {
-    "message" : [
-      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2431" : {
-    "message" : [
-      "Invalid partitioning: <cols> is missing or is in a map or array."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2432" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2433" : {
