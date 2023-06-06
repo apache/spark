@@ -1690,6 +1690,22 @@ class PlanGenerationTestSuite
     fn.timestamp_seconds(fn.col("x"))
   }
 
+  temporalFunctionTest("unix_date") {
+    fn.unix_date(fn.col("d"))
+  }
+
+  temporalFunctionTest("unix_micros") {
+    fn.unix_micros(fn.col("t"))
+  }
+
+  temporalFunctionTest("unix_millis") {
+    fn.unix_millis(fn.col("t"))
+  }
+
+  temporalFunctionTest("unix_seconds") {
+    fn.unix_seconds(fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long

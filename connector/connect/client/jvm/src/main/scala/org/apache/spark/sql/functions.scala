@@ -4030,6 +4030,40 @@ object functions {
    */
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
+  /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(dateColumn: Column): Column = Column.fn("unix_date", dateColumn)
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(timestampColumn: Column): Column = Column.fn("unix_micros", timestampColumn)
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(timestampColumn: Column): Column = Column.fn("unix_millis", timestampColumn)
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(timestampColumn: Column): Column = Column.fn("unix_seconds", timestampColumn)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
