@@ -2323,6 +2323,34 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 session_window.__doc__ = pysparkfuncs.session_window.__doc__
 
 
+def unix_date(col: "ColumnOrName") -> Column:
+    return _invoke_function("unix_date", _to_col(col))
+
+
+unix_date.__doc__ = pysparkfuncs.unix_date.__doc__
+
+
+def unix_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function("unix_micros", _to_col(col))
+
+
+unix_micros.__doc__ = pysparkfuncs.unix_micros.__doc__
+
+
+def unix_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function("unix_millis", _to_col(col))
+
+
+unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
+
+
+def unix_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function("unix_seconds", _to_col(col))
+
+
+unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
+
+
 # Partition Transformation Functions
 
 

@@ -5610,6 +5610,124 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     return _invoke_function("session_window", time_col, gap_duration)
 
 
+@try_remote_functions
+def unix_date(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of days since 1970-01-01.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of days since 1970-01-01.
+
+    Examples
+    --------
+    >>> from datetime import date
+    >>> from pyspark.sql.functions import unix_date
+    >>> date_df = spark.createDataFrame([(date(1970, 1, 2),)], ['dt'])
+    >>> date_df.select(unix_date(date_df.dt).alias('days')).collect()
+    [Row(days=1)]
+    """
+
+    return _invoke_function_over_columns("unix_date", col)
+
+
+@try_remote_functions
+def unix_micros(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of microseconds since 1970-01-01 00:00:00 UTC.
+
+    Examples
+    --------
+    >>> from datetime import datetime
+    >>> from pyspark.sql.functions import unix_micros
+    >>> timestamp_df = spark.createDataFrame([(datetime(2023, 6, 6, 21, 12),)], ['micros'])
+    >>> timestamp_df.select(unix_micros(timestamp_df.micros).alias('micros')).collect()
+    [Row(micros=1686057120000000)]
+    """
+
+    return _invoke_function_over_columns("unix_micros", col)
+
+
+@try_remote_functions
+def unix_millis(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of milliseconds since 1970-01-01 00:00:00 UTC.
+
+    Examples
+    --------
+    >>> from datetime import datetime
+    >>> from pyspark.sql.functions import unix_millis
+    >>> timestamp_df = spark.createDataFrame([(datetime(2023, 6, 6, 21, 15),)], ['millis'])
+    >>> timestamp_df.select(unix_millis(timestamp_df.mills).alias('millis')).collect()
+    [Row(millis=1686057300000)]
+    """
+
+    return _invoke_function_over_columns("unix_millis", col)
+
+
+@try_remote_functions
+def unix_seconds(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of seconds since 1970-01-01 00:00:00 UTC.
+
+    Examples
+    --------
+    >>> from datetime import datetime
+    >>> from pyspark.sql.functions import unix_seconds
+    >>> timestamp_df = spark.createDataFrame([(datetime(2023, 6, 6, 21, 16),)], ['seconds'])
+    >>> timestamp_df.select(unix_seconds(timestamp_df.seconds).alias('seconds')).collect()
+    [Row(seconds=1686057360)]
+    """
+
+    return _invoke_function_over_columns("unix_seconds", col)
+
+
 # ---------------------------- misc functions ----------------------------------
 
 

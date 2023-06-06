@@ -139,6 +139,10 @@ Datetime Functions
     session_window
     timestamp_seconds
     window_time
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
 
 
 Collection Functions
