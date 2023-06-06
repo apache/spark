@@ -272,8 +272,14 @@ class ArtifactTests(ReusedConnectTestCase):
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
 
     def test_cache_artifact(self):
-        hash = "cache/123"
-        self.assertEqual(self.artifact_manager.is_cached_artifact(hash), False)
+        import hashlib
+        s = "Hello, World!"
+        blob = bytearray(s, "utf-8")
+        expected_hash = hashlib.sha256(blob).hexdigest()
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), False)
+        actualHash = self.artifact_manager.cache_artifact(blob)
+        self.assertEqual(actualHash, expected_hash)
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
 
 if __name__ == "__main__":
