@@ -721,7 +721,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorClassTest(
     "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
     testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
-    "_LEGACY_ERROR_TEMP_2428",
+    "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
     Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
@@ -770,14 +770,16 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     assert(plan.resolved)
 
-    val resolved = s"${attrA.toString},${attrC.toString}"
-
-    val errorMsg = s"Resolved attribute(s) $resolved missing from ${otherA.toString} " +
-                     s"in operator !Aggregate [${aliases.mkString(", ")}]. " +
-                     s"Attribute(s) with the same name appear in the operation: a. " +
-                     "Please check if the right attribute(s) are used."
-
-    assertAnalysisError(plan, errorMsg :: Nil)
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+      expectedMessageParameters = Map(
+        "missingAttributes" -> "\"a\", \"c\"",
+        "input" -> "\"a\"",
+        "operator" -> s"!Aggregate [${aliases.mkString(", ")}]",
+        "operation" -> "\"a\""
+      )
+    )
   }
 
   test("error test for self-join") {
