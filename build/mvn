@@ -187,6 +187,8 @@ if [ ! -z "${SPARK_LOCAL_IP}" ]; then
   echo "Using SPARK_LOCAL_IP=$SPARK_LOCAL_IP" 1>&2
 fi
 
+export USE_MAVEN=1
+
 # call the `mvn` command as usual
 # SPARK-25854
 "${MVN_BIN}" "$@"
