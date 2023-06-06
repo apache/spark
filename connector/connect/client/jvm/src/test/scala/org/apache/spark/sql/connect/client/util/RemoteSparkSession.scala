@@ -18,16 +18,16 @@ package org.apache.spark.sql.connect.client.util
 
 import java.io.{BufferedOutputStream, File}
 import java.util.concurrent.TimeUnit
-import scala.io.Source
-import org.scalatest.BeforeAndAfterAll
 
+import scala.io.Source
+
+import org.scalatest.BeforeAndAfterAll
 import sys.process._
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 import org.apache.spark.sql.connect.common.config.ConnectCommon
-
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -126,7 +126,18 @@ object SparkConnectServerUtils {
       Seq("--conf", s"spark.sql.catalogImplementation=$catalogImplementation")
     }
 
-    writerV2Configs ++ hiveTestConfigs
+    // For UDF maven E2E tests, the server needs the client code to find the UDFs defined in tests.
+    val udfTestConfigs = tryFindJar(
+      "connector/connect/client/jvm",
+      // SBT passes the client & test jars to the server process automatically.
+      // So we skip building or finding this jar for SBT.
+      "sbt-tests-do-not-need-this-jar",
+      "spark-connect-client-jvm",
+      test = true)
+      .map(clientTestJar => Seq("--jars", clientTestJar.getCanonicalPath))
+      .getOrElse(Seq.empty)
+
+    writerV2Configs ++ hiveTestConfigs ++ udfTestConfigs
   }
 
   def start(): Unit = {
@@ -157,56 +168,6 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
   protected lazy val serverPort: Int = port
-  protected lazy val transferredClientJarIfNeed: Boolean = {
-    if (sys.env.contains("USE_MAVEN")) {
-      if (RemoteSparkSession.transferredClientJar.get()) {
-        true
-      } else {
-        val fileOption = IntegrationTestUtils.tryFindJar(
-          "connector/connect/client/jvm",
-          // SBT passes the client & test jars to the server process automatically.
-          // So we skip building or finding this jar for SBT.
-          "sbt-tests-do-not-need-this-jar",
-          "spark-connect-client-jvm")
-        fileOption match {
-          case Some(f) if spark != null =>
-            if (RemoteSparkSession.transferredClientJar.compareAndSet(false, true)) {
-              spark.addArtifact(f.getCanonicalPath)
-            }
-            true
-          case _ => false
-        }
-      }
-    } else {
-      true
-    }
-  }
-
-  protected lazy val transferredClientTestJarIfNeed: Boolean = {
-    if (sys.env.contains("USE_MAVEN")) {
-      if (RemoteSparkSession.transferredClientTestJar.get()) {
-        true
-      } else {
-        val fileOption = IntegrationTestUtils.tryFindJar(
-          "connector/connect/client/jvm",
-          // SBT passes the client & test jars to the server process automatically.
-          // So we skip building or finding this jar for SBT.
-          "sbt-tests-do-not-need-this-jar",
-          "spark-connect-client-jvm",
-          test = true)
-        fileOption match {
-          case Some(f) if spark != null =>
-            if (RemoteSparkSession.transferredClientTestJar.compareAndSet(false, true)) {
-              spark.addArtifact(f.getCanonicalPath)
-            }
-            true
-          case _ => false
-        }
-      }
-    } else {
-      true
-    }
-  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -256,9 +217,4 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
     spark = null
     super.afterAll()
   }
-}
-
-private object RemoteSparkSession {
-  private val transferredClientJar = new AtomicBoolean(false)
-  private val transferredClientTestJar = new AtomicBoolean(false)
 }

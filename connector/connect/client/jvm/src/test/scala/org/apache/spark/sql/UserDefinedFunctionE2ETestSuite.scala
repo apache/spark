@@ -34,13 +34,11 @@ import org.apache.spark.sql.functions.{col, udf}
  */
 class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   test("Dataset typed filter") {
-    assume(transferredClientTestJarIfNeed)
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
   }
 
   test("Dataset typed filter - java") {
-    assume(transferredClientTestJarIfNeed)
     val rows = spark
       .range(10)
       .filter(new FilterFunction[JLong] {
@@ -51,13 +49,11 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed map") {
-    assume(transferredClientTestJarIfNeed)
     val rows = spark.range(10).map(n => n / 2)(PrimitiveLongEncoder).collectAsList()
     assert(rows == Arrays.asList[Long](0, 0, 1, 1, 2, 2, 3, 3, 4, 4))
   }
 
   test("filter with condition") {
-    assume(transferredClientTestJarIfNeed)
     // This should go via `def filter(condition: Column)` rather than
     // `def filter(func: T => Boolean)`
     def func(i: Long): Boolean = i < 5
@@ -67,7 +63,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("filter with col(*)") {
-    assume(transferredClientTestJarIfNeed)
     // This should go via `def filter(condition: Column)` but it is executed as
     // `def filter(func: T => Boolean)`. This is fine as the result is the same.
     def func(i: Long): Boolean = i < 5
@@ -77,7 +72,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed map - java") {
-    assume(transferredClientTestJarIfNeed)
     val rows = spark
       .range(10)
       .map(
@@ -90,7 +84,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed flat map") {
-    assume(transferredClientTestJarIfNeed)
     val session: SparkSession = spark
     import session.implicits._
     val rows = spark
@@ -102,7 +95,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed flat map - java") {
-    assume(transferredClientTestJarIfNeed)
     val rows = spark
       .range(5)
       .flatMap(
@@ -116,7 +108,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed map partition") {
-    assume(transferredClientTestJarIfNeed)
     val session: SparkSession = spark
     import session.implicits._
     val df = spark.range(0, 100, 1, 50).repartition(4)
@@ -126,7 +117,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed map partition - java") {
-    assume(transferredClientTestJarIfNeed)
     val df = spark.range(0, 100, 1, 50).repartition(4)
     val result = df
       .mapPartitions(
@@ -141,7 +131,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset foreach") {
-    assume(transferredClientTestJarIfNeed)
     val func: JLong => Unit = _ => {
       throw new RuntimeException("Hello foreach")
     }
@@ -152,7 +141,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset foreach - java") {
-    assume(transferredClientTestJarIfNeed)
     val exception = intercept[Exception] {
       spark
         .range(2)
@@ -166,7 +154,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset foreachPartition") {
-    assume(transferredClientTestJarIfNeed)
     val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
       f.foreach(v => sum.addAndGet(v))
@@ -183,7 +170,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset foreachPartition - java") {
-    assume(transferredClientTestJarIfNeed)
     val sum = new AtomicLong()
     val exception = intercept[Exception] {
       spark
@@ -204,7 +190,6 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset foreach: change not visible to client") {
-    assume(transferredClientTestJarIfNeed)
     val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
       f.foreach(v => sum.addAndGet(v))
@@ -214,14 +199,12 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset reduce") {
-    assume(transferredClientTestJarIfNeed)
     val session: SparkSession = spark
     import session.implicits._
     assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
   }
 
   test("Dataset reduce - java") {
-    assume(transferredClientTestJarIfNeed)
     val session: SparkSession = spark
     import session.implicits._
     assert(
