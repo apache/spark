@@ -755,7 +755,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         sql(stmt)
       }
       checkErrorTableNotFound(e, "`nonexistent`",
-        ExpectedContext("TABLE nonexistent", stmt.length - "TABLE nonexistent".length,
+        ExpectedContext("nonexistent", stmt.length - "nonexistent".length,
           stmt.length - 1))
     }
   }
