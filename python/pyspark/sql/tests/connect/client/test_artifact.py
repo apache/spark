@@ -45,6 +45,15 @@ class ArtifactTests(ReusedConnectTestCase):
             "crc",
         )
 
+    @classmethod
+    def conf(cls):
+        conf = super().conf()
+        conf.set(
+            "spark.driver.extraJavaOptions",
+            "-Dspark.fs.copyFromLocalToFs.allowDestLocal=true",
+        )
+        return conf
+
     def test_basic_requests(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")

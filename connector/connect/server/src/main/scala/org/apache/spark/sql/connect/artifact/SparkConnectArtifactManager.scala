@@ -175,16 +175,16 @@ class SparkConnectArtifactManager private[connect] {
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
-      val allowDestLocalConf = System.getenv(
-        "SPARK_CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL"
+      val allowDestLocalConf = System.getProperty(
+        "spark.fs.copyFromLocalToFs.allowDestLocal"
       )
       if (allowDestLocalConf == null || allowDestLocalConf.toLowerCase() != "true") {
         // To avoid security issue, by default,
         // we don't support upload file to local file system
         // destination path, otherwise user is able to overwrite arbitrary file
         // on spark driver node.
-        // We can temporarily allow the behavior by setting
-        // `SPARK_CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL` environment variable
+        // We can temporarily allow the behavior by setting spark driver java property
+        // `spark.fs.copyFromLocalToFs.allowDestLocal`
         // to `true` when starting spark driver, we should only enable it for testing
         // purpose.
         throw new UnsupportedOperationException(

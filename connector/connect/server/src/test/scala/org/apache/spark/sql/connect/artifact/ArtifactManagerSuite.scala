@@ -34,6 +34,10 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
     conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+      .set(
+        "spark.driver.extraJavaOptions",
+        "-Dspark.fs.copyFromLocalToFs.allowDestLocal=true"
+      )
   }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
@@ -158,7 +162,6 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     artifactManager.uploadArtifactToFs(sessionHolder, remotePath, stagingPath)
     artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
-    val classFileDirectory = artifactManager.classArtifactDir
     val copiedClassFile = Paths.get(
       destFSDir.toString, "smallClassFileCopied.class"
     ).toFile
