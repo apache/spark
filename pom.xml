@@ -417,6 +417,12 @@
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-bundle</artifactId>
+      <version>${aws.java.sdk.version}</version>
+      <scope>runtime</scope>
+    </dependency>
   </dependencies>
   <dependencyManagement>
     <dependencies>
