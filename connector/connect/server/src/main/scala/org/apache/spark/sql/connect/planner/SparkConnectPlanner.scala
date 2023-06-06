@@ -2605,42 +2605,37 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
    * running command. In this function, we periodically check if the RPC call has been cancelled.
    * If so, we can stop the operation and release resources early.
    * @param query the query waits to be terminated
-   * @param timeoutMs optional. Timeout to wait for termination. If None, no timeout is set
+   * @param timeoutOptionMs optional. Timeout to wait for termination. If None, no timeout is set
    * @return if the query has terminated
    */
   private def handleStreamingAwaitTermination(
       query: StreamingQuery,
-      timeoutMs: Option[Long]): Boolean = {
+      timeoutOptionMs: Option[Long]): Boolean = {
     // How often to check if RPC is cancelled and call awaitTermination()
     val awaitTerminationIntervalMs = 10000
+    val startTimeMs = System.currentTimeMillis()
 
-    val hasTimeout = timeoutMs.isDefined
-    var timeoutLeftMs = timeoutMs.getOrElse(Long.MaxValue)
+    val timeoutTotalMs = timeoutOptionMs.getOrElse(Long.MaxValue)
+    var timeoutLeftMs = timeoutTotalMs
     require(timeoutLeftMs > 0, "Timeout has to be positive")
 
     val grpcContext = Context.current
     while (!grpcContext.isCancelled) {
-      val awaitTimeMs = if (hasTimeout) {
-        math.min(awaitTerminationIntervalMs, timeoutLeftMs)
-      } else {
-        awaitTerminationIntervalMs
-      }
+      val awaitTimeMs = math.min(awaitTerminationIntervalMs, timeoutLeftMs)
 
       val terminated = query.awaitTermination(awaitTimeMs)
       if (terminated) {
         return true
       }
 
-      if (hasTimeout) {
-        timeoutLeftMs -= awaitTerminationIntervalMs
-        if (timeoutLeftMs <= 0) {
-          return false
-        }
+      timeoutLeftMs = timeoutTotalMs - (System.currentTimeMillis() - startTimeMs)
+      if (timeoutLeftMs <= 0) {
+        return false
       }
     }
 
     // gRPC is cancelled
-    logError("RPC context is cancelled when executing awaitTermination()")
+    logWarning("RPC context is cancelled when executing awaitTermination()")
     throw new StatusRuntimeException(Status.CANCELLED)
   }
 
