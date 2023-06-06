@@ -198,19 +198,25 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     assert(sum.get() == 0) // The value is not 45
   }
 
-  test("Dataset reduce") {
+  test("Dataset reduce without null partition inputs") {
+    val session: SparkSession = spark
+    import session.implicits._
+    assert(spark.range(0, 10, 1, 5).map(_ + 1).reduce(_ + _) == 55)
+  }
+
+  test("Dataset reduce with null partition inputs") {
     val session: SparkSession = spark
     import session.implicits._
     assert(spark.range(0, 10, 1, 16).map(_ + 1).reduce(_ + _) == 55)
   }
 
-  test("Dataset reduce java to scala long type") {
+  test("Dataset reduce with null partition inputs - java to scala long type") {
     val session: SparkSession = spark
     import session.implicits._
     assert(spark.range(0, 5, 1, 10).as[Long].reduce(_ + _) == 10)
   }
 
-  test("Dataset reduce - java") {
+  test("Dataset reduce with null partition inputs - java") {
     val session: SparkSession = spark
     import session.implicits._
     assert(
