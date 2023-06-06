@@ -654,7 +654,9 @@ class SparkSession:
             be copied to.
             The path must be an an absolute path.
 
-        .. versionadded:: 3.5.0
+        Notes
+        -----
+        This API is a developer API.
         """
         if urllib.parse.urlparse(dest_path).scheme:
             raise ValueError(
