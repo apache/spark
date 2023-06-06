@@ -86,7 +86,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
-      "collect_top_k"
+      "collect_top_k",
+      "percentile_cont",
+      "percentile_disc"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other
