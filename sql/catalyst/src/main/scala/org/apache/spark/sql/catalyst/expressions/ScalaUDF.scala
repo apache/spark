@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALA_UDF, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -1204,6 +1204,30 @@ case class ScalaUDF(
     resultConverter(result)
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDF =
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDF =
     copy(children = newChildren)
+}
+
+/**
+ * This expression does nothing but put the children into one struct.
+ * This is used to handle unresolved star for [[ScalaUDF]] input.
+ */
+case class CastScalaUDFInputExpression(children: Seq[Expression]) extends Expression {
+
+  override def nullable: Boolean = false
+  override def dataType: DataType =
+    StructType(children.zipWithIndex.map {
+      case (t, i) => StructField(s"col_$i", t.dataType, t.nullable)
+    })
+  override lazy val deterministic: Boolean = children.forall(_.deterministic)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
+
+  override def eval(input: InternalRow): Any = input
+
+  override protected def doGenCode(
+      ctx: CodegenContext,
+      ev: ExprCode)
+      : ExprCode = throw new UnsupportedOperationException
 }

@@ -700,7 +700,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
 
       UntypedKeyValueGroupedDataset(
         dummyFunc.outEnc,
-        dummyFunc.inEnc,
+        dummyFunc.firstInEnc,
         qe.analyzed,
         logicalPlan.output,
         aliasedGroupings,
@@ -713,7 +713,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
       assert(groupingExprs.size() == 1)
       val groupFunc = TypedScalaUdf(groupingExprs.get(0))
-      val vEnc = groupFunc.inEnc
+      val vEnc = groupFunc.firstInEnc
       val kEnc = groupFunc.outEnc
 
       val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, logicalPlan)
@@ -737,11 +737,11 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       function: AnyRef,
       outEnc: ExpressionEncoder[_],
       outputObjAttr: Attribute,
-      inEnc: ExpressionEncoder[_],
+      firstInEnc: ExpressionEncoder[_],
       inputObjAttr: Attribute) {
     val outputNamedExpression: Seq[NamedExpression] = outEnc.namedExpressions
     def inputDeserializer(inputAttributes: Seq[Attribute] = Nil): Expression = {
-      UnresolvedDeserializer(inEnc.deserializer, inputAttributes)
+      UnresolvedDeserializer(firstInEnc.deserializer, inputAttributes)
     }
   }
   private object TypedScalaUdf {
@@ -763,6 +763,12 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       // the first input which is the key of the grouping function.
       assert(udf.inputEncoders.nonEmpty)
       val inEnc = ExpressionEncoder(udf.inputEncoders.head) // single input encoder or key encoder
+      TypedScalaUdf(udf.function, outEnc, generateObjAttr(outEnc), inEnc, generateObjAttr(inEnc))
+    }
+
+    def apply(udf: ScalaUDF): TypedScalaUdf = {
+      val inEnc = udf.inputEncoders.head.get
+      val outEnc = udf.outputEncoder.get
       TypedScalaUdf(udf.function, outEnc, generateObjAttr(outEnc), inEnc, generateObjAttr(inEnc))
     }
   }
@@ -1157,32 +1163,18 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
     assert(rel.hasInput)
     val baseRel = transformRelation(rel.getInput)
     val cond = rel.getCondition
-    if (isTypedScalaUdfExpr(cond)) {
-      transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
-    } else {
-      logical.Filter(condition = transformExpression(cond), child = baseRel)
-    }
-  }
-
-  private def isTypedScalaUdfExpr(expr: proto.Expression): Boolean = {
-    expr.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
-        val udf = expr.getCommonInlineUserDefinedFunction
-        // A typed scala udf is a scala udf && the udf argument is an unresolved start.
-        udf.getFunctionCase ==
-          proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
-          udf.getArgumentsCount == 1 &&
-          udf.getArguments(0).getExprTypeCase == proto.Expression.ExprTypeCase.UNRESOLVED_STAR
+    val expr = transformExpression(cond)
+    expr match {
+      case f: ScalaUDF if hasUnresolvedStartAsInput(f) =>
+        val udf = TypedScalaUdf(f)
+        TypedFilter(udf.function, baseRel)(udf.firstInEnc)
       case _ =>
-        false
+        logical.Filter(condition = expr, child = baseRel)
     }
   }
 
-  private def transformTypedFilter(
-      fun: proto.CommonInlineUserDefinedFunction,
-      child: LogicalPlan): TypedFilter = {
-    val udf = TypedScalaUdf(fun)
-    TypedFilter(udf.function, child)(udf.inEnc)
+  private def hasUnresolvedStartAsInput(f: ScalaUDF): Boolean = {
+    f.children.forall(c => c == UnresolvedStar(None))
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
@@ -1194,6 +1186,16 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
 
     val projection = rel.getExpressionsList.asScala.toSeq
       .map(transformExpression)
+      .map{ expr => expr transform {
+          case f: ScalaUDF if hasUnresolvedStartAsInput(f) =>
+            if (f.children.size == 1 && baseRel.output.size > 1) {
+              // The udf take the whole row as one function input
+              f.withNewChildrenInternal(IndexedSeq(CastScalaUDFInputExpression(baseRel.output)))
+            } else {
+              f.withNewChildrenInternal(baseRel.output.toIndexedSeq)
+            }
+          case a => a
+      }}
       .map(toNamedExpression)
 
     logical.Project(projectList = projection, child = baseRel)
@@ -1987,13 +1989,6 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
     rel.getGroupType match {
-      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
-          // This relies on the assumption that a KVGDS always requires the head to be a Typed UDF.
-          // This is the case for datasets created via groupByKey,
-          // and also via RelationalGroupedDS#as, as the first is a dummy UDF currently.
-          if rel.getGroupingExpressionsList.size() >= 1 &&
-            isTypedScalaUdfExpr(rel.getGroupingExpressionsList.get(0)) =>
-        transformKeyValueGroupedAggregate(rel)
       case _ =>
         transformRelationalGroupedAggregate(rel)
     }
@@ -2084,7 +2079,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       throw InvalidPlanInput("reduce requires single child expression")
     }
     val udf = fun.getArgumentsList.asScala.map(transformExpression) match {
-      case collection.Seq(f: ScalaUDF) =>
+      case Seq(f: ScalaUDF) =>
         f
       case other =>
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
@@ -2102,7 +2097,11 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
-        transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
+        val analyzed = session.sessionState.executePlan(plan).analyzed
+        transformTypedReduceExpression(
+          expr.getUnresolvedFunction,
+          analyzed.output.filterNot(a => a.name.startsWith("key"))
+        )
       case _ => transformExpression(expr)
     }
   }

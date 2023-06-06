@@ -210,8 +210,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr") {
-    val session: SparkSession = spark
-    import session.implicits._
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
