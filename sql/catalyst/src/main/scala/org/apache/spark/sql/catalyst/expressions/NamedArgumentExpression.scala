@@ -1,0 +1,54 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.expressions
+
+import org.apache.spark.sql.types.DataType
+
+/**
+ * An unevaluable unary expression specifically for named argument functions
+ *
+ * SQL Syntax: key => value
+ * SQL grammar: key=identifier FAT_ARROW value=expression
+ *
+ * NamedArgumentExpression is expected to be resolved
+ * and replaced in class extending [[NamedArgumentFunction]]
+ *
+ * Example usage in encode:
+ * SELECT encode("abc", charset => "utf-8");
+ * SELECT encode(charset => "utf-8", value => "abc");
+ *
+ * @param key The name of the function argument
+ * @param value The value of the function argument
+ */
+case class NamedArgumentExpression(key: String, value: Expression)
+    extends UnaryExpression with Unevaluable {
+  override def nullable: Boolean = value.nullable
+
+  override def dataType: DataType = value.dataType
+
+  override def toString: String = s"""$key => $value"""
+
+  // NamedArgumentExpression has a single child, which is its value expression,
+  // so the value expression can be resolved by Analyzer rules recursively.
+  // For example, when the value is a built-in function expression,
+  // it must be resolved by [[ResolveFunctions]]
+  override def child: Expression = value
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(value = newChild)
+}
