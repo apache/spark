@@ -190,11 +190,19 @@ class Catalog:
         """
         return self._jcatalog.setCurrentDatabase(dbName)
 
-    def listDatabases(self) -> List[Database]:
+    def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
         """
         Returns a list of databases available across all sessions.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        pattern : str
+            The pattern that the database name needs to match.
+
+            .. versionchanged: 3.5.0
+                Added ``pattern`` argument.
 
         Returns
         -------
@@ -205,8 +213,17 @@ class Catalog:
         --------
         >>> spark.catalog.listDatabases()
         [Database(name='default', catalog='spark_catalog', description='default database', ...
+
+        >>> spark.catalog.listDatabases("def*")
+        [Database(name='default', catalog='spark_catalog', description='default database', ...
+
+        >>> spark.catalog.listDatabases("def2*")
+        []
         """
-        iter = self._jcatalog.listDatabases().toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listDatabases().toLocalIterator()
+        else:
+            iter = self._jcatalog.listDatabases(pattern).toLocalIterator()
         databases = []
         while iter.hasNext():
             jdb = iter.next()
