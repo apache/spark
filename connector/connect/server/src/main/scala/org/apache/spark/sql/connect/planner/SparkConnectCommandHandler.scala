@@ -43,8 +43,10 @@ import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPy
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryProgress, Trigger}
 
-class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnectStreamHandler)
-    extends SparkConnectPlanner(session) {
+class SparkConnectCommandHandler(
+    val session: SparkSession,
+    val streamHandler: SparkConnectStreamHandler,
+    val planner: SparkConnectPlanner) {
 
   def process(command: proto.Command, userId: String, sessionId: String): Unit = {
     command.getCommandTypeCase match {
@@ -87,11 +89,11 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getPythonUdf
-    val function = transformPythonFunction(udf)
+    val function = planner.transformPythonFunction(udf)
     val udpf = UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = function,
-      dataType = transformDataType(udf.getOutputType),
+      dataType = planner.transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
 
@@ -101,7 +103,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
   private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getJavaUdf
     val dataType = if (udf.hasOutputType) {
-      transformDataType(udf.getOutputType)
+      planner.transformDataType(udf.getOutputType)
     } else {
       null
     }
@@ -123,7 +125,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
    */
   private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
     // Transform the input plan into the logical plan.
-    val plan = transformRelation(writeOperation.getInput)
+    val plan = planner.transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
 
@@ -199,7 +201,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
       comment = None,
       properties = Map.empty,
       originalText = None,
-      plan = transformRelation(createView.getInput),
+      plan = planner.transformRelation(createView.getInput),
       allowExisting = false,
       replace = createView.getReplace,
       viewType = viewType)
@@ -218,7 +220,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
    */
   private def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
     // Transform the input plan into the logical plan.
-    val plan = transformRelation(writeOperation.getInput)
+    val plan = planner.transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
 
@@ -236,7 +238,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
 
     if (writeOperation.getPartitioningColumnsCount > 0) {
       val names = writeOperation.getPartitioningColumnsList.asScala
-        .map(transformExpression)
+        .map(planner.transformExpression)
         .map(Column(_))
         .toSeq
       w.partitionedBy(names.head, names.tail: _*)
@@ -250,7 +252,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
           w.create()
         }
       case proto.WriteOperationV2.Mode.MODE_OVERWRITE =>
-        w.overwrite(Column(transformExpression(writeOperation.getOverwriteCondition)))
+        w.overwrite(Column(planner.transformExpression(writeOperation.getOverwriteCondition)))
       case proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS =>
         w.overwritePartitions()
       case proto.WriteOperationV2.Mode.MODE_APPEND =>
@@ -278,7 +280,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.process(extension, this))
+      .map(p => p.process(extension, planner))
       // Find the first non-empty transformation or throw.
       .find(_.nonEmpty)
       .flatten
@@ -289,7 +291,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
     // Eagerly execute commands of the provided SQL string.
     val df = session.sql(
       getSqlCommand.getSql,
-      getSqlCommand.getArgsMap.asScala.mapValues(transformLiteral).toMap)
+      getSqlCommand.getArgsMap.asScala.mapValues(planner.transformLiteral).toMap)
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
     val rows = df.logicalPlan match {
@@ -361,7 +363,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
       writeOp: WriteStreamOperationStart,
       userId: String,
       sessionId: String): Unit = {
-    val plan = transformRelation(writeOp.getInput)
+    val plan = planner.transformRelation(writeOp.getInput)
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
 
     val writer = dataset.writeStream
@@ -398,7 +400,7 @@ class SparkConnectHandler(session: SparkSession, val streamHandler: SparkConnect
 
     if (writeOp.hasForeachWriter) {
       val foreach = writeOp.getForeachWriter.getPythonWriter
-      val pythonFcn = transformPythonFunction(foreach)
+      val pythonFcn = planner.transformPythonFunction(foreach)
       writer.foreachImplementation(
         new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]])
     }

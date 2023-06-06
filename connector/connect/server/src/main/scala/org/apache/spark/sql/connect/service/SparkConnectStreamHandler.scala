@@ -34,7 +34,7 @@ import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.{SparkConnectHandler, SparkConnectPlanner}
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{LocalTableScanExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
@@ -42,8 +42,9 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
-    extends Logging {
+class SparkConnectStreamHandler(val responseObserver: StreamObserver[ExecutePlanResponse])
+    extends SparkConnectResponseHandler[ExecutePlanResponse]
+    with Logging {
 
   def handle(v: ExecutePlanRequest): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
     val sessionHolder = SparkConnectService
@@ -96,7 +97,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(session, Some(this))
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
     sendResponse(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
@@ -111,7 +112,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectHandler(session, this)
+    val planner = new SparkConnectPlanner(session, Some(this))
     planner.process(
       command = command,
       userId = request.getUserContext.getUserId,

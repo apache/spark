@@ -54,14 +54,13 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   protected val sparkConnectStreamHandler = new SparkConnectStreamHandler(new MockObserver())
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(spark).transformRelation(rel)
+    val planner = new SparkConnectPlanner(spark, Some(sparkConnectStreamHandler))
+    planner.transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectHandler(spark, sparkConnectStreamHandler).process(
-      cmd,
-      "clientId",
-      "sessionId")
+    new SparkConnectPlanner(spark, Some(sparkConnectStreamHandler))
+      .process(cmd, "clientId", "sessionId")
   }
 
   def readRel: proto.Relation =

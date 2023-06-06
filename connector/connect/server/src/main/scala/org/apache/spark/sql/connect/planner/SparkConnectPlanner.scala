@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.service.{SparkConnectResponseHandler, SparkConnectStreamHandler}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -61,9 +62,19 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) {
+class SparkConnectPlanner(
+    val session: SparkSession,
+    responseHandlerOpt: Option[SparkConnectResponseHandler[_]] = None) {
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  private lazy val commandHandler: Option[SparkConnectCommandHandler] =
+    responseHandlerOpt
+      .filter(_.isInstanceOf[SparkConnectStreamHandler])
+      .map(_.asInstanceOf[SparkConnectStreamHandler])
+      .map { streamHandler =>
+        new SparkConnectCommandHandler(session, streamHandler, this)
+      }
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
@@ -934,7 +945,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  protected def transformDataType(t: proto.DataType): DataType = {
+  def transformDataType(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.UNPARSED =>
         parseDatatypeString(t.getUnparsed.getDataTypeString)
@@ -1259,7 +1270,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    * @return
    *   Expression
    */
-  protected def transformLiteral(lit: proto.Expression.Literal): Literal = {
+  def transformLiteral(lit: proto.Expression.Literal): Literal = {
     LiteralExpressionProtoConverter.toCatalystExpression(lit)
   }
 
@@ -1381,7 +1392,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  protected def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+  def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables
@@ -2061,6 +2072,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
       case _ => transformExpression(expr)
     }
+  }
+
+  def process(command: proto.Command, userId: String, sessionId: String): Unit = {
+    assert(commandHandler.isDefined)
+    commandHandler.get.process(command, userId, sessionId)
   }
 
   private val emptyLocalRelation = LocalRelation(
