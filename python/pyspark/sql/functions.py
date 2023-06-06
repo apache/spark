@@ -5065,7 +5065,8 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 @try_remote_functions
 def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
-    Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.
+    Returns a double value, the value zero if no match is found,
+    or NaN if a match is found but the value is non-numeric.
 
     Examples
     --------
@@ -5079,7 +5080,8 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 @try_remote_functions
 def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
-    Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.
+    Returns a double value, the value zero if no match is found,
+    or NaN if a match is found but the value is non-numeric.
 
     Examples
     --------
@@ -5093,7 +5095,8 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 @try_remote_functions
 def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
-    Returns a float value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.
+    Returns a float value, the value zero if no match is found,
+    or NaN if a match is found but the value is non-numeric.
 
     Examples
     --------
@@ -5107,7 +5110,8 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 @try_remote_functions
 def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
-    Returns an integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.
+    Returns an integer value, or the value zero if no match is found,
+    or a match is found but the value is non-numeric.
 
     Examples
     --------
@@ -5121,7 +5125,8 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 @try_remote_functions
 def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
-    Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.
+    Returns a long integer value, or the value zero if no match is found,
+    or a match is found but the value is non-numeric.
 
     Examples
     --------
@@ -5135,7 +5140,8 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 @try_remote_functions
 def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
-    Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.
+    Returns a short integer value, or the value zero if no match is found,
+    or a match is found but the value is non-numeric.
 
     Examples
     --------
