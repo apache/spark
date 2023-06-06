@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -784,8 +784,70 @@ class AnalysisErrorSuite extends AnalysisTest {
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
-    assert(error.message.contains("Failure when resolving conflicting references in Join"))
-    assert(error.message.contains("Conflicting attributes"))
+    checkError(
+      exception = error,
+      errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
+      parameters = Map(
+        "nodeName" -> "Join",
+        "plan" -> "'Join Cross\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n",
+        "conflictingAttributes" -> "\"a\""
+      )
+    )
+  }
+
+  test("error test for self-intersect") {
+    val intersect = Intersect(testRelation, testRelation, true)
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(intersect)
+    }
+    checkError(
+      exception = error,
+      errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
+      parameters = Map(
+        "nodeName" -> "Intersect All",
+        "plan" ->
+          "'Intersect All true\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n",
+        "conflictingAttributes" -> "\"a\""
+      )
+    )
+  }
+
+  test("error test for self-except") {
+    val except = Except(testRelation, testRelation, true)
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(except)
+    }
+    checkError(
+      exception = error,
+      errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
+      parameters = Map(
+        "nodeName" -> "Except All",
+        "plan" ->
+          "'Except All true\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n",
+        "conflictingAttributes" -> "\"a\""
+      )
+    )
+  }
+
+  test("error test for self-asOfJoin") {
+    val asOfJoin =
+      AsOfJoin(testRelation, testRelation, testRelation.output(0), testRelation.output(0),
+      None, Inner, tolerance = None, allowExactMatches = true,
+      direction = AsOfJoinDirection("backward"))
+    val error = intercept[AnalysisException] {
+      SimpleAnalyzer.checkAnalysis(asOfJoin)
+    }
+    val expectedPlan = "'AsOfJoin (a#0 >= a#0), " +
+      "Inner\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n"
+    checkError(
+      exception = error,
+      errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
+      parameters = Map(
+        "nodeName" -> "AsOfJoin",
+        "plan" -> expectedPlan,
+        "conflictingAttributes" -> "\"a\""
+      )
+    )
   }
 
   test("check grouping expression data types") {
