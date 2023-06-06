@@ -19,7 +19,6 @@ from pyspark.mlv2.base import _PredictorParams
 
 from pyspark.ml.param.shared import HasProbabilityCol
 
-import logging
 from typing import Any, Union, List, Tuple, Callable
 import numpy as np
 import pandas as pd
@@ -48,7 +47,6 @@ from pyspark.sql.functions import lit, count, countDistinct
 
 import torch
 import torch.nn as torch_nn
-import torch.nn.functional as torch_fn
 
 
 class _LogisticRegressionParams(

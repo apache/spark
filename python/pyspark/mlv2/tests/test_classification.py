@@ -17,11 +17,8 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
 import numpy as np
-import pandas as pd
 from pyspark.mlv2.classification import LogisticRegression as LORV2
-from pyspark.ml.linalg import Vectors
 from pyspark.sql import SparkSession
 
 
