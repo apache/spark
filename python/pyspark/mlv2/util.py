@@ -101,8 +101,8 @@ def aggregate_dataframe(
 
 def transform_dataframe_column(
     dataframe: Union["DataFrame", "pd.DataFrame"],
-    input_col_name: str,
-    transform_fn: Callable[["pd.Series"], Any],
+    input_cols: List[str],
+    transform_fn: Callable[..., Any],
     output_cols: List[Tuple[str, str]],
 ) -> Union["DataFrame", "pd.DataFrame"]:
     """
@@ -114,8 +114,8 @@ def transform_dataframe_column(
     dataframe :
         A spark dataframe or a pandas dataframe
 
-    input_col_name :
-        The name of columns to be transformed
+    input_cols :
+        A list of names of input columns to be transformed
 
     transform_fn:
         A transforming function with one arguments of `pandas.Series` type,
@@ -132,11 +132,10 @@ def transform_dataframe_column(
 
     Returns
     -------
-    If the input dataframe is a spark dataframe, return a new spark dataframe
-    with the transformed result column appended.
-    If the input dataframe is a pandas dataframe, return a new pandas dataframe
-    with only one column of the the transformed result, but the result
-    pandas dataframe has the same index with the input dataframe.
+    If it is a spark DataFrame, the result of transformation is a new spark DataFrame
+    that contains all existing columns and output columns with names.
+    If it is a pandas DataFrame, the input pandas dataframe is appended with output
+    columns in place.
     """
 
     if len(output_cols) > 1:
@@ -148,21 +147,23 @@ def transform_dataframe_column(
         output_col_name, spark_udf_return_type = output_cols[0]
 
     if isinstance(dataframe, pd.DataFrame):
-        result_data = transform_fn(dataframe[input_col_name])
+        result_data = transform_fn(*[dataframe[col_name] for col_name in input_cols])
         if isinstance(result_data, pd.Series):
             assert len(output_cols) == 1
-            return pd.DataFrame({output_col_name: result_data})
+            result_data = pd.DataFrame({output_col_name: result_data})
         else:
             assert set(result_data.columns) == set(col_name for col_name, _ in output_cols)
-            return result_data
+            result_data = result_data
+
+        for col_name in result_data.columns:
+            dataframe.insert(len(dataframe.columns), col_name, result_data[col_name])
+        return dataframe
 
     @pandas_udf(returnType=spark_udf_return_type)  # type: ignore[call-overload]
     def transform_fn_pandas_udf(s: "pd.Series") -> "pd.Series":
         return transform_fn(s)
 
-    input_col = col(input_col_name)
-
-    result_spark_df = dataframe.withColumn(output_col_name, transform_fn_pandas_udf(input_col))
+    result_spark_df = dataframe.withColumn(output_col_name, transform_fn_pandas_udf(*input_cols))
 
     if len(output_cols) > 1:
         return result_spark_df.withColumns(
