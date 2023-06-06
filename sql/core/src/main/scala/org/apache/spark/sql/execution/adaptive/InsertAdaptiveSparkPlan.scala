@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -135,21 +134,10 @@ case class InsertAdaptiveSparkPlan(
       return subqueryMap.toMap
     }
     plan.foreach(_.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach(_.foreach {
-      case expressions.ScalarSubquery(p, _, exprId, _, _, _)
-          if !subqueryMap.contains(exprId.id) =>
-        val executedPlan = compileSubquery(p)
-        verifyAdaptivePlan(executedPlan, p)
-        subqueryMap.put(exprId.id, executedPlan)
-      case expressions.InSubquery(_, ListQuery(query, _, exprId, _, _, _))
-          if !subqueryMap.contains(exprId.id) =>
-        val executedPlan = compileSubquery(query)
-        verifyAdaptivePlan(executedPlan, query)
-        subqueryMap.put(exprId.id, executedPlan)
-      case expressions.DynamicPruningSubquery(_, buildPlan, _, _, _, exprId, _)
-          if !subqueryMap.contains(exprId.id) =>
-        val executedPlan = compileSubquery(buildPlan)
-        verifyAdaptivePlan(executedPlan, buildPlan)
-        subqueryMap.put(exprId.id, executedPlan)
+      case subquery: SubqueryExpression if !subqueryMap.contains(subquery.exprId.id) =>
+        val executedPlan = compileSubquery(subquery.plan)
+        verifyAdaptivePlan(executedPlan, subquery.plan)
+        subqueryMap.put(subquery.exprId.id, executedPlan)
       case _ =>
     }))
 
