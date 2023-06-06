@@ -77,7 +77,8 @@ class LocalFile(LocalData):
     @cached_property
     def stream(self) -> BinaryIO:
         return open(self.path, "rb")
-    
+
+
 class InMemory(LocalData):
     """
     Payload stored in memory.
@@ -95,6 +96,7 @@ class InMemory(LocalData):
     @cached_property
     def stream(self) -> BinaryIO:
         return io.BytesIO(self.blob)
+
 
 class Artifact:
     def __init__(self, path: str, storage: LocalData):
@@ -122,8 +124,10 @@ def new_pyfile_artifact(file_name: str, storage: LocalData) -> Artifact:
 def new_archive_artifact(file_name: str, storage: LocalData) -> Artifact:
     return _new_artifact(ARCHIVE_PREFIX, "", file_name, storage)
 
+
 def new_cache_artifact(id: str, storage: LocalData) -> Artifact:
     return _new_artifact(CACHE_PREFIX, "", id, storage)
+
 
 def _new_artifact(
     prefix: str, required_suffix: str, file_name: str, storage: LocalData
@@ -347,7 +351,7 @@ class ArtifactManager:
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
         status = resp.statuses.get(artifactName)
         return status.exists if status is not None else False
-    
+
     def cache_artifact(self, blob: bytes) -> str:
         """
         Cache the give blob at the session.

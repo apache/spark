@@ -273,6 +273,7 @@ class ArtifactTests(ReusedConnectTestCase):
 
     def test_cache_artifact(self):
         import hashlib
+
         s = "Hello, World!"
         blob = bytearray(s, "utf-8")
         expected_hash = hashlib.sha256(blob).hexdigest()
