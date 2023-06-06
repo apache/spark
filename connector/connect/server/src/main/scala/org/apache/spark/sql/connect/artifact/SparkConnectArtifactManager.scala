@@ -183,12 +183,12 @@ class SparkConnectArtifactManager private[connect] {
         // we don't support uploading file to local file system
         // destination path, otherwise user is able to overwrite arbitrary file
         // on spark driver node.
-        // We can temporarily allow the behavior by setting spark driver java property
+        // We can temporarily allow the behavior by setting spark config
         // `spark.fs.copyFromLocalToFs.allowDestLocal`
         // to `true` when starting spark driver, we should only enable it for testing
         // purpose.
         throw new UnsupportedOperationException(
-          "Upload artifact file to local file system destination path is not supported.")
+          "Uploading artifact file to local file system destination path is not supported.")
       }
     }
     fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)

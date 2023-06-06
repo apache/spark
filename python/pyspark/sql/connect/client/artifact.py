@@ -189,10 +189,10 @@ class ArtifactManager:
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
     def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
-        local_path = Path(local_path).absolute()
+        abs_path: Path = Path(local_path).absolute()
         # TODO: Support directory path.
-        assert local_path.is_file(), "local path must be a file path."
-        storage = LocalFile(str(local_path))
+        assert abs_path.is_file(), "local path must be a file path."
+        storage = LocalFile(str(abs_path))
 
         assert Path(dest_path).is_absolute(), "destination FS path must be an absolute path."
 
@@ -215,7 +215,7 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
-    def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]):
+    def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]) -> None:
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
         summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
 
@@ -233,7 +233,7 @@ class ArtifactManager:
         )
         self._request_add_artifacts(requests)
 
-    def _add_forward_to_fs_artifacts(self, local_path, dest_path):
+    def _add_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> None:
         requests: Iterator[proto.AddArtifactsRequest] = self._add_artifacts(
             self._parse_forward_to_fs_artifacts(local_path, dest_path)
         )
