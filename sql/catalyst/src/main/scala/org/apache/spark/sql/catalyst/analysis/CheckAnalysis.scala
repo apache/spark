@@ -674,9 +674,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            p.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2433",
-              messageParameters = Map("sqlExprs" -> exprs.map(_.sql).mkString(",")))
+            throw SparkException.internalError(
+              msg = "Only a single table generating function is allowed in a SELECT clause, " +
+                s"found: ${exprs.map(toSQLExpr(_)).mkString(", ")}.",
+              context = p.origin.getQueryContext,
+              summary = p.origin.context.summary)
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
@@ -688,34 +690,38 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case j: Join if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2434",
+              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
+                "nodeName" -> j.nodeName,
                 "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
 
           case i: Intersect if !i.duplicateResolved =>
             val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
             i.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2435",
+              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
+                "nodeName" -> i.nodeName,
                 "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
 
           case e: Except if !e.duplicateResolved =>
             val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
             e.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2436",
+              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
+                "nodeName" -> e.nodeName,
                 "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
 
           case j: AsOfJoin if !j.duplicateResolved =>
             val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2437",
+              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
+                "nodeName" -> j.nodeName,
                 "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(",")))
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.
