@@ -45,6 +45,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64tz_dtype,
     is_timedelta64_dtype,
 )
+import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
@@ -655,6 +656,12 @@ class SparkSession:
 
         .. versionadded:: 3.5.0
         """
+        if urllib.parse.urlparse(dest_path).scheme:
+            raise ValueError(
+                "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
+                "without scheme, and spark driver uses the default scheme to "
+                "determine the destination file system."
+            )
         self._client.copy_from_local_to_fs(local_path, dest_path)
 
     @staticmethod
