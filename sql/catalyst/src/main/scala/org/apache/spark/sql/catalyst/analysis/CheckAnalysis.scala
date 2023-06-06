@@ -1039,11 +1039,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
         case metrics @ CollectMetrics(name, _, _) =>
+          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics)
           metricsMap.get(name) match {
             case Some(other) =>
+              val simplifiedOther = simplifyPlanForCollectedMetrics(other)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (!metrics.sameResult(other)) {
+              if (!simplifiedMetrics.sameResult(simplifiedOther)) {
                 failAnalysis(
                   errorClass = "_LEGACY_ERROR_TEMP_2443",
                   messageParameters = Map(
@@ -1062,6 +1064,32 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       })
     }
     check(plan)
+  }
+
+  /**
+   * This method is only used for checking collected metrics. This method tries to
+   * remove extra alias-only project from the plan so that we can identify exact
+   * duplicates metric definition.
+   */
+  private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsDown {
+      case p: Project if p.projectList.size == p.child.output.size =>
+        var ret = true
+        p.projectList.zip(p.child.output).foreach({
+          case (left: Alias, right: Attribute) =>
+            if (left.child.semanticEquals(right) && right.name == left.name) {
+              ret = ret & true
+            } else {
+              ret = ret & false
+            }
+          case _ => ret = ret & false
+        })
+        if (ret) {
+          p.child
+        } else {
+          p
+        }
+    }
   }
 
   /**
