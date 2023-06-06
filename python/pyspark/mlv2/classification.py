@@ -36,8 +36,6 @@ from pyspark.ml.param.shared import (
     HasTol,
     HasWeightCol,
     HasSeed,
-)
-from pyspark.mlv2.common_params import (
     HasNumTrainWorkers,
     HasBatchSize,
     HasLearningRate,
