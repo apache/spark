@@ -4050,6 +4050,48 @@ object functions {
     SecondsToTimestamp(e.expr)
   }
 
+  /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(dateColumn: Column): Column = withExpr {
+    UnixDate(dateColumn.expr)
+  }
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(timestampColumn: Column): Column = withExpr {
+    UnixMicros(timestampColumn.expr)
+  }
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(timestampColumn: Column): Column = withExpr {
+    UnixMillis(timestampColumn.expr)
+  }
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(timestampColumn: Column): Column = withExpr {
+    UnixSeconds(timestampColumn.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////

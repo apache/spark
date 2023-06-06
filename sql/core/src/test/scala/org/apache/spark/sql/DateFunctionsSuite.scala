@@ -995,4 +995,55 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkTrunc("SECOND", "1961-04-12 00:01:02")
     checkTrunc("MINUTE", "1961-04-12 00:01:00")
   }
+
+  test("unix_date") {
+    val df = Seq(Date.valueOf("1970-01-02"), Date.valueOf("1969-12-31"), null).toDF("a")
+    checkAnswer(df.select(unix_date(col("a"))), Seq(Row(1), Row(-1), Row(null)))
+    checkAnswer(df.selectExpr("unix_date(a)"), Seq(Row(1), Row(-1), Row(null)))
+  }
+
+  test("unix_micros") {
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(1000) // 1 microsecond
+    val df = Seq(
+      new Timestamp(0L),
+      new Timestamp(1000L),
+      new Timestamp(-1000L),
+      timestampWithNanos, null).toDF("a")
+    checkAnswer(df.select(unix_micros(col("a"))),
+      Seq(Row(0), Row(1000000L), Row(-1000000L), Row(1000001L), Row(null)))
+    checkAnswer(df.selectExpr("unix_micros(a)"),
+      Seq(Row(0), Row(1000000L), Row(-1000000L), Row(1000001L), Row(null)))
+  }
+
+  test("unix_millis") {
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    val df = Seq(
+      new Timestamp(0L),
+      new Timestamp(1000L),
+      new Timestamp(-1000L),
+      timestampWithNanos, null).toDF("a")
+    checkAnswer(df.select(unix_millis(col("a"))),
+      Seq(Row(0), Row(1000L), Row(-1000L), Row(1000L), Row(null)))
+    checkAnswer(df.selectExpr("unix_millis(a)"),
+      Seq(Row(0), Row(1000L), Row(-1000L), Row(1000L), Row(null)))
+  }
+
+  test("unix_seconds") {
+    val df = Seq(
+      new Timestamp(0L),
+      new Timestamp(1000L),
+      new Timestamp(-1000L),
+      // -1ms is considered to be in -1st second, as 0-999ms is in 0th second.
+      new Timestamp(-1L),
+      // Truncates higher levels of precision
+      new Timestamp(1999L),
+      null).toDF("a")
+    checkAnswer(df.select(unix_seconds(col("a"))),
+      Seq(Row(0), Row(1L), Row(-1L), Row(-1L), Row(1), Row(null)))
+    checkAnswer(df.selectExpr("unix_seconds(a)"),
+      Seq(Row(0), Row(1L), Row(-1L), Row(-1L), Row(1), Row(null)))
+  }
 }
