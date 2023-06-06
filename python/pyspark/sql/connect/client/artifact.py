@@ -328,5 +328,5 @@ class ArtifactManager:
             user_context=self._user_context, session_id=self._session_id, names=[artifactName]
         )
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
-        status: proto.ArtifactStatusesResponse.ArtifactStatus = resp.statuses.get(artifactName)
-        return status.exists
+        status = resp.statuses.get(artifactName)
+        return status.exists if status is not None else False
