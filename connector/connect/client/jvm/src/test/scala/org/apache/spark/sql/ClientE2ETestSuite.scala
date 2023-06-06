@@ -955,6 +955,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val session = spark
     import session.implicits._
     implicit val ec = ExecutionContext.global
+    assume(transferredClientTestJarIfNeed && transferredClientJarIfNeed)
     val q1 = Future {
       spark.range(10).map(n => { Thread.sleep(30000); n }).collect()
     }
@@ -995,6 +996,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val session = spark
     import session.implicits._
     implicit val ec = ExecutionContext.global
+
+    assume(transferredClientTestJarIfNeed && transferredClientJarIfNeed)
 
     @volatile var finished = false
     val interruptor = Future {

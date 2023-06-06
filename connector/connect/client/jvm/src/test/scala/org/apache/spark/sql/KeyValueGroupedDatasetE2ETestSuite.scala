@@ -33,6 +33,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   import session.implicits._
 
   test("mapGroups") {
+    assume(transferredClientTestJarIfNeed)
     val session: SparkSession = spark
     import session.implicits._
     val values = spark
@@ -44,6 +45,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("flatGroupMap") {
+    assume(transferredClientTestJarIfNeed)
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -53,6 +55,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keys") {
+    assume(transferredClientTestJarIfNeed)
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -62,6 +65,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs - keys") {
+    assume(transferredClientTestJarIfNeed)
     // It is okay to cast from Long to Double, but not Long to Int.
     val values = spark
       .range(10)
@@ -73,6 +77,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs - flatGroupMap") {
+    assume(transferredClientTestJarIfNeed)
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -83,6 +88,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs mapValues - cogroup") {
+    assume(transferredClientTestJarIfNeed)
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -114,6 +120,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapValues - flatGroupMap") {
+    assume(transferredClientTestJarIfNeed)
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -124,6 +131,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapValues - keys") {
+    assume(transferredClientTestJarIfNeed)
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -134,6 +142,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("flatMapSortedGroups") {
+    assume(transferredClientTestJarIfNeed)
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -157,6 +166,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("cogroup") {
+    assume(transferredClientTestJarIfNeed)
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -173,6 +183,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("cogroupSorted") {
+    assume(transferredClientTestJarIfNeed)
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -200,6 +211,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("agg, keyAs") {
+    assume(transferredClientTestJarIfNeed)
     val ds = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -210,6 +222,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr") {
+    assume(transferredClientTestJarIfNeed)
     val session: SparkSession = spark
     import session.implicits._
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
@@ -222,6 +235,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -232,6 +246,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -242,6 +257,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -257,6 +273,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -273,6 +290,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -290,6 +308,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -308,6 +327,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr, expr, expr") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -377,6 +397,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-24762: typed agg on Option[Product] type") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(Some((1, 2)), Some((2, 3)), Some((1, 3))).toDS()
     assert(ds.groupByKey(_.get._1).count().collect() === Seq((1, 2), (2, 1)))
 
@@ -386,6 +407,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-25942: typed aggregation on primitive type") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(1, 2, 3).toDS()
 
     val agg = ds
@@ -395,6 +417,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-25942: typed aggregation on product type") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq((1, 2), (2, 3), (3, 4)).toDS()
     val agg = ds.groupByKey(x => x).agg(sum("_1").as[Long], sum($"_2" + 1).as[Long])
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
@@ -413,6 +436,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("reduceGroups") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq("abc", "xyz", "hello").toDS()
     checkDatasetUnorderly(
       ds.groupByKey(_.length).reduceGroups(_ + _),
@@ -421,6 +445,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("groupby") {
+    assume(transferredClientTestJarIfNeed)
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
