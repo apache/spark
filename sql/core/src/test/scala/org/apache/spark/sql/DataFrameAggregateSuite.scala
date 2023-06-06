@@ -463,6 +463,36 @@ class DataFrameAggregateSuite extends QueryTest
     checkAggregatesWithTol(sparkKurtosis, Row(-1.5), absTol)
   }
 
+  test("linear regression") {
+
+    val sparkRegrAvgX = testData2.agg(regr_avgx($"a", $"b"))
+    checkAnswer(sparkRegrAvgX, Row(1.5))
+
+    val sparkRegrAvgY = testData2.agg(regr_avgy($"a", $"b"))
+    checkAnswer(sparkRegrAvgY, Row(2.0))
+
+    val sparkRegrCount = testData2.agg(regr_count($"a", $"b"))
+    checkAnswer(sparkRegrCount, Row(6))
+
+    val sparkRegrIntercept = testData2.agg(regr_intercept($"a", $"b"))
+    checkAnswer(sparkRegrIntercept, Row(1.9999999999999998))
+
+    val sparkRegrR2 = testData2.agg(regr_r2($"a", $"b"))
+    checkAnswer(sparkRegrR2, Row(8.217301096052209E-33))
+
+    val sparkRegrSlope = testData2.agg(regr_slope($"a", $"b"))
+    checkAnswer(sparkRegrSlope, Row(1.480297366166875E-16))
+
+    val sparkRegrSXX = testData2.agg(regr_sxx($"a", $"b"))
+    checkAnswer(sparkRegrSXX, Row(1.5000000000000002))
+
+    val sparkRegrSXY = testData2.agg(regr_sxy($"a", $"b"))
+    checkAnswer(sparkRegrSXY, Row(2.220446049250313E-16))
+
+    val sparkRegrSYY = testData2.agg(regr_syy($"a", $"b"))
+    checkAnswer(sparkRegrSYY, Row(4.0))
+  }
+
   test("zero moments") {
     withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val input = Seq((1, 2)).toDF("a", "b")

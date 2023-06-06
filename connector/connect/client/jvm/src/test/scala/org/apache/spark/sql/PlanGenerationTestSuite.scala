@@ -1030,6 +1030,42 @@ class PlanGenerationTestSuite
     fn.var_pop("a")
   }
 
+  functionTest("regr_avgx") {
+    fn.regr_avgx("a", "b")
+  }
+
+  functionTest("regr_avgy") {
+    fn.regr_avgy("a", "b")
+  }
+
+  functionTest("regr_count") {
+    fn.regr_count("a", "b")
+  }
+
+  functionTest("regr_intercept") {
+    fn.regr_intercept("a", "b")
+  }
+
+  functionTest("regr_r2") {
+    fn.regr_r2("a", "b")
+  }
+
+  functionTest("regr_slope") {
+    fn.regr_slope("a", "b")
+  }
+
+  functionTest("regr_sxx") {
+    fn.regr_sxx("a", "b")
+  }
+
+  functionTest("regr_sxy") {
+    fn.regr_sxy("a", "b")
+  }
+
+  functionTest("regr_syy") {
+    fn.regr_syy("a", "b")
+  }
+
   functionTest("array") {
     fn.array("a", "a")
   }

@@ -2074,6 +2074,286 @@ def var_pop(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the average of the independent variable for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the average of the independent variable for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_avgx("y", "x")).first()
+    Row(regr_avgx(y, x)=0.999)
+    """
+    return _invoke_function_over_columns("regr_avgx", y, x)
+
+
+@try_remote_functions
+def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the average of the dependent variable for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the average of the dependent variable for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_avgy("y", "x")).first()
+    Row(regr_avgy(y, x)=9.980732994136464)
+    """
+    return _invoke_function_over_columns("regr_avgy", y, x)
+
+
+@try_remote_functions
+def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the number of non-null number pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of non-null number pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_count("y", "x")).first()
+    Row(regr_count(y, x)=1000)
+    """
+    return _invoke_function_over_columns("regr_count", y, x)
+
+
+@try_remote_functions
+def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the intercept of the univariate linear regression line
+    for non-null pairs in a group, where `y` is the dependent variable and
+    `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the intercept of the univariate linear regression line for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_intercept("y", "x")).first()
+    Row(regr_intercept(y, x)=-0.04961745990969568)
+    """
+    return _invoke_function_over_columns("regr_intercept", y, x)
+
+
+@try_remote_functions
+def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the coefficient of determination for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the coefficient of determination for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_r2("y", "x")).first()
+    Row(regr_r2(y, x)=0.9851908293645436)
+    """
+    return _invoke_function_over_columns("regr_r2", y, x)
+
+
+@try_remote_functions
+def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the slope of the linear regression line for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the slope of the linear regression line for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_slope("y", "x")).first()
+    Row(regr_slope(y, x)=10.040390844891048)
+    """
+    return _invoke_function_over_columns("regr_slope", y, x)
+
+
+@try_remote_functions
+def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_sxx("y", "x")).first()
+    Row(regr_sxx(y, x)=666.9989999999996)
+    """
+    return _invoke_function_over_columns("regr_sxx", y, x)
+
+
+@try_remote_functions
+def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_sxy("y", "x")).first()
+    Row(regr_sxy(y, x)=6696.93065315148)
+    """
+    return _invoke_function_over_columns("regr_sxy", y, x)
+
+
+@try_remote_functions
+def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_syy("y", "x")).first()
+    Row(regr_syy(y, x)=68250.53503811295)
+    """
+    return _invoke_function_over_columns("regr_syy", y, x)
+
+
+@try_remote_functions
 def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
