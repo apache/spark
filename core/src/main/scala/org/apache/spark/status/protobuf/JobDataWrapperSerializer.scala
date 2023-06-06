@@ -71,6 +71,7 @@ private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWr
     }
     jobData.stageIds.foreach(id => jobDataBuilder.addStageIds(id.toLong))
     jobData.jobGroup.foreach(jobDataBuilder.setJobGroup)
+    jobData.jobTags.foreach(jobDataBuilder.addJobTags)
     jobData.killedTasksSummary.foreach { entry =>
       jobDataBuilder.putKillTasksSummary(entry._1, entry._2)
     }
@@ -93,6 +94,7 @@ private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWr
       completionTime = completionTime,
       stageIds = info.getStageIdsList.asScala.map(_.toInt),
       jobGroup = jobGroup,
+      jobTags = info.getJobTagsList.asScala,
       status = status,
       numTasks = info.getNumTasks,
       numActiveTasks = info.getNumActiveTasks,
