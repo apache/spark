@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal}
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 
 /**
  * This object is responsible for processing unresolved table specifications in commands with
@@ -49,19 +49,24 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
   /** Helper method to resolve the table specification within a logical plan. */
   private def resolveTableSpec(
       t: HasTableSpec, withNewSpec: TableSpec => LogicalPlan): LogicalPlan = t.tableSpec match {
-    case _: ResolvedTableSpec =>
-      t
-    case u: UnresolvedTableSpec =>
+    case u: UnresolvedTableSpec if t.unresolvedOptionsList.allOptionsResolved =>
       val newOptions: Seq[(String, String)] = t.unresolvedOptionsList.options.map {
         case (key: String, null) =>
           (key, null)
         case (key: String, value: Expression) =>
           val newValue: String = try {
-            constantFold(value) match {
-              case lit: Literal =>
-                lit.toString
-              case _ =>
+            val dt = value.dataType
+            value match {
+              case Literal(null, _) =>
+                "null"
+              case _
+                if dt.isInstanceOf[ArrayType] ||
+                  dt.isInstanceOf[StructType] ||
+                  dt.isInstanceOf[MapType] =>
                 throw QueryCompilationErrors.optionMustBeConstant(key)
+              case _ =>
+                val result = value.eval()
+                Literal(result, dt).toString
             }
           } catch {
             case _: SparkThrowable | _: java.lang.RuntimeException =>
@@ -78,17 +83,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         serde = u.serde,
         external = u.external)
       withNewSpec(newTableSpec)
-  }
-
-  /** Helper method to constant-fold expressions of TableSpec options. */
-  private def constantFold(expression: Expression): Expression = {
-    val logical = Project(Seq(Alias(expression, "col")()), OneRowRelation())
-    val folded = ConstantFolding(logical)
-    folded match {
-      case Project(Seq(Alias(expression, _)), _) => expression
-      // Note that we do not need to check if the pattern does not match because the constant
-      // folding we have invoked will not change the operators and number of projection expressions
-      // in the query plan.
-    }
+    case _ =>
+      t
   }
 }

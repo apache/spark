@@ -36,17 +36,11 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  def checkInvalidUnresolvedColumn(createOption: String): Unit = {
-  }
-
-
   test("SPARK-43529: Support constant expressions in CREATE/REPLACE TABLE OPTIONS") {
     checkOption("1 + 2", "3")
     checkOption("'a' || 'b'", "ab")
     checkOption("true or false", "true")
     checkOption("null", "null")
-    checkOption("cast(array('9', '9') as array<byte>)", "[9,9]")
-    checkOption("cast(map('9', '9') as map<string, string>)", "map(keys: [9], values: [9])")
     checkOption("cast('11 23:4:0' as interval day to second)",
       "INTERVAL '11 23:04:00' DAY TO SECOND")
     checkOption("date_diff(current_date(), current_date())", "0")
@@ -73,6 +67,27 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
       parameters = Map(
         "objectName" -> "`unresolvedAttribute`"),
       queryContext = Array(ExpectedContext("", "", 69, 87, "unresolvedAttribute")))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"$prefix ('k' = cast(array('9', '9') as array<byte>))")),
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map(
+        "key" -> "k",
+        "supported" -> "constant expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"$prefix ('k' = cast(map('9', '9') as map<string, string>))")),
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map(
+        "key" -> "k",
+        "supported" -> "constant expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"$prefix ('k' = raise_error('failure'))")),
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      parameters = Map(
+        "key" -> "k",
+        "supported" -> "constant expressions"))
     checkError(
       exception = intercept[AnalysisException](
         sql(s"$prefix ('k' = raise_error('failure'))")),
