@@ -78,7 +78,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
 
       HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
 
-      val spySqlContext = spy(sqlContext)
+      val spySqlContext = spy[SQLContext](sqlContext)
 
       // When cancel() is called on the operation, cleanup causes an exception to be thrown inside
       // of execute(). This should not cause the state to become ERROR. The exception here will be

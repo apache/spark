@@ -31,13 +31,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
-import org.apache.spark.connect.proto.StreamingQueryCommand
-import org.apache.spark.connect.proto.StreamingQueryCommandResult
-import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
-import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
@@ -182,8 +178,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
     catalog.getCatTypeCase match {
-      case proto.Catalog.CatTypeCase.CURRENT_DATABASE =>
-        transformCurrentDatabase(catalog.getCurrentDatabase)
+      case proto.Catalog.CatTypeCase.CURRENT_DATABASE => transformCurrentDatabase()
       case proto.Catalog.CatTypeCase.SET_CURRENT_DATABASE =>
         transformSetCurrentDatabase(catalog.getSetCurrentDatabase)
       case proto.Catalog.CatTypeCase.LIST_DATABASES =>
@@ -213,13 +208,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Catalog.CatTypeCase.CACHE_TABLE => transformCacheTable(catalog.getCacheTable)
       case proto.Catalog.CatTypeCase.UNCACHE_TABLE =>
         transformUncacheTable(catalog.getUncacheTable)
-      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache(catalog.getClearCache)
+      case proto.Catalog.CatTypeCase.CLEAR_CACHE => transformClearCache()
       case proto.Catalog.CatTypeCase.REFRESH_TABLE =>
         transformRefreshTable(catalog.getRefreshTable)
       case proto.Catalog.CatTypeCase.REFRESH_BY_PATH =>
         transformRefreshByPath(catalog.getRefreshByPath)
       case proto.Catalog.CatTypeCase.CURRENT_CATALOG =>
-        transformCurrentCatalog(catalog.getCurrentCatalog)
+        transformCurrentCatalog()
       case proto.Catalog.CatTypeCase.SET_CURRENT_CATALOG =>
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
@@ -452,7 +447,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
-    val fractions = rel.getFractionsList.asScala.toSeq.map { protoFraction =>
+    val fractions = rel.getFractionsList.asScala.map { protoFraction =>
       val stratum = transformLiteral(protoFraction.getStratum) match {
         case Literal(s, StringType) if s != null => s.toString
         case literal => literal.value
@@ -1407,8 +1402,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       command = fun.getCommand.toByteArray,
       // Empty environment variables
       envVars = Maps.newHashMap(),
-      // No imported Python libraries
-      pythonIncludes = Lists.newArrayList(),
+      pythonIncludes =
+        SparkConnectArtifactManager.getOrCreateArtifactManager.getSparkConnectPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
@@ -1452,32 +1447,34 @@ class SparkConnectPlanner(val session: SparkSession) {
     def extractArgsOfProtobufFunction(
         functionName: String,
         argumentsCount: Int,
-        children: Seq[Expression]): (String, Option[String], Map[String, String]) = {
+        children: collection.Seq[Expression])
+        : (String, Option[Array[Byte]], Map[String, String]) = {
       val messageClassName = children(1) match {
         case Literal(s, StringType) if s != null => s.toString
         case other =>
           throw InvalidPlanInput(
             s"MessageClassName in $functionName should be a literal string, but got $other")
       }
-      val (descFilePathOpt, options) = if (argumentsCount == 2) {
+      val (binaryFileDescSetOpt, options) = if (argumentsCount == 2) {
         (None, Map.empty[String, String])
       } else if (argumentsCount == 3) {
         children(2) match {
-          case Literal(s, StringType) if s != null =>
-            (Some(s.toString), Map.empty[String, String])
+          case Literal(b, BinaryType) if b != null =>
+            (Some(b.asInstanceOf[Array[Byte]]), Map.empty[String, String])
           case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
             (None, ExprUtils.convertToMapData(CreateMap(arguments)))
           case other =>
             throw InvalidPlanInput(
-              s"The valid type for the 3rd arg in $functionName is string or map, but got $other")
+              s"The valid type for the 3rd arg in $functionName " +
+                s"is binary or map, but got $other")
         }
       } else if (argumentsCount == 4) {
-        val filePathOpt = children(2) match {
-          case Literal(s, StringType) if s != null =>
-            Some(s.toString)
+        val fileDescSetOpt = children(2) match {
+          case Literal(b, BinaryType) if b != null =>
+            Some(b.asInstanceOf[Array[Byte]])
           case other =>
             throw InvalidPlanInput(
-              s"DescFilePath in $functionName should be a literal string, but got $other")
+              s"DescFilePath in $functionName should be a literal binary, but got $other")
         }
         val map = children(3) match {
           case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
@@ -1486,12 +1483,12 @@ class SparkConnectPlanner(val session: SparkSession) {
             throw InvalidPlanInput(
               s"Options in $functionName should be created by map, but got $other")
         }
-        (filePathOpt, map)
+        (fileDescSetOpt, map)
       } else {
         throw InvalidPlanInput(
           s"$functionName requires 2 ~ 4 arguments, but got $argumentsCount ones!")
       }
-      (messageClassName, descFilePathOpt, options)
+      (messageClassName, binaryFileDescSetOpt, options)
     }
 
     fun.getFunctionName match {
@@ -1511,24 +1508,24 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case "nth_value" if fun.getArgumentsCount == 3 =>
         // NthValue does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ignoreNulls = extractBoolean(children(2), "ignoreNulls")
         Some(NthValue(children(0), children(1), ignoreNulls))
 
       case "lag" if fun.getArgumentsCount == 4 =>
         // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
         Some(Lag(children.head, children(1), children(2), ignoreNulls))
 
       case "lead" if fun.getArgumentsCount == 4 =>
         // Lead does not have a constructor which accepts Expression typed 'ignoreNulls'
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ignoreNulls = extractBoolean(children(3), "ignoreNulls")
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
 
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         val timeCol = children.head
         val windowDuration = extractString(children(1), "windowDuration")
         var slideDuration = windowDuration
@@ -1544,7 +1541,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
 
       case "session_window" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         val timeCol = children.head
         val sessionWindow = children.last match {
           case Literal(s, StringType) if s != null => SessionWindow(timeCol, s.toString)
@@ -1555,7 +1552,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY)))
 
       case "bucket" if fun.getArgumentsCount == 2 =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         (children.head, children.last) match {
           case (numBuckets: Literal, child) if numBuckets.dataType == IntegerType =>
             Some(Bucket(numBuckets, child))
@@ -1580,7 +1577,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
 
         var schema: DataType = null
         children(1) match {
@@ -1609,7 +1606,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       // Avro-specific functions
       case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         val jsonFormatSchema = extractString(children(1), "jsonFormatSchema")
         var options = Map.empty[String, String]
         if (fun.getArgumentsCount == 3) {
@@ -1618,7 +1615,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
 
       case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
         var jsonFormatSchema = Option.empty[String]
         if (fun.getArgumentsCount == 2) {
           jsonFormatSchema = Some(extractString(children(1), "jsonFormatSchema"))
@@ -1648,16 +1645,18 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       // Protobuf-specific functions
       case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val (messageClassName, descFilePathOpt, options) =
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val (messageClassName, binaryFileDescSetOpt, options) =
           extractArgsOfProtobufFunction("from_protobuf", fun.getArgumentsCount, children)
-        Some(ProtobufDataToCatalyst(children.head, messageClassName, descFilePathOpt, options))
+        Some(
+          ProtobufDataToCatalyst(children.head, messageClassName, binaryFileDescSetOpt, options))
 
       case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
-        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val (messageClassName, descFilePathOpt, options) =
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val (messageClassName, binaryFileDescSetOpt, options) =
           extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
-        Some(CatalystDataToProtobuf(children.head, messageClassName, descFilePathOpt, options))
+        Some(
+          CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
 
       case _ => None
     }
@@ -1692,6 +1691,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
   }
 
+  @scala.annotation.tailrec
   private def extractMapData(expr: Expression, field: String): Map[String, String] = expr match {
     case map: CreateMap => ExprUtils.convertToMapData(map)
     case UnresolvedFunction(Seq("map"), args, _, _, _) => extractMapData(CreateMap(args), field)
@@ -2055,8 +2055,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     if (fun.getArgumentsCount != 1) {
       throw InvalidPlanInput("reduce requires single child expression")
     }
-    val udf = fun.getArgumentsList.asScala.toSeq.map(transformExpression) match {
-      case Seq(f: ScalaUDF) =>
+    val udf = fun.getArgumentsList.asScala.map(transformExpression) match {
+      case collection.Seq(f: ScalaUDF) =>
         f
       case other =>
         throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
@@ -2111,7 +2111,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           sessionId,
           responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
-        handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
+        handleGetResourcesCommand(sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -2370,7 +2370,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         .map(transformExpression)
         .map(Column(_))
         .toSeq
-      w.partitionedBy(names.head, names.tail.toSeq: _*)
+      w.partitionedBy(names.head, names.tail: _*)
     }
 
     writeOperation.getMode match {
@@ -2659,7 +2659,6 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   def handleGetResourcesCommand(
-      command: proto.GetResourcesCommand,
       sessionId: String,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     responseObserver.onNext(
@@ -2687,7 +2686,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     output = AttributeReference("value", StringType, false)() :: Nil,
     data = Seq.empty)
 
-  private def transformCurrentDatabase(getCurrentDatabase: proto.CurrentDatabase): LogicalPlan = {
+  private def transformCurrentDatabase(): LogicalPlan = {
     session.createDataset(session.catalog.currentDatabase :: Nil)(Encoders.STRING).logicalPlan
   }
 
@@ -2698,7 +2697,11 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformListDatabases(getListDatabases: proto.ListDatabases): LogicalPlan = {
-    session.catalog.listDatabases().logicalPlan
+    if (getListDatabases.hasPattern) {
+      session.catalog.listDatabases(getListDatabases.getPattern).logicalPlan
+    } else {
+      session.catalog.listDatabases().logicalPlan
+    }
   }
 
   private def transformListTables(getListTables: proto.ListTables): LogicalPlan = {
@@ -2918,7 +2921,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     emptyLocalRelation
   }
 
-  private def transformClearCache(getClearCache: proto.ClearCache): LogicalPlan = {
+  private def transformClearCache(): LogicalPlan = {
     session.catalog.clearCache()
     emptyLocalRelation
   }
@@ -2933,7 +2936,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     emptyLocalRelation
   }
 
-  private def transformCurrentCatalog(getCurrentCatalog: proto.CurrentCatalog): LogicalPlan = {
+  private def transformCurrentCatalog(): LogicalPlan = {
     session.createDataset(session.catalog.currentCatalog() :: Nil)(Encoders.STRING).logicalPlan
   }
 
@@ -2944,6 +2947,10 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
-    session.catalog.listCatalogs().logicalPlan
+    if (getListCatalogs.hasPattern) {
+      session.catalog.listCatalogs(getListCatalogs.getPattern).logicalPlan
+    } else {
+      session.catalog.listCatalogs().logicalPlan
+    }
   }
 }

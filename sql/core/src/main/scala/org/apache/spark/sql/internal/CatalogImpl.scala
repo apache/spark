@@ -91,6 +91,24 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Returns a list of databases (namespaces) which name match the specify pattern and
+   * available within the current catalog.
+   *
+   * @since 3.5.0
+   */
+  override def listDatabases(pattern: String): Dataset[Database] = {
+    val plan = ShowNamespaces(UnresolvedNamespace(Nil), Some(pattern))
+    val qe = sparkSession.sessionState.executePlan(plan)
+    val catalog = qe.analyzed.collectFirst {
+      case ShowNamespaces(r: ResolvedNamespace, _, _) => r.catalog
+    }.get
+    val databases = qe.toRdd.collect().map { row =>
+      getNamespace(catalog, parseIdent(row.getString(0)))
+    }
+    CatalogImpl.makeDataset(databases, sparkSession)
+  }
+
+  /**
    * Returns a list of tables in the current database.
    * This includes all temporary tables.
    */
@@ -861,6 +879,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def listCatalogs(): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(None)
+    CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+  }
+
+  /**
+   * Returns a list of catalogs which name match the specify pattern and available in this session.
+   *
+   * @since 3.5.0
+   */
+  override def listCatalogs(pattern: String): Dataset[CatalogMetadata] = {
+    val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(Some(pattern))
     CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
   }
 

@@ -1241,3 +1241,20 @@ Filter (cast(t0a#x as bigint) < scalar-subquery#x [t0a#x && t0b#x])
       +- View (`t0`, [t0a#x,t0b#x])
          +- Project [cast(col1#x as int) AS t0a#x, cast(col2#x as int) AS t0b#x]
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *
+from range(1, 3) t1
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) is not null
+-- !query analysis
+Project [id#xL]
++- Filter isnotnull(scalar-subquery#x [id#xL])
+   :  +- Project [id#xL AS c#xL]
+   :     +- Filter (outer(id#xL) = id#xL)
+   :        +- SubqueryAlias t2
+   :           +- Range (1, 2, step=1, splits=None)
+   +- SubqueryAlias t1
+      +- Range (1, 3, step=1, splits=None)

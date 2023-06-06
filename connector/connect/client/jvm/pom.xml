@@ -34,7 +34,7 @@
     <sbt.project.name>connect-client-jvm</sbt.project.name>
     <guava.version>31.0.1-jre</guava.version>
     <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <mima.version>1.1.0</mima.version>
+    <mima.version>1.1.2</mima.version>
   </properties>
 
   <dependencies>

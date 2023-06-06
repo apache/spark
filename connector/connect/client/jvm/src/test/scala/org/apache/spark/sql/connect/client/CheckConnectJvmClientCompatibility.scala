@@ -113,13 +113,24 @@ object CheckConnectJvmClientCompatibility {
         "Sql")
 
       val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
-      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, sqlJar)
+      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, avroJar)
       appendMimaCheckErrorMessageIfNeeded(
         resultWriter,
         problemsWithAvroModule,
         clientJar,
         avroJar,
         "Avro")
+
+      val protobufJar: File =
+        findJar("connector/protobuf", "spark-protobuf-assembly", "spark-protobuf")
+      val problemsWithProtobufModule =
+        checkMiMaCompatibilityWithProtobufModule(clientJar, protobufJar)
+      appendMimaCheckErrorMessageIfNeeded(
+        resultWriter,
+        problemsWithProtobufModule,
+        clientJar,
+        protobufJar,
+        "Protobuf")
 
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
       appendIncompatibleDatasetApisErrorMessageIfNeeded(resultWriter, incompatibleApis)
@@ -140,6 +151,14 @@ object CheckConnectJvmClientCompatibility {
     val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
     val excludeRules = Seq.empty
     checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithProtobufModule(
+      clientJar: File,
+      protobufJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.protobuf.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, protobufJar, includedRules, excludeRules)
   }
 
   private def checkMiMaCompatibilityWithSqlModule(
@@ -288,11 +307,11 @@ object CheckConnectJvmClientCompatibility {
    */
   private def checkMiMaCompatibility(
       clientJar: File,
-      sqlJar: File,
+      targetJar: File,
       includedRules: Seq[IncludeByName],
       excludeRules: Seq[ProblemFilter]): List[Problem] = {
-    val mima = new MiMaLib(Seq(clientJar, sqlJar))
-    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
+    val mima = new MiMaLib(Seq(clientJar, targetJar))
+    val allProblems = mima.collectProblems(targetJar, clientJar, List.empty)
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))

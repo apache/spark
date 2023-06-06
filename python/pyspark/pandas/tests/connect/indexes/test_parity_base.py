@@ -29,27 +29,33 @@ class IndexesParityTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_append(self):
         super().test_append()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
+    )
     def test_drop_duplicates(self):
         super().test_drop_duplicates()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_factorize(self):
         super().test_factorize()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
+    )
     def test_index_drop_duplicates(self):
         super().test_index_drop_duplicates()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43703): Enable IndexesParityTests.test_monotonic.")
     def test_monotonic(self):
         super().test_monotonic()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43704): Enable IndexesParityTests.test_to_series.")
     def test_to_series(self):
         super().test_to_series()
 

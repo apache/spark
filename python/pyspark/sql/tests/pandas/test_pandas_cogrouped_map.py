@@ -19,7 +19,15 @@ import unittest
 from typing import cast
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf, sum
-from pyspark.sql.types import DoubleType, StructType, StructField, Row
+from pyspark.sql.types import (
+    ArrayType,
+    DoubleType,
+    LongType,
+    StructType,
+    StructField,
+    YearMonthIntervalType,
+    Row,
+)
 from pyspark.sql.window import Window
 from pyspark.errors import IllegalArgumentException, PythonException
 from pyspark.testing.sqlutils import (
@@ -333,9 +341,11 @@ class CogroupedApplyInPandasTestsMixin:
         # Test that we get a sensible exception invalid values passed to apply
         self._test_merge_error(
             fn=lambda l, r: l,
-            output_schema="id long, v array<timestamp>",
+            output_schema=(
+                StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType()))
+            ),
             error_class=NotImplementedError,
-            error_message_regex="Invalid return type.*ArrayType.*TimestampType",
+            error_message_regex="Invalid return type.*ArrayType.*YearMonthIntervalType",
         )
 
     def test_wrong_args(self):
