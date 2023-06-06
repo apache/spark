@@ -551,9 +551,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val d3 = Date.valueOf("2014-12-31")
     val df = Seq(d1, d2, d3).toDF("d")
 
-    checkAnswer(
-      df.select(unix_date(col("d"))),
-      Seq(Row(16435), Row(16617), Row(16638)))
+    val result1 = df.selectExpr("unix_date(d)")
+    val result2 = df.select(unix_date(col("d")))
+    checkAnswer(result1, result2)
   }
 
   test("function unix_micros") {
@@ -562,9 +562,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
     val df = Seq(t1, t2, t3).toDF("t")
 
-    checkAnswer(
-      df.select(unix_micros(col("t"))),
-      Seq(Row(1420099199000000L), Row(1420099199000000L), Row(1437584400000000L)))
+    val result1 = df.selectExpr("unix_micros(t)")
+    val result2 = df.select(unix_micros(col("t")))
+    checkAnswer(result1, result2)
   }
 
   test("function unix_millis") {
@@ -573,9 +573,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
     val df = Seq(t1, t2, t3).toDF("t")
 
-    checkAnswer(
-      df.select(unix_millis(col("t"))),
-      Seq(Row(1420099199000L), Row(1420099199000L), Row(1437584400000L)))
+    val result1 = df.selectExpr("unix_millis(t)")
+    val result2 = df.select(unix_millis(col("t")))
+    checkAnswer(result1, result2)
   }
 
   test("function unix_seconds") {
@@ -584,9 +584,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
     val df = Seq(t1, t2, t3).toDF("t")
 
-    checkAnswer(
-      df.select(unix_seconds(col("t"))),
-      Seq(Row(1420099199L), Row(1420099199L), Row(1437584400L)))
+    val result1 = df.selectExpr("unix_seconds(t)")
+    val result2 = df.select(unix_seconds(col("t")))
+    checkAnswer(result1, result2)
   }
 
   test("function trunc") {

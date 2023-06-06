@@ -4991,6 +4991,7 @@ def unix_date(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('1970-01-02',)], ['t'])
     >>> df.select(unix_date(to_date(df.t)).alias('n')).collect()
     [Row(n=1)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_date", col)
 
@@ -5005,6 +5006,7 @@ def unix_micros(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
     >>> df.select(unix_micros(to_timestamp(df.t)).alias('n')).collect()
     [Row(n=1437584400000000)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_micros", col)
 
@@ -5020,6 +5022,7 @@ def unix_millis(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
     >>> df.select(unix_millis(to_timestamp(df.t)).alias('n')).collect()
     [Row(n=1437584400000)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_millis", col)
 
@@ -5035,6 +5038,7 @@ def unix_seconds(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
     >>> df.select(unix_seconds(to_timestamp(df.t)).alias('n')).collect()
     [Row(n=1437584400)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_seconds", col)
 
