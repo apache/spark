@@ -435,7 +435,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      parameters = Map("columnName" -> "`__auto_generated_subquery_name`.`map`"),
+      parameters = Map("columnName" -> "`map`"),
       sqlState = "42818")
   }
 
@@ -646,6 +646,16 @@ class QueryExecutionErrorsSuite
         "message" -> "integer overflow",
         "alternative" -> "",
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
+  }
+
+  test("FAILED_PARSE_STRUCT_TYPE: parsing invalid struct type") {
+    val raw = """{"type":"array","elementType":"integer","containsNull":false}"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        StructType.fromString(raw)
+      },
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
+      parameters = Map("raw" -> s"'$raw'"))
   }
 
   test("CAST_OVERFLOW: from long to ANSI intervals") {

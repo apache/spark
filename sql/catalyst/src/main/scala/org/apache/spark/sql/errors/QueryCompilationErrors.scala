@@ -2497,10 +2497,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def cannotOverwritePathBeingReadFromError(): Throwable = {
+  def cannotOverwritePathBeingReadFromError(path: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1254",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_OVERWRITE.PATH",
+      messageParameters = Map("path" -> path))
+  }
+
+  def cannotOverwriteTableThatIsBeingReadFromError(tableIdent: TableIdentifier): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_OVERWRITE.TABLE",
+      messageParameters = Map("table" -> toSQLId(tableIdent.nameParts)))
   }
 
   def cannotDropBuiltinFuncError(functionName: String): Throwable = {
@@ -2954,12 +2960,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
     new TableAlreadyExistsException(tableIdent.nameParts)
-  }
-
-  def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1315",
-      messageParameters = Map("tableName" -> tableName))
   }
 
   def invalidPartitionTransformationError(expr: Expression): Throwable = {
@@ -3535,6 +3535,36 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
+    )
+  }
+
+  def avroIncorrectTypeError(
+      avroPath: String, sqlPath: String, avroType: String,
+      sqlType: String, key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_INCORRECT_TYPE",
+      messageParameters = Map(
+        "avroPath" -> avroPath,
+        "sqlPath" -> sqlPath,
+        "avroType" -> avroType,
+        "sqlType" -> toSQLType(sqlType),
+        "key" -> key
+      )
+    )
+  }
+
+  def avroLowerPrecisionError(
+      avroPath: String, sqlPath: String, avroType: String,
+      sqlType: String, key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_LOWER_PRECISION",
+      messageParameters = Map(
+        "avroPath" -> avroPath,
+        "sqlPath" -> sqlPath,
+        "avroType" -> avroType,
+        "sqlType" -> toSQLType(sqlType),
+        "key" -> key
+      )
     )
   }
 }

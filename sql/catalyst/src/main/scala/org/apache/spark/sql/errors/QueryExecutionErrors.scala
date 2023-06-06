@@ -1305,8 +1305,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2122",
-      messageParameters = Map("simpleString" -> StructType.simpleString, "raw" -> raw))
+      errorClass = "FAILED_PARSE_STRUCT_TYPE",
+      messageParameters = Map("raw" -> toSQLValue(raw, StringType)))
   }
 
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
@@ -2013,7 +2013,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def batchMetadataFileNotFoundError(batchMetadataFile: Path): SparkFileNotFoundException = {
     new SparkFileNotFoundException(
-      errorClass = "_LEGACY_ERROR_TEMP_2206",
+      errorClass = "BATCH_METADATA_NOT_FOUND",
       messageParameters = Map(
         "batchMetadataFile" -> batchMetadataFile.toString()))
   }

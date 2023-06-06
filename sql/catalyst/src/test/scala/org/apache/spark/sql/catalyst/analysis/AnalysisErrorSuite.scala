@@ -464,7 +464,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `b`, `c`, `d`, `e`"))
+    Map("objectName" -> "`bad_column`", "proposal" -> "`a`, `c`, `d`, `b`, `e`"))
 
   errorClassTest(
     "slide duration greater than window in time window",
@@ -790,7 +790,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("check grouping expression data types") {
-    def checkDataType(dataType: DataType, shouldSuccess: Boolean): Unit = {
+    def checkDataType(
+        dataType: DataType, shouldSuccess: Boolean, dataTypeMsg: String = ""): Unit = {
       val plan =
         Aggregate(
           AttributeReference("a", dataType)(exprId = ExprId(2)) :: Nil,
@@ -802,7 +803,14 @@ class AnalysisErrorSuite extends AnalysisTest {
       if (shouldSuccess) {
         assertAnalysisSuccess(plan, true)
       } else {
-        assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
+        assertAnalysisErrorClass(
+          inputPlan = plan,
+          expectedErrorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+          expectedMessageParameters = Map(
+            "sqlExpr" -> "\"a\"",
+            "dataType" -> dataTypeMsg
+          )
+        )
       }
     }
 
@@ -830,8 +838,11 @@ class AnalysisErrorSuite extends AnalysisTest {
         .add("f1", FloatType, nullable = true)
         .add("f2", MapType(StringType, LongType), nullable = true),
       new UngroupableUDT())
-    unsupportedDataTypes.foreach { dataType =>
-      checkDataType(dataType, shouldSuccess = false)
+    val expectedDataTypeParameters =
+      Seq("\"MAP<STRING, BIGINT>\"", "\"STRUCT<f1: FLOAT, f2: MAP<STRING, BIGINT>>\"")
+    unsupportedDataTypes.zip(expectedDataTypeParameters).foreach {
+      case (dataType, dataTypeMsg) =>
+        checkDataType(dataType, shouldSuccess = false, dataTypeMsg)
     }
   }
 
@@ -1025,10 +1036,11 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter($"t1.c1" === $"t2.c1",
             t.as("t2")))
       ).as("sub") :: Nil, t.as("t1"))
-    assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
-      "neither present in the group by, nor in an aggregate function. Add it to group by " +
-      "using ordinal position or wrap it in first() (or first_value) if you don't care " +
-      "which value you get." :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass =
+        "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      expectedMessageParameters = Map("sqlExpr" -> "\"scalarsubquery(c1)\""))
   }
 
   errorTest(
@@ -1036,7 +1048,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
     "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name " +
       "`bad_column` cannot be resolved. Did you mean one of the following? " +
-      "[`a`, `b`, `c`, `d`, `e`]"
+      "[`a`, `c`, `d`, `b`, `e`]"
       :: Nil)
 
   errorClassTest(

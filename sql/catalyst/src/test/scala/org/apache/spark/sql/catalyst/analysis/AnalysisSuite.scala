@@ -1500,6 +1500,25 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(refs.map(_.output).distinct.length == 2)
     }
 
+    withClue("CTE relation has duplicated attributes") {
+      val cteDef = CTERelationDef(testRelation.select($"a", $"a"))
+      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      val plan = WithCTE(cteRef.join(cteRef.select($"a")), Seq(cteDef)).analyze
+      val refs = plan.collect {
+        case r: CTERelationRef => r
+      }
+      assert(refs.length == 2)
+      assert(refs.map(_.output).distinct.length == 2)
+    }
+
+    withClue("CTE relation has duplicate aliases") {
+      val alias = Alias($"a", "x")()
+      val cteDef = CTERelationDef(testRelation.select(alias, alias).where($"x" === 1))
+      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      // Should not fail with the assertion failure: Found duplicate rewrite attributes.
+      WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
+    }
+
     withClue("references in both CTE relation definition and main query") {
       val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
       val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
@@ -1541,5 +1560,32 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val attr = $"a".int.markAsQualifiedAccessOnly()
     val rel = LocalRelation(attr)
     checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
+  }
+
+  test("SPARK-43030: deduplicate relations with duplicate aliases") {
+    // Should not fail with the assertion failure: Found duplicate rewrite attributes.
+    val alias = Alias($"a", "x")()
+
+    withClue("project") {
+      val plan = testRelation.select(alias, alias).where($"x" === 1)
+      plan.join(plan).analyze
+    }
+
+    withClue("aggregate") {
+      val plan = testRelation.groupBy($"a")(alias, alias).where($"x" === 1)
+      plan.join(plan).analyze
+    }
+
+    withClue("window") {
+      val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+      val spec = windowSpec(Seq($"c"), Seq(), frame)
+      val plan = testRelation2
+        .window(
+          Seq(alias, alias, windowExpr(min($"b"), spec).as("min_b")),
+          Seq($"c"),
+          Seq())
+        .where($"x" === 1)
+      plan.join(plan).analyze
+    }
   }
 }

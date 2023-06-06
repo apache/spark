@@ -139,7 +139,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       a: Attribute,
       errorClass: String): Nothing = {
     val missingCol = a.sql
-    val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+    val candidates = operator.inputSet.toSeq
+      .map(attr => attr.qualifier :+ attr.name)
     val orderedCandidates =
       StringUtils.orderSuggestedIdentifiersBySimilarity(missingCol, candidates)
     throw QueryCompilationErrors.unresolvedAttributeError(
@@ -403,12 +404,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
             if (!toleranceAssertion.foldable) {
               j.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2418",
+                errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
                 messageParameters = Map.empty)
             }
             if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
               j.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2419",
+                errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
                 messageParameters = Map.empty)
             }
 
@@ -427,8 +428,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
                   if (!child.deterministic) {
                     child.failAnalysis(
-                      errorClass = "_LEGACY_ERROR_TEMP_2421",
-                      messageParameters = Map("sqlExpr" -> expr.sql))
+                      errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+                      messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))
                   }
                 }
               case _: Attribute if groupingExprs.isEmpty =>
@@ -440,8 +441,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               case s: ScalarSubquery
                   if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
                 s.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2423",
-                  messageParameters = Map("sqlExpr" -> s.sql))
+                  errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+                  messageParameters = Map("sqlExpr" -> toSQLExpr(s)))
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               // There should be no Window in Aggregate - this case will fail later check anyway.
               // Perform this check for special case of lateral column alias, when the window
@@ -463,10 +464,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               // Check if the data type of expr is orderable.
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 expr.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2425",
+                  errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
                   messageParameters = Map(
-                    "sqlExpr" -> expr.sql,
-                    "dataType" -> expr.dataType.catalogString))
+                    "sqlExpr" -> toSQLExpr(expr),
+                    "dataType" -> toSQLType(expr.dataType)))
               }
 
               if (!expr.deterministic) {
@@ -719,6 +720,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !o.isInstanceOf[Expand] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
