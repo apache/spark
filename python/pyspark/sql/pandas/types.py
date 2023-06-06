@@ -495,6 +495,7 @@ def _create_converter_to_pandas(
     error_on_duplicated_field_names: bool = True,
     timestamp_utc_localized: bool = True,
     ndarray_as_list: bool = False,
+    null_int_float: bool = True,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -523,6 +524,8 @@ def _create_converter_to_pandas(
         whereas the ones from `df.collect()` are localized to the local timezone.
     ndarray_as_list : bool, optional
         Whether `np.ndarray` is converted to a list or not (default ``False``).
+    null_int_float : bool, optional
+        Whether the int Series with nulls will be converted to float Series or not.
 
     Returns
     -------
@@ -544,7 +547,7 @@ def _create_converter_to_pandas(
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
-                    return pser.astype(np.float64, copy=False)
+                    return pser.astype(np.float64, copy=False) if null_int_float else pser
                 else:
                     return pser.astype(pandas_type, copy=False)
 

@@ -177,7 +177,20 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
         # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
-        s = arrow_column.to_pandas(date_as_object=True)
+        import pyarrow as pa
+        import pandas as pd
+
+        dtype_mapping = {
+            pa.int8(): pd.Int8Dtype(),
+            pa.int16(): pd.Int16Dtype(),
+            pa.int32(): pd.Int32Dtype(),
+            pa.int64(): pd.Int64Dtype(),
+            pa.uint8(): pd.UInt8Dtype(),
+            pa.uint16(): pd.UInt16Dtype(),
+            pa.uint32(): pd.UInt32Dtype(),
+            pa.uint64(): pd.UInt64Dtype(),
+        }
+        s = arrow_column.to_pandas(date_as_object=True, types_mapper=dtype_mapping.get)
 
         # TODO(SPARK-43579): cache the converter for reuse
         converter = _create_converter_to_pandas(
@@ -187,6 +200,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             struct_in_pandas=struct_in_pandas,
             error_on_duplicated_field_names=True,
             ndarray_as_list=ndarray_as_list,
+            null_int_float=False,
         )
         return converter(s)
 
