@@ -34,10 +34,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
     conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
-      .set(
-        "spark.driver.extraJavaOptions",
-        "-Dspark.fs.copyFromLocalToFs.allowDestLocal=true"
-      )
+      .set("spark.fs.copyFromLocalToFs.allowDestLocal", "true")
   }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")

@@ -48,10 +48,7 @@ class ArtifactTests(ReusedConnectTestCase):
     @classmethod
     def conf(cls):
         conf = super().conf()
-        conf.set(
-            "spark.driver.extraJavaOptions",
-            "-Dspark.fs.copyFromLocalToFs.allowDestLocal=true",
-        )
+        conf.set("spark.fs.copyFromLocalToFs.allowDestLocal", "true")
         return conf
 
     def test_basic_requests(self):
