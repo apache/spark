@@ -337,22 +337,16 @@ private[spark] class SparkSubmit extends Logging {
         // For example we might use the dependencies for downloading
         // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
         // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
-        if (isKubernetesCluster) {
+        if (isKubernetesClusterModeDriver) {
+          val loader = getSubmitClassLoader(sparkConf)
+          for (jar <- resolvedMavenCoordinates) {
+            addJarToClasspath(jar, loader)
+          }
+        } else if (isKubernetesCluster) {
           // We need this in K8s cluster mode so that we can upload local deps
           // via the k8s application, like in cluster mode driver
-          childClasspath ++= resolvedMavenCoordinates.split(",")
+          childClasspath ++= resolvedMavenCoordinates
         } else {
-          // In K8s client mode, when in the driver, add resolved jars early as we might need
-          // them at the submit time for artifact downloading.
-          // For example we might use the dependencies for downloading
-          // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
-          // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
-          if (isKubernetesClusterModeDriver) {
-            val loader = getSubmitClassLoader(sparkConf)
-            for (jar <- resolvedMavenCoordinates.split(",")) {
-              addJarToClasspath(jar, loader)
-            }
-          }
           args.jars = mergeFileLists(args.jars, mergeFileLists(resolvedMavenCoordinates: _*))
           if (args.isPython || isInternal(args.primaryResource)) {
             args.pyFiles = mergeFileLists(args.pyFiles,
@@ -966,7 +960,7 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(s"Main class:\n$childMainClass")
       logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
-      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n")}")
+      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).mkString("\n")}")
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       logInfo("\n")
     }
@@ -1372,12 +1366,6 @@ private[spark] object SparkSubmitUtils extends Logging {
     ivySettings.addResolver(repoResolver)
     ivySettings.setDefaultResolver(repoResolver.getName)
     processRemoteRepoArg(ivySettings, remoteRepos)
-    // (since 2.5) Setting the property ivy.maven.lookup.sources to false
-    // disables the lookup of the sources artifact.
-    // And setting the property ivy.maven.lookup.javadoc to false
-    // disables the lookup of the javadoc artifact.
-    ivySettings.setVariable("ivy.maven.lookup.sources", "false")
-    ivySettings.setVariable("ivy.maven.lookup.javadoc", "false")
     ivySettings
   }
 
@@ -1609,6 +1597,12 @@ private[spark] object SparkSubmitUtils extends Logging {
 
           dependencyPaths
         }
+        // retrieve all resolved dependencies
+        ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
+          packagesDirectory.getAbsolutePath + File.separator +
+            "[organization]_[artifact]-[revision](-[classifier]).[ext]",
+          retrieveOptions.setConfs(Array(ivyConfName)))
+        resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
       } finally {
         System.setOut(sysOut)
         clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
