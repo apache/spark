@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
 
-class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuite {
+class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {
     val sql1 = "UPDATE primitive_table AS t SET t.txt = 'new', t.i = 1"
