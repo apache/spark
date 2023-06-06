@@ -114,7 +114,7 @@
   },
   "CANNOT_DECODE_URL" : {
     "message" : [
-      "Cannot decode url : <url>."
+      "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
   },
@@ -130,7 +130,7 @@
   },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
-      "Failed to merge incompatible data types <left> and <right>."
+      "Failed to merge incompatible data types <left> and <right>. Please check the data types of the columns being merged and ensure that they are compatible. If necessary, consider casting the columns to compatible data types before attempting the merge."
     ],
     "sqlState" : "42825"
   },
@@ -153,7 +153,7 @@
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
-      "Cannot parse decimal."
+      "Cannot parse decimal. Please ensure that the input is a valid number with optional decimal point or comma separators."
     ],
     "sqlState" : "22018"
   },
@@ -176,12 +176,12 @@
   },
   "CANNOT_READ_FILE_FOOTER" : {
     "message" : [
-      "Could not read footer for file: <file>."
+      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format. If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt. If it is, you can choose to either ignore it or fix the corruption."
     ]
   },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
-      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
     ],
     "sqlState" : "429BB"
   },
