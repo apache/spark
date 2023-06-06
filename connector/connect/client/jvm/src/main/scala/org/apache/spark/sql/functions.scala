@@ -4248,6 +4248,93 @@ object functions {
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
 
+  /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(xml: Column, path: String): Column =
+    Column.fn("xpath", xml, lit(path))
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(xml: Column, path: String): Column =
+    Column.fn("xpath_boolean", xml, lit(path))
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(xml: Column, path: String): Column =
+    Column.fn("xpath_double", xml, lit(path))
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(xml: Column, path: String): Column =
+    Column.fn("xpath_number", xml, lit(path))
+
+  /**
+   * Returns a float value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(xml: Column, path: String): Column =
+    Column.fn("xpath_float", xml, lit(path))
+
+  /**
+   * Returns an integer value, or the value zero if no match is found, or a match is found but the
+   * value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(xml: Column, path: String): Column =
+    Column.fn("xpath_int", xml, lit(path))
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found, or a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(xml: Column, path: String): Column =
+    Column.fn("xpath_long", xml, lit(path))
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found, or a match is found
+   * but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(xml: Column, path: String): Column =
+    Column.fn("xpath_short", xml, lit(path))
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(xml: Column, path: String): Column =
+    Column.fn("xpath_string", xml, lit(path))
+
   private def newLambdaVariable(name: String): proto.Expression.UnresolvedNamedLambdaVariable = {
     proto.Expression.UnresolvedNamedLambdaVariable
       .newBuilder()

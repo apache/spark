@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -5243,6 +5244,102 @@ object functions {
   def days(e: Column): Column = withExpr { Days(e.expr) }
 
   /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(x: Column, p: String): Column = withExpr {
+    XPathList(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(x: Column, p: String): Column = withExpr {
+    XPathBoolean(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(x: Column, p: String): Column = withExpr {
+    XPathDouble(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(x: Column, p: String): Column = withExpr {
+    XPathDouble(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns a float value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(x: Column, p: String): Column = withExpr {
+    XPathFloat(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns an integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(x: Column, p: String): Column = withExpr {
+    XPathInt(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(x: Column, p: String): Column = withExpr {
+    XPathLong(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(x: Column, p: String): Column = withExpr {
+    XPathShort(x.expr, lit(p).expr)
+  }
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(x: Column, p: String): Column = withExpr {
+    XPathString(x.expr, lit(p).expr)
+  }
+
+    /**
    * A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms

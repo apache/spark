@@ -2168,6 +2168,69 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
 
 
+def xpath(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath", _to_col(xml), lit(path))
+
+
+xpath.__doc__ = pysparkfuncs.xpath.__doc__
+
+
+def xpath_boolean(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_boolean", _to_col(xml), lit(path))
+
+
+xpath_boolean.__doc__ = pysparkfuncs.xpath_boolean.__doc__
+
+
+def xpath_double(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_double", _to_col(xml), lit(path))
+
+
+xpath_double.__doc__ = pysparkfuncs.xpath_double.__doc__
+
+
+def xpath_number(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_number", _to_col(xml), lit(path))
+
+
+xpath_number.__doc__ = pysparkfuncs.xpath_number.__doc__
+
+
+def xpath_float(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_float", _to_col(xml), lit(path))
+
+
+xpath_float.__doc__ = pysparkfuncs.xpath_float.__doc__
+
+
+def xpath_int(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_int", _to_col(xml), lit(path))
+
+
+xpath_int.__doc__ = pysparkfuncs.xpath_int.__doc__
+
+
+def xpath_long(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_long", _to_col(xml), lit(path))
+
+
+xpath_long.__doc__ = pysparkfuncs.xpath_long.__doc__
+
+
+def xpath_short(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_short", _to_col(xml), lit(path))
+
+
+xpath_short.__doc__ = pysparkfuncs.xpath_short.__doc__
+
+
+def xpath_string(xml: "ColumnOrName", path: str) -> Column:
+    return _invoke_function("xpath_string", _to_col(xml), lit(path))
+
+
+xpath_string.__doc__ = pysparkfuncs.xpath_string.__doc__
+
+
 def trunc(date: "ColumnOrName", format: str) -> Column:
     return _invoke_function("trunc", _to_col(date), lit(format))
 

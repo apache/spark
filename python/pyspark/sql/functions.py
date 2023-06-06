@@ -5034,6 +5034,132 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 @try_remote_functions
+def xpath(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns a string array of values within the nodes of xml that match the XPath expression.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>',)], ['x'])
+    >>> df.select(xpath(df.x, 'a/b/text()').alias('r')).collect()
+    [Row(r=['b1', 'b2', 'b3'])]
+    """
+    return _invoke_function("xpath", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_boolean(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns true if the XPath expression evaluates to true, or if a matching node is found.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b></a>',)], ['x'])
+    >>> df.select(xpath_boolean(df.x, 'a/b').alias('r')).collect()
+    [Row(r=True)]
+    """
+    return _invoke_function("xpath_boolean", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_double(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_double(df.x, 'sum(a/b)').alias('r')).collect()
+    [Row(r=3.0)]
+    """
+    return _invoke_function("xpath_double", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_number(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_number(df.x, 'sum(a/b)').alias('r')).collect()
+    [Row(r=3.0)]
+    """
+    return _invoke_function("xpath_number", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_float(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns a float value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_float(df.x, 'sum(a/b)').alias('r')).collect()
+    [Row(r=3.0)]
+    """
+    return _invoke_function("xpath_float", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_int(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns an integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_int(df.x, 'sum(a/b)').alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function("xpath_int", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_long(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_long(df.x, 'sum(a/b)').alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function("xpath_long", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_short(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_short(df.x, 'sum(a/b)').alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function("xpath_short", _to_java_column(xml), path)
+
+
+@try_remote_functions
+def xpath_string(xml: "ColumnOrName", path: str) -> Column:
+    """
+    Returns the text contents of the first xml node that matches the XPath expression.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>b</b><c>cc</c></a>',)], ['x'])
+    >>> df.select(xpath_string(df.x, 'a/c').alias('r')).collect()
+    [Row(r='cc')]
+    """
+    return _invoke_function("xpath_string", _to_java_column(xml), path)
+
+
+@try_remote_functions
 def trunc(date: "ColumnOrName", format: str) -> Column:
     """
     Returns date truncated to the unit specified by the format.
