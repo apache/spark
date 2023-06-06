@@ -24,10 +24,12 @@ from typing import Any, Union, List, Tuple, Callable
 import numpy as np
 import pandas as pd
 import math
-from pyspark.mlv2.base import Estimator, Model, Predictor, PredictionModel
 
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkValueError,
+)
 from pyspark.sql import DataFrame
-
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
 from pyspark.ml.param.shared import (
@@ -41,6 +43,7 @@ from pyspark.ml.param.shared import (
     HasLearningRate,
     HasMomentum,
 )
+from pyspark.mlv2.base import Predictor, PredictionModel
 from pyspark.sql.functions import lit, count, countDistinct
 
 import torch
@@ -187,7 +190,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "LogisticRegressionModel":
         if isinstance(dataset, pd.DataFrame):
             # TODO: support pandas dataframe fitting
-            raise NotImplementedError("Fitting pandas dataframe is not supported yet.")
+            raise PySparkNotImplementedError("Fitting pandas dataframe is not supported yet.")
 
         num_train_workers = self.getNumTrainWorkers()
         batch_size = self.getBatchSize()
@@ -207,7 +210,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         num_features = len(dataset.select(self.getFeaturesCol()).head()[0])
 
         if num_classes < 2:
-            raise ValueError("Training dataset distinct labels must >= 2.")
+            raise PySparkValueError("Training dataset distinct labels must >= 2.")
 
         # TODO: support GPU.
         distributor = TorchDistributor(
