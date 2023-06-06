@@ -335,7 +335,7 @@ if __name__ == "__main__":
         (
             "numTrainWorkers",
             "number of training workers",
-            1,
+            "1",
             "TypeConverters.toInt",
         ),
         (

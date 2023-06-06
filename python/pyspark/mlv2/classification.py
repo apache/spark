@@ -72,7 +72,7 @@ class _LogisticRegressionParams(
 
 
 class _LinearNet(torch_nn.Module):
-    def __init__(self, num_features, num_classes, bias) -> None:
+    def __init__(self, num_features: int, num_classes: int, bias: bool) -> None:
         super(_LinearNet, self).__init__()
         output_dim = num_classes
         self.fc = torch_nn.Linear(num_features, output_dim, bias=bias, dtype=torch.float32)
@@ -83,15 +83,15 @@ class _LinearNet(torch_nn.Module):
 
 
 def _train_logistic_regression_model_worker_fn(
-    num_samples_per_worker,
-    num_features,
-    batch_size,
-    max_iter,
-    num_classes,
-    learning_rate,
-    momentum,
-    fit_intercept,
-    seed,
+    num_samples_per_worker: int,
+    num_features: int,
+    batch_size: int,
+    max_iter: int,
+    num_classes: int,
+    learning_rate: float,
+    momentum: float,
+    fit_intercept: bool,
+    seed: int,
 ):
     from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
     from torch.nn.parallel import DistributedDataParallel as DDP
@@ -200,12 +200,13 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         )
 
         # TODO: check label values are in range of [0, num_classes)
+        # type: ignore
         num_rows, num_classes = dataset.agg(count(lit(1)), countDistinct(self.getLabelCol())).head()
 
         num_batches_per_worker = math.ceil(num_rows / num_train_workers / batch_size)
         num_samples_per_worker = num_batches_per_worker * batch_size
 
-        num_features = len(dataset.select(self.getFeaturesCol()).head()[0])
+        num_features = len(dataset.select(self.getFeaturesCol()).head()[0])  # type: ignore
 
         if num_classes < 2:
             raise PySparkValueError("Training dataset distinct labels must >= 2.")
@@ -250,7 +251,7 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, torch_model, num_features, num_classes):
+    def __init__(self, torch_model: Any, num_features: int, num_classes: int):
         super().__init__()
         self.torch_model = torch_model
         self.num_features = num_features
@@ -262,7 +263,7 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
     def numClasses(self) -> int:
         return self.num_classes
 
-    def _input_columns(self) -> str:
+    def _input_columns(self) -> List[str]:
         return [self.getOrDefault(self.featuresCol)]
 
     def _output_columns(self) -> List[Tuple[str, str]]:
@@ -278,7 +279,7 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
         num_classes = self.num_classes
         fit_intercept = self.getFitIntercept()
 
-        def transform_fn(input_series: "pd.Series") -> Any:
+        def transform_fn(input_series: Any) -> Any:
             torch_model = _LinearNet(
                 num_features=num_features, num_classes=num_classes, bias=fit_intercept
             )
