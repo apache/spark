@@ -3,3 +3,4 @@ docs/_build/
 pyspark.egg-info
 build/
 dist/
+venv/
