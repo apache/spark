@@ -88,7 +88,7 @@ def _train_logistic_regression_model_worker_fn(
     momentum: float,
     fit_intercept: bool,
     seed: int,
-):
+) -> Any:
     from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
     from torch.nn.parallel import DistributedDataParallel as DDP
     import torch.distributed
@@ -196,13 +196,14 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         )
 
         # TODO: check label values are in range of [0, num_classes)
-        # type: ignore
-        num_rows, num_classes = dataset.agg(count(lit(1)), countDistinct(self.getLabelCol())).head()
+        num_rows, num_classes = dataset.agg(
+            count(lit(1)), countDistinct(self.getLabelCol())
+        ).head()  # type: ignore[misc]
 
         num_batches_per_worker = math.ceil(num_rows / num_train_workers / batch_size)
         num_samples_per_worker = num_batches_per_worker * batch_size
 
-        num_features = len(dataset.select(self.getFeaturesCol()).head()[0])  # type: ignore
+        num_features = len(dataset.select(self.getFeaturesCol()).head()[0])  # type: ignore[index]
 
         if num_classes < 2:
             raise ValueError("Training dataset distinct labels must >= 2.")

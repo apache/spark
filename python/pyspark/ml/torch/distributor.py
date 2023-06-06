@@ -969,7 +969,7 @@ class TorchDistributor(Distributor):
 
 
 def _get_spark_partition_data_loader(
-    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: int = 2
+    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: Optional[int] = 2
 ) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
