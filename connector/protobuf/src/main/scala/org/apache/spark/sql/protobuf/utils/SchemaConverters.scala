@@ -18,6 +18,7 @@ package org.apache.spark.sql.protobuf.utils
 
 import scala.collection.JavaConverters._
 
+import com.google.protobuf.{BoolValue, BytesValue, DoubleValue, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -91,6 +92,28 @@ object SchemaConverters extends Logging {
       case MESSAGE if protobufOptions.convertAnyFieldsToJson &&
             fd.getMessageType.getFullName == "google.protobuf.Any" =>
         Some(StringType) // Any protobuf will be parsed and converted to json string.
+
+      // Handle Well Known wrapper types. We want to output these as primitives instead of
+      // message structs.
+      case MESSAGE if fd.getMessageType.getFullName == BoolValue.getDescriptor.getFullName =>
+        Some(BooleanType)
+      case MESSAGE if fd.getMessageType.getFullName == Int32Value.getDescriptor.getFullName =>
+        Some(IntegerType)
+      case MESSAGE if fd.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName =>
+        Some(IntegerType)
+      case MESSAGE if fd.getMessageType.getFullName == Int64Value.getDescriptor.getFullName =>
+        Some(LongType)
+      case MESSAGE if fd.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName =>
+        Some(LongType)
+      case MESSAGE if fd.getMessageType.getFullName == StringValue.getDescriptor.getFullName =>
+        Some(StringType)
+      case MESSAGE if fd.getMessageType.getFullName == BytesValue.getDescriptor.getFullName =>
+        Some(BinaryType)
+      case MESSAGE if fd.getMessageType.getFullName == FloatValue.getDescriptor.getFullName =>
+        Some(FloatType)
+      case MESSAGE if fd.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName =>
+        Some(DoubleType)
+
       case MESSAGE if fd.isRepeated && fd.getMessageType.getOptions.hasMapEntry =>
         var keyType: Option[DataType] = None
         var valueType: Option[DataType] = None

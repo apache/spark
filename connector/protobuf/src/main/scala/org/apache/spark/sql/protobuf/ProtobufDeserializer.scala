@@ -18,7 +18,7 @@ package org.apache.spark.sql.protobuf
 
 import java.util.concurrent.TimeUnit
 
-import com.google.protobuf.{ByteString, DynamicMessage, Message, TypeRegistry}
+import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, Message, StringValue, TypeRegistry, UInt32Value, UInt64Value}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 import com.google.protobuf.util.JsonFormat
@@ -193,7 +193,7 @@ private[sql] class ProtobufDeserializer(
       case (INT, ShortType) =>
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
-      case  (
+      case (
         MESSAGE | BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
         ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
         newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
@@ -247,11 +247,85 @@ private[sql] class ProtobufDeserializer(
           updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
 
       case (MESSAGE, StringType)
-          if protoType.getMessageType.getFullName == "google.protobuf.Any" =>
+        if protoType.getMessageType.getFullName == "google.protobuf.Any" =>
         (updater, ordinal, value) =>
           // Convert 'Any' protobuf message to JSON string.
           val jsonStr = jsonPrinter.print(value.asInstanceOf[DynamicMessage])
           updater.set(ordinal, UTF8String.fromString(jsonStr))
+
+      // Handle well known wrapper types. We unpack the value field instead of keeping
+      // them as nested structs
+      case (MESSAGE, BooleanType)
+        if protoType.getMessageType.getFullName == BoolValue.getDescriptor.getFullName =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.setBoolean(
+            ordinal,
+            dm.getField(
+              dm.getDescriptorForType.findFieldByName("value")
+            ).asInstanceOf[Boolean]
+          )
+      case (MESSAGE, IntegerType)
+        if (protoType.getMessageType.getFullName == Int32Value.getDescriptor.getFullName
+          || protoType.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName) =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.setInt(
+            ordinal,
+            dm.getField(
+              dm.getDescriptorForType.findFieldByName("value")
+            ).asInstanceOf[Int]
+          )
+      case (MESSAGE, LongType)
+        if (protoType.getMessageType.getFullName == Int64Value.getDescriptor.getFullName
+          || protoType.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName) =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.setLong(
+            ordinal,
+            dm.getField(
+              dm.getDescriptorForType.findFieldByName("value")
+            ).asInstanceOf[Long]
+          )
+      case (MESSAGE, StringType)
+        if protoType.getMessageType.getFullName == StringValue.getDescriptor.getFullName =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.set(
+            ordinal,
+            UTF8String.fromString(
+              dm.getField(
+                dm.getDescriptorForType.findFieldByName("value")
+              ).asInstanceOf[String]
+            )
+          )
+      case (MESSAGE, BinaryType)
+        if protoType.getMessageType.getFullName == BytesValue.getDescriptor.getFullName =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.set(ordinal, dm.getField(
+            dm.getDescriptorForType.findFieldByName("value")
+          ).asInstanceOf[ByteString].toByteArray)
+      case (MESSAGE, FloatType)
+        if protoType.getMessageType.getFullName == FloatValue.getDescriptor.getFullName =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.setFloat(
+            ordinal,
+            dm.getField(
+              dm.getDescriptorForType.findFieldByName("value")
+            ).asInstanceOf[Float]
+          )
+      case (MESSAGE, DoubleType)
+        if protoType.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName =>
+        (updater, ordinal, value) =>
+          val dm = value.asInstanceOf[DynamicMessage]
+          updater.setDouble(
+            ordinal,
+            dm.getField(
+              dm.getDescriptorForType.findFieldByName("value")
+            ).asInstanceOf[Double]
+          )
 
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(

@@ -21,7 +21,7 @@ import java.time.Duration
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{Any => AnyProto, ByteString, DynamicMessage}
+import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import org.json4s.StringInput
 import org.json4s.jackson.JsonMethods
 
@@ -1581,6 +1581,58 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           "protobufColumn" -> "field 'basic_enum'",
           "data" -> "9999",
           "enumString" -> "0, 1, 2"))
+    }
+  }
+
+  test("well known types deserialization and round trip") {
+    val message = spark.range(1).select(
+      lit(WellKnownWrapperTypes
+        .newBuilder()
+        .setBoolVal(BoolValue.of(true))
+        .setInt32Val(Int32Value.of(100))
+        .setUint32Val(UInt32Value.of(200))
+        .setInt64Val(Int64Value.of(300))
+        .setUint64Val(UInt64Value.of(400))
+        .setStringVal(StringValue.of("string"))
+        .setBytesVal(BytesValue.of(ByteString.copyFromUtf8("bytes")))
+        .setFloatVal(FloatValue.of(1.23f))
+        .setDoubleVal(DoubleValue.of(4.56))
+        .addInt32List(Int32Value.of(1))
+        .addInt32List(Int32Value.of(2))
+        .putWktMap(1, StringValue.of("mapval"))
+        .build().toByteArray
+      ).as("raw_proto"))
+
+    // Ensure that when we deserialize, well known wrapper types get deserialized
+    // as primitives rather than unwrapped as messages.
+    val expected = spark.range(1).select(
+      struct(
+        lit(true).as("bool_val"),
+        lit(100).as("int32_val"),
+        lit(200).as("uint32_val"),
+        lit(300).as("int64_val"),
+        lit(400).as("uint64_val"),
+        lit("string").as("string_val"),
+        lit("bytes".getBytes).as("bytes_val"),
+        lit(1.23f).as("float_val"),
+        lit(4.56).as("double_val"),
+        typedLit(List(1, 2)).as("int32_list"),
+        typedLit(Map(1 -> "mapval")).as("wkt_map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      val parsed = message.select(from_protobuf_wrapper(
+        $"raw_proto",
+        name,
+        descFilePathOpt).as("parsed"))
+      checkAnswer(parsed, expected)
+
+      val reserialized = parsed.select(
+        to_protobuf_wrapper($"parsed", name, descFilePathOpt).as("reserialized"))
+      val reparsed = reserialized.select(
+        from_protobuf_wrapper($"reserialized", name, descFilePathOpt).as("reparsed"))
+      checkAnswer(parsed, reparsed)
     }
   }
 
