@@ -1656,39 +1656,39 @@ class PlanGenerationTestSuite
   }
 
   temporalFunctionTest("xpath") {
-    fn.xpath(fn.col("s"), "a/b/text()")
+    fn.xpath(fn.col("s"), lit("a/b/text()"))
   }
 
   temporalFunctionTest("xpath_boolean") {
-    fn.xpath_boolean(fn.col("s"), "a/b")
+    fn.xpath_boolean(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_double") {
-    fn.xpath_double(fn.col("s"), "a/b")
+    fn.xpath_double(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_number") {
-    fn.xpath_number(fn.col("s"), "a/b")
+    fn.xpath_number(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_float") {
-    fn.xpath_float(fn.col("s"), "a/b")
+    fn.xpath_float(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_int") {
-    fn.xpath_int(fn.col("s"), "a/b")
+    fn.xpath_int(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_long") {
-    fn.xpath_long(fn.col("s"), "a/b")
+    fn.xpath_long(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_short") {
-    fn.xpath_short(fn.col("s"), "a/b")
+    fn.xpath_short(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("xpath_string") {
-    fn.xpath_string(fn.col("s"), "a/b")
+    fn.xpath_string(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("trunc") {

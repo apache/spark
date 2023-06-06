@@ -5249,8 +5249,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath(x: Column, p: String): Column = withExpr {
-    XPathList(x.expr, lit(p).expr)
+  def xpath(x: Column, p: Column): Column = withExpr {
+    XPathList(x.expr, p.expr)
   }
 
   /**
@@ -5259,8 +5259,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_boolean(x: Column, p: String): Column = withExpr {
-    XPathBoolean(x.expr, lit(p).expr)
+  def xpath_boolean(x: Column, p: Column): Column = withExpr {
+    XPathBoolean(x.expr, p.expr)
   }
 
   /**
@@ -5270,8 +5270,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_double(x: Column, p: String): Column = withExpr {
-    XPathDouble(x.expr, lit(p).expr)
+  def xpath_double(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
   }
 
   /**
@@ -5281,8 +5281,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_number(x: Column, p: String): Column = withExpr {
-    XPathDouble(x.expr, lit(p).expr)
+  def xpath_number(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
   }
 
   /**
@@ -5292,8 +5292,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_float(x: Column, p: String): Column = withExpr {
-    XPathFloat(x.expr, lit(p).expr)
+  def xpath_float(x: Column, p: Column): Column = withExpr {
+    XPathFloat(x.expr, p.expr)
   }
 
   /**
@@ -5303,8 +5303,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_int(x: Column, p: String): Column = withExpr {
-    XPathInt(x.expr, lit(p).expr)
+  def xpath_int(x: Column, p: Column): Column = withExpr {
+    XPathInt(x.expr, p.expr)
   }
 
   /**
@@ -5314,8 +5314,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_long(x: Column, p: String): Column = withExpr {
-    XPathLong(x.expr, lit(p).expr)
+  def xpath_long(x: Column, p: Column): Column = withExpr {
+    XPathLong(x.expr, p.expr)
   }
 
   /**
@@ -5325,8 +5325,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_short(x: Column, p: String): Column = withExpr {
-    XPathShort(x.expr, lit(p).expr)
+  def xpath_short(x: Column, p: Column): Column = withExpr {
+    XPathShort(x.expr, p.expr)
   }
 
   /**
@@ -5335,8 +5335,8 @@ object functions {
    * @group "xml_funcs"
    * @since 3.5.0
    */
-  def xpath_string(x: Column, p: String): Column = withExpr {
-    XPathString(x.expr, lit(p).expr)
+  def xpath_string(x: Column, p: Column): Column = withExpr {
+    XPathString(x.expr, p.expr)
   }
 
     /**
