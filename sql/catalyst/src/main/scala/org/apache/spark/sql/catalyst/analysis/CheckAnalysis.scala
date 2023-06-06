@@ -1074,17 +1074,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsDown {
       case p: Project if p.projectList.size == p.child.output.size =>
-        var ret = true
-        p.projectList.zip(p.child.output).foreach({
+        val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
           case (left: Alias, right: Attribute) =>
             if (left.child.semanticEquals(right) && right.name == left.name) {
-              ret = ret & true
+              true
             } else {
-              ret = ret & false
+              false
             }
-          case _ => ret = ret & false
-        })
-        if (ret) {
+          case _ => false
+        }
+        if (assignExprIdOnly) {
           p.child
         } else {
           p
