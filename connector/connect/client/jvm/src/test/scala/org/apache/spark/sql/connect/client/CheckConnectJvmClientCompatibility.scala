@@ -95,7 +95,7 @@ object CheckConnectJvmClientCompatibility {
     } catch {
       case e: Throwable =>
         println(e.getMessage)
-        resultWriter.write(s"ERROR: ${e.getMessage}")
+        resultWriter.write(s"ERROR: ${e.getMessage}\n")
     } finally {
       if (resultWriter != null) {
         resultWriter.close()
