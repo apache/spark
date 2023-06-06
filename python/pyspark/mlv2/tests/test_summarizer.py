@@ -17,19 +17,13 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
 import numpy as np
-import pandas as pd
 
 from pyspark.mlv2.summarizer import summarize_dataframe
 from pyspark.sql import SparkSession
 
 
 class SummarizerTestsMixin:
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43788): Enable SummarizerTests.test_summarize_dataframe for pandas 2.0.0.",
-    )
     def test_summarize_dataframe(self):
         df1 = self.spark.createDataFrame(
             [

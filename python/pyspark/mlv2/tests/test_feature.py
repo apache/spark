@@ -17,19 +17,13 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
 import numpy as np
-import pandas as pd
 
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
 from pyspark.sql import SparkSession
 
 
 class FeatureTestsMixin:
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43784): Enable FeatureTests.test_max_abs_scaler for pandas 2.0.0.",
-    )
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -53,10 +47,6 @@ class FeatureTestsMixin:
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43783): Enable FeatureTests.test_standard_scaler for pandas 2.0.0.",
-    )
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
