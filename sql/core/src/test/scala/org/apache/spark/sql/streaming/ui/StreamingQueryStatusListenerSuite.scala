@@ -267,6 +267,40 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     store.write(testData)
     store.close(closeParent = false)
   }
+
+  test("SPARK-43973: onQueryTerminated should pick up exception info") {
+    val kvStore = new ElementTrackingStore(createStore(), sparkConf)
+    val listener = new StreamingQueryStatusListener(spark.sparkContext.conf, kvStore)
+    val queryStore = new StreamingQueryStatusStore(kvStore)
+
+    // succeed (no exception) case
+    val id1 = UUID.randomUUID()
+    val runId1 = UUID.randomUUID()
+    val startEvent1 = new StreamingQueryListener.QueryStartedEvent(
+      id1, runId1, "test1", "2023-01-01T20:50:00.800Z")
+    listener.onQueryStarted(startEvent1)
+    val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None, None)
+    listener.onQueryTerminated(terminateEvent1)
+
+    // failure (has exception) case
+    val id2 = UUID.randomUUID()
+    val runId2 = UUID.randomUUID()
+    val startEvent2 = new StreamingQueryListener.QueryStartedEvent(
+      id2, runId2, "test2", "2023-01-02T20:54:20.827Z")
+    listener.onQueryStarted(startEvent2)
+    val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(
+      id2, runId2, Option("ExampleException"), Option("EXAMPLE_ERROR_CLASS"))
+    listener.onQueryTerminated(terminateEvent2)
+
+    // check results
+    val (activeQueries, stoppedQueries) = queryStore.allQueryUIData.partition(_.summary.isActive)
+    assert(activeQueries.isEmpty)
+    val (finishedQueries, failedQueries) = stoppedQueries.partition(_.summary.exception.isEmpty)
+    assert(finishedQueries.size == 1)
+    assert(failedQueries.size == 1)
+    assert(failedQueries.head.summary.exception == Option("ExampleException"))
+    // there's no UI state for errorClassOnException yet; should check it as well when it's added
+  }
 }
 
 class StreamingQueryStatusListenerWithDiskStoreSuite extends StreamingQueryStatusListenerSuite {

@@ -107,7 +107,7 @@ private[sql] class StreamingQueryStatusListener(
       querySummary.id,
       querySummary.runId,
       isActive = false,
-      querySummary.exception,
+      event.exception,
       querySummary.startTimestamp,
       Some(curTime)
     ), checkTriggers = true)
