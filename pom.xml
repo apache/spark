@@ -418,10 +418,9 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.amazonaws</groupId>
-      <artifactId>aws-java-sdk-bundle</artifactId>
-      <version>${aws.java.sdk.version}</version>
-      <scope>runtime</scope>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bundle</artifactId>
+      <version>2.20.79</version>
     </dependency>
   </dependencies>
   <dependencyManagement>
