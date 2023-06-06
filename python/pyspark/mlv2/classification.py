@@ -262,8 +262,8 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
     def numClasses(self) -> int:
         return self.num_classes
 
-    def _input_column_name(self) -> str:
-        return self.getOrDefault(self.featuresCol)
+    def _input_columns(self) -> str:
+        return [self.getOrDefault(self.featuresCol)]
 
     def _output_columns(self) -> List[Tuple[str, str]]:
         output_cols = [(self.getOrDefault(self.predictionCol), "bigint")]
