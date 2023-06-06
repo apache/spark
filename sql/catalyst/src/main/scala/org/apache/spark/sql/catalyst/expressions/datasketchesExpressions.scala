@@ -21,6 +21,7 @@ import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
 
 @ExpressionDescription(
@@ -102,11 +103,8 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val sketch2 = HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
     if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
-      throw new UnsupportedOperationException(
-        "Sketches have different lgConfigK values: " +
-        s"${sketch1.getLgConfigK} and ${sketch2.getLgConfigK}. " +
-        "Set allowDifferentLgConfigK to true to enable unions of " +
-        "different lgConfigK values.")
+      throw QueryExecutionErrors.hllUnionDifferentLogK(
+        sketch1.getLgConfigK.toString, sketch2.getLgConfigK.toString, function = "HLL_UNION")
     }
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)

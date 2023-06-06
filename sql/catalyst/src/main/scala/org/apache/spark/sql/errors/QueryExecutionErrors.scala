@@ -2849,4 +2849,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "data" -> data,
         "enumString" -> enumString))
   }
+
+  def hllInvalidLogK(function: String, min: String, max: String, value: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_INVALID_LOG_K",
+      messageParameters = Map(
+        "function" -> function,
+        "min" -> min,
+        "max" -> max,
+        "value" -> value))
+  }
+
+  def hllUnionDifferentLogK(left: String, right: String, function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_UNION_DIFFERENT_LOG_K",
+      messageParameters = Map(
+        "left" -> left,
+        "right" -> right,
+        "function" -> function))
+  }
 }

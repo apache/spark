@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -189,11 +189,11 @@ object HllSketchAgg {
   private val minLgConfigK = 4
   private val maxLgConfigK = 21
 
-  // Replicate Datasketche's HllUtil's checkLgK implementation, as we can't reference it directly
+  // Replicate Datasketches' HllUtil's checkLgK implementation, as we can't reference it directly.
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
-      throw new SketchesArgumentException(
-        s"Log K must be between $minLgConfigK and $maxLgConfigK, inclusive: " + lgConfigK)
+      throw QueryExecutionErrors.hllInvalidLogK(function = "HLL_SKETCH_AGG",
+        min = minLgConfigK.toString, max = maxLgConfigK.toString, value = lgConfigK.toString)
     }
   }
 }
@@ -295,10 +295,8 @@ case class HllUnionAgg(
   def compareLgConfigK(left: Int, right: Int): Unit = {
     if (!allowDifferentLgConfigK) {
       if (left != right) {
-        throw new UnsupportedOperationException(
-          s"Sketches have different lgConfigK values: $left and $right. " +
-            "Set allowDifferentLgConfigK to true to enable unions of " +
-            "different lgConfigK values.")
+        throw QueryExecutionErrors.hllUnionDifferentLogK(
+          left.toString, right.toString, function = "HLL_UNION_AGG")
       }
     }
   }

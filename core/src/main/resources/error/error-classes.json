@@ -746,6 +746,16 @@
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ]
   },
+  "HLL_INVALID_LOG_K" : {
+    "message" : [
+      "Invalid call to <function>; the log K value must be between <min> and <max>, inclusive: <value>."
+    ]
+  },
+  "HLL_UNION_DIFFERENT_LOG_K" : {
+    "message" : [
+      "Sketches have different lgConfigK values: <left> and <right>. Set the allowDifferentLgConfigK parameter to true to use the <function> of different lgConfigK values."
+    ]
+  },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
       "<identifier> is not a valid identifier as it has more than 2 name parts."
