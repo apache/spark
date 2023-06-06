@@ -165,19 +165,19 @@ class SparkConnectArtifactManager private[connect] {
       remoteRelativePath: Path,
       serverLocalStagingPath: Path): Unit = {
     val hadoopConf = sessionHolder.session.sparkContext.hadoopConfiguration
-    assert(remoteRelativePath.startsWith(
-      SparkConnectArtifactManager.forwardToFSPrefix + File.separator)
-    )
+    assert(
+      remoteRelativePath.startsWith(
+        SparkConnectArtifactManager.forwardToFSPrefix + File.separator))
     val destFSPath = new FSPath(
-      Paths.get("/").resolve(
-        remoteRelativePath.subpath(1, remoteRelativePath.getNameCount)).toString
-    )
+      Paths
+        .get("/")
+        .resolve(remoteRelativePath.subpath(1, remoteRelativePath.getNameCount))
+        .toString)
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
-      val allowDestLocalConf = sessionHolder.session.sparkContext.conf.get(
-        "spark.fs.copyFromLocalToFs.allowDestLocal", "false"
-      )
+      val allowDestLocalConf = sessionHolder.session.sparkContext.conf
+        .get("spark.fs.copyFromLocalToFs.allowDestLocal", "false")
       if (allowDestLocalConf.toLowerCase() != "true") {
         // To avoid security issue, by default,
         // we don't support uploading file to local file system
@@ -188,16 +188,10 @@ class SparkConnectArtifactManager private[connect] {
         // to `true` when starting spark driver, we should only enable it for testing
         // purpose.
         throw new UnsupportedOperationException(
-          "Upload artifact file to local file system destination path is not supported."
-        )
+          "Upload artifact file to local file system destination path is not supported.")
       }
     }
-    fs.copyFromLocalFile(
-      false,
-      true,
-      new FSPath(localPath.toString),
-      destFSPath
-    )
+    fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)
   }
 }
 
