@@ -2386,7 +2386,7 @@ def make_dt_interval(
     _mins = lit(0) if mins is None else _to_col(mins)
     _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
 
-    return _invoke_function("make_dt_interval", _days, _hours, _mins, _secs)
+    return _invoke_function_over_columns("make_dt_interval", _days, _hours, _mins, _secs)
 
 
 make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
@@ -2409,7 +2409,9 @@ def make_interval(
     _min = lit(0) if min is None else _to_col(min)
     _sec = lit(decimal.Decimal(0)) if sec is None else _to_col(sec)
 
-    return _invoke_function("make_interval", _year, _month, _week, _day, _hour, _min, _sec)
+    return _invoke_function_over_columns(
+        "make_interval", _year, _month, _week, _day, _hour, _min, _sec
+    )
 
 
 make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
@@ -2426,9 +2428,13 @@ def make_timestamp(
     timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
     if timezone is not None:
-        return _invoke_function("make_timestamp", year, month, week, day, hour, min, sec, timezone)
+        return _invoke_function_over_columns(
+            "make_timestamp", year, month, week, day, hour, min, sec, timezone
+        )
     else:
-        return _invoke_function("make_timestamp", year, month, week, day, hour, min, sec)
+        return _invoke_function_over_columns(
+            "make_timestamp", year, month, week, day, hour, min, sec
+        )
 
 
 make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
@@ -2444,9 +2450,11 @@ def make_timestamp_ltz(
     timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
     if timezone is not None:
-        return _invoke_function("make_timestamp_ltz", year, month, day, hour, min, sec, timezone)
+        return _invoke_function_over_columns(
+            "make_timestamp_ltz", year, month, day, hour, min, sec, timezone
+        )
     else:
-        return _invoke_function("make_timestamp_ltz", year, month, day, hour, min, sec)
+        return _invoke_function_over_columns("make_timestamp_ltz", year, month, day, hour, min, sec)
 
 
 make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
@@ -2460,7 +2468,7 @@ def make_timestamp_ntz(
     min: "ColumnOrName",
     sec: "ColumnOrName",
 ) -> Column:
-    return _invoke_function("make_timestamp_ntz", year, month, day, hour, min, sec)
+    return _invoke_function_over_columns("make_timestamp_ntz", year, month, day, hour, min, sec)
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
@@ -2472,7 +2480,7 @@ def make_ym_interval(
 ) -> Column:
     _year = lit(0) if year is None else _to_col(year)
     _month = lit(0) if month is None else _to_col(month)
-    return _invoke_function("make_ym_interval", _year, _month)
+    return _invoke_function_over_columns("make_ym_interval", _year, _month)
 
 
 make_ym_interval.__doc__ = pysparkfuncs.make_ym_interval.__doc__
