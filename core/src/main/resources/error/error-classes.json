@@ -888,7 +888,7 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "Cannot write to <tableName>,"
+      "Cannot write to <tableName>, the reason is "
     ],
     "subClass" : {
       "NOT_ENOUGH_DATA_COLUMNS" : {
@@ -1701,7 +1701,7 @@
   },
   "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT" : {
     "message" : [
-      "<cmd> is not supported, if you want to enable it, please set `spark.sql.catalogImplementation` to `hive`."
+      "<cmd> is not supported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
     ]
   },
   "NOT_SUPPORTED_IN_JDBC_CATALOG" : {

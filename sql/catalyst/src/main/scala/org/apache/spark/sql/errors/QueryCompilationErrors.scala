@@ -1736,7 +1736,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def ddlWithoutHiveSupportEnabledError(cmd: String): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-      messageParameters = Map("cmd" -> cmd))
+      messageParameters = Map("cmd" -> toSQLStmt(cmd)))
   }
 
   def createTableColumnTypesOptionColumnNotFoundInSchemaError(
@@ -2051,7 +2051,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
-        "tableName" -> tableName,
+        "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
@@ -2063,7 +2063,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
-        "tableName" -> tableName,
+        "tableName" -> toSQLId(tableName),
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }

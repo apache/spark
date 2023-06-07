@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -527,7 +528,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
              """.stripMargin)
         },
         errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-        parameters = Map("cmd" -> "INSERT OVERWRITE DIRECTORY with the Hive format")
+        parameters = Map("cmd" -> "INSERT OVERWRITE DIRECTORY WITH THE HIVE FORMAT")
       )
     }
   }
@@ -973,7 +974,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         },
         errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
-          "tableName" -> "unknown",
+          "tableName" -> toSQLId("unknown"),
           "tableColumns" -> "`a`, `b`",
           "dataColumns" -> "`a`"))
     }
