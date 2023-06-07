@@ -673,6 +673,9 @@ def negative(col: "ColumnOrName") -> Column:
 negative.__doc__ = pysparkfuncs.negative.__doc__
 
 
+negate = negative
+
+
 def pi() -> Column:
     return _invoke_function("pi")
 

@@ -59,7 +59,6 @@ class FunctionsTestsMixin:
             "typedlit",  # Scala only
             "typedLit",  # Scala only
             "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
-            "negate",  # equivalent to python -expression
             "not",  # equivalent to python ~expression
             "udaf",  # used for creating UDAF's which are not supported in PySpark
         ]

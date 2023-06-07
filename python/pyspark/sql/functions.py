@@ -1451,6 +1451,9 @@ def negative(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("negative", col)
 
 
+negate = negative
+
+
 @try_remote_functions
 def pi() -> Column:
     """Returns Pi.
