@@ -46,18 +46,12 @@ import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.Constants;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
-<<<<<<< HEAD
+import org.apache.spark.network.shuffle.ShuffleTransportContext;
 import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.DBBackend;
 import org.apache.spark.network.shuffledb.DBIterator;
 import org.apache.spark.network.shuffledb.StoreVersion;
 import org.apache.spark.network.util.DBProvider;
-=======
-import org.apache.spark.network.shuffle.ShuffleTransportContext;
-import org.apache.spark.network.util.LevelDBProvider;
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.DBIterator;
->>>>>>> 83cfc7a8cce ([LIHADOOP-67934] Delegating finalize shuffle merge to a dedicated eventloop group)
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

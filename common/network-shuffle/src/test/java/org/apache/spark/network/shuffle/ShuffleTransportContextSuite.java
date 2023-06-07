@@ -88,6 +88,7 @@ public class ShuffleTransportContextSuite {
 
   @Test
   public void testInitializePipeline() throws IOException {
+    // SPARK-43987: test that the FinalizedHandler is added to the pipeline only when configured
     for (boolean enabled : new boolean[]{true, false}) {
       ShuffleTransportContext ctx = createShuffleTransportContext(enabled);
       SocketChannel channel = new NioSocketChannel();
@@ -104,6 +105,7 @@ public class ShuffleTransportContextSuite {
 
   @Test
   public void testDecodeOfFinalizeShuffleMessage() throws Exception {
+    // SPARK-43987: test FinalizeShuffleMerge message is decoded correctly
     FinalizeShuffleMerge finalizeRequest = new FinalizeShuffleMerge("app0", 1, 2, 3);
     RpcRequest rpcRequest = new RpcRequest(1, new NioManagedBuffer(finalizeRequest.toByteBuffer()));
     ByteBuf messageBuf = getDecodableMessageBuf(rpcRequest);
@@ -121,6 +123,7 @@ public class ShuffleTransportContextSuite {
 
   @Test
   public void testDecodeOfAnyOtherRpcMessage() throws Exception {
+    // SPARK-43987: test any other RPC message is decoded correctly
     OpenBlocks openBlocks = new OpenBlocks("app0", "1", new String[]{"block1", "block2"});
     RpcRequest rpcRequest = new RpcRequest(1, new NioManagedBuffer(openBlocks.toByteBuffer()));
     ByteBuf messageBuf = getDecodableMessageBuf(rpcRequest);

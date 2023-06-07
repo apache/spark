@@ -87,6 +87,10 @@ public class ShuffleTransportContext extends TransportContext {
     return ch;
   }
 
+  /**
+   * Add finalize handler to pipeline if needed. This is needed only when separateFinalizeShuffleMerge
+   * is enabled.
+   */
   private void addFinalizeHandlerToPipelineIfNeeded(SocketChannel channel,
       TransportChannelHandler ch) {
     if (finalizeWorkers != null) {
@@ -111,6 +115,11 @@ public class ShuffleTransportContext extends TransportContext {
       this.delegate = delegate;
     }
 
+    /**
+     * Decode the message and check if it is a finalize merge request. If yes, then create a
+     * internal rpc request message and add it to the list of messages to be handled by
+     * {@link TransportChannelHandler}
+    */
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext,
         ByteBuf byteBuf,
