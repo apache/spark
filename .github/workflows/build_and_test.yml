@@ -776,7 +776,10 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
       - name: Build with Maven
+        shell: 'script -q -e -c "bash {0}"'
         run: |
+          # Fix for TTY related issues when launching the Ammonite REPL in tests.
+          export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
           export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
