@@ -273,7 +273,7 @@ private[sql] class ProtobufDeserializer(
 
       case (ENUM, IntegerType) =>
         (updater, ordinal, value) =>
-          updater.set(ordinal, value.asInstanceOf[EnumValueDescriptor].getNumber)
+          updater.setInt(ordinal, value.asInstanceOf[EnumValueDescriptor].getNumber)
 
       case _ =>
         throw QueryCompilationErrors.cannotConvertProtobufTypeToSqlTypeError(

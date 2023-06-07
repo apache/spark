@@ -510,8 +510,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0049", ctx)
   }
 
-  def unsupportedLocalFileSchemeError(ctx: InsertOverwriteDirContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0050", ctx)
+  def unsupportedLocalFileSchemeError(
+      ctx: InsertOverwriteDirContext,
+      actualSchema: String): Throwable = {
+    new ParseException(
+      errorClass = "LOCAL_MUST_WITH_SCHEMA_FILE",
+      messageParameters = Map("actualSchema" -> actualSchema),
+      ctx)
   }
 
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
@@ -603,15 +608,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0057", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION", ctx)
   }
 
   def defaultColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0058", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION", ctx)
   }
 
   def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
+    new ParseException(errorClass = "REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION", ctx)
   }
 
   def duplicateTableColumnDescriptor(
