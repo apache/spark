@@ -40,11 +40,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   import testImplicits._
 
-  val testFileDescFile = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
+  val testFileDescFile = protobufDescriptorFile("functions_suite.desc")
   private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
-  val proto2FileDescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  val proto2FileDescFile = protobufDescriptorFile("proto2_messages.desc")
   val proto2FileDesc = ProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
   private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
 
@@ -147,13 +147,18 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     checkWithFileAndClassName("SimpleMessageRepeated") {
       case (name, descFilePathOpt) =>
-        val fromProtoDF = df.select(
-          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
-        val toProtoDF = fromProtoDF.select(
-          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
-        val toFromProtoDF = toProtoDF.select(
-          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
-        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+        List(
+          Map.empty[String, String],
+          Map("enums.as.ints" -> "false"),
+          Map("enums.as.ints" -> "true")).foreach(opts => {
+          val fromProtoDF = df.select(
+            from_protobuf_wrapper($"value", name, descFilePathOpt, opts).as("value_from"))
+          val toProtoDF = fromProtoDF.select(
+            to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+          val toFromProtoDF = toProtoDF.select(
+            from_protobuf_wrapper($"value_to", name, descFilePathOpt, opts).as("value_to_from"))
+          checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+        })
     }
   }
 
@@ -462,7 +467,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val catalystTypesFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
@@ -504,7 +509,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val catalystTypesFile = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
@@ -686,13 +691,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("raise cannot construct protobuf descriptor error") {
+  test("raise protobuf descriptor error") {
     val df = Seq(ByteString.empty().toByteArray).toDF("value")
-    val testFileDescriptor =
-      testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+    val descWithoutImports = descriptorSetWithoutImports(testFileDesc, "BasicMessage")
 
     val e = intercept[AnalysisException] {
-      df.select(functions.from_protobuf($"value", "BasicMessage", testFileDescriptor) as 'sample)
+      df.select(functions.from_protobuf($"value", "BasicMessage", descWithoutImports) as 'sample)
         .where("sample.string_value == \"slam\"").show()
     }
     checkError(
@@ -1497,6 +1501,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         .setValue("value")
         .setBasicEnum(BasicEnumMessage.BasicEnum.FIRST)
         .setNestedEnum(SimpleMessageEnum.NestedEnum.NESTED_SECOND)
+        .addRepeatedEnum(BasicEnumMessage.BasicEnum.FIRST)
         .build().toByteArray).as("raw_proto"))
 
     val expected = spark.range(1).select(
@@ -1504,7 +1509,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         lit("key").as("key"),
         lit("value").as("value"),
         lit("FIRST").as("basic_enum"),
-        lit("NESTED_SECOND").as("nested_enum")
+        lit("NESTED_SECOND").as("nested_enum"),
+        typedLit(Seq("FIRST")).as("repeated_enum")
       ).as("proto")
     )
 
@@ -1515,7 +1521,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         lit("key").as("key"),
         lit("value").as("value"),
         lit(1).as("basic_enum"),
-        lit(2).as("nested_enum")
+        lit(2).as("nested_enum"),
+        typedLit(Seq(1)).as("repeated_enum")
       ).as("proto")
     )
 

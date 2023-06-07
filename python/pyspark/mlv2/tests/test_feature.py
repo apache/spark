@@ -17,19 +17,13 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
 import numpy as np
-import pandas as pd
 
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
 from pyspark.sql import SparkSession
 
 
 class FeatureTestsMixin:
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43784): Enable FeatureTests.test_max_abs_scaler for pandas 2.0.0.",
-    )
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -42,6 +36,7 @@ class FeatureTestsMixin:
         scaler = MaxAbsScaler(inputCol="features", outputCol="scaled_features")
         model = scaler.fit(df1)
         result = model.transform(df1).toPandas()
+        assert list(result.columns) == ["features", "scaled_features"]
 
         expected_result = [[2.0 / 3, 1.0, 0.6], [-1.0, -1.0 / 7, -1.0]]
 
@@ -50,13 +45,11 @@ class FeatureTestsMixin:
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
+        assert id(local_transform_result) == id(local_df1)
+        assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43783): Enable FeatureTests.test_standard_scaler for pandas 2.0.0.",
-    )
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -70,6 +63,7 @@ class FeatureTestsMixin:
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
         model = scaler.fit(df1)
         result = model.transform(df1).toPandas()
+        assert list(result.columns) == ["features", "scaled_features"]
 
         expected_result = [
             [0.7559289460184544, 1.1338934190276817, 0.8006407690254358],
@@ -82,6 +76,8 @@ class FeatureTestsMixin:
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
+        assert id(local_transform_result) == id(local_df1)
+        assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 

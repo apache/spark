@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ToJsonUtil
 
 class RowTest extends AnyFunSpec with Matchers {
 
@@ -101,7 +102,7 @@ class RowTest extends AnyFunSpec with Matchers {
       val values = ArraySeq("1", "2", "3")
       val row = new GenericRowWithSchema(Array(values), schema)
       val expectedList = JArray(JString("1") :: JString("2") :: JString("3") :: Nil)
-      row.jsonValue shouldBe new JObject(("list", expectedList) :: Nil)
+      ToJsonUtil.jsonValue(row) shouldBe new JObject(("list", expectedList) :: Nil)
     }
   }
 

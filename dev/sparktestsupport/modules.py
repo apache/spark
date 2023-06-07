@@ -609,6 +609,7 @@ pyspark_ml = Module(
         "pyspark.mlv2.tests.test_summarizer",
         "pyspark.mlv2.tests.test_evaluation",
         "pyspark.mlv2.tests.test_feature",
+        "pyspark.mlv2.tests.test_classification",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -823,6 +824,7 @@ pyspark_connect = Module(
         "pyspark.mlv2.tests.connect.test_parity_summarizer",
         "pyspark.mlv2.tests.connect.test_parity_evaluation",
         "pyspark.mlv2.tests.connect.test_parity_feature",
+        "pyspark.mlv2.tests.connect.test_parity_classification",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

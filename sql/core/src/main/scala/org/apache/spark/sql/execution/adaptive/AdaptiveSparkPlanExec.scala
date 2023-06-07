@@ -590,7 +590,12 @@ case class AdaptiveSparkPlanExec(
         // Apply `queryStageOptimizerRules` so that we can reuse subquery.
         // No need to apply `postStageCreationRules` for `InMemoryTableScanExec`
         // as it's a leaf node.
-        TableCacheQueryStageExec(currentStageId, optimizeQueryStage(i, isFinalStage = false))
+        val newPlan = optimizeQueryStage(i, isFinalStage = false)
+        if (!newPlan.isInstanceOf[InMemoryTableScanExec]) {
+          throw SparkException.internalError(
+            "Custom AQE rules cannot transform table scan node to something else.")
+        }
+        TableCacheQueryStageExec(currentStageId, newPlan)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)

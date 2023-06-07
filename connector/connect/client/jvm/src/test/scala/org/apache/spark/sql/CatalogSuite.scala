@@ -126,6 +126,14 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
               parquetTableName,
               orcTableName,
               jsonTableName))
+          assert(
+            spark.catalog
+              .listTables(spark.catalog.currentDatabase, "par*")
+              .collect()
+              .map(_.name)
+              .toSet == Set(parquetTableName))
+          assert(
+            spark.catalog.listTables(spark.catalog.currentDatabase, "txt*").collect().isEmpty)
         }
         assert(spark.catalog.tableExists(parquetTableName))
         assert(!spark.catalog.tableExists(orcTableName))
