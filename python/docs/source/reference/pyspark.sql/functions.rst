@@ -83,6 +83,7 @@ Math Functions
     log10
     log1p
     log2
+    negate
     negative
     pi
     pmod
