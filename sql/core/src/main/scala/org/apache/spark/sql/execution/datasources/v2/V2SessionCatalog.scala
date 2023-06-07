@@ -210,15 +210,17 @@ class V2SessionCatalog(catalog: SessionCatalog)
     try {
       val table = loadTable(ident)
       if (table != null) {
-        val v1Table = table.asInstanceOf[V1Table].v1Table
-        if (v1Table.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
-            operation = "DROP TABLE",
-            requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
-            objectName = v1Table.qualifiedName,
-            foundType = v1Table.tableType.name,
-            alternative = "DROP VIEW"
-          )
+        table match {
+          case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+            throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+              operation = "DROP TABLE",
+              requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
+                s" ${CatalogTableType.MANAGED.name}",
+              objectName = v1Table.qualifiedName,
+              foundType = v1Table.tableType.name,
+              alternative = "DROP VIEW"
+            )
+          case _ =>
         }
         catalog.invalidateCachedTable(ident.asTableIdentifier)
         catalog.dropTable(
