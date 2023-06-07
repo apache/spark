@@ -1413,7 +1413,7 @@ case class UnresolvedTableSpec(
 /**
  * This contains the expressions in an OPTIONS list. We store it alongside anywhere the above
  * UnresolvedTableSpec lives. We use a separate object here so that tree traversals in analyzer
- * rules can descend into the child expressions naturally with no extra treatment.
+ * rules can descend into the child expressions naturally without extra treatment.
  */
 case class OptionsListExpressions(options: Seq[(String, Expression)])
   extends Expression with Unevaluable {
