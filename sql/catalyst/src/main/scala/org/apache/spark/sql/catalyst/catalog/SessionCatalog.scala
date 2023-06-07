@@ -849,7 +849,6 @@ class SessionCatalog(
         tempViews.remove(table)
       }
     }
-    invalidateCachedTable(name)
   }
 
   /**

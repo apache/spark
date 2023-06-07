@@ -220,6 +220,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
             alternative = "DROP VIEW"
           )
         }
+        catalog.invalidateCachedTable(ident.asTableIdentifier)
         catalog.dropTable(
           ident.asTableIdentifier,
           ignoreIfNotExists = true,
