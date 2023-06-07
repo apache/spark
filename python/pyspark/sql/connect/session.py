@@ -613,7 +613,9 @@ class SparkSession:
         """
         return self._client
 
-    def addArtifacts(self, *path: str, pyfile: bool = False, archive: bool = False) -> None:
+    def addArtifacts(
+        self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
+    ) -> None:
         """
         Add artifact(s) to the client session. Currently only local files are supported.
 
@@ -630,10 +632,13 @@ class SparkSession:
         archive : bool
             Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
             The archives are unpacked on the executor side automatically.
+        file : bool
+            Add a file to be downloaded with this Spark job on every node.
+            The ``path`` passed can only be a local file for now.
         """
-        if pyfile and archive:
-            raise ValueError("'pyfile' and 'archive' cannot be True together.")
-        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive)
+        if sum([file, pyfile, archive]) > 1:
+            raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
+        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifact = addArtifacts
 

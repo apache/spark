@@ -1251,8 +1251,8 @@ class SparkConnectClient(object):
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
-        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive)
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
+        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
 
 class RetryState:
