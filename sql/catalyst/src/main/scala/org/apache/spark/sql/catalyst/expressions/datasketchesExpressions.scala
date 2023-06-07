@@ -62,7 +62,7 @@ case class HllSketchEstimate(child: Expression)
     _FUNC_(first, second, allowDifferentLgConfigK) - Merges two binary representations of
     Datasketches HllSketch objects, using a Datasketches Union object. Set
     allowDifferentLgConfigK to true to allow unions of sketches with different
-    lgConfigK values (defaults to false). """,
+    lgConfigK values (defaults to false).""",
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(hll_sketch_agg(col1), hll_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
