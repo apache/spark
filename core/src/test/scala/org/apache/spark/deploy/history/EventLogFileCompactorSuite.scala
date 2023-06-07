@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper.writeEventsToRollingWriter
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.status.ListenerEventsTestHelper._
@@ -280,6 +281,24 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
         }
         assert(linesLength === expectedLines.length)
       }
+    }
+  }
+
+  test("Use the value of spark.eventLog.compression.codec set by user") {
+    withTempDir { dir =>
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val conf = new SparkConf()
+      conf.set(EVENT_LOG_COMPRESS, true)
+      conf.set(EVENT_LOG_COMPRESSION_CODEC, "lz4")
+
+      val fileStatuses = writeEventsToRollingWriter(fs, "app", dir, conf, hadoopConf,
+        (1 to 10).map(_ => testEvent): _*)
+      val fileToCompact = fileStatuses.head.getPath
+
+      val writer = new CompactedEventLogFileWriter(fileToCompact, "dummy", None,
+        fileToCompact.getParent.toUri, conf, hadoopConf)
+      assert(writer.compressionCodecName === Some("lz4"))
     }
   }
 

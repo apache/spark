@@ -65,7 +65,7 @@ abstract class EventLogFileWriter(
       None
     }
 
-  private[history] val compressionCodecName = compressionCodec.map { c =>
+  private[history] lazy val compressionCodecName = compressionCodec.map { c =>
     CompressionCodec.getShortName(c.getClass.getName)
   }
 
@@ -212,7 +212,7 @@ class SingleEventLogFileWriter(
     hadoopConf: Configuration)
   extends EventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf) {
 
-  override val logPath: String = SingleEventLogFileWriter.getLogPath(logBaseDir, appId,
+  override def logPath: String = SingleEventLogFileWriter.getLogPath(logBaseDir, appId,
     appAttemptId, compressionCodecName)
 
   protected def inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
