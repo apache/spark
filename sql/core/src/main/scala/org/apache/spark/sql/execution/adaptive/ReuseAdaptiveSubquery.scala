@@ -33,16 +33,11 @@ case class ReuseAdaptiveSubquery(
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
-        // The subquery can be already reused (the same Java object) due to filter pushdown
-        // of table cache. If it happens, we just need to wrap the current subquery with
-        // `ReusedSubqueryExec` and no need to update the `reuseMap`.
-        reuseMap.get(sub.plan.canonicalized).map { subquery =>
-          sub.withNewPlan(ReusedSubqueryExec(subquery))
-        }.getOrElse {
-          reuseMap.putIfAbsent(sub.plan.canonicalized, sub.plan) match {
-            case Some(subquery) => sub.withNewPlan(ReusedSubqueryExec(subquery))
-            case None => sub
-          }
+        val newPlan = reuseMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
+        if (newPlan.ne(sub.plan)) {
+          sub.withNewPlan(ReusedSubqueryExec(newPlan))
+        } else {
+          sub
         }
     }
   }
