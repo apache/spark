@@ -1068,7 +1068,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   /**
    * This method is only used for checking collected metrics. This method tries to
-   * remove extra alias-only project from the plan so that we can identify exact
+   * remove extra project which only re-assign expr ids from the plan so that we can identify exact
    * duplicates metric definition.
    */
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
