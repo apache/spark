@@ -945,9 +945,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
       val data = Seq.tabulate(count)(i => (i, str))
-      val df = spark.createDataFrame(data)
-      assert(df.count() === count)
-      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+      for (_ <- 0 until 2) {
+        val df = spark.createDataFrame(data)
+        assert(df.count() === count)
+        assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+      }
     }
   }
 
