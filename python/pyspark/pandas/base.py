@@ -31,7 +31,7 @@ from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex, GenericColumn
+from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -67,7 +67,7 @@ def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) ->
 
 
 def align_diff_index_ops(
-    func: Callable[..., GenericColumn], this_index_ops: SeriesOrIndex, *args: Any
+    func: Callable[..., Column], this_index_ops: SeriesOrIndex, *args: Any
 ) -> SeriesOrIndex:
     """
     Align the `IndexOpsMixin` objects and apply the function.
@@ -178,7 +178,7 @@ def align_diff_index_ops(
                 ).rename(that_series.name)
 
 
-def booleanize_null(scol: GenericColumn, f: Callable[..., GenericColumn]) -> GenericColumn:
+def booleanize_null(scol: Column, f: Callable[..., Column]) -> Column:
     """
     Booleanize Null in Spark Column
     """
@@ -190,12 +190,12 @@ def booleanize_null(scol: GenericColumn, f: Callable[..., GenericColumn]) -> Gen
     if f in comp_ops:
         # if `f` is "!=", fill null with True otherwise False
         filler = f == Column.__ne__
-        scol = F.when(scol.isNull(), filler).otherwise(scol)  # type: ignore[arg-type]
+        scol = F.when(scol.isNull(), filler).otherwise(scol)
 
     return scol
 
 
-def column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
+def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     """
     A decorator that wraps APIs taking/returning Spark Column so that pandas-on-Spark Series can be
     supported too. If this decorator is used for the `f` function that takes Spark Column and
@@ -225,7 +225,7 @@ def column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
             )
 
             field = InternalField.from_struct_field(
-                self._internal.spark_frame.select(scol).schema[0],  # type: ignore[arg-type]
+                self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
                     isinstance(col.dtype, extension_dtypes) for col in [self] + cols
                 ),
@@ -252,7 +252,7 @@ def column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
     return wrapper
 
 
-def numpy_column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
+def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     @wraps(f)
     def wrapper(self: SeriesOrIndex, *args: Any) -> SeriesOrIndex:
         # PySpark does not support NumPy type out of the box. For now, we convert NumPy types
@@ -287,7 +287,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _with_new_scol(
-        self: IndexOpsLike, scol: GenericColumn, *, field: Optional[InternalField] = None
+        self: IndexOpsLike, scol: Column, *, field: Optional[InternalField] = None
     ) -> IndexOpsLike:
         pass
 
@@ -904,7 +904,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         1    2
         dtype: int64
 
-        >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
+        >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')  # doctest: +SKIP
         Int64Index([1, 2], dtype='int64', name='a')
         """
         return self._dtype_op.astype(self, dtype)
@@ -1247,7 +1247,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         4    23
         Name: Col2, dtype: int64
 
-        >>> df.index.shift(periods=3, fill_value=0)
+        >>> df.index.shift(periods=3, fill_value=0)  # doctest: +SKIP
         Int64Index([0, 0, 0, 0, 1], dtype='int64')
         """
         return self._shift(periods, fill_value).spark.analyzed
@@ -1341,7 +1341,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         For Index
 
         >>> idx = ps.Index([3, 1, 2, 3, 4, np.nan])
-        >>> idx
+        >>> idx  # doctest: +SKIP
         Float64Index([3.0, 1.0, 2.0, 3.0, 4.0, nan], dtype='float64')
 
         >>> idx.value_counts().sort_index()
@@ -1505,7 +1505,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         3
 
         >>> idx = ps.Index([1, 1, 2, None])
-        >>> idx
+        >>> idx  # doctest: +SKIP
         Float64Index([1.0, 1.0, 2.0, nan], dtype='float64')
 
         >>> idx.nunique()
@@ -1580,10 +1580,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Index
 
         >>> psidx = ps.Index([100, 200, 300, 400, 500])
-        >>> psidx
+        >>> psidx  # doctest: +SKIP
         Int64Index([100, 200, 300, 400, 500], dtype='int64')
 
-        >>> psidx.take([0, 2, 4]).sort_values()
+        >>> psidx.take([0, 2, 4]).sort_values()  # doctest: +SKIP
         Int64Index([100, 300, 500], dtype='int64')
 
         MultiIndex
@@ -1678,7 +1678,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> psidx = ps.Index(['b', None, 'a', 'c', 'b'])
         >>> codes, uniques = psidx.factorize()
-        >>> codes
+        >>> codes  # doctest: +SKIP
         Int64Index([1, -1, 0, 2, 1], dtype='int64')
         >>> uniques
         Index(['a', 'b', 'c'], dtype='object')

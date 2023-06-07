@@ -409,7 +409,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val executor = backend.executor
       // Mock the executor.
       when(executor.threadPool).thenReturn(threadPool)
-      val runningTasks = spy(new ConcurrentHashMap[Long, Executor#TaskRunner])
+      val runningTasks = spy[ConcurrentHashMap[Long, Executor#TaskRunner]](
+        new ConcurrentHashMap[Long, Executor#TaskRunner])
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
       when(executor.conf).thenReturn(conf)
 
@@ -497,7 +498,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val executor = backend.executor
       // Mock the executor.
       when(executor.threadPool).thenReturn(threadPool)
-      val runningTasks = spy(new ConcurrentHashMap[Long, Executor#TaskRunner])
+      val runningTasks = spy[ConcurrentHashMap[Long, Executor#TaskRunner]](
+        new ConcurrentHashMap[Long, Executor#TaskRunner])
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
       when(executor.conf).thenReturn(conf)
 

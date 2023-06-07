@@ -38,7 +38,7 @@ from pyspark.sql.connect.proto import types_pb2 as spark_dot_connect_dot_types__
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x18spark/connect/base.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1cspark/connect/commands.proto\x1a\x1aspark/connect/common.proto\x1a\x1fspark/connect/expressions.proto\x1a\x1dspark/connect/relations.proto\x1a\x19spark/connect/types.proto"t\n\x04Plan\x12-\n\x04root\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x04root\x12\x32\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x16.spark.connect.CommandH\x00R\x07\x63ommandB\t\n\x07op_type"z\n\x0bUserContext\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n\tuser_name\x18\x02 \x01(\tR\x08userName\x12\x35\n\nextensions\x18\xe7\x07 \x03(\x0b\x32\x14.google.protobuf.AnyR\nextensions"\xd0\x12\n\x12\x41nalyzePlanRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12$\n\x0b\x63lient_type\x18\x03 \x01(\tH\x01R\nclientType\x88\x01\x01\x12\x42\n\x06schema\x18\x04 \x01(\x0b\x32(.spark.connect.AnalyzePlanRequest.SchemaH\x00R\x06schema\x12\x45\n\x07\x65xplain\x18\x05 \x01(\x0b\x32).spark.connect.AnalyzePlanRequest.ExplainH\x00R\x07\x65xplain\x12O\n\x0btree_string\x18\x06 \x01(\x0b\x32,.spark.connect.AnalyzePlanRequest.TreeStringH\x00R\ntreeString\x12\x46\n\x08is_local\x18\x07 \x01(\x0b\x32).spark.connect.AnalyzePlanRequest.IsLocalH\x00R\x07isLocal\x12R\n\x0cis_streaming\x18\x08 \x01(\x0b\x32-.spark.connect.AnalyzePlanRequest.IsStreamingH\x00R\x0bisStreaming\x12O\n\x0binput_files\x18\t \x01(\x0b\x32,.spark.connect.AnalyzePlanRequest.InputFilesH\x00R\ninputFiles\x12U\n\rspark_version\x18\n \x01(\x0b\x32..spark.connect.AnalyzePlanRequest.SparkVersionH\x00R\x0csparkVersion\x12I\n\tddl_parse\x18\x0b \x01(\x0b\x32*.spark.connect.AnalyzePlanRequest.DDLParseH\x00R\x08\x64\x64lParse\x12X\n\x0esame_semantics\x18\x0c \x01(\x0b\x32/.spark.connect.AnalyzePlanRequest.SameSemanticsH\x00R\rsameSemantics\x12U\n\rsemantic_hash\x18\r \x01(\x0b\x32..spark.connect.AnalyzePlanRequest.SemanticHashH\x00R\x0csemanticHash\x12\x45\n\x07persist\x18\x0e \x01(\x0b\x32).spark.connect.AnalyzePlanRequest.PersistH\x00R\x07persist\x12K\n\tunpersist\x18\x0f \x01(\x0b\x32+.spark.connect.AnalyzePlanRequest.UnpersistH\x00R\tunpersist\x12_\n\x11get_storage_level\x18\x10 \x01(\x0b\x32\x31.spark.connect.AnalyzePlanRequest.GetStorageLevelH\x00R\x0fgetStorageLevel\x1a\x31\n\x06Schema\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\xbb\x02\n\x07\x45xplain\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12X\n\x0c\x65xplain_mode\x18\x02 \x01(\x0e\x32\x35.spark.connect.AnalyzePlanRequest.Explain.ExplainModeR\x0b\x65xplainMode"\xac\x01\n\x0b\x45xplainMode\x12\x1c\n\x18\x45XPLAIN_MODE_UNSPECIFIED\x10\x00\x12\x17\n\x13\x45XPLAIN_MODE_SIMPLE\x10\x01\x12\x19\n\x15\x45XPLAIN_MODE_EXTENDED\x10\x02\x12\x18\n\x14\x45XPLAIN_MODE_CODEGEN\x10\x03\x12\x15\n\x11\x45XPLAIN_MODE_COST\x10\x04\x12\x1a\n\x16\x45XPLAIN_MODE_FORMATTED\x10\x05\x1a\x35\n\nTreeString\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x32\n\x07IsLocal\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x36\n\x0bIsStreaming\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x35\n\nInputFiles\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x0e\n\x0cSparkVersion\x1a)\n\x08\x44\x44LParse\x12\x1d\n\nddl_string\x18\x01 \x01(\tR\tddlString\x1ay\n\rSameSemantics\x12\x34\n\x0btarget_plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\ntargetPlan\x12\x32\n\nother_plan\x18\x02 \x01(\x0b\x32\x13.spark.connect.PlanR\totherPlan\x1a\x37\n\x0cSemanticHash\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x97\x01\n\x07Persist\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relation\x12\x45\n\rstorage_level\x18\x02 \x01(\x0b\x32\x1b.spark.connect.StorageLevelH\x00R\x0cstorageLevel\x88\x01\x01\x42\x10\n\x0e_storage_level\x1an\n\tUnpersist\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relation\x12\x1f\n\x08\x62locking\x18\x02 \x01(\x08H\x00R\x08\x62locking\x88\x01\x01\x42\x0b\n\t_blocking\x1a\x46\n\x0fGetStorageLevel\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relationB\t\n\x07\x61nalyzeB\x0e\n\x0c_client_type"\x99\r\n\x13\x41nalyzePlanResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x43\n\x06schema\x18\x02 \x01(\x0b\x32).spark.connect.AnalyzePlanResponse.SchemaH\x00R\x06schema\x12\x46\n\x07\x65xplain\x18\x03 \x01(\x0b\x32*.spark.connect.AnalyzePlanResponse.ExplainH\x00R\x07\x65xplain\x12P\n\x0btree_string\x18\x04 \x01(\x0b\x32-.spark.connect.AnalyzePlanResponse.TreeStringH\x00R\ntreeString\x12G\n\x08is_local\x18\x05 \x01(\x0b\x32*.spark.connect.AnalyzePlanResponse.IsLocalH\x00R\x07isLocal\x12S\n\x0cis_streaming\x18\x06 \x01(\x0b\x32..spark.connect.AnalyzePlanResponse.IsStreamingH\x00R\x0bisStreaming\x12P\n\x0binput_files\x18\x07 \x01(\x0b\x32-.spark.connect.AnalyzePlanResponse.InputFilesH\x00R\ninputFiles\x12V\n\rspark_version\x18\x08 \x01(\x0b\x32/.spark.connect.AnalyzePlanResponse.SparkVersionH\x00R\x0csparkVersion\x12J\n\tddl_parse\x18\t \x01(\x0b\x32+.spark.connect.AnalyzePlanResponse.DDLParseH\x00R\x08\x64\x64lParse\x12Y\n\x0esame_semantics\x18\n \x01(\x0b\x32\x30.spark.connect.AnalyzePlanResponse.SameSemanticsH\x00R\rsameSemantics\x12V\n\rsemantic_hash\x18\x0b \x01(\x0b\x32/.spark.connect.AnalyzePlanResponse.SemanticHashH\x00R\x0csemanticHash\x12\x46\n\x07persist\x18\x0c \x01(\x0b\x32*.spark.connect.AnalyzePlanResponse.PersistH\x00R\x07persist\x12L\n\tunpersist\x18\r \x01(\x0b\x32,.spark.connect.AnalyzePlanResponse.UnpersistH\x00R\tunpersist\x12`\n\x11get_storage_level\x18\x0e \x01(\x0b\x32\x32.spark.connect.AnalyzePlanResponse.GetStorageLevelH\x00R\x0fgetStorageLevel\x1a\x39\n\x06Schema\x12/\n\x06schema\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x1a\x30\n\x07\x45xplain\x12%\n\x0e\x65xplain_string\x18\x01 \x01(\tR\rexplainString\x1a-\n\nTreeString\x12\x1f\n\x0btree_string\x18\x01 \x01(\tR\ntreeString\x1a$\n\x07IsLocal\x12\x19\n\x08is_local\x18\x01 \x01(\x08R\x07isLocal\x1a\x30\n\x0bIsStreaming\x12!\n\x0cis_streaming\x18\x01 \x01(\x08R\x0bisStreaming\x1a"\n\nInputFiles\x12\x14\n\x05\x66iles\x18\x01 \x03(\tR\x05\x66iles\x1a(\n\x0cSparkVersion\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version\x1a;\n\x08\x44\x44LParse\x12/\n\x06parsed\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06parsed\x1a\'\n\rSameSemantics\x12\x16\n\x06result\x18\x01 \x01(\x08R\x06result\x1a&\n\x0cSemanticHash\x12\x16\n\x06result\x18\x01 \x01(\x05R\x06result\x1a\t\n\x07Persist\x1a\x0b\n\tUnpersist\x1aS\n\x0fGetStorageLevel\x12@\n\rstorage_level\x18\x01 \x01(\x0b\x32\x1b.spark.connect.StorageLevelR\x0cstorageLevelB\x08\n\x06result"\xd1\x01\n\x12\x45xecutePlanRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x42\x0e\n\x0c_client_type"\xdb\x0c\n\x13\x45xecutePlanResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12P\n\x0b\x61rrow_batch\x18\x02 \x01(\x0b\x32-.spark.connect.ExecutePlanResponse.ArrowBatchH\x00R\narrowBatch\x12\x63\n\x12sql_command_result\x18\x05 \x01(\x0b\x32\x33.spark.connect.ExecutePlanResponse.SqlCommandResultH\x00R\x10sqlCommandResult\x12~\n#write_stream_operation_start_result\x18\x08 \x01(\x0b\x32..spark.connect.WriteStreamOperationStartResultH\x00R\x1fwriteStreamOperationStartResult\x12q\n\x1estreaming_query_command_result\x18\t \x01(\x0b\x32*.spark.connect.StreamingQueryCommandResultH\x00R\x1bstreamingQueryCommandResult\x12k\n\x1cget_resources_command_result\x18\n \x01(\x0b\x32(.spark.connect.GetResourcesCommandResultH\x00R\x19getResourcesCommandResult\x12\x35\n\textension\x18\xe7\x07 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00R\textension\x12\x44\n\x07metrics\x18\x04 \x01(\x0b\x32*.spark.connect.ExecutePlanResponse.MetricsR\x07metrics\x12]\n\x10observed_metrics\x18\x06 \x03(\x0b\x32\x32.spark.connect.ExecutePlanResponse.ObservedMetricsR\x0fobservedMetrics\x12/\n\x06schema\x18\x07 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x1aG\n\x10SqlCommandResult\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relation\x1a=\n\nArrowBatch\x12\x1b\n\trow_count\x18\x01 \x01(\x03R\x08rowCount\x12\x12\n\x04\x64\x61ta\x18\x02 \x01(\x0cR\x04\x64\x61ta\x1a\x85\x04\n\x07Metrics\x12Q\n\x07metrics\x18\x01 \x03(\x0b\x32\x37.spark.connect.ExecutePlanResponse.Metrics.MetricObjectR\x07metrics\x1a\xcc\x02\n\x0cMetricObject\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n\x07plan_id\x18\x02 \x01(\x03R\x06planId\x12\x16\n\x06parent\x18\x03 \x01(\x03R\x06parent\x12z\n\x11\x65xecution_metrics\x18\x04 \x03(\x0b\x32M.spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntryR\x10\x65xecutionMetrics\x1a{\n\x15\x45xecutionMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ExecutePlanResponse.Metrics.MetricValueR\x05value:\x02\x38\x01\x1aX\n\x0bMetricValue\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05value\x18\x02 \x01(\x03R\x05value\x12\x1f\n\x0bmetric_type\x18\x03 \x01(\tR\nmetricType\x1a`\n\x0fObservedMetrics\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x39\n\x06values\x18\x02 \x03(\x0b\x32!.spark.connect.Expression.LiteralR\x06valuesB\x0f\n\rresponse_type"A\n\x08KeyValue\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x19\n\x05value\x18\x02 \x01(\tH\x00R\x05value\x88\x01\x01\x42\x08\n\x06_value"\x84\x08\n\rConfigRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\x44\n\toperation\x18\x03 \x01(\x0b\x32&.spark.connect.ConfigRequest.OperationR\toperation\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x1a\xf2\x03\n\tOperation\x12\x34\n\x03set\x18\x01 \x01(\x0b\x32 .spark.connect.ConfigRequest.SetH\x00R\x03set\x12\x34\n\x03get\x18\x02 \x01(\x0b\x32 .spark.connect.ConfigRequest.GetH\x00R\x03get\x12W\n\x10get_with_default\x18\x03 \x01(\x0b\x32+.spark.connect.ConfigRequest.GetWithDefaultH\x00R\x0egetWithDefault\x12G\n\nget_option\x18\x04 \x01(\x0b\x32&.spark.connect.ConfigRequest.GetOptionH\x00R\tgetOption\x12>\n\x07get_all\x18\x05 \x01(\x0b\x32#.spark.connect.ConfigRequest.GetAllH\x00R\x06getAll\x12:\n\x05unset\x18\x06 \x01(\x0b\x32".spark.connect.ConfigRequest.UnsetH\x00R\x05unset\x12P\n\ris_modifiable\x18\x07 \x01(\x0b\x32).spark.connect.ConfigRequest.IsModifiableH\x00R\x0cisModifiableB\t\n\x07op_type\x1a\x34\n\x03Set\x12-\n\x05pairs\x18\x01 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x1a\x19\n\x03Get\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a?\n\x0eGetWithDefault\x12-\n\x05pairs\x18\x01 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x1a\x1f\n\tGetOption\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a\x30\n\x06GetAll\x12\x1b\n\x06prefix\x18\x01 \x01(\tH\x00R\x06prefix\x88\x01\x01\x42\t\n\x07_prefix\x1a\x1b\n\x05Unset\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a"\n\x0cIsModifiable\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keysB\x0e\n\x0c_client_type"z\n\x0e\x43onfigResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12-\n\x05pairs\x18\x02 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x12\x1a\n\x08warnings\x18\x03 \x03(\tR\x08warnings"\xe7\x06\n\x13\x41\x64\x64\x41rtifactsRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12$\n\x0b\x63lient_type\x18\x06 \x01(\tH\x01R\nclientType\x88\x01\x01\x12@\n\x05\x62\x61tch\x18\x03 \x01(\x0b\x32(.spark.connect.AddArtifactsRequest.BatchH\x00R\x05\x62\x61tch\x12Z\n\x0b\x62\x65gin_chunk\x18\x04 \x01(\x0b\x32\x37.spark.connect.AddArtifactsRequest.BeginChunkedArtifactH\x00R\nbeginChunk\x12H\n\x05\x63hunk\x18\x05 \x01(\x0b\x32\x30.spark.connect.AddArtifactsRequest.ArtifactChunkH\x00R\x05\x63hunk\x1a\x35\n\rArtifactChunk\x12\x12\n\x04\x64\x61ta\x18\x01 \x01(\x0cR\x04\x64\x61ta\x12\x10\n\x03\x63rc\x18\x02 \x01(\x03R\x03\x63rc\x1ao\n\x13SingleChunkArtifact\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x44\n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x30.spark.connect.AddArtifactsRequest.ArtifactChunkR\x04\x64\x61ta\x1a]\n\x05\x42\x61tch\x12T\n\tartifacts\x18\x01 \x03(\x0b\x32\x36.spark.connect.AddArtifactsRequest.SingleChunkArtifactR\tartifacts\x1a\xc1\x01\n\x14\x42\x65ginChunkedArtifact\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n\x0btotal_bytes\x18\x02 \x01(\x03R\ntotalBytes\x12\x1d\n\nnum_chunks\x18\x03 \x01(\x03R\tnumChunks\x12U\n\rinitial_chunk\x18\x04 \x01(\x0b\x32\x30.spark.connect.AddArtifactsRequest.ArtifactChunkR\x0cinitialChunkB\t\n\x07payloadB\x0e\n\x0c_client_type"\xbc\x01\n\x14\x41\x64\x64\x41rtifactsResponse\x12Q\n\tartifacts\x18\x01 \x03(\x0b\x32\x33.spark.connect.AddArtifactsResponse.ArtifactSummaryR\tartifacts\x1aQ\n\x0f\x41rtifactSummary\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12*\n\x11is_crc_successful\x18\x02 \x01(\x08R\x0fisCrcSuccessful2\xed\x02\n\x13SparkConnectService\x12X\n\x0b\x45xecutePlan\x12!.spark.connect.ExecutePlanRequest\x1a".spark.connect.ExecutePlanResponse"\x00\x30\x01\x12V\n\x0b\x41nalyzePlan\x12!.spark.connect.AnalyzePlanRequest\x1a".spark.connect.AnalyzePlanResponse"\x00\x12G\n\x06\x43onfig\x12\x1c.spark.connect.ConfigRequest\x1a\x1d.spark.connect.ConfigResponse"\x00\x12[\n\x0c\x41\x64\x64\x41rtifacts\x12".spark.connect.AddArtifactsRequest\x1a#.spark.connect.AddArtifactsResponse"\x00(\x01\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x18spark/connect/base.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1cspark/connect/commands.proto\x1a\x1aspark/connect/common.proto\x1a\x1fspark/connect/expressions.proto\x1a\x1dspark/connect/relations.proto\x1a\x19spark/connect/types.proto"t\n\x04Plan\x12-\n\x04root\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationH\x00R\x04root\x12\x32\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x16.spark.connect.CommandH\x00R\x07\x63ommandB\t\n\x07op_type"z\n\x0bUserContext\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n\tuser_name\x18\x02 \x01(\tR\x08userName\x12\x35\n\nextensions\x18\xe7\x07 \x03(\x0b\x32\x14.google.protobuf.AnyR\nextensions"\xf5\x12\n\x12\x41nalyzePlanRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12$\n\x0b\x63lient_type\x18\x03 \x01(\tH\x01R\nclientType\x88\x01\x01\x12\x42\n\x06schema\x18\x04 \x01(\x0b\x32(.spark.connect.AnalyzePlanRequest.SchemaH\x00R\x06schema\x12\x45\n\x07\x65xplain\x18\x05 \x01(\x0b\x32).spark.connect.AnalyzePlanRequest.ExplainH\x00R\x07\x65xplain\x12O\n\x0btree_string\x18\x06 \x01(\x0b\x32,.spark.connect.AnalyzePlanRequest.TreeStringH\x00R\ntreeString\x12\x46\n\x08is_local\x18\x07 \x01(\x0b\x32).spark.connect.AnalyzePlanRequest.IsLocalH\x00R\x07isLocal\x12R\n\x0cis_streaming\x18\x08 \x01(\x0b\x32-.spark.connect.AnalyzePlanRequest.IsStreamingH\x00R\x0bisStreaming\x12O\n\x0binput_files\x18\t \x01(\x0b\x32,.spark.connect.AnalyzePlanRequest.InputFilesH\x00R\ninputFiles\x12U\n\rspark_version\x18\n \x01(\x0b\x32..spark.connect.AnalyzePlanRequest.SparkVersionH\x00R\x0csparkVersion\x12I\n\tddl_parse\x18\x0b \x01(\x0b\x32*.spark.connect.AnalyzePlanRequest.DDLParseH\x00R\x08\x64\x64lParse\x12X\n\x0esame_semantics\x18\x0c \x01(\x0b\x32/.spark.connect.AnalyzePlanRequest.SameSemanticsH\x00R\rsameSemantics\x12U\n\rsemantic_hash\x18\r \x01(\x0b\x32..spark.connect.AnalyzePlanRequest.SemanticHashH\x00R\x0csemanticHash\x12\x45\n\x07persist\x18\x0e \x01(\x0b\x32).spark.connect.AnalyzePlanRequest.PersistH\x00R\x07persist\x12K\n\tunpersist\x18\x0f \x01(\x0b\x32+.spark.connect.AnalyzePlanRequest.UnpersistH\x00R\tunpersist\x12_\n\x11get_storage_level\x18\x10 \x01(\x0b\x32\x31.spark.connect.AnalyzePlanRequest.GetStorageLevelH\x00R\x0fgetStorageLevel\x1a\x31\n\x06Schema\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\xbb\x02\n\x07\x45xplain\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12X\n\x0c\x65xplain_mode\x18\x02 \x01(\x0e\x32\x35.spark.connect.AnalyzePlanRequest.Explain.ExplainModeR\x0b\x65xplainMode"\xac\x01\n\x0b\x45xplainMode\x12\x1c\n\x18\x45XPLAIN_MODE_UNSPECIFIED\x10\x00\x12\x17\n\x13\x45XPLAIN_MODE_SIMPLE\x10\x01\x12\x19\n\x15\x45XPLAIN_MODE_EXTENDED\x10\x02\x12\x18\n\x14\x45XPLAIN_MODE_CODEGEN\x10\x03\x12\x15\n\x11\x45XPLAIN_MODE_COST\x10\x04\x12\x1a\n\x16\x45XPLAIN_MODE_FORMATTED\x10\x05\x1aZ\n\nTreeString\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12\x19\n\x05level\x18\x02 \x01(\x05H\x00R\x05level\x88\x01\x01\x42\x08\n\x06_level\x1a\x32\n\x07IsLocal\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x36\n\x0bIsStreaming\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x35\n\nInputFiles\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x0e\n\x0cSparkVersion\x1a)\n\x08\x44\x44LParse\x12\x1d\n\nddl_string\x18\x01 \x01(\tR\tddlString\x1ay\n\rSameSemantics\x12\x34\n\x0btarget_plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\ntargetPlan\x12\x32\n\nother_plan\x18\x02 \x01(\x0b\x32\x13.spark.connect.PlanR\totherPlan\x1a\x37\n\x0cSemanticHash\x12\'\n\x04plan\x18\x01 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x1a\x97\x01\n\x07Persist\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relation\x12\x45\n\rstorage_level\x18\x02 \x01(\x0b\x32\x1b.spark.connect.StorageLevelH\x00R\x0cstorageLevel\x88\x01\x01\x42\x10\n\x0e_storage_level\x1an\n\tUnpersist\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relation\x12\x1f\n\x08\x62locking\x18\x02 \x01(\x08H\x00R\x08\x62locking\x88\x01\x01\x42\x0b\n\t_blocking\x1a\x46\n\x0fGetStorageLevel\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relationB\t\n\x07\x61nalyzeB\x0e\n\x0c_client_type"\x99\r\n\x13\x41nalyzePlanResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x43\n\x06schema\x18\x02 \x01(\x0b\x32).spark.connect.AnalyzePlanResponse.SchemaH\x00R\x06schema\x12\x46\n\x07\x65xplain\x18\x03 \x01(\x0b\x32*.spark.connect.AnalyzePlanResponse.ExplainH\x00R\x07\x65xplain\x12P\n\x0btree_string\x18\x04 \x01(\x0b\x32-.spark.connect.AnalyzePlanResponse.TreeStringH\x00R\ntreeString\x12G\n\x08is_local\x18\x05 \x01(\x0b\x32*.spark.connect.AnalyzePlanResponse.IsLocalH\x00R\x07isLocal\x12S\n\x0cis_streaming\x18\x06 \x01(\x0b\x32..spark.connect.AnalyzePlanResponse.IsStreamingH\x00R\x0bisStreaming\x12P\n\x0binput_files\x18\x07 \x01(\x0b\x32-.spark.connect.AnalyzePlanResponse.InputFilesH\x00R\ninputFiles\x12V\n\rspark_version\x18\x08 \x01(\x0b\x32/.spark.connect.AnalyzePlanResponse.SparkVersionH\x00R\x0csparkVersion\x12J\n\tddl_parse\x18\t \x01(\x0b\x32+.spark.connect.AnalyzePlanResponse.DDLParseH\x00R\x08\x64\x64lParse\x12Y\n\x0esame_semantics\x18\n \x01(\x0b\x32\x30.spark.connect.AnalyzePlanResponse.SameSemanticsH\x00R\rsameSemantics\x12V\n\rsemantic_hash\x18\x0b \x01(\x0b\x32/.spark.connect.AnalyzePlanResponse.SemanticHashH\x00R\x0csemanticHash\x12\x46\n\x07persist\x18\x0c \x01(\x0b\x32*.spark.connect.AnalyzePlanResponse.PersistH\x00R\x07persist\x12L\n\tunpersist\x18\r \x01(\x0b\x32,.spark.connect.AnalyzePlanResponse.UnpersistH\x00R\tunpersist\x12`\n\x11get_storage_level\x18\x0e \x01(\x0b\x32\x32.spark.connect.AnalyzePlanResponse.GetStorageLevelH\x00R\x0fgetStorageLevel\x1a\x39\n\x06Schema\x12/\n\x06schema\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x1a\x30\n\x07\x45xplain\x12%\n\x0e\x65xplain_string\x18\x01 \x01(\tR\rexplainString\x1a-\n\nTreeString\x12\x1f\n\x0btree_string\x18\x01 \x01(\tR\ntreeString\x1a$\n\x07IsLocal\x12\x19\n\x08is_local\x18\x01 \x01(\x08R\x07isLocal\x1a\x30\n\x0bIsStreaming\x12!\n\x0cis_streaming\x18\x01 \x01(\x08R\x0bisStreaming\x1a"\n\nInputFiles\x12\x14\n\x05\x66iles\x18\x01 \x03(\tR\x05\x66iles\x1a(\n\x0cSparkVersion\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version\x1a;\n\x08\x44\x44LParse\x12/\n\x06parsed\x18\x01 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06parsed\x1a\'\n\rSameSemantics\x12\x16\n\x06result\x18\x01 \x01(\x08R\x06result\x1a&\n\x0cSemanticHash\x12\x16\n\x06result\x18\x01 \x01(\x05R\x06result\x1a\t\n\x07Persist\x1a\x0b\n\tUnpersist\x1aS\n\x0fGetStorageLevel\x12@\n\rstorage_level\x18\x01 \x01(\x0b\x32\x1b.spark.connect.StorageLevelR\x0cstorageLevelB\x08\n\x06result"\x85\x03\n\x12\x45xecutePlanRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\'\n\x04plan\x18\x03 \x01(\x0b\x32\x13.spark.connect.PlanR\x04plan\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x12X\n\x0frequest_options\x18\x05 \x03(\x0b\x32/.spark.connect.ExecutePlanRequest.RequestOptionR\x0erequestOptions\x1aX\n\rRequestOption\x12\x35\n\textension\x18\xe7\x07 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00R\textensionB\x10\n\x0erequest_optionB\x0e\n\x0c_client_type"\xe5\r\n\x13\x45xecutePlanResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12P\n\x0b\x61rrow_batch\x18\x02 \x01(\x0b\x32-.spark.connect.ExecutePlanResponse.ArrowBatchH\x00R\narrowBatch\x12\x63\n\x12sql_command_result\x18\x05 \x01(\x0b\x32\x33.spark.connect.ExecutePlanResponse.SqlCommandResultH\x00R\x10sqlCommandResult\x12~\n#write_stream_operation_start_result\x18\x08 \x01(\x0b\x32..spark.connect.WriteStreamOperationStartResultH\x00R\x1fwriteStreamOperationStartResult\x12q\n\x1estreaming_query_command_result\x18\t \x01(\x0b\x32*.spark.connect.StreamingQueryCommandResultH\x00R\x1bstreamingQueryCommandResult\x12k\n\x1cget_resources_command_result\x18\n \x01(\x0b\x32(.spark.connect.GetResourcesCommandResultH\x00R\x19getResourcesCommandResult\x12\x87\x01\n&streaming_query_manager_command_result\x18\x0b \x01(\x0b\x32\x31.spark.connect.StreamingQueryManagerCommandResultH\x00R"streamingQueryManagerCommandResult\x12\x35\n\textension\x18\xe7\x07 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00R\textension\x12\x44\n\x07metrics\x18\x04 \x01(\x0b\x32*.spark.connect.ExecutePlanResponse.MetricsR\x07metrics\x12]\n\x10observed_metrics\x18\x06 \x03(\x0b\x32\x32.spark.connect.ExecutePlanResponse.ObservedMetricsR\x0fobservedMetrics\x12/\n\x06schema\x18\x07 \x01(\x0b\x32\x17.spark.connect.DataTypeR\x06schema\x1aG\n\x10SqlCommandResult\x12\x33\n\x08relation\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x08relation\x1a=\n\nArrowBatch\x12\x1b\n\trow_count\x18\x01 \x01(\x03R\x08rowCount\x12\x12\n\x04\x64\x61ta\x18\x02 \x01(\x0cR\x04\x64\x61ta\x1a\x85\x04\n\x07Metrics\x12Q\n\x07metrics\x18\x01 \x03(\x0b\x32\x37.spark.connect.ExecutePlanResponse.Metrics.MetricObjectR\x07metrics\x1a\xcc\x02\n\x0cMetricObject\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n\x07plan_id\x18\x02 \x01(\x03R\x06planId\x12\x16\n\x06parent\x18\x03 \x01(\x03R\x06parent\x12z\n\x11\x65xecution_metrics\x18\x04 \x03(\x0b\x32M.spark.connect.ExecutePlanResponse.Metrics.MetricObject.ExecutionMetricsEntryR\x10\x65xecutionMetrics\x1a{\n\x15\x45xecutionMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ExecutePlanResponse.Metrics.MetricValueR\x05value:\x02\x38\x01\x1aX\n\x0bMetricValue\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n\x05value\x18\x02 \x01(\x03R\x05value\x12\x1f\n\x0bmetric_type\x18\x03 \x01(\tR\nmetricType\x1a`\n\x0fObservedMetrics\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x39\n\x06values\x18\x02 \x03(\x0b\x32!.spark.connect.Expression.LiteralR\x06valuesB\x0f\n\rresponse_type"A\n\x08KeyValue\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x19\n\x05value\x18\x02 \x01(\tH\x00R\x05value\x88\x01\x01\x42\x08\n\x06_value"\x84\x08\n\rConfigRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12\x44\n\toperation\x18\x03 \x01(\x0b\x32&.spark.connect.ConfigRequest.OperationR\toperation\x12$\n\x0b\x63lient_type\x18\x04 \x01(\tH\x00R\nclientType\x88\x01\x01\x1a\xf2\x03\n\tOperation\x12\x34\n\x03set\x18\x01 \x01(\x0b\x32 .spark.connect.ConfigRequest.SetH\x00R\x03set\x12\x34\n\x03get\x18\x02 \x01(\x0b\x32 .spark.connect.ConfigRequest.GetH\x00R\x03get\x12W\n\x10get_with_default\x18\x03 \x01(\x0b\x32+.spark.connect.ConfigRequest.GetWithDefaultH\x00R\x0egetWithDefault\x12G\n\nget_option\x18\x04 \x01(\x0b\x32&.spark.connect.ConfigRequest.GetOptionH\x00R\tgetOption\x12>\n\x07get_all\x18\x05 \x01(\x0b\x32#.spark.connect.ConfigRequest.GetAllH\x00R\x06getAll\x12:\n\x05unset\x18\x06 \x01(\x0b\x32".spark.connect.ConfigRequest.UnsetH\x00R\x05unset\x12P\n\ris_modifiable\x18\x07 \x01(\x0b\x32).spark.connect.ConfigRequest.IsModifiableH\x00R\x0cisModifiableB\t\n\x07op_type\x1a\x34\n\x03Set\x12-\n\x05pairs\x18\x01 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x1a\x19\n\x03Get\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a?\n\x0eGetWithDefault\x12-\n\x05pairs\x18\x01 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x1a\x1f\n\tGetOption\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a\x30\n\x06GetAll\x12\x1b\n\x06prefix\x18\x01 \x01(\tH\x00R\x06prefix\x88\x01\x01\x42\t\n\x07_prefix\x1a\x1b\n\x05Unset\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\x1a"\n\x0cIsModifiable\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keysB\x0e\n\x0c_client_type"z\n\x0e\x43onfigResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12-\n\x05pairs\x18\x02 \x03(\x0b\x32\x17.spark.connect.KeyValueR\x05pairs\x12\x1a\n\x08warnings\x18\x03 \x03(\tR\x08warnings"\xe7\x06\n\x13\x41\x64\x64\x41rtifactsRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12$\n\x0b\x63lient_type\x18\x06 \x01(\tH\x01R\nclientType\x88\x01\x01\x12@\n\x05\x62\x61tch\x18\x03 \x01(\x0b\x32(.spark.connect.AddArtifactsRequest.BatchH\x00R\x05\x62\x61tch\x12Z\n\x0b\x62\x65gin_chunk\x18\x04 \x01(\x0b\x32\x37.spark.connect.AddArtifactsRequest.BeginChunkedArtifactH\x00R\nbeginChunk\x12H\n\x05\x63hunk\x18\x05 \x01(\x0b\x32\x30.spark.connect.AddArtifactsRequest.ArtifactChunkH\x00R\x05\x63hunk\x1a\x35\n\rArtifactChunk\x12\x12\n\x04\x64\x61ta\x18\x01 \x01(\x0cR\x04\x64\x61ta\x12\x10\n\x03\x63rc\x18\x02 \x01(\x03R\x03\x63rc\x1ao\n\x13SingleChunkArtifact\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x44\n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x30.spark.connect.AddArtifactsRequest.ArtifactChunkR\x04\x64\x61ta\x1a]\n\x05\x42\x61tch\x12T\n\tartifacts\x18\x01 \x03(\x0b\x32\x36.spark.connect.AddArtifactsRequest.SingleChunkArtifactR\tartifacts\x1a\xc1\x01\n\x14\x42\x65ginChunkedArtifact\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n\x0btotal_bytes\x18\x02 \x01(\x03R\ntotalBytes\x12\x1d\n\nnum_chunks\x18\x03 \x01(\x03R\tnumChunks\x12U\n\rinitial_chunk\x18\x04 \x01(\x0b\x32\x30.spark.connect.AddArtifactsRequest.ArtifactChunkR\x0cinitialChunkB\t\n\x07payloadB\x0e\n\x0c_client_type"\xbc\x01\n\x14\x41\x64\x64\x41rtifactsResponse\x12Q\n\tartifacts\x18\x01 \x03(\x0b\x32\x33.spark.connect.AddArtifactsResponse.ArtifactSummaryR\tartifacts\x1aQ\n\x0f\x41rtifactSummary\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12*\n\x11is_crc_successful\x18\x02 \x01(\x08R\x0fisCrcSuccessful"\xc3\x01\n\x17\x41rtifactStatusesRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12$\n\x0b\x63lient_type\x18\x03 \x01(\tH\x00R\nclientType\x88\x01\x01\x12\x14\n\x05names\x18\x04 \x03(\tR\x05namesB\x0e\n\x0c_client_type"\x8c\x02\n\x18\x41rtifactStatusesResponse\x12Q\n\x08statuses\x18\x01 \x03(\x0b\x32\x35.spark.connect.ArtifactStatusesResponse.StatusesEntryR\x08statuses\x1a(\n\x0e\x41rtifactStatus\x12\x16\n\x06\x65xists\x18\x01 \x01(\x08R\x06\x65xists\x1as\n\rStatusesEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12L\n\x05value\x18\x02 \x01(\x0b\x32\x36.spark.connect.ArtifactStatusesResponse.ArtifactStatusR\x05value:\x02\x38\x01"\xc5\x02\n\x10InterruptRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12=\n\x0cuser_context\x18\x02 \x01(\x0b\x32\x1a.spark.connect.UserContextR\x0buserContext\x12$\n\x0b\x63lient_type\x18\x03 \x01(\tH\x00R\nclientType\x88\x01\x01\x12T\n\x0einterrupt_type\x18\x04 \x01(\x0e\x32-.spark.connect.InterruptRequest.InterruptTypeR\rinterruptType"G\n\rInterruptType\x12\x1e\n\x1aINTERRUPT_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12INTERRUPT_TYPE_ALL\x10\x01\x42\x0e\n\x0c_client_type"2\n\x11InterruptResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId2\xa4\x04\n\x13SparkConnectService\x12X\n\x0b\x45xecutePlan\x12!.spark.connect.ExecutePlanRequest\x1a".spark.connect.ExecutePlanResponse"\x00\x30\x01\x12V\n\x0b\x41nalyzePlan\x12!.spark.connect.AnalyzePlanRequest\x1a".spark.connect.AnalyzePlanResponse"\x00\x12G\n\x06\x43onfig\x12\x1c.spark.connect.ConfigRequest\x1a\x1d.spark.connect.ConfigResponse"\x00\x12[\n\x0c\x41\x64\x64\x41rtifacts\x12".spark.connect.AddArtifactsRequest\x1a#.spark.connect.AddArtifactsResponse"\x00(\x01\x12\x63\n\x0e\x41rtifactStatus\x12&.spark.connect.ArtifactStatusesRequest\x1a\'.spark.connect.ArtifactStatusesResponse"\x00\x12P\n\tInterrupt\x12\x1f.spark.connect.InterruptRequest\x1a .spark.connect.InterruptResponse"\x00\x42\x36\n\x1eorg.apache.spark.connect.protoP\x01Z\x12internal/generatedb\x06proto3'
 )
 
 
@@ -73,6 +73,7 @@ _ANALYZEPLANRESPONSE_PERSIST = _ANALYZEPLANRESPONSE.nested_types_by_name["Persis
 _ANALYZEPLANRESPONSE_UNPERSIST = _ANALYZEPLANRESPONSE.nested_types_by_name["Unpersist"]
 _ANALYZEPLANRESPONSE_GETSTORAGELEVEL = _ANALYZEPLANRESPONSE.nested_types_by_name["GetStorageLevel"]
 _EXECUTEPLANREQUEST = DESCRIPTOR.message_types_by_name["ExecutePlanRequest"]
+_EXECUTEPLANREQUEST_REQUESTOPTION = _EXECUTEPLANREQUEST.nested_types_by_name["RequestOption"]
 _EXECUTEPLANRESPONSE = DESCRIPTOR.message_types_by_name["ExecutePlanResponse"]
 _EXECUTEPLANRESPONSE_SQLCOMMANDRESULT = _EXECUTEPLANRESPONSE.nested_types_by_name[
     "SqlCommandResult"
@@ -113,9 +114,20 @@ _ADDARTIFACTSRESPONSE = DESCRIPTOR.message_types_by_name["AddArtifactsResponse"]
 _ADDARTIFACTSRESPONSE_ARTIFACTSUMMARY = _ADDARTIFACTSRESPONSE.nested_types_by_name[
     "ArtifactSummary"
 ]
+_ARTIFACTSTATUSESREQUEST = DESCRIPTOR.message_types_by_name["ArtifactStatusesRequest"]
+_ARTIFACTSTATUSESRESPONSE = DESCRIPTOR.message_types_by_name["ArtifactStatusesResponse"]
+_ARTIFACTSTATUSESRESPONSE_ARTIFACTSTATUS = _ARTIFACTSTATUSESRESPONSE.nested_types_by_name[
+    "ArtifactStatus"
+]
+_ARTIFACTSTATUSESRESPONSE_STATUSESENTRY = _ARTIFACTSTATUSESRESPONSE.nested_types_by_name[
+    "StatusesEntry"
+]
+_INTERRUPTREQUEST = DESCRIPTOR.message_types_by_name["InterruptRequest"]
+_INTERRUPTRESPONSE = DESCRIPTOR.message_types_by_name["InterruptResponse"]
 _ANALYZEPLANREQUEST_EXPLAIN_EXPLAINMODE = _ANALYZEPLANREQUEST_EXPLAIN.enum_types_by_name[
     "ExplainMode"
 ]
+_INTERRUPTREQUEST_INTERRUPTTYPE = _INTERRUPTREQUEST.enum_types_by_name["InterruptType"]
 Plan = _reflection.GeneratedProtocolMessageType(
     "Plan",
     (_message.Message,),
@@ -424,12 +436,22 @@ ExecutePlanRequest = _reflection.GeneratedProtocolMessageType(
     "ExecutePlanRequest",
     (_message.Message,),
     {
+        "RequestOption": _reflection.GeneratedProtocolMessageType(
+            "RequestOption",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _EXECUTEPLANREQUEST_REQUESTOPTION,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanRequest.RequestOption)
+            },
+        ),
         "DESCRIPTOR": _EXECUTEPLANREQUEST,
         "__module__": "spark.connect.base_pb2"
         # @@protoc_insertion_point(class_scope:spark.connect.ExecutePlanRequest)
     },
 )
 _sym_db.RegisterMessage(ExecutePlanRequest)
+_sym_db.RegisterMessage(ExecutePlanRequest.RequestOption)
 
 ExecutePlanResponse = _reflection.GeneratedProtocolMessageType(
     "ExecutePlanResponse",
@@ -697,19 +719,87 @@ AddArtifactsResponse = _reflection.GeneratedProtocolMessageType(
 _sym_db.RegisterMessage(AddArtifactsResponse)
 _sym_db.RegisterMessage(AddArtifactsResponse.ArtifactSummary)
 
+ArtifactStatusesRequest = _reflection.GeneratedProtocolMessageType(
+    "ArtifactStatusesRequest",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _ARTIFACTSTATUSESREQUEST,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.ArtifactStatusesRequest)
+    },
+)
+_sym_db.RegisterMessage(ArtifactStatusesRequest)
+
+ArtifactStatusesResponse = _reflection.GeneratedProtocolMessageType(
+    "ArtifactStatusesResponse",
+    (_message.Message,),
+    {
+        "ArtifactStatus": _reflection.GeneratedProtocolMessageType(
+            "ArtifactStatus",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _ARTIFACTSTATUSESRESPONSE_ARTIFACTSTATUS,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ArtifactStatusesResponse.ArtifactStatus)
+            },
+        ),
+        "StatusesEntry": _reflection.GeneratedProtocolMessageType(
+            "StatusesEntry",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _ARTIFACTSTATUSESRESPONSE_STATUSESENTRY,
+                "__module__": "spark.connect.base_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.ArtifactStatusesResponse.StatusesEntry)
+            },
+        ),
+        "DESCRIPTOR": _ARTIFACTSTATUSESRESPONSE,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.ArtifactStatusesResponse)
+    },
+)
+_sym_db.RegisterMessage(ArtifactStatusesResponse)
+_sym_db.RegisterMessage(ArtifactStatusesResponse.ArtifactStatus)
+_sym_db.RegisterMessage(ArtifactStatusesResponse.StatusesEntry)
+
+InterruptRequest = _reflection.GeneratedProtocolMessageType(
+    "InterruptRequest",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _INTERRUPTREQUEST,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.InterruptRequest)
+    },
+)
+_sym_db.RegisterMessage(InterruptRequest)
+
+InterruptResponse = _reflection.GeneratedProtocolMessageType(
+    "InterruptResponse",
+    (_message.Message,),
+    {
+        "DESCRIPTOR": _INTERRUPTRESPONSE,
+        "__module__": "spark.connect.base_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.InterruptResponse)
+    },
+)
+_sym_db.RegisterMessage(InterruptResponse)
+
 _SPARKCONNECTSERVICE = DESCRIPTOR.services_by_name["SparkConnectService"]
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
+    DESCRIPTOR._serialized_options = (
+        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
+    )
     _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._options = None
     _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_options = b"8\001"
+    _ARTIFACTSTATUSESRESPONSE_STATUSESENTRY._options = None
+    _ARTIFACTSTATUSESRESPONSE_STATUSESENTRY._serialized_options = b"8\001"
     _PLAN._serialized_start = 219
     _PLAN._serialized_end = 335
     _USERCONTEXT._serialized_start = 337
     _USERCONTEXT._serialized_end = 459
     _ANALYZEPLANREQUEST._serialized_start = 462
-    _ANALYZEPLANREQUEST._serialized_end = 2846
+    _ANALYZEPLANREQUEST._serialized_end = 2883
     _ANALYZEPLANREQUEST_SCHEMA._serialized_start = 1657
     _ANALYZEPLANREQUEST_SCHEMA._serialized_end = 1706
     _ANALYZEPLANREQUEST_EXPLAIN._serialized_start = 1709
@@ -717,109 +807,125 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _ANALYZEPLANREQUEST_EXPLAIN_EXPLAINMODE._serialized_start = 1852
     _ANALYZEPLANREQUEST_EXPLAIN_EXPLAINMODE._serialized_end = 2024
     _ANALYZEPLANREQUEST_TREESTRING._serialized_start = 2026
-    _ANALYZEPLANREQUEST_TREESTRING._serialized_end = 2079
-    _ANALYZEPLANREQUEST_ISLOCAL._serialized_start = 2081
-    _ANALYZEPLANREQUEST_ISLOCAL._serialized_end = 2131
-    _ANALYZEPLANREQUEST_ISSTREAMING._serialized_start = 2133
-    _ANALYZEPLANREQUEST_ISSTREAMING._serialized_end = 2187
-    _ANALYZEPLANREQUEST_INPUTFILES._serialized_start = 2189
-    _ANALYZEPLANREQUEST_INPUTFILES._serialized_end = 2242
-    _ANALYZEPLANREQUEST_SPARKVERSION._serialized_start = 2244
-    _ANALYZEPLANREQUEST_SPARKVERSION._serialized_end = 2258
-    _ANALYZEPLANREQUEST_DDLPARSE._serialized_start = 2260
-    _ANALYZEPLANREQUEST_DDLPARSE._serialized_end = 2301
-    _ANALYZEPLANREQUEST_SAMESEMANTICS._serialized_start = 2303
-    _ANALYZEPLANREQUEST_SAMESEMANTICS._serialized_end = 2424
-    _ANALYZEPLANREQUEST_SEMANTICHASH._serialized_start = 2426
-    _ANALYZEPLANREQUEST_SEMANTICHASH._serialized_end = 2481
-    _ANALYZEPLANREQUEST_PERSIST._serialized_start = 2484
-    _ANALYZEPLANREQUEST_PERSIST._serialized_end = 2635
-    _ANALYZEPLANREQUEST_UNPERSIST._serialized_start = 2637
-    _ANALYZEPLANREQUEST_UNPERSIST._serialized_end = 2747
-    _ANALYZEPLANREQUEST_GETSTORAGELEVEL._serialized_start = 2749
-    _ANALYZEPLANREQUEST_GETSTORAGELEVEL._serialized_end = 2819
-    _ANALYZEPLANRESPONSE._serialized_start = 2849
-    _ANALYZEPLANRESPONSE._serialized_end = 4538
-    _ANALYZEPLANRESPONSE_SCHEMA._serialized_start = 3957
-    _ANALYZEPLANRESPONSE_SCHEMA._serialized_end = 4014
-    _ANALYZEPLANRESPONSE_EXPLAIN._serialized_start = 4016
-    _ANALYZEPLANRESPONSE_EXPLAIN._serialized_end = 4064
-    _ANALYZEPLANRESPONSE_TREESTRING._serialized_start = 4066
-    _ANALYZEPLANRESPONSE_TREESTRING._serialized_end = 4111
-    _ANALYZEPLANRESPONSE_ISLOCAL._serialized_start = 4113
-    _ANALYZEPLANRESPONSE_ISLOCAL._serialized_end = 4149
-    _ANALYZEPLANRESPONSE_ISSTREAMING._serialized_start = 4151
-    _ANALYZEPLANRESPONSE_ISSTREAMING._serialized_end = 4199
-    _ANALYZEPLANRESPONSE_INPUTFILES._serialized_start = 4201
-    _ANALYZEPLANRESPONSE_INPUTFILES._serialized_end = 4235
-    _ANALYZEPLANRESPONSE_SPARKVERSION._serialized_start = 4237
-    _ANALYZEPLANRESPONSE_SPARKVERSION._serialized_end = 4277
-    _ANALYZEPLANRESPONSE_DDLPARSE._serialized_start = 4279
-    _ANALYZEPLANRESPONSE_DDLPARSE._serialized_end = 4338
-    _ANALYZEPLANRESPONSE_SAMESEMANTICS._serialized_start = 4340
-    _ANALYZEPLANRESPONSE_SAMESEMANTICS._serialized_end = 4379
-    _ANALYZEPLANRESPONSE_SEMANTICHASH._serialized_start = 4381
-    _ANALYZEPLANRESPONSE_SEMANTICHASH._serialized_end = 4419
-    _ANALYZEPLANRESPONSE_PERSIST._serialized_start = 2484
-    _ANALYZEPLANRESPONSE_PERSIST._serialized_end = 2493
-    _ANALYZEPLANRESPONSE_UNPERSIST._serialized_start = 2637
-    _ANALYZEPLANRESPONSE_UNPERSIST._serialized_end = 2648
-    _ANALYZEPLANRESPONSE_GETSTORAGELEVEL._serialized_start = 4445
-    _ANALYZEPLANRESPONSE_GETSTORAGELEVEL._serialized_end = 4528
-    _EXECUTEPLANREQUEST._serialized_start = 4541
-    _EXECUTEPLANREQUEST._serialized_end = 4750
-    _EXECUTEPLANRESPONSE._serialized_start = 4753
-    _EXECUTEPLANRESPONSE._serialized_end = 6380
-    _EXECUTEPLANRESPONSE_SQLCOMMANDRESULT._serialized_start = 5611
-    _EXECUTEPLANRESPONSE_SQLCOMMANDRESULT._serialized_end = 5682
-    _EXECUTEPLANRESPONSE_ARROWBATCH._serialized_start = 5684
-    _EXECUTEPLANRESPONSE_ARROWBATCH._serialized_end = 5745
-    _EXECUTEPLANRESPONSE_METRICS._serialized_start = 5748
-    _EXECUTEPLANRESPONSE_METRICS._serialized_end = 6265
-    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT._serialized_start = 5843
-    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT._serialized_end = 6175
-    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_start = 6052
-    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_end = 6175
-    _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_start = 6177
-    _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_end = 6265
-    _EXECUTEPLANRESPONSE_OBSERVEDMETRICS._serialized_start = 6267
-    _EXECUTEPLANRESPONSE_OBSERVEDMETRICS._serialized_end = 6363
-    _KEYVALUE._serialized_start = 6382
-    _KEYVALUE._serialized_end = 6447
-    _CONFIGREQUEST._serialized_start = 6450
-    _CONFIGREQUEST._serialized_end = 7478
-    _CONFIGREQUEST_OPERATION._serialized_start = 6670
-    _CONFIGREQUEST_OPERATION._serialized_end = 7168
-    _CONFIGREQUEST_SET._serialized_start = 7170
-    _CONFIGREQUEST_SET._serialized_end = 7222
-    _CONFIGREQUEST_GET._serialized_start = 7224
-    _CONFIGREQUEST_GET._serialized_end = 7249
-    _CONFIGREQUEST_GETWITHDEFAULT._serialized_start = 7251
-    _CONFIGREQUEST_GETWITHDEFAULT._serialized_end = 7314
-    _CONFIGREQUEST_GETOPTION._serialized_start = 7316
-    _CONFIGREQUEST_GETOPTION._serialized_end = 7347
-    _CONFIGREQUEST_GETALL._serialized_start = 7349
-    _CONFIGREQUEST_GETALL._serialized_end = 7397
-    _CONFIGREQUEST_UNSET._serialized_start = 7399
-    _CONFIGREQUEST_UNSET._serialized_end = 7426
-    _CONFIGREQUEST_ISMODIFIABLE._serialized_start = 7428
-    _CONFIGREQUEST_ISMODIFIABLE._serialized_end = 7462
-    _CONFIGRESPONSE._serialized_start = 7480
-    _CONFIGRESPONSE._serialized_end = 7602
-    _ADDARTIFACTSREQUEST._serialized_start = 7605
-    _ADDARTIFACTSREQUEST._serialized_end = 8476
-    _ADDARTIFACTSREQUEST_ARTIFACTCHUNK._serialized_start = 7992
-    _ADDARTIFACTSREQUEST_ARTIFACTCHUNK._serialized_end = 8045
-    _ADDARTIFACTSREQUEST_SINGLECHUNKARTIFACT._serialized_start = 8047
-    _ADDARTIFACTSREQUEST_SINGLECHUNKARTIFACT._serialized_end = 8158
-    _ADDARTIFACTSREQUEST_BATCH._serialized_start = 8160
-    _ADDARTIFACTSREQUEST_BATCH._serialized_end = 8253
-    _ADDARTIFACTSREQUEST_BEGINCHUNKEDARTIFACT._serialized_start = 8256
-    _ADDARTIFACTSREQUEST_BEGINCHUNKEDARTIFACT._serialized_end = 8449
-    _ADDARTIFACTSRESPONSE._serialized_start = 8479
-    _ADDARTIFACTSRESPONSE._serialized_end = 8667
-    _ADDARTIFACTSRESPONSE_ARTIFACTSUMMARY._serialized_start = 8586
-    _ADDARTIFACTSRESPONSE_ARTIFACTSUMMARY._serialized_end = 8667
-    _SPARKCONNECTSERVICE._serialized_start = 8670
-    _SPARKCONNECTSERVICE._serialized_end = 9035
+    _ANALYZEPLANREQUEST_TREESTRING._serialized_end = 2116
+    _ANALYZEPLANREQUEST_ISLOCAL._serialized_start = 2118
+    _ANALYZEPLANREQUEST_ISLOCAL._serialized_end = 2168
+    _ANALYZEPLANREQUEST_ISSTREAMING._serialized_start = 2170
+    _ANALYZEPLANREQUEST_ISSTREAMING._serialized_end = 2224
+    _ANALYZEPLANREQUEST_INPUTFILES._serialized_start = 2226
+    _ANALYZEPLANREQUEST_INPUTFILES._serialized_end = 2279
+    _ANALYZEPLANREQUEST_SPARKVERSION._serialized_start = 2281
+    _ANALYZEPLANREQUEST_SPARKVERSION._serialized_end = 2295
+    _ANALYZEPLANREQUEST_DDLPARSE._serialized_start = 2297
+    _ANALYZEPLANREQUEST_DDLPARSE._serialized_end = 2338
+    _ANALYZEPLANREQUEST_SAMESEMANTICS._serialized_start = 2340
+    _ANALYZEPLANREQUEST_SAMESEMANTICS._serialized_end = 2461
+    _ANALYZEPLANREQUEST_SEMANTICHASH._serialized_start = 2463
+    _ANALYZEPLANREQUEST_SEMANTICHASH._serialized_end = 2518
+    _ANALYZEPLANREQUEST_PERSIST._serialized_start = 2521
+    _ANALYZEPLANREQUEST_PERSIST._serialized_end = 2672
+    _ANALYZEPLANREQUEST_UNPERSIST._serialized_start = 2674
+    _ANALYZEPLANREQUEST_UNPERSIST._serialized_end = 2784
+    _ANALYZEPLANREQUEST_GETSTORAGELEVEL._serialized_start = 2786
+    _ANALYZEPLANREQUEST_GETSTORAGELEVEL._serialized_end = 2856
+    _ANALYZEPLANRESPONSE._serialized_start = 2886
+    _ANALYZEPLANRESPONSE._serialized_end = 4575
+    _ANALYZEPLANRESPONSE_SCHEMA._serialized_start = 3994
+    _ANALYZEPLANRESPONSE_SCHEMA._serialized_end = 4051
+    _ANALYZEPLANRESPONSE_EXPLAIN._serialized_start = 4053
+    _ANALYZEPLANRESPONSE_EXPLAIN._serialized_end = 4101
+    _ANALYZEPLANRESPONSE_TREESTRING._serialized_start = 4103
+    _ANALYZEPLANRESPONSE_TREESTRING._serialized_end = 4148
+    _ANALYZEPLANRESPONSE_ISLOCAL._serialized_start = 4150
+    _ANALYZEPLANRESPONSE_ISLOCAL._serialized_end = 4186
+    _ANALYZEPLANRESPONSE_ISSTREAMING._serialized_start = 4188
+    _ANALYZEPLANRESPONSE_ISSTREAMING._serialized_end = 4236
+    _ANALYZEPLANRESPONSE_INPUTFILES._serialized_start = 4238
+    _ANALYZEPLANRESPONSE_INPUTFILES._serialized_end = 4272
+    _ANALYZEPLANRESPONSE_SPARKVERSION._serialized_start = 4274
+    _ANALYZEPLANRESPONSE_SPARKVERSION._serialized_end = 4314
+    _ANALYZEPLANRESPONSE_DDLPARSE._serialized_start = 4316
+    _ANALYZEPLANRESPONSE_DDLPARSE._serialized_end = 4375
+    _ANALYZEPLANRESPONSE_SAMESEMANTICS._serialized_start = 4377
+    _ANALYZEPLANRESPONSE_SAMESEMANTICS._serialized_end = 4416
+    _ANALYZEPLANRESPONSE_SEMANTICHASH._serialized_start = 4418
+    _ANALYZEPLANRESPONSE_SEMANTICHASH._serialized_end = 4456
+    _ANALYZEPLANRESPONSE_PERSIST._serialized_start = 2521
+    _ANALYZEPLANRESPONSE_PERSIST._serialized_end = 2530
+    _ANALYZEPLANRESPONSE_UNPERSIST._serialized_start = 2674
+    _ANALYZEPLANRESPONSE_UNPERSIST._serialized_end = 2685
+    _ANALYZEPLANRESPONSE_GETSTORAGELEVEL._serialized_start = 4482
+    _ANALYZEPLANRESPONSE_GETSTORAGELEVEL._serialized_end = 4565
+    _EXECUTEPLANREQUEST._serialized_start = 4578
+    _EXECUTEPLANREQUEST._serialized_end = 4967
+    _EXECUTEPLANREQUEST_REQUESTOPTION._serialized_start = 4863
+    _EXECUTEPLANREQUEST_REQUESTOPTION._serialized_end = 4951
+    _EXECUTEPLANRESPONSE._serialized_start = 4970
+    _EXECUTEPLANRESPONSE._serialized_end = 6735
+    _EXECUTEPLANRESPONSE_SQLCOMMANDRESULT._serialized_start = 5966
+    _EXECUTEPLANRESPONSE_SQLCOMMANDRESULT._serialized_end = 6037
+    _EXECUTEPLANRESPONSE_ARROWBATCH._serialized_start = 6039
+    _EXECUTEPLANRESPONSE_ARROWBATCH._serialized_end = 6100
+    _EXECUTEPLANRESPONSE_METRICS._serialized_start = 6103
+    _EXECUTEPLANRESPONSE_METRICS._serialized_end = 6620
+    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT._serialized_start = 6198
+    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT._serialized_end = 6530
+    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_start = 6407
+    _EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY._serialized_end = 6530
+    _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_start = 6532
+    _EXECUTEPLANRESPONSE_METRICS_METRICVALUE._serialized_end = 6620
+    _EXECUTEPLANRESPONSE_OBSERVEDMETRICS._serialized_start = 6622
+    _EXECUTEPLANRESPONSE_OBSERVEDMETRICS._serialized_end = 6718
+    _KEYVALUE._serialized_start = 6737
+    _KEYVALUE._serialized_end = 6802
+    _CONFIGREQUEST._serialized_start = 6805
+    _CONFIGREQUEST._serialized_end = 7833
+    _CONFIGREQUEST_OPERATION._serialized_start = 7025
+    _CONFIGREQUEST_OPERATION._serialized_end = 7523
+    _CONFIGREQUEST_SET._serialized_start = 7525
+    _CONFIGREQUEST_SET._serialized_end = 7577
+    _CONFIGREQUEST_GET._serialized_start = 7579
+    _CONFIGREQUEST_GET._serialized_end = 7604
+    _CONFIGREQUEST_GETWITHDEFAULT._serialized_start = 7606
+    _CONFIGREQUEST_GETWITHDEFAULT._serialized_end = 7669
+    _CONFIGREQUEST_GETOPTION._serialized_start = 7671
+    _CONFIGREQUEST_GETOPTION._serialized_end = 7702
+    _CONFIGREQUEST_GETALL._serialized_start = 7704
+    _CONFIGREQUEST_GETALL._serialized_end = 7752
+    _CONFIGREQUEST_UNSET._serialized_start = 7754
+    _CONFIGREQUEST_UNSET._serialized_end = 7781
+    _CONFIGREQUEST_ISMODIFIABLE._serialized_start = 7783
+    _CONFIGREQUEST_ISMODIFIABLE._serialized_end = 7817
+    _CONFIGRESPONSE._serialized_start = 7835
+    _CONFIGRESPONSE._serialized_end = 7957
+    _ADDARTIFACTSREQUEST._serialized_start = 7960
+    _ADDARTIFACTSREQUEST._serialized_end = 8831
+    _ADDARTIFACTSREQUEST_ARTIFACTCHUNK._serialized_start = 8347
+    _ADDARTIFACTSREQUEST_ARTIFACTCHUNK._serialized_end = 8400
+    _ADDARTIFACTSREQUEST_SINGLECHUNKARTIFACT._serialized_start = 8402
+    _ADDARTIFACTSREQUEST_SINGLECHUNKARTIFACT._serialized_end = 8513
+    _ADDARTIFACTSREQUEST_BATCH._serialized_start = 8515
+    _ADDARTIFACTSREQUEST_BATCH._serialized_end = 8608
+    _ADDARTIFACTSREQUEST_BEGINCHUNKEDARTIFACT._serialized_start = 8611
+    _ADDARTIFACTSREQUEST_BEGINCHUNKEDARTIFACT._serialized_end = 8804
+    _ADDARTIFACTSRESPONSE._serialized_start = 8834
+    _ADDARTIFACTSRESPONSE._serialized_end = 9022
+    _ADDARTIFACTSRESPONSE_ARTIFACTSUMMARY._serialized_start = 8941
+    _ADDARTIFACTSRESPONSE_ARTIFACTSUMMARY._serialized_end = 9022
+    _ARTIFACTSTATUSESREQUEST._serialized_start = 9025
+    _ARTIFACTSTATUSESREQUEST._serialized_end = 9220
+    _ARTIFACTSTATUSESRESPONSE._serialized_start = 9223
+    _ARTIFACTSTATUSESRESPONSE._serialized_end = 9491
+    _ARTIFACTSTATUSESRESPONSE_ARTIFACTSTATUS._serialized_start = 9334
+    _ARTIFACTSTATUSESRESPONSE_ARTIFACTSTATUS._serialized_end = 9374
+    _ARTIFACTSTATUSESRESPONSE_STATUSESENTRY._serialized_start = 9376
+    _ARTIFACTSTATUSESRESPONSE_STATUSESENTRY._serialized_end = 9491
+    _INTERRUPTREQUEST._serialized_start = 9494
+    _INTERRUPTREQUEST._serialized_end = 9819
+    _INTERRUPTREQUEST_INTERRUPTTYPE._serialized_start = 9732
+    _INTERRUPTREQUEST_INTERRUPTTYPE._serialized_end = 9803
+    _INTERRUPTRESPONSE._serialized_start = 9821
+    _INTERRUPTRESPONSE._serialized_end = 9871
+    _SPARKCONNECTSERVICE._serialized_start = 9874
+    _SPARKCONNECTSERVICE._serialized_end = 10422
 # @@protoc_insertion_point(module_scope)

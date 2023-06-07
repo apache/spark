@@ -21,6 +21,7 @@ import java.util.concurrent.Semaphore
 
 import scala.util.control.NonFatal
 
+import ammonite.compiler.CodeClassWrapper
 import ammonite.util.Bind
 
 import org.apache.spark.annotation.DeveloperApi
@@ -75,7 +76,7 @@ object ConnectRepl {
       }
 
     // Build the session.
-    val spark = SparkSession.builder().client(client).build()
+    val spark = SparkSession.builder().client(client).getOrCreate()
     val sparkBind = new Bind("spark", spark)
 
     // Add the proper imports and register a [[ClassFinder]].
@@ -88,10 +89,13 @@ object ConnectRepl {
         |
         |spark.registerClassFinder(new AmmoniteClassFinder(repl.sess))
         |""".stripMargin
-
+    // Please note that we make ammonite generate classes instead of objects.
+    // Classes tend to have superior serialization behavior when using UDFs.
     val main = ammonite.Main(
       welcomeBanner = Option(splash),
       predefCode = predefCode,
+      replCodeWrapper = CodeClassWrapper,
+      scriptCodeWrapper = CodeClassWrapper,
       inputStream = inputStream,
       outputStream = outputStream,
       errorStream = errorStream)

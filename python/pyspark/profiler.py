@@ -45,6 +45,7 @@ except Exception:
     has_memory_profiler = False
 
 from pyspark.accumulators import AccumulatorParam
+from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.context import SparkContext
@@ -413,8 +414,9 @@ class MemoryProfiler(Profiler):
             self._accumulator.add(codemap_dict)  # type: ignore[arg-type]
             return ret
         else:
-            raise RuntimeError(
-                "Install the 'memory_profiler' library in the cluster to enable memory profiling."
+            raise PySparkRuntimeError(
+                error_class="MISSING_LIBRARY_FOR_PROFILER",
+                message_parameters={},
             )
 
     def stats(self) -> CodeMapDict:

@@ -24,14 +24,16 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJsonNode, safeMapToJsonNode}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
+import org.apache.spark.sql.util.ToJsonUtil
 import org.apache.spark.util.JacksonUtils
 
 /**
@@ -197,13 +199,28 @@ class StreamingQueryProgress private[spark](
     obj.set[JsonNode]("sources", sourcesArrayNode)
 
     obj.set[JsonNode]("sink", sink.jsonNode)
-    val observedMetricsNode = safeMapToJsonNode[Row](observedMetrics, row => row.jsonNode)
+    val observedMetricsNode =
+      safeMapToJsonNode[Row](observedMetrics, row => ToJsonUtil.jsonNode(row))
     if (!observedMetricsNode.isMissingNode) {
       obj.set[JsonNode]("observedMetrics", observedMetricsNode)
     }
     obj
   }
+}
 
+private[spark] object StreamingQueryProgress {
+  private[this] val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.registerModule(DefaultScalaModule)
+    ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    ret
+  }
+
+  private[spark] def jsonString(progress: StreamingQueryProgress): String =
+    mapper.writeValueAsString(progress)
+
+  private[spark] def fromJson(json: String): StreamingQueryProgress =
+    mapper.readValue[StreamingQueryProgress](json)
 }
 
 /**

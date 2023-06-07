@@ -74,10 +74,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
   }
 }
 
@@ -117,10 +118,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
   }
 }
 
@@ -177,10 +179,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
   }
 }
 
@@ -198,10 +201,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
   }
 }
 
@@ -220,10 +224,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
   }
 }
 
@@ -240,10 +245,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
   }
 }
 
@@ -275,10 +281,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "aBc"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`aBc`"
   }
 }
 
@@ -294,10 +301,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
   "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "aBc"
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`aBc`"
   }
 }
 

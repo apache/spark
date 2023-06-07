@@ -64,6 +64,7 @@ from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
+from pyspark.errors import PySparkRuntimeError
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -117,9 +118,12 @@ def wrap_scalar_pandas_udf(f, return_type):
 
     def verify_result_length(result, length):
         if len(result) != length:
-            raise RuntimeError(
-                "Result vector from pandas_udf was not the required length: "
-                "expected %d, got %d" % (length, len(result))
+            raise PySparkRuntimeError(
+                error_class="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                message_parameters={
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
             )
         return result
 
@@ -173,16 +177,21 @@ def verify_pandas_result(result, return_type, assign_cols_by_name):
             extra = sorted(list(column_names.difference(field_names)))
             extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
-            raise RuntimeError(
-                "Column names of the returned pandas.DataFrame do not match specified schema."
-                "{}{}".format(missing, extra)
+            raise PySparkRuntimeError(
+                error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
+                message_parameters={
+                    "missing": missing,
+                    "extra": extra,
+                },
             )
         # otherwise the number of columns of result have to match the return type
         elif len(result.columns) != len(return_type):
-            raise RuntimeError(
-                "Number of columns of the returned pandas.DataFrame "
-                "doesn't match specified schema. "
-                "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+            raise PySparkRuntimeError(
+                error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                message_parameters={
+                    "expected": str(len(return_type)),
+                    "actual": str(len(result.columns)),
+                },
             )
 
 
@@ -278,10 +287,12 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type):
                 len(result.columns) == len(return_type)
                 or (len(result.columns) == 0 and result.empty)
             ):
-                raise RuntimeError(
-                    "Number of columns of the element (pandas.DataFrame) in return iterator "
-                    "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(return_type), len(result.columns))
+                raise PySparkRuntimeError(
+                    error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    message_parameters={
+                        "expected": str(len(return_type)),
+                        "actual": str(len(result.columns)),
+                    },
                 )
 
             return result
@@ -330,7 +341,12 @@ def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
     elif window_bound_type == "unbounded":
         return wrap_unbounded_window_agg_pandas_udf(f, return_type)
     else:
-        raise RuntimeError("Invalid window bound type: {} ".format(window_bound_type))
+        raise PySparkRuntimeError(
+            error_class="INVALID_WINDOW_BOUND_TYPE",
+            message_parameters={
+                "window_bound_type": window_bound_type,
+            },
+        )
 
 
 def wrap_unbounded_window_agg_pandas_udf(f, return_type):
@@ -403,7 +419,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         func = fail_on_stopiteration(chained_func)
 
     # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return arg_offsets, wrap_batch_iter_udf(func, return_type)
@@ -429,7 +445,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-# Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
+# Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF and SQL_ARROW_BATCHED_UDF when
+# returning StructType
 def assign_cols_by_name(runner_conf):
     return (
         runner_conf.get(
@@ -443,6 +460,7 @@ def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
     if eval_type in (
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -497,8 +515,16 @@ def read_udfs(pickleSer, infile, eval_type):
                 or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
+            # Arrow-optimized Python UDF takes a struct type argument as a Row
+            struct_in_pandas = (
+                "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
+            )
             ser = ArrowStreamPandasUDFSerializer(
-                timezone, safecheck, assign_cols_by_name(runner_conf), df_for_struct
+                timezone,
+                safecheck,
+                assign_cols_by_name(runner_conf),
+                df_for_struct,
+                struct_in_pandas,
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)
@@ -554,13 +580,18 @@ def read_udfs(pickleSer, infile, eval_type):
                 except StopIteration:
                     pass
                 else:
-                    raise RuntimeError("pandas iterator UDF should exhaust the input " "iterator.")
+                    raise PySparkRuntimeError(
+                        error_class="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
+                        message_parameters={},
+                    )
 
                 if num_output_rows != num_input_rows:
-                    raise RuntimeError(
-                        "The length of output in Scalar iterator pandas UDF should be "
-                        "the same with the input's; however, the length of output was %d and the "
-                        "length of input was %d." % (num_output_rows, num_input_rows)
+                    raise PySparkRuntimeError(
+                        error_class="RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF",
+                        message_parameters={
+                            "output_length": str(num_output_rows),
+                            "input_length": str(num_input_rows),
+                        },
                     )
 
         # profiling is not supported for UDF
@@ -700,14 +731,12 @@ def main(infile, outfile):
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
-            raise RuntimeError(
-                (
-                    "Python in worker has different version %s than that in "
-                    + "driver %s, PySpark cannot run with different minor versions. "
-                    + "Please check environment variables PYSPARK_PYTHON and "
-                    + "PYSPARK_DRIVER_PYTHON are correctly set."
-                )
-                % ("%d.%d" % sys.version_info[:2], version)
+            raise PySparkRuntimeError(
+                error_class="PYTHON_VERSION_MISMATCH",
+                message_parameters={
+                    "worker_version": str(sys.version_info[:2]),
+                    "driver_version": str(version),
+                },
             )
 
         # read inputs only for a barrier task

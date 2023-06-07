@@ -185,9 +185,9 @@ object Project {
           createNewColumn(columnExpr, f.name, f.metadata, Metadata.empty)
         } else {
           if (columnPath.isEmpty) {
-            val candidates = fields.map(_._1)
+            val candidates = fields.map(field => Seq(field._1))
             val orderedCandidates =
-              StringUtils.orderStringsBySimilarity(f.name, candidates)
+              StringUtils.orderSuggestedIdentifiersBySimilarity(f.name, candidates)
             throw QueryCompilationErrors.unresolvedColumnError(f.name, orderedCandidates)
           } else {
             throw QueryCompilationErrors.unresolvedFieldError(f.name, columnPath, fields.map(_._1))
@@ -844,7 +844,17 @@ case class CTERelationRef(
 
   override lazy val resolved: Boolean = _resolved
 
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def newInstance(): LogicalPlan = {
+    // CTERelationRef inherits the output attributes from a query, which may contain duplicated
+    // attributes, for queries like `SELECT a, a FROM t`. It's important to keep the duplicated
+    // attributes to have the same id in the new instance, as column resolution allows more than one
+    // matching attributes if their ids are the same.
+    // For example, `Project('a, CTERelationRef(a#1, a#1))` can be resolved properly as the matching
+    // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
+    // resolved.
+    val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
+    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+  }
 
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
 
@@ -1997,7 +2007,8 @@ case class LateralJoin(
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(left.output ++ right.plan.output)
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(
+    left.output ++ right.plan.output)
 
   private[this] lazy val childMetadataAttributes =
     AttributeSeq(left.metadataOutput ++ right.plan.metadataOutput)

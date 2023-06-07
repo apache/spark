@@ -1878,8 +1878,13 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
 substring_index.__doc__ = pysparkfuncs.substring_index.__doc__
 
 
-def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("levenshtein", left, right)
+def levenshtein(
+    left: "ColumnOrName", right: "ColumnOrName", threshold: Optional[int] = None
+) -> Column:
+    if threshold is None:
+        return _invoke_function_over_columns("levenshtein", left, right)
+    else:
+        return _invoke_function("levenshtein", _to_col(left), _to_col(right), lit(threshold))
 
 
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
@@ -2141,6 +2146,34 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
+
+
+def unix_date(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_date", col)
+
+
+unix_date.__doc__ = pysparkfuncs.unix_date.__doc__
+
+
+def unix_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_micros", col)
+
+
+unix_micros.__doc__ = pysparkfuncs.unix_micros.__doc__
+
+
+def unix_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_millis", col)
+
+
+unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
+
+
+def unix_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_seconds", col)
+
+
+unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
@@ -2441,6 +2474,47 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
+    if lgConfigK is not None:
+        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
+    else:
+        return _invoke_function("hll_sketch_agg", _to_col(col))
+
+
+hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
+
+
+def hll_union_agg(col: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
+    if allowDifferentLgConfigK is not None:
+        return _invoke_function("hll_union_agg", _to_col(col), lit(allowDifferentLgConfigK))
+    else:
+        return _invoke_function("hll_union_agg", _to_col(col))
+
+
+hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
+
+
+def hll_sketch_estimate(col: "ColumnOrName") -> Column:
+    return _invoke_function("hll_sketch_estimate", _to_col(col))
+
+
+hll_sketch_estimate.__doc__ = pysparkfuncs.hll_sketch_estimate.__doc__
+
+
+def hll_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None
+) -> Column:
+    if allowDifferentLgConfigK is not None:
+        return _invoke_function(
+            "hll_union", _to_col(col1), _to_col(col2), lit(allowDifferentLgConfigK)
+        )
+    else:
+        return _invoke_function("hll_union", _to_col(col1), _to_col(col2))
+
+
+hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
+
+
 # User Defined Function
 
 
@@ -2463,8 +2537,6 @@ def udf(
     returnType: "DataTypeOrString" = StringType(),
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
-    from pyspark.rdd import PythonEvalType
-
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
@@ -2472,13 +2544,10 @@ def udf(
         return functools.partial(
             _create_py_udf,
             returnType=return_type,
-            evalType=PythonEvalType.SQL_BATCHED_UDF,
             useArrow=useArrow,
         )
     else:
-        return _create_py_udf(
-            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
-        )
+        return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__

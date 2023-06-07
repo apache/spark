@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ToJsonUtil
 
 class RowTest extends AnyFunSpec with Matchers {
 
@@ -97,12 +98,11 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("json should convert a mutable array to JSON") {
-      import org.json4s.jackson.JsonMethods.compact
       val schema = new StructType().add(StructField("list", ArrayType(StringType)))
       val values = ArraySeq("1", "2", "3")
       val row = new GenericRowWithSchema(Array(values), schema)
       val expectedList = JArray(JString("1") :: JString("2") :: JString("3") :: Nil)
-      assert(row.json === compact(JObject(("list", expectedList) :: Nil)))
+      ToJsonUtil.jsonNode(row) shouldBe new JObject(("list", expectedList) :: Nil)
     }
   }
 

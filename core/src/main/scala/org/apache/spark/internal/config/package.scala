@@ -20,6 +20,7 @@ package org.apache.spark.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkContext
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
@@ -1108,6 +1109,19 @@ package object config {
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .version("2.2.0")
     .stringConf
+    .createOptional
+
+  private[spark] val SPARK_LOG_LEVEL = ConfigBuilder("spark.log.level")
+    .doc("When set, overrides any user-defined log settings as if calling " +
+      "SparkContext.setLogLevel() at Spark startup. Valid log levels include: " +
+      SparkContext.VALID_LOG_LEVELS.mkString(","))
+    .version("3.5.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(
+      logLevel => SparkContext.VALID_LOG_LEVELS.contains(logLevel),
+      "Invalid value for 'spark.log.level'. Valid values are " +
+      SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
@@ -2256,6 +2270,16 @@ package object config {
         "whether fetch failure caused by removed decommissioned executors could be ignored " +
         s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
       .version("3.4.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(0)
+
+  private[spark] val SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedUnknownDecommissionExecutors")
+      .internal()
+      .doc("Max number of unknown executors by decommission to retain. This affects " +
+        "whether executor could receive decommission request sent before its registration.")
+      .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(0)

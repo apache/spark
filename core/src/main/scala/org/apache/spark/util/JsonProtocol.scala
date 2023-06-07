@@ -17,16 +17,13 @@
 
 package org.apache.spark.util
 
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import com.fasterxml.jackson.core.{JsonEncoding, JsonGenerator}
-import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -53,11 +50,8 @@ import org.apache.spark.util.Utils.weakIntern
  *  - Any new JSON fields should be optional; use `jsonOption` when reading these fields
  *    in `*FromJson` methods.
  */
-private[spark] object JsonProtocol {
+private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
-
-  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
@@ -67,15 +61,6 @@ private[spark] object JsonProtocol {
     toJsonString { generator =>
       writeSparkEventToJson(event, generator)
     }
-  }
-
-  def toJsonString(block: JsonGenerator => Unit): String = {
-    val baos = new ByteArrayOutputStream()
-    val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
-    block(generator)
-    generator.close()
-    baos.close()
-    new String(baos.toByteArray, StandardCharsets.UTF_8)
   }
 
   def writeSparkEventToJson(event: SparkListenerEvent, g: JsonGenerator): Unit = {
@@ -1554,17 +1539,18 @@ private[spark] object JsonProtocol {
   }
 
   def stackTraceFromJson(json: JsonNode): Array[StackTraceElement] = {
-    json.extractElements.map { line =>
+    jsonOption(json).map(_.extractElements.map { line =>
       val declaringClass = line.get("Declaring Class").extractString
       val methodName = line.get("Method Name").extractString
-      val fileName = line.get("File Name").extractString
+      val fileName = jsonOption(line.get("File Name")).map(_.extractString).orNull
       val lineNumber = line.get("Line Number").extractInt
       new StackTraceElement(declaringClass, methodName, fileName, lineNumber)
-    }.toArray
+    }.toArray).getOrElse(Array[StackTraceElement]())
   }
 
   def exceptionFromJson(json: JsonNode): Exception = {
-    val e = new Exception(json.get("Message").extractString)
+    val message = jsonOption(json.get("Message")).map(_.extractString).orNull
+    val e = new Exception(message)
     e.setStackTrace(stackTraceFromJson(json.get("Stack Trace")))
     e
   }

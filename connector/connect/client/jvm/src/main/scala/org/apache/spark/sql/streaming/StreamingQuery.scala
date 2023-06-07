@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -79,6 +80,12 @@ trait StreamingQuery {
   def isActive: Boolean
 
   /**
+   * Returns the [[StreamingQueryException]] if the query was terminated by an exception.
+   * @since 3.5.0
+   */
+  def exception: Option[StreamingQueryException]
+
+  /**
    * Returns the current status of the query.
    *
    * @since 3.5.0
@@ -100,6 +107,32 @@ trait StreamingQuery {
    * @since 3.5.0
    */
   def lastProgress: StreamingQueryProgress
+
+  /**
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
+   *
+   * If the query has terminated, then all subsequent calls to this method will either return
+   * immediately (if the query was terminated by `stop()`).
+   *
+   * @since 3.5.0
+   */
+  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
+  // framework is supported and modify the doc accordingly.
+  def awaitTermination(): Unit
+
+  /**
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception. If
+   * the query has terminated with an exception, then the exception will be thrown. Otherwise, it
+   * returns whether the query has terminated or not within the `timeoutMs` milliseconds.
+   *
+   * If the query has terminated, then all subsequent calls to this method will return `true`
+   * immediately.
+   *
+   * @since 3.5.0
+   */
+  // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
+  // framework is supported and modify the doc accordingly.
+  def awaitTermination(timeoutMs: Long): Boolean
 
   /**
    * Blocks until all available data in the source has been processed and committed to the sink.
@@ -153,6 +186,15 @@ class RemoteStreamingQuery(
     executeQueryCmd(_.setStatus(true)).getStatus.getIsActive
   }
 
+  override def awaitTermination(): Unit = {
+    executeQueryCmd(_.getAwaitTerminationBuilder.build())
+  }
+
+  override def awaitTermination(timeoutMs: Long): Boolean = {
+    executeQueryCmd(
+      _.getAwaitTerminationBuilder.setTimeoutMs(timeoutMs)).getAwaitTermination.getTerminated
+  }
+
   override def status: StreamingQueryStatus = {
     val statusResp = executeQueryCmd(_.setStatus(true)).getStatus
     new StreamingQueryStatus(
@@ -163,14 +205,14 @@ class RemoteStreamingQuery(
 
   override def recentProgress: Array[StreamingQueryProgress] = {
     executeQueryCmd(_.setRecentProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala
-      .map(json => new StreamingQueryProgress(json))
+      .map(StreamingQueryProgress.fromJson)
       .toArray
   }
 
   override def lastProgress: StreamingQueryProgress = {
     executeQueryCmd(
       _.setLastProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala.headOption
-      .map(json => new StreamingQueryProgress(json))
+      .map(StreamingQueryProgress.fromJson)
       .orNull
   }
 
@@ -197,6 +239,20 @@ class RemoteStreamingQuery(
     // scalastyle:off println
     println(explain)
     // scalastyle:on println
+  }
+
+  override def exception: Option[StreamingQueryException] = {
+    val exception = executeQueryCmd(_.setException(true)).getException
+    if (exception.hasExceptionMessage) {
+      Some(
+        new StreamingQueryException(
+          // message maps to the return value of original StreamingQueryException's toString method
+          message = exception.getExceptionMessage,
+          errorClass = exception.getErrorClass,
+          stackTrace = exception.getStackTrace))
+    } else {
+      None
+    }
   }
 
   private def executeQueryCmd(
@@ -241,5 +297,21 @@ object RemoteStreamingQuery {
       runId = UUID.fromString(result.getQueryId.getRunId),
       name = if (result.getName.isEmpty) null else result.getName,
       sparkSession = sparkSession)
+  }
+
+  def fromStreamingQueryInstanceResponse(
+      sparkSession: SparkSession,
+      q: StreamingQueryInstance): RemoteStreamingQuery = {
+
+    val name = if (q.hasName) {
+      q.getName
+    } else {
+      null
+    }
+    new RemoteStreamingQuery(
+      UUID.fromString(q.getId.getId),
+      UUID.fromString(q.getId.getRunId),
+      name,
+      sparkSession)
   }
 }

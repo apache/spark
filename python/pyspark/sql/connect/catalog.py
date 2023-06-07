@@ -62,8 +62,8 @@ class Catalog:
 
     setCurrentCatalog.__doc__ = PySparkCatalog.setCurrentCatalog.__doc__
 
-    def listCatalogs(self) -> List[CatalogMetadata]:
-        pdf = self._execute_and_fetch(plan.ListCatalogs())
+    def listCatalogs(self, pattern: Optional[str] = None) -> List[CatalogMetadata]:
+        pdf = self._execute_and_fetch(plan.ListCatalogs(pattern=pattern))
         return [
             CatalogMetadata(name=row.iloc[0], description=row.iloc[1]) for _, row in pdf.iterrows()
         ]
@@ -82,8 +82,8 @@ class Catalog:
 
     setCurrentDatabase.__doc__ = PySparkCatalog.setCurrentDatabase.__doc__
 
-    def listDatabases(self) -> List[Database]:
-        pdf = self._execute_and_fetch(plan.ListDatabases())
+    def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
+        pdf = self._execute_and_fetch(plan.ListDatabases(pattern=pattern))
         return [
             Database(
                 name=row.iloc[0],

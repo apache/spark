@@ -65,14 +65,14 @@ Project [(cast(1.5 as double) > cast(0.5 as double)) AS (1.5 > 0.5)#x]
 -- !query
 select to_date('2009-07-30 04:17:52') > to_date('2009-07-30 04:17:52')
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) > to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles))) AS (to_date(2009-07-30 04:17:52) > to_date(2009-07-30 04:17:52))#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) > to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false)) AS (to_date(2009-07-30 04:17:52) > to_date(2009-07-30 04:17:52))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2009-07-30 04:17:52') > '2009-07-30 04:17:52'
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) > cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) > 2009-07-30 04:17:52)#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) > cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) > 2009-07-30 04:17:52)#x]
 +- OneRowRelation
 
 
@@ -114,14 +114,14 @@ Project [(cast(1.5 as double) >= cast(0.5 as double)) AS (1.5 >= 0.5)#x]
 -- !query
 select to_date('2009-07-30 04:17:52') >= to_date('2009-07-30 04:17:52')
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) >= to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles))) AS (to_date(2009-07-30 04:17:52) >= to_date(2009-07-30 04:17:52))#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) >= to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false)) AS (to_date(2009-07-30 04:17:52) >= to_date(2009-07-30 04:17:52))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2009-07-30 04:17:52') >= '2009-07-30 04:17:52'
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) >= cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) >= 2009-07-30 04:17:52)#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) >= cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) >= 2009-07-30 04:17:52)#x]
 +- OneRowRelation
 
 
@@ -163,14 +163,14 @@ Project [(cast(0.5 as double) < cast(1.5 as double)) AS (0.5 < 1.5)#x]
 -- !query
 select to_date('2009-07-30 04:17:52') < to_date('2009-07-30 04:17:52')
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) < to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles))) AS (to_date(2009-07-30 04:17:52) < to_date(2009-07-30 04:17:52))#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) < to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false)) AS (to_date(2009-07-30 04:17:52) < to_date(2009-07-30 04:17:52))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2009-07-30 04:17:52') < '2009-07-30 04:17:52'
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) < cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) < 2009-07-30 04:17:52)#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) < cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) < 2009-07-30 04:17:52)#x]
 +- OneRowRelation
 
 
@@ -212,49 +212,49 @@ Project [(cast(0.5 as double) <= cast(1.5 as double)) AS (0.5 <= 1.5)#x]
 -- !query
 select to_date('2009-07-30 04:17:52') <= to_date('2009-07-30 04:17:52')
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) <= to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles))) AS (to_date(2009-07-30 04:17:52) <= to_date(2009-07-30 04:17:52))#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) <= to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false)) AS (to_date(2009-07-30 04:17:52) <= to_date(2009-07-30 04:17:52))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2009-07-30 04:17:52') <= '2009-07-30 04:17:52'
 -- !query analysis
-Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles)) <= cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) <= 2009-07-30 04:17:52)#x]
+Project [(to_date(2009-07-30 04:17:52, None, Some(America/Los_Angeles), false) <= cast(2009-07-30 04:17:52 as date)) AS (to_date(2009-07-30 04:17:52) <= 2009-07-30 04:17:52)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2017-03-01') = to_timestamp('2017-03-01 00:00:00')
 -- !query analysis
-Project [(cast(to_date(2017-03-01, None, Some(America/Los_Angeles)) as timestamp) = to_timestamp(2017-03-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), false)) AS (to_date(2017-03-01) = to_timestamp(2017-03-01 00:00:00))#x]
+Project [(cast(to_date(2017-03-01, None, Some(America/Los_Angeles), false) as timestamp) = to_timestamp(2017-03-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), false)) AS (to_date(2017-03-01) = to_timestamp(2017-03-01 00:00:00))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp('2017-03-01 00:00:01') > to_date('2017-03-01')
 -- !query analysis
-Project [(to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false) > cast(to_date(2017-03-01, None, Some(America/Los_Angeles)) as timestamp)) AS (to_timestamp(2017-03-01 00:00:01) > to_date(2017-03-01))#x]
+Project [(to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false) > cast(to_date(2017-03-01, None, Some(America/Los_Angeles), false) as timestamp)) AS (to_timestamp(2017-03-01 00:00:01) > to_date(2017-03-01))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp('2017-03-01 00:00:01') >= to_date('2017-03-01')
 -- !query analysis
-Project [(to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false) >= cast(to_date(2017-03-01, None, Some(America/Los_Angeles)) as timestamp)) AS (to_timestamp(2017-03-01 00:00:01) >= to_date(2017-03-01))#x]
+Project [(to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false) >= cast(to_date(2017-03-01, None, Some(America/Los_Angeles), false) as timestamp)) AS (to_timestamp(2017-03-01 00:00:01) >= to_date(2017-03-01))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2017-03-01') < to_timestamp('2017-03-01 00:00:01')
 -- !query analysis
-Project [(cast(to_date(2017-03-01, None, Some(America/Los_Angeles)) as timestamp) < to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false)) AS (to_date(2017-03-01) < to_timestamp(2017-03-01 00:00:01))#x]
+Project [(cast(to_date(2017-03-01, None, Some(America/Los_Angeles), false) as timestamp) < to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false)) AS (to_date(2017-03-01) < to_timestamp(2017-03-01 00:00:01))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date('2017-03-01') <= to_timestamp('2017-03-01 00:00:01')
 -- !query analysis
-Project [(cast(to_date(2017-03-01, None, Some(America/Los_Angeles)) as timestamp) <= to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false)) AS (to_date(2017-03-01) <= to_timestamp(2017-03-01 00:00:01))#x]
+Project [(cast(to_date(2017-03-01, None, Some(America/Los_Angeles), false) as timestamp) <= to_timestamp(2017-03-01 00:00:01, None, TimestampType, Some(America/Los_Angeles), false)) AS (to_date(2017-03-01) <= to_timestamp(2017-03-01 00:00:01))#x]
 +- OneRowRelation
 
 

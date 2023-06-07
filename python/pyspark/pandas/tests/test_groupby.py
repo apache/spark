@@ -60,6 +60,9 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
+            pdf = pdf[["a", "b", "c", "e"]]
         psdf = ps.from_pandas(pdf)
 
         for as_index in [True, False]:
@@ -178,6 +181,9 @@ class GroupByTestsMixin:
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
         psdf = ps.from_pandas(pdf)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
+            pdf = pdf[[10, 20, 30]]
 
         for as_index in [True, False]:
             if as_index:
@@ -203,6 +209,10 @@ class GroupByTestsMixin:
                 sort(pdf.groupby(10, as_index=as_index)[[20, 30]].sum()),
             )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43555): Enable GroupByTests.test_groupby_multiindex_columns for pandas 2.0.0.",
+    )
     def test_groupby_multiindex_columns(self):
         pdf = pd.DataFrame(
             {
@@ -271,6 +281,10 @@ class GroupByTestsMixin:
                 check_exact=check_exact,
             )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43554): Enable GroupByTests.test_basic_stat_funcs for pandas 2.0.0.",
+    )
     def test_basic_stat_funcs(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.var(), check_exact=False)
 
@@ -328,6 +342,10 @@ class GroupByTestsMixin:
             check_exact=False,
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43706): Enable GroupByTests.test_mean " "for pandas 2.0.0.",
+    )
     def test_mean(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean())
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=None))
@@ -411,6 +429,10 @@ class GroupByTestsMixin:
             psdf.groupby("A").sum(min_count=3).sort_index(),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43553): Enable GroupByTests.test_mad for pandas 2.0.0.",
+    )
     def test_mad(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
 
@@ -460,6 +482,10 @@ class GroupByTestsMixin:
             psdf.groupby("A").last(min_count=2).sort_index(),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43552): Enable GroupByTests.test_nth for pandas 2.0.0.",
+    )
     def test_nth(self):
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
@@ -471,6 +497,10 @@ class GroupByTestsMixin:
         with self.assertRaisesRegex(TypeError, "Invalid index"):
             self.psdf.groupby("B").nth("x")
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43551): Enable GroupByTests.test_prod for pandas 2.0.0.",
+    )
     def test_prod(self):
         pdf = pd.DataFrame(
             {
@@ -1185,6 +1215,10 @@ class GroupByTestsMixin:
         #                pdf.groupby([('x', 'a'), ('x', 'b')]).shift(periods=-1,
         #                                                            fill_value=0).sort_index())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43708): Enable GroupByTests.test_apply " "for pandas 2.0.0.",
+    )
     def test_apply(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
@@ -1278,6 +1312,10 @@ class GroupByTestsMixin:
             pdf.groupby([("x", "a"), ("x", "b")]).apply(len).sort_index(),
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43706): Enable GroupByTests.test_apply_without_shortcut " "for pandas 2.0.0.",
+    )
     def test_apply_without_shortcut(self):
         with option_context("compute.shortcut_limit", 0):
             self.test_apply()

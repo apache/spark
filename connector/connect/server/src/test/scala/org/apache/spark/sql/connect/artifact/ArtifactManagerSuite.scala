@@ -16,15 +16,17 @@
  */
 package org.apache.spark.sql.connect.artifact
 
-import java.nio.file.Paths
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
 class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
@@ -37,12 +39,16 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
   private lazy val artifactManager = SparkConnectArtifactManager.getOrCreateArtifactManager
 
+  private def sessionHolder(): SessionHolder = {
+    SessionHolder("test", spark.sessionUUID, spark)
+  }
+
   test("Jar artifacts are added to spark session") {
     val copyDir = Utils.createTempDir().toPath
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallJar.jar")
     val remotePath = Paths.get("jars/smallJar.jar")
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val jarList = spark.sparkContext.listJars()
     assert(jarList.exists(_.contains(remotePath.toString)))
@@ -54,7 +60,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("smallClassFile.class")
     val remotePath = Paths.get("classes/smallClassFile.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("smallClassFile.class").toFile
@@ -67,7 +73,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("Hello.class").toFile
@@ -90,7 +96,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("Hello.class").toFile
@@ -106,5 +112,37 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val udf = org.apache.spark.sql.functions.udf(instance)
     val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
     session.range(10).select(udf(col("id").cast("string"))).collect()
+  }
+
+  test("add a cache artifact to the Block Manager") {
+    withTempPath { path =>
+      val stagingPath = path.toPath
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      val remotePath = Paths.get("cache/abc")
+      val session = sessionHolder()
+      val blockManager = spark.sparkContext.env.blockManager
+      val blockId = CacheId(session.userId, session.sessionId, "abc")
+      try {
+        artifactManager.addArtifact(session, remotePath, stagingPath, None)
+        val bytes = blockManager.getLocalBytes(blockId)
+        assert(bytes.isDefined)
+        val readback = new String(bytes.get.toByteBuffer().array(), StandardCharsets.UTF_8)
+        assert(readback === "test")
+      } finally {
+        blockManager.releaseLock(blockId)
+        blockManager.removeCache(session.userId, session.sessionId)
+      }
+    }
+  }
+
+  test("Check Python includes when zipped package is added") {
+    withTempPath { path =>
+      val stagingPath = path.toPath
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      val session = sessionHolder()
+      val remotePath = Paths.get("pyfiles/abc.zip")
+      artifactManager.addArtifact(session, remotePath, stagingPath, None)
+      assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
+    }
   }
 }

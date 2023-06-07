@@ -2321,6 +2321,11 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>False</td>
   </tr>
   <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled</td>
+    <td>Whether to upload changelog instead of snapshot during RocksDB StateStore commit</td>
+    <td>False</td>
+  </tr>
+  <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.blockSizeKB</td>
     <td>Approximate size in KB of user data packed per block for a RocksDB BlockBasedTable, which is a RocksDB's default SST file format.</td>
     <td>4</td>
@@ -2360,7 +2365,47 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>The maximum number of MemTables in RocksDB, both active and immutable. Value of -1 means that RocksDB internal default values will be used</td>
     <td>-1</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage</td>
+    <td>Whether total memory usage for RocksDB state store instances on a single node is bounded.</td>
+    <td>false</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB</td>
+    <td>Total memory limit in MB for RocksDB state store instances on a single node.</td>
+    <td>500</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.writeBufferCacheRatio</td>
+    <td>Total memory to be occupied by write buffers as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
+    <td>0.5</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.highPriorityPoolRatio</td>
+    <td>Total memory to be occupied by blocks in high priority pool as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
+    <td>0.1</td>
+  </tr>
 </table>
+
+##### RocksDB State Store Memory Management
+RocksDB allocates memory for different objects such as memtables, block cache and filter/index blocks. If left unbounded, RocksDB memory usage across multiple instances could grow indefinitely and potentially cause OOM (out-of-memory) issues.
+RocksDB provides a way to limit the memory usage for all DB instances running on a single node by using the write buffer manager functionality.
+If you want to cap RocksDB memory usage in your Spark Structured Streaming deployment, this feature can be enabled by setting the `spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage` config to `true`.
+You can also determine the max allowed memory for RocksDB instances by setting the `spark.sql.streaming.stateStore.rocksdb.maxMemoryUsageMB` value to a static number or as a fraction of the physical memory available on the node.
+Limits for individual RocksDB instances can also be configured by setting `spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB` and `spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber` to the required values. By default, RocksDB internal defaults are used for these settings.
+
+##### RocksDB State Store Changelog Checkpointing
+In newer version of Spark, changelog checkpointing is introduced for RocksDB state store. The traditional checkpointing mechanism for RocksDB State Store is incremental snapshot checkpointing, where the manifest files and newly generated RocksDB SST files of RocksDB instances are uploaded to a durable storage.
+Instead of uploading data files of RocksDB instances, changelog checkpointing uploads changes made to the state since the last checkpoint for durability.
+Snapshots are persisted periodically in the background for predictable failure recovery and changelog trimming.
+Changelog checkpointing avoids cost of capturing and uploading snapshots of RocksDB instances and significantly reduce streaming query latency.
+
+Changelog checkpointing is disabled by default. You can enable RocksDB State Store changelog checkpointing by setting `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled` config to `true`.
+Changelog checkpointing is designed to be backward compatible with traditional checkpointing mechanism.
+RocksDB state store provider offers seamless support for transitioning between two checkpointing mechanisms in both directions. This allows you to leverage the performance benefits of changelog checkpointing without discarding the old state checkpoint.
+In a version of spark that supports changelog checkpointing, you can migrate streaming queries from older versions of Spark to changelog checkpointing by enabling changelog checkpointing in the spark session.
+Vice versa, you can disable changelog checkpointing safely in newer version of Spark, then any query that already run with changelog checkpointing will switch back to traditional checkpointing.
+You would need to restart you streaming queries for change in checkpointing mechanism to be applied, but you won't observe any performance degrade in the process.
 
 ##### Performance-aspect considerations
 

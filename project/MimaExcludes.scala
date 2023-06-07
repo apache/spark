@@ -50,7 +50,17 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.SafeJsonSerializer.safeDoubleToJValue"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.param.FloatParam.jValueDecode"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.param.FloatParam.jValueEncode"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata"),
+    // [SPARK-43792][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listCatalogs
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listCatalogs"),
+     // [SPARK-43919][SQL] Extract JSON functionality out of Row
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Row.json"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Row.prettyJson"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.json"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.prettyJson"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
+    // [SPARK-43881][SQL][PYTHON][CONNECT] Add optional pattern for Catalog.listDatabases
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.listDatabases")
   )
 
   // Defulat exclude rules
@@ -78,6 +88,14 @@ object MimaExcludes {
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
+
+    // SPARK-43265: Move Error framework to a common utils module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkThrowable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

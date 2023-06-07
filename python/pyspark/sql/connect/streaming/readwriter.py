@@ -19,8 +19,10 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import sys
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
@@ -30,7 +32,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamWriter as PySparkDataStreamWriter,
 )
 from pyspark.sql.types import Row, StructType
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -470,7 +472,6 @@ class DataStreamWriter:
 
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
-    # TODO (SPARK-43054): Implement and uncomment the doc
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
         ...
@@ -480,13 +481,26 @@ class DataStreamWriter:
         ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
-        raise NotImplementedError("foreach() is not implemented.")
+        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 
-    # foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+        func = PySparkDataStreamWriter._construct_foreach_function(f)
+        serializer = AutoBatchedSerializer(CPickleSerializer())
+        command = (func, None, serializer, serializer)
+        # Python ForeachWriter isn't really a PythonUDF. But we reuse it for simplicity.
+        self._write_proto.foreach_writer.python_writer.command = CloudPickleSerializer().dumps(
+            command
+        )
+        self._write_proto.foreach_writer.python_writer.python_ver = "%d.%d" % sys.version_info[:2]
+        return self
+
+    foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
     # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        raise NotImplementedError("foreachBatch() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreachBatch()"},
+        )
 
     # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
@@ -546,8 +560,7 @@ class DataStreamWriter:
             **options,
         )
 
-    # TODO (SPARK-42962): uncomment below
-    # start.__doc__ = PySparkDataStreamWriter.start.__doc__
+    start.__doc__ = PySparkDataStreamWriter.start.__doc__
 
     def toTable(
         self,

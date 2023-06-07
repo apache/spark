@@ -956,3 +956,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 }
+
+class RocksDBStateStoreStreamingAggregationSuite
+  extends StreamingAggregationSuite with RocksDBStateStoreTest

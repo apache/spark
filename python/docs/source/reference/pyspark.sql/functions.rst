@@ -138,6 +138,10 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
     window_time
 
 
@@ -241,6 +245,8 @@ Aggregate Functions
     first
     grouping
     grouping_id
+    hll_sketch_agg
+    hll_union_agg
     kurtosis
     last
     max
@@ -355,4 +361,6 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    hll_sketch_estimate
+    hll_union
 

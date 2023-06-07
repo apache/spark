@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.internal.config.IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED
 
 class CompressionCodecSuite extends SparkFunSuite {
@@ -127,9 +127,17 @@ class CompressionCodecSuite extends SparkFunSuite {
   }
 
   test("bad compression codec") {
-    intercept[IllegalArgumentException] {
-      CompressionCodec.createCodec(conf, "foobar")
-    }
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CompressionCodec.createCodec(conf, "foobar")
+      },
+      errorClass = "CODEC_NOT_AVAILABLE",
+      parameters = Map(
+        "codecName" -> "foobar",
+        "configKey" -> "\"spark.io.compression.codec\"",
+        "configVal" -> "\"snappy\""
+      )
+    )
   }
 
   private def testConcatenationOfSerializedStreams(codec: CompressionCodec): Unit = {
