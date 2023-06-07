@@ -2648,7 +2648,7 @@ class DDLParserSuite extends AnalysisTest {
       val fragment = "b STRING NOT NULL DEFAULT \"abc\""
       checkError(
         exception = parseException(sql),
-        errorClass = "_LEGACY_ERROR_TEMP_0058",
+        errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
         parameters = Map.empty,
         context = ExpectedContext(
           fragment = fragment,

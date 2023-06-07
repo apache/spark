@@ -32,10 +32,8 @@ from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
-    ArrayType,
     BinaryType,
     DataType,
-    MapType,
     StringType,
     StructType,
     _parse_datatype_string,
@@ -129,18 +127,12 @@ def _create_py_udf(
             else useArrow
         )
     regular_udf = _create_udf(f, returnType, PythonEvalType.SQL_BATCHED_UDF)
-    return_type = regular_udf.returnType
     try:
         is_func_with_args = len(getfullargspec(f).args) > 0
     except TypeError:
         is_func_with_args = False
-    is_output_atomic_type = (
-        not isinstance(return_type, StructType)
-        and not isinstance(return_type, MapType)
-        and not isinstance(return_type, ArrayType)
-    )
     if is_arrow_enabled:
-        if is_output_atomic_type and is_func_with_args:
+        if is_func_with_args:
             return _create_arrow_py_udf(regular_udf)
         else:
             warnings.warn(
@@ -175,11 +167,6 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
     def vectorized_udf(*args: pd.Series) -> pd.Series:
-        if any(map(lambda arg: isinstance(arg, pd.DataFrame), args)):
-            raise PySparkNotImplementedError(
-                error_class="UNSUPPORTED_WITH_ARROW_OPTIMIZATION",
-                message_parameters={"feature": "Struct input type"},
-            )
         return pd.Series(result_func(f(*a)) for a in zip(*args))
 
     # Regular UDFs can take callable instances too.

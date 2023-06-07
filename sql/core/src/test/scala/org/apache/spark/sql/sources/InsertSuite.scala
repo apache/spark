@@ -1254,7 +1254,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("create table t(i boolean, s bigint default 42L) using parquet")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_0058",
+          errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
           parameters = Map.empty,
           context = ExpectedContext("s bigint default 42L", 26, 45)
         )
@@ -1268,7 +1268,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[ParseException] {
           sql("insert into t partition(i=default) values(5, default)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0059",
+        errorClass = "REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION",
         parameters = Map.empty,
         context = ExpectedContext(
           fragment = "partition(i=default)",
@@ -1631,7 +1631,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("alter table t add column s bigint default 42L")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_0058",
+          errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
           parameters = Map.empty,
           context = ExpectedContext(
             fragment = "s bigint default 42L",
@@ -1720,7 +1720,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[ParseException] {
             sql(sqlText)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_0058",
+          errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITH_SUGGESTION",
           parameters = Map.empty,
           context = ExpectedContext(
             fragment = sqlText,
@@ -2333,8 +2333,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       exception = intercept[ParseException] {
         sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0050",
-      parameters = Map.empty,
+      errorClass = "LOCAL_MUST_WITH_SCHEMA_FILE",
+      parameters = Map("actualSchema" -> "hdfs"),
       context = ExpectedContext(
         fragment = "insert overwrite local directory 'hdfs:/abcd' using parquet",
         start = 0,

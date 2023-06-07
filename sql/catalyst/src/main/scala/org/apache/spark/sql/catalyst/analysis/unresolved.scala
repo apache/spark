@@ -36,13 +36,35 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class UnresolvedException(function: String)
   extends AnalysisException(s"Invalid call to $function on unresolved object")
 
-case class PlanWithUnresolvedIdentifier(identifierExpr: Expression,
-                                   planBuilder: Seq[String] => LogicalPlan)
+/**
+ * A logical plan placeholder that holds the identifier clause string expression. It will be
+ * replaced by the actual logical plan with the evaluated identifier string.
+ */
+case class PlanWithUnresolvedIdentifier(
+    identifierExpr: Expression,
+    planBuilder: Seq[String] => LogicalPlan)
   extends LeafNode {
-
   override def output: Seq[Attribute] = Nil
-
   override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+}
+
+/**
+ * An expression placeholder that holds the identifier clause string expression. It will be
+ * replaced by the actual expression with the evaluated identifier string.
+ */
+case class ExpressionWithUnresolvedIdentifier(
+    identifierExpr: Expression,
+    exprBuilder: Seq[String] => Expression)
+  extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+  override def child: Expression = identifierExpr
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(identifierExpr = newChild)
+  }
 }
 
 /**
@@ -282,61 +304,6 @@ object UnresolvedAttribute {
     if (inBacktick) throw e
     nameParts += tmp.mkString
     nameParts.toSeq
-  }
-}
-
-/**
- * Holds an identifier clause for an attribute that has yet to be resolved.
- */
-case class UnresolvedAttributeIdentifierClause(expr: Expression)
-  extends Expression with Unevaluable {
-
-  override def children: Seq[Expression] = Seq(expr)
-
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override lazy val resolved = false
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
-
-  override def prettyName: String = "IDENTIFIER"
-  override def toString: String = {
-    s"'(${children.mkString(", ")})"
-  }
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
-  UnresolvedAttributeIdentifierClause = {
-      copy(expr = newChildren.head)
-  }
-}
-
-case class UnresolvedFunctionIdentifierClause(
-    identExpr: Expression,
-    arguments: Seq[Expression],
-    isDistinct: Boolean,
-    filter: Option[Expression] = None,
-    ignoreNulls: Boolean = false)
-  extends Expression with Unevaluable {
-
-  override def children: Seq[Expression] = arguments ++ filter.toSeq
-
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override lazy val resolved = false
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER_CLAUSE)
-
-  override def prettyName: String = identExpr.toString
-  override def toString: String = {
-    val distinct = if (isDistinct) "distinct " else ""
-    s"'${identExpr.toString}($distinct${children.mkString(", ")})"
-  }
-
-  override protected def withNewChildrenInternal
-  (newChildren: IndexedSeq[Expression]): UnresolvedFunctionIdentifierClause = {
-    if (filter.isDefined) {
-      copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
-    } else {
-      copy(arguments = newChildren)
-    }
   }
 }
 
