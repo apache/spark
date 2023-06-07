@@ -32,7 +32,7 @@ import org.apache.spark.util.ThreadUtils
  * please don't import classes that only exist in `spark-connect-client-jvm.jar` into the this
  * class, as it will trigger similar maven test failures again.
  */
-class SparkSessionE2ESuite extends RemoteSparkSession {
+class SparkSessionCleanRoomE2ESuite extends RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
     val session = spark
