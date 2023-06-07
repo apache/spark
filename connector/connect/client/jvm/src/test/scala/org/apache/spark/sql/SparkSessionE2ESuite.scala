@@ -25,6 +25,14 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * Warning: SPARK-43648 moves two test cases related to `interrupt all` from
+ * `ClientE2ETestSuite` to the current test class to avoid the maven test issue
+ * of missing `org.apache.spark.sql.connect.client.SparkResult` during udf
+ * deserialization in server side. So please don't import classes that only
+ * exist in `spark-connect-client-jvm.jar` into the this class, as it will
+ * trigger similar maven test failures again.
+ */
 class SparkSessionE2ESuite extends RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
