@@ -882,56 +882,6 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns a percentile value based on a continuous distribution of
-   * numeric or ANSI interval column at the given percentage(s) with value range in [0.0, 1.0].
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def percentile_cont(e: Column, percentage: Column): Column =
-    withAggregateFunction { PercentileCont(e.expr, percentage.expr) }
-
-  /**
-   * Aggregate function: returns a percentile value based on a continuous distribution of
-   * numeric or ANSI interval column at the given percentage(s) with value range in [0.0, 1.0].
-   *
-   * Note: reverse used to specify whether to reverse calculate percentile value.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def percentile_cont(e: Column, percentage: Column, reverse: Column): Column =
-    withAggregateFunction {
-      assert(reverse.expr.foldable && reverse.expr.dataType == BooleanType)
-      PercentileCont(e.expr, percentage.expr, reverse.expr.eval().asInstanceOf[Boolean])
-    }
-
-  /**
-   * Aggregate function: returns the percentile(s) based on a discrete distribution of
-   * numeric column `expr` at the given percentage(s) with value range in [0.0, 1.0].
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def percentile_disc(e: Column, percentage: Column): Column =
-    withAggregateFunction { PercentileDisc(e.expr, percentage.expr) }
-
-  /**
-   * Aggregate function: returns the percentile(s) based on a discrete distribution of
-   * numeric column `expr` at the given percentage(s) with value range in [0.0, 1.0].
-   *
-   * Note: reverse used to specify whether to reverse calculate percentile value.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def percentile_disc(e: Column, percentage: Column, reverse: Column): Column =
-    withAggregateFunction {
-      assert(reverse.expr.foldable && reverse.expr.dataType == BooleanType)
-      PercentileDisc(e.expr, percentage.expr, reverse.expr.eval().asInstanceOf[Boolean])
-    }
-
-  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
    * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
    * no more than `percentage` of `col` values is less than the value or equal to that value.

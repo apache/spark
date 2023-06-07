@@ -755,62 +755,6 @@ class FunctionsTestsMixin:
 
         self.assertListEqual(actual, expected)
 
-    def test_percentile_cont(self):
-        actual = list(
-            chain.from_iterable(
-                [
-                    re.findall("(percentile_cont\\(.*\\))", str(x))
-                    for x in [
-                        F.percentile_cont(F.col("foo"), F.lit(0.5)),
-                        F.percentile_cont(F.col("bar"), 0.25, True),
-                        F.percentile_cont(F.col("bar"), [0.25, 0.5, 0.75]),
-                        F.percentile_cont(F.col("foo"), (0.05, 0.95), True),
-                        F.percentile_cont("foo", 0.5),
-                        F.percentile_cont("bar", [0.1, 0.9], True),
-                    ]
-                ]
-            )
-        )
-
-        expected = [
-            "percentile_cont(0.5) WITHIN GROUP (ORDER BY foo)",
-            "percentile_cont(0.25) WITHIN GROUP (ORDER BY bar DESC)",
-            "percentile_cont(array(0.25, 0.5, 0.75)) WITHIN GROUP (ORDER BY bar)",
-            "percentile_cont(array(0.05, 0.95)) WITHIN GROUP (ORDER BY foo DESC)",
-            "percentile_cont(0.5) WITHIN GROUP (ORDER BY foo)",
-            "percentile_cont(array(0.1, 0.9)) WITHIN GROUP (ORDER BY bar DESC)",
-        ]
-
-        self.assertListEqual(actual, expected)
-
-    def test_percentile_disc(self):
-        actual = list(
-            chain.from_iterable(
-                [
-                    re.findall("(percentile_disc\\(.*\\))", str(x))
-                    for x in [
-                        F.percentile_disc(F.col("foo"), F.lit(0.5)),
-                        F.percentile_disc(F.col("bar"), 0.25, True),
-                        F.percentile_disc(F.col("bar"), [0.25, 0.5, 0.75]),
-                        F.percentile_disc(F.col("foo"), (0.05, 0.95), True),
-                        F.percentile_disc("foo", 0.5),
-                        F.percentile_disc("bar", [0.1, 0.9], True),
-                    ]
-                ]
-            )
-        )
-
-        expected = [
-            "percentile_disc(0.5) WITHIN GROUP (ORDER BY foo)",
-            "percentile_disc(0.25) WITHIN GROUP (ORDER BY bar DESC)",
-            "percentile_disc(array(0.25, 0.5, 0.75)) WITHIN GROUP (ORDER BY bar)",
-            "percentile_disc(array(0.05, 0.95)) WITHIN GROUP (ORDER BY foo DESC)",
-            "percentile_disc(0.5) WITHIN GROUP (ORDER BY foo)",
-            "percentile_disc(array(0.1, 0.9)) WITHIN GROUP (ORDER BY bar DESC)",
-        ]
-
-        self.assertListEqual(actual, expected)
-
     def test_percentile_approx(self):
         actual = list(
             chain.from_iterable(

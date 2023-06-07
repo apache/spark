@@ -39,18 +39,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
-    # percentile_cont in PySpark output like 'percentile_cont(0.5) WITHIN GROUP (ORDER BY col)',
-    # but in connect output like 'percentile_cont(col, 0.5)'.
-    @unittest.skip("Output is different.")
-    def test_percentile_cont(self):
-        super().test_percentile_cont()
-
-    # percentile_disc in PySpark output like 'percentile_disc(0.5) WITHIN GROUP (ORDER BY col)',
-    # but in connect output like 'percentile_cont(col, 0.5)'.
-    @unittest.skip("Output is different.")
-    def test_percentile_disc(self):
-        super().test_percentile_disc()
-
     def test_raise_error(self):
         self.check_raise_error(SparkConnectException)
 

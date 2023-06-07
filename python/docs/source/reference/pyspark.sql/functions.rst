@@ -258,8 +258,6 @@ Aggregate Functions
     mode
     percentile
     percentile_approx
-    percentile_cont
-    percentile_disc
     product
     regr_avgx
     regr_avgy

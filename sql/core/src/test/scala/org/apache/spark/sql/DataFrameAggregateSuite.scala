@@ -1040,31 +1040,6 @@ class DataFrameAggregateSuite extends QueryTest
       Row("Java", 2012.5) ::
         Row("dotNET", 2012.0) :: Nil
     )
-
-    // percentile_cont
-    checkAnswer(
-      courseSales.groupBy("course").agg(
-        percentile_cont(col("year"), lit(0.3)),
-        percentile_cont(col("year"), lit(Array(0.25, 0.75))),
-        percentile_cont(col("year"), lit(0.3), lit(true)),
-        percentile_cont(col("year"), lit(Array(0.25, 0.75)), lit(true))
-      ),
-      Row("Java", 2012.2999999999997,
-        Seq(2012.25, 2012.75), 2012.6999999999998, Seq(2012.75, 2012.25)) ::
-        Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.4, Seq(2012.5, 2012.0)) :: Nil
-    )
-
-    // percentile_disc
-    checkAnswer(
-      courseSales.groupBy("course").agg(
-        percentile_disc(col("year"), lit(0.3)),
-        percentile_disc(col("year"), lit(Array(0.25, 0.75))),
-        percentile_disc(col("year"), lit(0.3), lit(true)),
-        percentile_disc(col("year"), lit(Array(0.25, 0.75)), lit(true))
-      ),
-      Row("Java", 2012.0, Seq(2012.0, 2012.0), 2013.0, Seq(2013.0, 2013.0)) ::
-        Row("dotNET", 2012.0, Seq(2012.0, 2012.0), 2013.0, Seq(2013.0, 2012.0)) :: Nil
-    )
   }
 
   test("count_if") {
