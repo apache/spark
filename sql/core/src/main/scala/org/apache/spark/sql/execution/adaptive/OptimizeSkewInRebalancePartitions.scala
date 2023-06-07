@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ShufflePartitionSpec, SparkPlan}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, LeafExecNode, ShufflePartitionSpec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleOrigin, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -84,7 +88,7 @@ case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequireme
     if (newPartitionsSpec.length == mapStats.get.bytesByPartitionId.length) {
       shuffle
     } else {
-      AQEShuffleReadExec(shuffle, newPartitionsSpec)
+      RebalanceChildWrapper(AQEShuffleReadExec(shuffle, newPartitionsSpec))
     }
   }
 
@@ -104,11 +108,22 @@ case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequireme
       ValidateRequirements.validate(optimized)
     }
     if (requirementSatisfied) {
-      optimized
+      optimized.transform {
+        case RebalanceChildWrapper(child) => child
+      }
     } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS)) {
-      ensureRequirements.apply(optimized)
+      ensureRequirements.apply(optimized).transform {
+        case RebalanceChildWrapper(child) => child
+      }
     } else {
       plan
     }
   }
+}
+
+case class RebalanceChildWrapper(plan: SparkPlan) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override def output: Seq[Attribute] = plan.output
+  override def outputPartitioning: Partitioning = plan.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
 }
