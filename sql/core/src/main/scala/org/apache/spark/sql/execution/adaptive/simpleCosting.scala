@@ -41,18 +41,29 @@ case class SimpleCost(value: Long) extends Cost {
  */
 case class SimpleCostEvaluator(
     forceOptimizeSkewedJoin: Boolean,
-    forceOptimizeSkewedShuffleRead: Boolean)
+    forceOptimizeSkewsInRebalancePartitions: Boolean)
     extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
     val numShuffles = plan.collect {
       case s: ShuffleExchangeLike => s
     }.size
 
-    if (forceOptimizeSkewedJoin || forceOptimizeSkewedShuffleRead) {
-      val numSkews = plan.collect {
-        case j: ShuffledJoin if forceOptimizeSkewedJoin && j.isSkewJoin => j
-        case r: AQEShuffleReadExec if forceOptimizeSkewedShuffleRead && r.hasSkewedPartition => r
+    if (forceOptimizeSkewedJoin || forceOptimizeSkewsInRebalancePartitions) {
+      val numSkewJoins = plan.collect {
+        case j: ShuffledJoin if j.isSkewJoin => j
       }.size
+
+      // When numSkewJoins > 0, it means that OptimizeSkewedJoin takes effect,
+      // otherwise we also need to calculate the number of AQEShuffleReadExec
+      // for OptimizeSkewedShuffleRead if needed.
+      val numSkews = if (numSkewJoins > 0 && forceOptimizeSkewedJoin) {
+        numSkewJoins
+      } else if (numSkewJoins == 0 && forceOptimizeSkewsInRebalancePartitions) {
+        plan.collect {
+          case r: AQEShuffleReadExec if r.hasSkewedPartition => r
+        }.size
+      } else 0
+
       // We put `-numSkews` in the first 32 bits of the long value, so that it's compared first
       // when comparing the cost, and larger `numSkews` means lower cost.
       SimpleCost(-numSkews.toLong << 32 | numShuffles)

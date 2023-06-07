@@ -94,7 +94,8 @@ case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequireme
     }
 
     val optimized = plan transformUp {
-      case stage: ShuffleQueryStageExec if isSupported(stage.shuffle) =>
+      case stage: ShuffleQueryStageExec if stage.isMaterialized &&
+        stage.mapStats.isDefined && isSupported(stage.shuffle) =>
         tryOptimizeSkewedPartitions(stage)
     }
     val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
@@ -104,7 +105,7 @@ case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequireme
     }
     if (requirementSatisfied) {
       optimized
-    } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS)) {
+    } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS)) {
       ensureRequirements.apply(optimized)
     } else {
       plan

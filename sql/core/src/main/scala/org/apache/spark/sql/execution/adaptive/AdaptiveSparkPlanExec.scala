@@ -107,7 +107,7 @@ case class AdaptiveSparkPlanExec(
       case _ =>
         SimpleCostEvaluator(
           conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
-          conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS))
+          conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS))
     }
 
   // A list of physical plan rules to be applied before creation of query stages. The physical

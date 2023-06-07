@@ -823,7 +823,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ADAPTIVE_FORCE_OPTIMIZE_IN_REBALANCE_PARTITIONS =
+  val ADAPTIVE_FORCE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS =
     buildConf("spark.sql.adaptive.forceOptimizeSkewsInRebalancePartitions")
       .doc("When true, force enable OptimizeSkewsInRebalancePartitions" +
         " even if it introduces extra shuffle.")
