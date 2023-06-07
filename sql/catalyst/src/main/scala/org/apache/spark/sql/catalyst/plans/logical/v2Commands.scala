@@ -437,12 +437,6 @@ trait V2CreateTablePlan extends LogicalPlan {
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 }
 
-/** A trait used for logical plan nodes that create or replace new table specifications. */
-trait HasTableSpec extends LogicalPlan {
-  def tableSpec: TableSpec
-  def unresolvedOptionsList: UnresolvedOptionsList
-}
-
 /**
  * Create a new table with a v2 catalog.
  */
@@ -452,8 +446,8 @@ case class CreateTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     ignoreIfExists: Boolean,
-    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends UnaryCommand with V2CreateTablePlan with HasTableSpec {
+    optionsListExpressions: OptionsListExpressions = OptionsListExpressions(Seq.empty))
+  extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
 
@@ -476,8 +470,8 @@ case class CreateTableAsSelect(
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
     isAnalyzed: Boolean = false,
-    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends V2CreateTableAsSelectPlan with HasTableSpec {
+    optionsListExpressions: OptionsListExpressions = OptionsListExpressions(Seq.empty))
+  extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
@@ -506,8 +500,8 @@ case class ReplaceTable(
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     orCreate: Boolean,
-    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends UnaryCommand with V2CreateTablePlan with HasTableSpec {
+    optionsListExpressions: OptionsListExpressions = OptionsListExpressions(Seq.empty))
+  extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
 
@@ -533,8 +527,8 @@ case class ReplaceTableAsSelect(
     writeOptions: Map[String, String],
     orCreate: Boolean,
     isAnalyzed: Boolean = false,
-    unresolvedOptionsList: UnresolvedOptionsList = UnresolvedOptionsList(Seq.empty))
-  extends V2CreateTableAsSelectPlan with HasTableSpec {
+    optionsListExpressions: OptionsListExpressions = OptionsListExpressions(Seq.empty))
+  extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
@@ -1421,7 +1415,7 @@ case class UnresolvedTableSpec(
  * UnresolvedTableSpec lives. We use a separate object here so that tree traversals in analyzer
  * rules can descend into the child expressions naturally with no extra treatment.
  */
-case class UnresolvedOptionsList(options: Seq[(String, Expression)])
+case class OptionsListExpressions(options: Seq[(String, Expression)])
   extends Expression with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = MapType(StringType, StringType)
@@ -1434,7 +1428,7 @@ case class UnresolvedOptionsList(options: Seq[(String, Expression)])
       case ((key: String, _), newChild: Expression) =>
         (key, newChild)
     }
-    UnresolvedOptionsList(newOptions)
+    OptionsListExpressions(newOptions)
   }
 
   lazy val allOptionsResolved: Boolean = options.map(_._2).forall(_.resolved)

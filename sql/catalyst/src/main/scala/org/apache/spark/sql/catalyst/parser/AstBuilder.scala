@@ -3325,13 +3325,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * specified.
    */
   override def visitExpressionPropertyList(
-      ctx: ExpressionPropertyListContext): UnresolvedOptionsList = {
+      ctx: ExpressionPropertyListContext): OptionsListExpressions = {
     val options = ctx.expressionProperty.asScala.map { property =>
       val key: String = visitPropertyKey(property.key)
       val value: Expression = Option(property.value).map(expression).getOrElse(null)
       key -> value
     }.toSeq
-    UnresolvedOptionsList(options)
+    OptionsListExpressions(options)
   }
 
   override def visitStringLit(ctx: StringLitContext): Token = {
@@ -3368,7 +3368,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   type TableClauses = (
       Seq[Transform], Seq[StructField], Option[BucketSpec], Map[String, String],
-      UnresolvedOptionsList, Option[String], Option[String], Option[SerdeInfo])
+      OptionsListExpressions, Option[String], Option[String], Option[SerdeInfo])
 
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
@@ -3663,8 +3663,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   def cleanTableOptions(
       ctx: ParserRuleContext,
-      options: UnresolvedOptionsList,
-      location: Option[String]): (UnresolvedOptionsList, Option[String]) = {
+      options: OptionsListExpressions,
+      location: Option[String]): (OptionsListExpressions, Option[String]) = {
     var path = location
     val filtered = cleanTableProperties(ctx, options.options.toMap).filter {
       case (key, value) if key.equalsIgnoreCase("path") =>
@@ -3682,7 +3682,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         false
       case _ => true
     }
-    (UnresolvedOptionsList(filtered.toSeq), path)
+    (OptionsListExpressions(filtered.toSeq), path)
   }
 
   /**
@@ -3841,7 +3841,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val cleanedProperties = cleanTableProperties(ctx, properties)
     val options = Option(ctx.options).map(visitExpressionPropertyList)
-      .getOrElse(UnresolvedOptionsList(Seq.empty))
+      .getOrElse(OptionsListExpressions(Seq.empty))
     val location = visitLocationSpecList(ctx.locationSpec())
     val (cleanedOptions, newLocation) = cleanTableOptions(ctx, options, location)
     val comment = visitCommentSpecList(ctx.commentSpec())
@@ -3953,7 +3953,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
       case Some(query) =>
         CreateTableAsSelect(withIdentClause(identifierContext, UnresolvedIdentifier(_)),
-          partitioning, query, tableSpec, Map.empty, ifNotExists, unresolvedOptionsList = options)
+          partitioning, query, tableSpec, Map.empty, ifNotExists, optionsListExpressions = options)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
@@ -3961,7 +3961,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         val schema = StructType(columns ++ partCols)
         CreateTable(withIdentClause(identifierContext, UnresolvedIdentifier(_)),
           schema, partitioning, tableSpec, ignoreIfExists = ifNotExists,
-          unresolvedOptionsList = options)
+          optionsListExpressions = options)
     }
   }
 
@@ -4025,7 +4025,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         ReplaceTableAsSelect(
           withIdentClause(ctx.replaceTableHeader.identifierReference(), UnresolvedIdentifier(_)),
           partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate,
-          unresolvedOptionsList = options)
+          optionsListExpressions = options)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
@@ -4033,7 +4033,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         val schema = StructType(columns ++ partCols)
         ReplaceTable(
           withIdentClause(ctx.replaceTableHeader.identifierReference(), UnresolvedIdentifier(_)),
-          schema, partitioning, tableSpec, orCreate = orCreate, unresolvedOptionsList = options)
+          schema, partitioning, tableSpec, orCreate = orCreate, optionsListExpressions = options)
     }
   }
 

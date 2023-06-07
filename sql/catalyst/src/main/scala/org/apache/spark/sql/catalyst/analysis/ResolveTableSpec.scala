@@ -36,21 +36,22 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsAnyPattern(COMMAND), ruleId) {
       case t: CreateTable =>
-        resolveTableSpec(t, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
       case t: CreateTableAsSelect =>
-        resolveTableSpec(t, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
       case t: ReplaceTable =>
-        resolveTableSpec(t, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
       case t: ReplaceTableAsSelect =>
-        resolveTableSpec(t, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
     }
   }
 
   /** Helper method to resolve the table specification within a logical plan. */
   private def resolveTableSpec(
-      t: HasTableSpec, withNewSpec: TableSpec => LogicalPlan): LogicalPlan = t.tableSpec match {
-    case u: UnresolvedTableSpec if t.unresolvedOptionsList.allOptionsResolved =>
-      val newOptions: Seq[(String, String)] = t.unresolvedOptionsList.options.map {
+      input: LogicalPlan, tableSpec: TableSpec, optionsListExpressions: OptionsListExpressions,
+      withNewSpec: TableSpec => LogicalPlan): LogicalPlan = tableSpec match {
+    case u: UnresolvedTableSpec if optionsListExpressions.allOptionsResolved =>
+      val newOptions: Seq[(String, String)] = optionsListExpressions.options.map {
         case (key: String, null) =>
           (key, null)
         case (key: String, value: Expression) =>
@@ -84,6 +85,6 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         external = u.external)
       withNewSpec(newTableSpec)
     case _ =>
-      t
+      input
   }
 }
