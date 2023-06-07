@@ -10118,6 +10118,7 @@ def make_timestamp(
 
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
     ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
     >>> df.select(make_timestamp(
@@ -10126,8 +10127,9 @@ def make_timestamp(
     +-----------------------+
     |r                      |
     +-----------------------+
-    |2014-12-28 13:30:45.887|
+    |2014-12-27 21:30:45.887|
     +-----------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
         return _invoke_function_over_columns(
@@ -10153,6 +10155,7 @@ def make_timestamp_ltz(
 
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
     ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
     >>> df.select(make_timestamp_ltz(
@@ -10161,8 +10164,9 @@ def make_timestamp_ltz(
     +-----------------------+
     |r                      |
     +-----------------------+
-    |2014-12-28 13:30:45.887|
+    |2014-12-27 21:30:45.887|
     +-----------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
         return _invoke_function_over_columns(
@@ -10187,6 +10191,7 @@ def make_timestamp_ntz(
 
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
     ...     ["year", "month", "day", "hour", "min", "sec"])
     >>> df.select(make_timestamp_ntz(
@@ -10197,6 +10202,7 @@ def make_timestamp_ntz(
     +-----------------------+
     |2014-12-28 06:30:45.887|
     +-----------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("make_timestamp_ntz", year, month, day, hour, min, sec)
 
@@ -10210,6 +10216,7 @@ def make_ym_interval(
 
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
     >>> df.select(make_ym_interval(df.year, df.month).alias('r')).show(truncate=False)
     +-------------------------------+
@@ -10217,6 +10224,7 @@ def make_ym_interval(
     +-------------------------------+
     |INTERVAL '2015-0' YEAR TO MONTH|
     +-------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if year is None:
         year = lit(0)
