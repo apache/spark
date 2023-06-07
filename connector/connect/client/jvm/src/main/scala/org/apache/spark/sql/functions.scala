@@ -588,7 +588,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_sketch_agg(columnName: String, lgConfigK: Int): Column =
-    Column.fn("hll_sketch_agg", Column(columnName), lit(lgConfigK))
+    hll_sketch_agg(Column(columnName), lgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
@@ -607,8 +607,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def hll_sketch_agg(columnName: String): Column =
-    Column.fn("hll_sketch_agg", Column(columnName))
+  def hll_sketch_agg(columnName: String): Column = hll_sketch_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -632,7 +631,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_union_agg(columnName: String, allowDifferentLgConfigK: Boolean): Column =
-    Column.fn("hll_union_agg", Column(columnName), lit(allowDifferentLgConfigK))
+    hll_union_agg(Column(columnName), allowDifferentLgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -653,8 +652,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def hll_union_agg(columnName: String): Column =
-    Column.fn("hll_union_agg", Column(columnName))
+  def hll_union_agg(columnName: String): Column = hll_union_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
@@ -1190,8 +1188,7 @@ object functions {
    * @group window_funcs
    * @since 3.4.0
    */
-  def nth_value(e: Column, offset: Int): Column =
-    Column.fn("nth_value", e, lit(offset))
+  def nth_value(e: Column, offset: Int): Column = nth_value(e, offset, false)
 
   /**
    * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
@@ -2715,7 +2712,27 @@ object functions {
    * @since 3.5.0
    */
   def hll_sketch_estimate(columnName: String): Column =
-    Column.fn("hll_sketch_estimate", Column(columnName))
+    hll_sketch_estimate(Column(columnName))
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
+   * Union object. Throws an exception if sketches have different lgConfigK values.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def hll_union(c1: Column, c2: Column): Column =
+    Column.fn("hll_union", c1, c2)
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Dataskethes
+   * Union object. Throws an exception if sketches have different lgConfigK values.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def hll_union(columnName1: String, columnName2: String): Column =
+    hll_union(Column(columnName1), Column(columnName2))
 
   /**
    * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
@@ -2740,27 +2757,7 @@ object functions {
       columnName1: String,
       columnName2: String,
       allowDifferentLgConfigK: Boolean): Column =
-    Column.fn("hll_union", Column(columnName1), Column(columnName2), lit(allowDifferentLgConfigK))
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
-   * Union object. Throws an exception if sketches have different lgConfigK values.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(c1: Column, c2: Column): Column =
-    Column.fn("hll_union", c1, c2)
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Dataskethes
-   * Union object. Throws an exception if sketches have different lgConfigK values.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(columnName1: String, columnName2: String): Column =
-    Column.fn("hll_union", Column(columnName1), Column(columnName2))
+    hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -2890,13 +2887,6 @@ object functions {
   def lower(e: Column): Column = Column.fn("lower", e)
 
   /**
-   * Computes the Levenshtein distance of the two given string columns.
-   * @group string_funcs
-   * @since 3.4.0
-   */
-  def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
-
-  /**
    * Computes the Levenshtein distance of the two given string columns if it's less than or equal
    * to a given threshold.
    * @return
@@ -2906,6 +2896,13 @@ object functions {
    */
   def levenshtein(l: Column, r: Column, threshold: Int): Column =
     Column.fn("levenshtein", l, r, lit(threshold))
+
+  /**
+   * Computes the Levenshtein distance of the two given string columns.
+   * @group string_funcs
+   * @since 3.4.0
+   */
+  def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
   /**
    * Locate the position of the first occurrence of substr.
@@ -3706,6 +3703,40 @@ object functions {
    * @since 3.4.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
+
+  /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = Column.fn("unix_date", e)
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
+   * precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = Column.fn("unix_millis", e)
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
+   * precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = Column.fn("unix_seconds", e)
 
   /**
    * Returns date truncated to the unit specified by the format.

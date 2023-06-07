@@ -42,9 +42,8 @@ from pyspark.sql.types import (
 )
 
 from pyspark.storagelevel import StorageLevel
-from pyspark.sql.connect.types import to_arrow_schema
 import pyspark.sql.connect.proto as pb2
-from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names
+from pyspark.sql.pandas.types import to_arrow_schema, _dedup_names, _deduplicate_field_names
 
 from typing import (
     Any,
@@ -246,7 +245,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
 
-            conv = LocalDataToArrowConversion._create_converter(dataType.sqlType())
+            conv = LocalDataToArrowConversion._create_converter(udt.sqlType())
 
             def convert_udt(value: Any) -> Any:
                 if value is None:
@@ -428,7 +427,7 @@ class ArrowTableToRowsConversion:
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
 
-            conv = ArrowTableToRowsConversion._create_converter(dataType.sqlType())
+            conv = ArrowTableToRowsConversion._create_converter(udt.sqlType())
 
             def convert_udt(value: Any) -> Any:
                 if value is None:

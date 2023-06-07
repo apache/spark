@@ -147,13 +147,18 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     checkWithFileAndClassName("SimpleMessageRepeated") {
       case (name, descFilePathOpt) =>
-        val fromProtoDF = df.select(
-          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
-        val toProtoDF = fromProtoDF.select(
-          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
-        val toFromProtoDF = toProtoDF.select(
-          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
-        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+        List(
+          Map.empty[String, String],
+          Map("enums.as.ints" -> "false"),
+          Map("enums.as.ints" -> "true")).foreach(opts => {
+          val fromProtoDF = df.select(
+            from_protobuf_wrapper($"value", name, descFilePathOpt, opts).as("value_from"))
+          val toProtoDF = fromProtoDF.select(
+            to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+          val toFromProtoDF = toProtoDF.select(
+            from_protobuf_wrapper($"value_to", name, descFilePathOpt, opts).as("value_to_from"))
+          checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+        })
     }
   }
 
@@ -1496,6 +1501,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         .setValue("value")
         .setBasicEnum(BasicEnumMessage.BasicEnum.FIRST)
         .setNestedEnum(SimpleMessageEnum.NestedEnum.NESTED_SECOND)
+        .addRepeatedEnum(BasicEnumMessage.BasicEnum.FIRST)
         .build().toByteArray).as("raw_proto"))
 
     val expected = spark.range(1).select(
@@ -1503,7 +1509,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         lit("key").as("key"),
         lit("value").as("value"),
         lit("FIRST").as("basic_enum"),
-        lit("NESTED_SECOND").as("nested_enum")
+        lit("NESTED_SECOND").as("nested_enum"),
+        typedLit(Seq("FIRST")).as("repeated_enum")
       ).as("proto")
     )
 
@@ -1514,7 +1521,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         lit("key").as("key"),
         lit("value").as("value"),
         lit(1).as("basic_enum"),
-        lit(2).as("nested_enum")
+        lit(2).as("nested_enum"),
+        typedLit(Seq(1)).as("repeated_enum")
       ).as("proto")
     )
 

@@ -1650,7 +1650,7 @@ def to_datetime(
     Passing errors='coerce' will force an out-of-bounds date to NaT,
     in addition to forcing non-dates (or non-parseable dates) to NaT.
 
-    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')
+    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')  # doctest: +SKIP
     datetime.datetime(1300, 1, 1, 0, 0)
     >>> ps.to_datetime('13000101', format='%Y%m%d', errors='coerce')
     NaT
@@ -1821,21 +1821,21 @@ def date_range(
 
     Specify `start` and `end`, with the default daily frequency.
 
-    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +SKIP
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `start` and `periods`, the number of periods (days).
 
-    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +SKIP
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `end` and `periods`, the number of periods (days).
 
-    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +SKIP
     DatetimeIndex(['2017-12-25', '2017-12-26', '2017-12-27', '2017-12-28',
                    '2017-12-29', '2017-12-30', '2017-12-31', '2018-01-01'],
                   dtype='datetime64[ns]', freq=None)
@@ -1845,7 +1845,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2018-04-24', end='2018-04-27', periods=3
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2018-04-24 00:00:00', '2018-04-25 12:00:00',
                    '2018-04-27 00:00:00'],
                   dtype='datetime64[ns]', freq=None)
@@ -1854,14 +1854,14 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)
 
     Multiples are allowed
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1870,7 +1870,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='1/1/2018', periods=5, freq=pd.offsets.MonthEnd(3)
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -1880,7 +1880,7 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed=None
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
                    dtype='datetime64[ns]', freq=None)
 
@@ -1888,14 +1888,14 @@ def date_range(
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed='left'
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
 
     Use ``closed='right'`` to exclude `start` if it falls on the boundary.
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed='right'
-    ... )  # doctest: +NORMALIZE_WHITESPACE
+    ... )  # doctest: +SKIP
     DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"

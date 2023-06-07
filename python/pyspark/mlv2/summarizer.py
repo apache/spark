@@ -17,7 +17,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import Any, Union
+from typing import Any, Union, List, Dict
 
 from pyspark.sql import DataFrame
 from pyspark.mlv2.util import aggregate_dataframe
@@ -46,7 +46,7 @@ class SummarizerAggState:
         self.max_values = np.maximum(self.max_values, state.max_values)
         return self
 
-    def to_result(self, metrics: list[str]) -> dict[str, Any]:
+    def to_result(self, metrics: List[str]) -> Dict[str, Any]:
         result = {}
 
         for metric in metrics:
@@ -75,8 +75,8 @@ class SummarizerAggState:
 
 
 def summarize_dataframe(
-    dataframe: Union["DataFrame", "pd.DataFrame"], column: str, metrics: list[str]
-) -> dict[str, Any]:
+    dataframe: Union["DataFrame", "pd.DataFrame"], column: str, metrics: List[str]
+) -> Dict[str, Any]:
     """
     Summarize an array type column over a spark dataframe or a pandas dataframe
 
@@ -99,7 +99,7 @@ def summarize_dataframe(
 
     def local_agg_fn(pandas_df: "pd.DataFrame") -> Any:
         state = None
-        for _, value_array in pandas_df[column].iteritems():
+        for _, value_array in pandas_df[column].items():
             if state is None:
                 state = SummarizerAggState(value_array)
             else:

@@ -75,7 +75,7 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.types import _create_converter_to_pandas
+from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -717,7 +717,7 @@ class SparkConnectClient(object):
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
 
-        schema = schema or types.from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
         # Rename columns to avoid duplicated column names.
@@ -726,11 +726,14 @@ class SparkConnectClient(object):
 
         if len(pdf.columns) > 0:
             timezone: Optional[str] = None
+            if any(_has_type(f.dataType, TimestampType) for f in schema.fields):
+                (timezone,) = self.get_configs("spark.sql.session.timeZone")
+
             struct_in_pandas: Optional[str] = None
             error_on_duplicated_field_names: bool = False
-            if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
-                timezone, struct_in_pandas = self.get_configs(
-                    "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+            if any(_has_type(f.dataType, StructType) for f in schema.fields):
+                (struct_in_pandas,) = self.get_config_with_defaults(
+                    ("spark.sql.execution.pandas.structHandlingMode", "legacy"),
                 )
 
                 if struct_in_pandas == "legacy":
@@ -1108,6 +1111,17 @@ class SparkConnectClient(object):
         configs = dict(self.config(op).pairs)
         return tuple(configs.get(key) for key in keys)
 
+    def get_config_with_defaults(
+        self, *pairs: Tuple[str, Optional[str]]
+    ) -> Tuple[Optional[str], ...]:
+        op = pb2.ConfigRequest.Operation(
+            get_with_default=pb2.ConfigRequest.GetWithDefault(
+                pairs=[pb2.KeyValue(key=key, value=default) for key, default in pairs]
+            )
+        )
+        configs = dict(self.config(op).pairs)
+        return tuple(configs.get(key) for key, _ in pairs)
+
     def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """
         Call the config RPC of Spark Connect.
@@ -1237,8 +1251,8 @@ class SparkConnectClient(object):
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
-        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive)
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
+        self._artifact_manager.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
 
 class RetryState:
