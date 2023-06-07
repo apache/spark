@@ -893,14 +893,14 @@
     "subClass" : {
       "NOT_ENOUGH_DATA_COLUMNS" : {
         "message" : [
-          "not enough data columns: ",
+          "not enough data columns:",
           "Table columns: <tableColumns>.",
           "Data columns: <dataColumns>."
         ]
       },
       "TOO_MANY_DATA_COLUMNS" : {
         "message" : [
-          "too many data columns: ",
+          "too many data columns:",
           "Table columns: <tableColumns>.",
           "Data columns: <dataColumns>."
         ]
