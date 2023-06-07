@@ -341,9 +341,9 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
        3lmwu+Mw0H3fi5NDvcu9lg==
       > SELECT base64(_FUNC_('Apache Spark', '1234567890abcdef', 'CBC', 'DEFAULT'));
        2NYmDCjgXTbbxGA3/SnJEfFC/JQ7olk2VQWReIAAFKo=
-      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'CBC', 'DEFAULT', unhex('00000000000000000000000000000000'));
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'CBC', 'DEFAULT', unhex('00000000000000000000000000000000')));
        AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=
-      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'GCM', 'DEFAULT', unhex('000000000000000000000000'), 'This is an AAD mixed into the input');
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'GCM', 'DEFAULT', unhex('000000000000000000000000'), 'This is an AAD mixed into the input'));
        AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4
   """,
   since = "3.3.0",

@@ -34,11 +34,16 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     aadOpt: Option[String] = None,
     expectedErrorClassOpt: Option[String] = None,
     errorParamsMap: Map[String, String] = Map()) {
+
+    def isIvDefined: Boolean = {
+      ivHexOpt.isDefined && ivHexOpt.get != null && ivHexOpt.get.length > 0
+    }
+
     val plaintextBytes: Array[Byte] = plaintext.getBytes("UTF-8")
     val keyBytes: Array[Byte] = key.getBytes("UTF-8")
     val utf8mode: UTF8String = UTF8String.fromString(mode)
     val utf8Padding: UTF8String = UTF8String.fromString(padding)
-    val deterministic: Boolean = mode.equalsIgnoreCase("ECB") || ivHexOpt.isDefined
+    val deterministic: Boolean = mode.equalsIgnoreCase("ECB") || isIvDefined
     val ivBytes: Array[Byte] =
       ivHexOpt.map({ivHex => Hex.unhex(ivHex.getBytes("UTF-8"))}).getOrElse(null)
     val aadBytes: Array[Byte] = aadOpt.map({aad => aad.getBytes("UTF-8")}).getOrElse(null)
