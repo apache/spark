@@ -1008,25 +1008,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def regr_avgx(y: String, x: String): Column = regr_avgx(Column(y), Column(x))
-
-  /**
-   * Aggregate function: returns the average of the independent variable for non-null pairs in a
-   * group, where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
   def regr_avgy(y: Column, x: Column): Column = Column.fn("regr_avgy", y, x)
-
-  /**
-   * Aggregate function: returns the average of the independent variable for non-null pairs in a
-   * group, where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_avgy(y: String, x: String): Column = regr_avgy(Column(y), Column(x))
 
   /**
    * Aggregate function: returns the number of non-null number pairs in a group, where `y` is the
@@ -1036,15 +1018,6 @@ object functions {
    * @since 3.5.0
    */
   def regr_count(y: Column, x: Column): Column = Column.fn("regr_count", y, x)
-
-  /**
-   * Aggregate function: returns the number of non-null number pairs in a group, where `y` is the
-   * dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_count(y: String, x: String): Column = regr_count(Column(y), Column(x))
 
   /**
    * Aggregate function: returns the intercept of the univariate linear regression line for
@@ -1057,16 +1030,6 @@ object functions {
   def regr_intercept(y: Column, x: Column): Column = Column.fn("regr_intercept", y, x)
 
   /**
-   * Aggregate function: returns the intercept of the univariate linear regression line for
-   * non-null pairs in a group, where `y` is the dependent variable and `x` is the independent
-   * variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_intercept(y: String, x: String): Column = regr_intercept(Column(y), Column(x))
-
-  /**
    * Aggregate function: returns the coefficient of determination for non-null pairs in a group,
    * where `y` is the dependent variable and `x` is the independent variable.
    *
@@ -1074,15 +1037,6 @@ object functions {
    * @since 3.5.0
    */
   def regr_r2(y: Column, x: Column): Column = Column.fn("regr_r2", y, x)
-
-  /**
-   * Aggregate function: returns the coefficient of determination for non-null pairs in a group,
-   * where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_r2(y: String, x: String): Column = regr_r2(Column(y), Column(x))
 
   /**
    * Aggregate function: returns the slope of the linear regression line for non-null pairs in a
@@ -1094,15 +1048,6 @@ object functions {
   def regr_slope(y: Column, x: Column): Column = Column.fn("regr_slope", y, x)
 
   /**
-   * Aggregate function: returns the slope of the linear regression line for non-null pairs in a
-   * group, where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_slope(y: String, x: String): Column = regr_slope(Column(y), Column(x))
-
-  /**
    * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group,
    * where `y` is the dependent variable and `x` is the independent variable.
    *
@@ -1110,15 +1055,6 @@ object functions {
    * @since 3.5.0
    */
   def regr_sxx(y: Column, x: Column): Column = Column.fn("regr_sxx", y, x)
-
-  /**
-   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group,
-   * where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_sxx(y: String, x: String): Column = regr_sxx(Column(y), Column(x))
 
   /**
    * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group,
@@ -1130,15 +1066,6 @@ object functions {
   def regr_sxy(y: Column, x: Column): Column = Column.fn("regr_sxy", y, x)
 
   /**
-   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group,
-   * where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_sxy(y: String, x: String): Column = regr_sxy(Column(y), Column(x))
-
-  /**
    * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group,
    * where `y` is the dependent variable and `x` is the independent variable.
    *
@@ -1146,15 +1073,6 @@ object functions {
    * @since 3.5.0
    */
   def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
-
-  /**
-   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group,
-   * where `y` is the dependent variable and `x` is the independent variable.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
-  def regr_syy(y: String, x: String): Column = regr_syy(Column(y), Column(x))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
