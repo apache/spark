@@ -1411,7 +1411,7 @@ case class UnresolvedTableSpec(
 }
 
 /**
- * This contains the information for a parsed OPTIONS list. We store it alongside anywhere the above
+ * This contains the expressions in an OPTIONS list. We store it alongside anywhere the above
  * UnresolvedTableSpec lives. We use a separate object here so that tree traversals in analyzer
  * rules can descend into the child expressions naturally with no extra treatment.
  */
