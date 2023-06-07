@@ -1076,11 +1076,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case p: Project if p.projectList.size == p.child.output.size =>
         val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
           case (left: Alias, right: Attribute) =>
-            if (left.child.semanticEquals(right) && right.name == left.name) {
-              true
-            } else {
-              false
-            }
+            left.child.semanticEquals(right) && right.name == left.name
           case _ => false
         }
         if (assignExprIdOnly) {
