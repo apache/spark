@@ -99,6 +99,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val planner = new SparkConnectPlanner(sessionHolder, Some(events))
     val dataframe =
       Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
+    events.postParsed(Some(dataframe))
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver, events)
@@ -176,7 +177,6 @@ object SparkConnectStreamHandler {
       numSent += 1
     }
 
-    events.postParsed(Some(dataframe))
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
         events.postFinished()

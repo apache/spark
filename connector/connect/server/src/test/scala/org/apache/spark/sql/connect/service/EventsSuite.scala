@@ -53,11 +53,8 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
   val DEFAULT_JOB_GROUP_ID =
     s"User_${DEFAULT_USER_ID}_Session_${DEFAULT_SESSION_ID}_Request_${DEFAULT_QUERY_ID}"
 
-  test("post started") {
+  test("SPARK-43923: post started") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
-    val planHolder = mock[ExecutePlanHolder]
-    when(planHolder.operationId).thenReturn(DEFAULT_QUERY_ID)
-    when(planHolder.jobGroupId).thenReturn(DEFAULT_JOB_GROUP_ID)
     val relation = proto.Relation.newBuilder
       .setLimit(proto.Limit.newBuilder.setLimit(10))
       .build()
@@ -74,7 +71,8 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
       .setClientType(DEFAULT_CLIENT_TYPE)
       .build()
 
-    events.postStarted(planHolder, executePlanRequest)
+    val planHolder = ExecutePlanHolder(DEFAULT_QUERY_ID, events.sessionHolder, executePlanRequest)
+    events.postStarted(planHolder)
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(SparkListenerConnectOperationStarted(
         DEFAULT_JOB_GROUP_ID,
@@ -88,30 +86,31 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
         Map.empty))
   }
 
-  gridTest("post parsed with jobGroupId and dataframe")(Seq(true, false)) { isEager =>
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
-    val df = setupDf(isEager, false)
-    events.postParsed(Some(df))
-    val expectedTimes = isEager match {
-      case true =>
-        0
-      case false =>
-        1
-    }
+  gridTest("SPARK-43923: post parsed with jobGroupId and dataframe")(Seq(true, false)) {
+    isEager =>
+      val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+      val df = setupDf(isEager, false)
+      events.postParsed(Some(df))
+      val expectedTimes = isEager match {
+        case true =>
+          0
+        case false =>
+          1
+      }
 
-    verify(df.queryExecution, times(expectedTimes)).executedPlan
-    val event = SparkListenerConnectOperationParsed(
-      DEFAULT_JOB_GROUP_ID,
-      DEFAULT_QUERY_ID,
-      DEFAULT_CLOCK.getTimeMillis())
-    event.analyzedPlan = Some(df.queryExecution.analyzed)
-    verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
-      .post(event)
+      verify(df.queryExecution, times(expectedTimes)).executedPlan
+      val event = SparkListenerConnectOperationParsed(
+        DEFAULT_JOB_GROUP_ID,
+        DEFAULT_QUERY_ID,
+        DEFAULT_CLOCK.getTimeMillis())
+      event.analyzedPlan = Some(df.queryExecution.analyzed)
+      verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
+        .post(event)
   }
 
-  test("post parsed with jobGroupId and empty dataframe") {
+  test("SPARK-43923: post parsed with jobGroupId and empty dataframe") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
-    events.postParsed(Option.empty[DataFrame])
+    events.postParsed()
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationParsed(
@@ -120,9 +119,9 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  test("post canceled with jobGroupId") {
+  test("SPARK-43923: post canceled with jobGroupId") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
-    events.postCanceled(DEFAULT_JOB_GROUP_ID)
+    events.postCanceled()
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationCanceled(
@@ -131,7 +130,7 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  test("post failed with jobGroupId") {
+  test("SPARK-43923: post failed with jobGroupId") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
     events.postFailed(DEFAULT_ERROR)
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
@@ -144,7 +143,7 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
           Map.empty[String, String]))
   }
 
-  test("post finished with jobGroupId") {
+  test("SPARK-43923: post finished with jobGroupId") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
     events.postFinished()
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
@@ -155,9 +154,9 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  test("post postParsedAndFinished with empty dataframe") {
+  test("SPARK-43923: post postParsedAndFinished with empty dataframe") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
-    events.postParsedAndFinished(Option.empty[DataFrame])
+    events.postParsedAndFinished()
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationParsed(
@@ -172,7 +171,7 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  test("post closed with jobGroupId") {
+  test("SPARK-43923: post closed with jobGroupId") {
     val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
     events.postClosed()
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
@@ -183,22 +182,36 @@ class EventsSuite extends SparkFunSuite with MockitoSugar with SparkConnectPlanT
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  test("post session closed") {
+  test("SPARK-43923: post session closed") {
     val events = setupEvents()
     events.postSessionClosed()
     verify(events.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(SparkListenerConnectSessionClosed(DEFAULT_SESSION_ID, DEFAULT_CLOCK.getTimeMillis()))
   }
 
-  test("post without job group id does not post") {
-    val events = setupEvents()
+  gridTest("SPARK-43923: post without job group id does not post")(Seq(None, Some("1"))) {
+    jobGroupIdOpt =>
+      val events = setupEvents(jobGroupIdOpt)
 
-    events.postFailed(DEFAULT_ERROR)
-    events.postParsed(Option.empty[DataFrame])
-    events.postParsedAndFinished(Option.empty[DataFrame])
-    events.postFinished()
-    events.postClosed()
-    verify(events.sessionHolder.session.sparkContext.listenerBus, never()).post(any())
+      assertThrows[RuntimeException] {
+        events.postFailed(DEFAULT_ERROR)
+      }
+      assertThrows[RuntimeException] {
+        events.postParsed()
+      }
+      assertThrows[RuntimeException] {
+        events.postParsedAndFinished()
+      }
+      assertThrows[RuntimeException] {
+        events.postCanceled()
+      }
+      assertThrows[RuntimeException] {
+        events.postFinished()
+      }
+      assertThrows[RuntimeException] {
+        events.postClosed()
+      }
+      verify(events.sessionHolder.session.sparkContext.listenerBus, never()).post(any())
   }
 
   protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(

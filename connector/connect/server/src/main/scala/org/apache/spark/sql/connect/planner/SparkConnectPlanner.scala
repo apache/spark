@@ -2412,7 +2412,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
-    events.foreach(_.postParsedAndFinished(None))
+    events.foreach(_.postParsedAndFinished())
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -2452,7 +2452,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
       .find(_.nonEmpty)
       .flatten
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
-    events.foreach(_.postParsedAndFinished(None))
+    events.foreach(_.postParsedAndFinished())
   }
 
   private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
@@ -2738,7 +2738,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
       case None =>
         throw new IllegalArgumentException(s"Streaming query $id is not found")
     }
-    events.foreach(_.postParsed(Option.empty[DataFrame]))
+    events.foreach(_.postParsed())
 
     command.getCommandCase match {
       case StreamingQueryCommand.CommandCase.STATUS =>
@@ -2888,7 +2888,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
       command: StreamingQueryManagerCommand,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    events.foreach(_.postParsed(Option.empty[DataFrame]))
+    events.foreach(_.postParsed())
 
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
 
@@ -2935,7 +2935,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
   def handleGetResourcesCommand(
       sessionId: String,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    events.foreach(_.postParsedAndFinished(None))
+    events.foreach(_.postParsedAndFinished())
     responseObserver.onNext(
       proto.ExecutePlanResponse
         .newBuilder()

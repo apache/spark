@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.service
 import org.apache.spark.connect.proto
 
 object ExecutePlanHolder {
-  val JOB_GROUP_ID_PATTERN = "User_(\\d*)_Session_([a-z0-9\\-]*)_Request_([a-z0-9\\-]*)".r
+  val JOB_GROUP_ID_PATTERN = "User_([a-z0-9\\-]*)_Session_([a-z0-9\\-]*)_Request_([a-z0-9\\-]*)".r
   def getQueryOperationId(jobGroupId: String): Option[String] = {
     jobGroupId match {
       case JOB_GROUP_ID_PATTERN(userId: String, sessionId: String, queryId: String) =>

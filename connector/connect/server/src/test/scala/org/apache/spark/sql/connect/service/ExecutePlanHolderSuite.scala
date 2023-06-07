@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.connect.service
 
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkFunSuite}
 import org.apache.spark.connect.proto.ExecutePlanRequest
-import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 
@@ -36,7 +33,7 @@ class ExecutePlanHolderSuite extends SparkFunSuite with MockitoSugar with SparkC
   val DEFAULT_JOB_GROUP_ID =
     s"User_${DEFAULT_USER_ID}_Session_${DEFAULT_SESSION_ID}_Request_${DEFAULT_QUERY_ID}"
 
-  test("job group id matches pattern") {
+  test("SPARK-43923: job group id matches pattern") {
     val mockSession = mock[SparkSession]
     val request = ExecutePlanRequest.newBuilder().build()
     val sessionHolder = SessionHolder(DEFAULT_USER_ID, DEFAULT_SESSION_ID, mockSession)
@@ -44,19 +41,6 @@ class ExecutePlanHolderSuite extends SparkFunSuite with MockitoSugar with SparkC
     assert(
       ExecutePlanHolder
         .getQueryOperationId(executePlanHolder.jobGroupId) == Some(DEFAULT_QUERY_ID))
-  }
-
-  test("interrupt cancels job group id") {
-    val mockSession = mock[SparkSession]
-    val mockContext = mock[SparkContext]
-    val mockListenerBus = mock[LiveListenerBus]
-    when(mockContext.listenerBus).thenReturn(mockListenerBus)
-    when(mockSession.sparkContext).thenReturn(mockContext)
-    val request = ExecutePlanRequest.newBuilder().build()
-    val sessionHolder = SessionHolder(DEFAULT_USER_ID, DEFAULT_SESSION_ID, mockSession)
-    val executePlanHolder = ExecutePlanHolder(DEFAULT_QUERY_ID, sessionHolder, request)
-    executePlanHolder.interrupt()
-    verify(mockListenerBus, times(1)).post(any[SparkListenerConnectOperationCanceled])
   }
 
 }

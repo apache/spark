@@ -120,51 +120,40 @@ class SparkConnectService(debug: Boolean)
       opType: String,
       observer: StreamObserver[V],
       userId: String,
-      sessionId: String): PartialFunction[Throwable, Unit] = {
+      sessionId: String,
+      events: Option[Events] = None): PartialFunction[Throwable, Unit] = {
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(userId, sessionId)
     val session = sessionHolder.session
     val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
 
-    {
+    val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
       case e: UnsupportedOperationException =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        val throwable = Status.INVALID_ARGUMENT.withDescription(e.getMessage).asRuntimeException()
-        postFailed(opType, sessionHolder.events, throwable)
-        observer.onError(throwable)
+        (e, Status.INVALID_ARGUMENT.withDescription(e.getMessage).asRuntimeException())
 
       case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
-        val throwable = StatusProto.toStatusRuntimeException(
-          buildStatusFromThrowable(se.getCause, stackTraceEnabled))
-        postFailed(opType, sessionHolder.events, throwable)
-        observer.onError(throwable)
+        (
+          se,
+          StatusProto.toStatusRuntimeException(
+            buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        val throwable =
-          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled))
-        postFailed(opType, sessionHolder.events, throwable)
-        observer.onError(throwable)
+        (e, StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
 
       case e: Throwable =>
-        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
-        val throwable = Status.UNKNOWN
-          .withCause(e)
-          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-          .asRuntimeException()
-        postFailed(opType, sessionHolder.events, throwable)
-        observer.onError(throwable)
+        (
+          e,
+          Status.UNKNOWN
+            .withCause(e)
+            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+            .asRuntimeException())
     }
-  }
-
-  /**
-   * Post failed for opType execute as these are the only statements being tracked
-   */
-  private def postFailed(opType: String, events: Events, throwable: Throwable) = {
-    if (opType.equals("execute")) {
-      events.postFailed(throwable.getMessage)
-    }
+    partial
+      .andThen { case (original, wrapped) =>
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
+        events.foreach(_.postFailed(wrapped.getMessage))
+        observer.onError(wrapped)
+      }
   }
 
   /**
@@ -187,7 +176,11 @@ class SparkConnectService(debug: Boolean)
         "execute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
-        sessionId = request.getSessionId)
+        sessionId = request.getSessionId,
+        Some(
+          SparkConnectService
+            .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+            .events))
     }
   }
 
