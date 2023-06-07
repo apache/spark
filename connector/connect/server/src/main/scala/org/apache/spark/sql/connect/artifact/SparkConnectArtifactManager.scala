@@ -100,6 +100,7 @@ class SparkConnectArtifactManager private[connect] {
    * @param session
    * @param remoteRelativePath
    * @param serverLocalStagingPath
+   * @param fragment
    */
   private[connect] def addArtifact(
       sessionHolder: SessionHolder,
@@ -138,8 +139,7 @@ class SparkConnectArtifactManager private[connect] {
       // previously added,
       if (Files.exists(target)) {
         throw new RuntimeException(
-          s"Duplicate Jar: $remoteRelativePath. " +
-            s"Jars cannot be overwritten.")
+          s"Duplicate file: $remoteRelativePath. Files cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
       if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
@@ -157,6 +157,8 @@ class SparkConnectArtifactManager private[connect] {
         val canonicalUri =
           fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
         sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
+      } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
+        sessionHolder.session.sparkContext.addFile(target.toString)
       }
     }
   }

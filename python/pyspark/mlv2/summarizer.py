@@ -99,7 +99,7 @@ def summarize_dataframe(
 
     def local_agg_fn(pandas_df: "pd.DataFrame") -> Any:
         state = None
-        for _, value_array in pandas_df[column].iteritems():
+        for _, value_array in pandas_df[column].items():
             if state is None:
                 state = SummarizerAggState(value_array)
             else:

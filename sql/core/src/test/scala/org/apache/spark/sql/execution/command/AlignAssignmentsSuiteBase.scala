@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
 
-class AlignAssignmentsSuite extends AnalysisTest {
+abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
 
   private val primitiveTable = {
     val t = mock(classOf[SupportsRowLevelOperations])
