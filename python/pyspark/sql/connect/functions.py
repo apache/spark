@@ -1051,6 +1051,69 @@ def var_pop(col: "ColumnOrName") -> Column:
 var_pop.__doc__ = pysparkfuncs.var_pop.__doc__
 
 
+def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_avgx", y, x)
+
+
+regr_avgx.__doc__ = pysparkfuncs.regr_avgx.__doc__
+
+
+def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_avgy", y, x)
+
+
+regr_avgy.__doc__ = pysparkfuncs.regr_avgy.__doc__
+
+
+def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_count", y, x)
+
+
+regr_count.__doc__ = pysparkfuncs.regr_count.__doc__
+
+
+def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_intercept", y, x)
+
+
+regr_intercept.__doc__ = pysparkfuncs.regr_intercept.__doc__
+
+
+def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_r2", y, x)
+
+
+regr_r2.__doc__ = pysparkfuncs.regr_r2.__doc__
+
+
+def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_slope", y, x)
+
+
+regr_slope.__doc__ = pysparkfuncs.regr_slope.__doc__
+
+
+def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_sxx", y, x)
+
+
+regr_sxx.__doc__ = pysparkfuncs.regr_sxx.__doc__
+
+
+def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_sxy", y, x)
+
+
+regr_sxy.__doc__ = pysparkfuncs.regr_sxy.__doc__
+
+
+def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_syy", y, x)
+
+
+regr_syy.__doc__ = pysparkfuncs.regr_syy.__doc__
+
+
 def var_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_samp", col)
 
@@ -2146,6 +2209,34 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
+
+
+def unix_date(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_date", col)
+
+
+unix_date.__doc__ = pysparkfuncs.unix_date.__doc__
+
+
+def unix_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_micros", col)
+
+
+unix_micros.__doc__ = pysparkfuncs.unix_micros.__doc__
+
+
+def unix_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_millis", col)
+
+
+unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
+
+
+def unix_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_seconds", col)
+
+
+unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload

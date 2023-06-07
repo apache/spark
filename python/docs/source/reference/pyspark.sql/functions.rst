@@ -138,6 +138,10 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
     window_time
 
 
@@ -254,6 +258,15 @@ Aggregate Functions
     mode
     percentile_approx
     product
+    regr_avgx
+    regr_avgy
+    regr_count
+    regr_intercept
+    regr_r2
+    regr_slope
+    regr_sxx
+    regr_sxy
+    regr_syy
     skewness
     stddev
     stddev_pop

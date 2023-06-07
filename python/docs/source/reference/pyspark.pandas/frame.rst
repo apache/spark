@@ -37,6 +37,7 @@ Attributes and underlying data
    :toctree: api/
 
    DataFrame.index
+   DataFrame.info
    DataFrame.columns
    DataFrame.empty
 
@@ -272,13 +273,14 @@ Serialization / IO / Conversion
 .. autosummary::
    :toctree: api/
 
+   DataFrame.from_dict
    DataFrame.from_records
-   DataFrame.info
    DataFrame.to_table
    DataFrame.to_delta
    DataFrame.to_parquet
    DataFrame.to_spark_io
    DataFrame.to_csv
+   DataFrame.to_orc
    DataFrame.to_pandas
    DataFrame.to_html
    DataFrame.to_numpy

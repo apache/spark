@@ -992,6 +992,88 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = Column.fn("regr_avgx", y, x)
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = Column.fn("regr_avgy", y, x)
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs in a group, where `y` is the
+   * dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = Column.fn("regr_count", y, x)
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line for
+   * non-null pairs in a group, where `y` is the dependent variable and `x` is the independent
+   * variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column = Column.fn("regr_intercept", y, x)
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = Column.fn("regr_r2", y, x)
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column = Column.fn("regr_slope", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = Column.fn("regr_sxx", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = Column.fn("regr_sxy", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3703,6 +3785,40 @@ object functions {
    * @since 3.4.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
+
+  /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = Column.fn("unix_date", e)
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
+   * precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = Column.fn("unix_millis", e)
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
+   * precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = Column.fn("unix_seconds", e)
 
   /**
    * Returns date truncated to the unit specified by the format.

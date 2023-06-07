@@ -833,7 +833,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val scheme = Option(storage.locationUri.get.getScheme)
       scheme match {
         case Some(pathScheme) if (!pathScheme.equals("file")) =>
-          throw QueryParsingErrors.unsupportedLocalFileSchemeError(ctx)
+          throw QueryParsingErrors.unsupportedLocalFileSchemeError(ctx, pathScheme)
         case _ =>
           // force scheme to be file rather than fs.default.name
           val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
