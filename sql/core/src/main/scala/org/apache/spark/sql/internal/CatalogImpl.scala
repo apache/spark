@@ -240,6 +240,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
+    listFunctionsInternal(dbName, None)
+  }
+
+  /**
+   * Returns a list of functions registered in the specified database (namespace)
+   * which name match the specify pattern (the name can be qualified with catalog).
+   * This includes all built-in and temporary functions.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listFunctions(dbName: String, pattern: String): Dataset[Function] = {
+    listFunctionsInternal(dbName, Some(pattern))
+  }
+
+  private def listFunctionsInternal(dbName: String, pattern: Option[String]): Dataset[Function] = {
     val namespace = resolveNamespace(dbName)
     val functions = collection.mutable.ArrayBuilder.make[Function]
 
@@ -249,7 +265,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // List built-in functions. We don't need to specify the namespace here as SHOW FUNCTIONS with
     // only system scope does not need to know the catalog and namespace.
-    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), userScope = false, systemScope = true, None)
+    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), userScope = false, systemScope = true, pattern)
     sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
       // Built-in functions do not belong to any catalog or namespace. We can only look it up with
       // a single part name.
@@ -258,8 +274,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
 
     // List user functions.
-    val plan1 = ShowFunctions(UnresolvedNamespace(namespace),
-      userScope = true, systemScope = false, None)
+    val plan1 = ShowFunctions(UnresolvedNamespace(namespace), true, false, pattern)
     sparkSession.sessionState.executePlan(plan1).toRdd.collect().foreach { row =>
       functions += makeFunction(parseIdent(row.getString(0)))
     }
