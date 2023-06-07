@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
+import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
@@ -247,5 +248,18 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     assertFileDataEquality(remainingArtifacts.get(0).getData, Paths.get(file3))
     assertFileDataEquality(remainingArtifacts.get(1).getData, Paths.get(file4))
+  }
+
+  test("cache an artifact and check its presence") {
+    val s = "Hello, World!"
+    val blob = s.getBytes("UTF-8")
+    val expectedHash = sha256Hex(blob)
+    assert(artifactManager.isCachedArtifact(expectedHash) === false)
+    val actualHash = artifactManager.cacheArtifact(blob)
+    assert(actualHash === expectedHash)
+    assert(artifactManager.isCachedArtifact(expectedHash) === true)
+
+    val receivedRequests = service.getAndClearLatestAddArtifactRequests()
+    assert(receivedRequests.size == 1)
   }
 }

@@ -74,6 +74,12 @@
       "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which leads to data being read as null. Please provide a wider decimal type to get the correct result. To allow reading null to this field, enable the SQL configuration: <key>."
     ]
   },
+  "BATCH_METADATA_NOT_FOUND" : {
+    "message" : [
+      "Unable to find batch <batchMetadataFile>."
+    ],
+    "sqlState" : "42K03"
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow."
@@ -108,7 +114,7 @@
   },
   "CANNOT_DECODE_URL" : {
     "message" : [
-      "Cannot decode url : <url>."
+      "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
   },
@@ -124,7 +130,7 @@
   },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
-      "Failed to merge incompatible data types <left> and <right>."
+      "Failed to merge incompatible data types <left> and <right>. Please check the data types of the columns being merged and ensure that they are compatible. If necessary, consider casting the columns to compatible data types before attempting the merge."
     ],
     "sqlState" : "42825"
   },
@@ -147,7 +153,7 @@
   },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
-      "Cannot parse decimal."
+      "Cannot parse decimal. Please ensure that the input is a valid number with optional decimal point or comma separators."
     ],
     "sqlState" : "22018"
   },
@@ -170,12 +176,12 @@
   },
   "CANNOT_READ_FILE_FOOTER" : {
     "message" : [
-      "Could not read footer for file: <file>."
+      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format. If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt. If it is, you can choose to either ignore it or fix the corruption."
     ]
   },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
-      "Cannot recognize hive type string: <fieldType>, column: <fieldName>."
+      "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
     ],
     "sqlState" : "429BB"
   },
@@ -652,6 +658,11 @@
   "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE" : {
     "message" : [
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
+    ]
+  },
+  "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
     ]
   },
   "FAILED_EXECUTE_UDF" : {
@@ -1511,6 +1522,11 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ]
   },
+  "LOCAL_MUST_WITH_SCHEMA_FILE" : {
+    "message" : [
+      "LOCAL must be used together with the schema of `file`, but got: `<actualSchema>`."
+    ]
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
@@ -1539,6 +1555,24 @@
       "Add the columns or the expression to the GROUP BY, aggregate the expression, or use <expressionAnyValue> if you do not care which of the values within a group is returned."
     ],
     "sqlState" : "42803"
+  },
+  "MISSING_ATTRIBUTES" : {
+    "message" : [
+      "Resolved attribute(s) <missingAttributes> missing from <input> in operator <operator>."
+    ],
+    "subClass" : {
+      "RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION" : {
+        "message" : [
+          "Attribute(s) with the same name appear in the operation: <operation>.",
+          "Please check if the right attribute(s) are used."
+        ]
+      },
+      "RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT" : {
+        "message" : [
+          ""
+        ]
+      }
+    }
   },
   "MISSING_GROUP_BY" : {
     "message" : [
@@ -1836,6 +1870,11 @@
       "Recursive view <viewIdent> detected (cycle: <newPath>)."
     ]
   },
+  "REF_DEFAULT_VALUE_IS_NOT_ALLOWED_IN_PARTITION" : {
+    "message" : [
+      "References to DEFAULT column values are not allowed within the PARTITION clause."
+    ]
+  },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
       "Failed to rename as <sourcePath> was not found."
@@ -1937,6 +1976,11 @@
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
+    ]
+  },
+  "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT" : {
+    "message" : [
+      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
     ]
   },
   "TABLE_OR_VIEW_ALREADY_EXISTS" : {
@@ -2142,6 +2186,23 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_DEFAULT_VALUE" : {
+    "message" : [
+      "DEFAULT column values is not supported."
+    ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Enable it by setting \"spark.sql.defaultColumn.enabled\" to \"true\"."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_DESERIALIZER" : {
     "message" : [
       "The deserializer is not supported:"
@@ -2285,6 +2346,11 @@
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
           "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
+        ]
+      },
+      "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
+        "message" : [
+          "Invalid partitioning: <cols> is missing or is in a map or array."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -2702,11 +2768,6 @@
       "Directory path and 'path' in OPTIONS should be specified one, but not both."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0050" : {
-    "message" : [
-      "LOCAL is supported only with file: scheme."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0051" : {
     "message" : [
       "Empty set in <element> grouping sets is not supported."
@@ -2725,21 +2786,6 @@
   "_LEGACY_ERROR_TEMP_0056" : {
     "message" : [
       "Invalid time travel spec: <reason>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0057" : {
-    "message" : [
-      "Support for DEFAULT column values is not implemented yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0058" : {
-    "message" : [
-      "Support for DEFAULT column values is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0059" : {
-    "message" : [
-      "References to DEFAULT column values are not allowed within the PARTITION clause."
     ]
   },
   "_LEGACY_ERROR_TEMP_0060" : {
@@ -4988,11 +5034,6 @@
       "Cannot set timeout timestamp without enabling event time timeout in [map|flatMapGroupsWithState."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2206" : {
-    "message" : [
-      "Unable to find batch <batchMetadataFile>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2207" : {
     "message" : [
       "Multiple streaming queries are concurrently using <path>."
@@ -5525,31 +5566,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2426" : {
-    "message" : [
-      "nondeterministic expression <sqlExpr> should not appear in grouping expression."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2427" : {
-    "message" : [
-      "sorting is not supported for columns of type <type>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2428" : {
-    "message" : [
-      "The sum of the LIMIT clause and the OFFSET clause must not be greater than the maximum 32-bit integer value (2,147,483,647) but found limit = <limit>, offset = <offset>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2431" : {
-    "message" : [
-      "Invalid partitioning: <cols> is missing or is in a map or array."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2432" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2433" : {

@@ -120,6 +120,7 @@ message SimpleMessageEnum {
   }
   BasicEnumMessage.BasicEnum basic_enum = 3;
   NestedEnum nested_enum = 4;
+  repeated BasicEnumMessage.BasicEnum repeated_enum = 5;
 }
 
 
