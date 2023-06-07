@@ -179,11 +179,17 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     createTempTable("my_temp_table")
     assert(spark.catalog.listTables().collect().map(_.name).toSet ==
       Set("my_table1", "my_table2", "my_temp_table"))
+    assert(spark.catalog.listTables(spark.catalog.currentDatabase, "my_table*").collect()
+      .map(_.name).toSet == Set("my_table1", "my_table2"))
     dropTable("my_table1")
     assert(spark.catalog.listTables().collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
+    assert(spark.catalog.listTables(spark.catalog.currentDatabase, "my_table*").collect()
+      .map(_.name).toSet == Set("my_table2"))
     dropTable("my_temp_table")
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_table2"))
+    assert(spark.catalog.listTables(spark.catalog.currentDatabase, "my_table*").collect()
+      .map(_.name).toSet == Set("my_table2"))
   }
 
   test("SPARK-39828: Catalog.listTables() should respect currentCatalog") {
@@ -224,14 +230,17 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       Set("my_table1", "my_temp_table"))
     assert(spark.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
+    assert(spark.catalog.listTables("my_db2", "my_table*").collect().map(_.name).toSet ==
+      Set("my_table2"))
     dropTable("my_table1", Some("my_db1"))
     assert(spark.catalog.listTables("my_db1").collect().map(_.name).toSet ==
       Set("my_temp_table"))
+    assert(spark.catalog.listTables("my_db1", "my_table*").collect().isEmpty)
     assert(spark.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
     dropTable("my_temp_table")
-    assert(spark.catalog.listTables("default").collect().map(_.name).isEmpty)
-    assert(spark.catalog.listTables("my_db1").collect().map(_.name).isEmpty)
+    assert(spark.catalog.listTables("default").collect().isEmpty)
+    assert(spark.catalog.listTables("my_db1").collect().isEmpty)
     assert(spark.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2"))
     val e = intercept[AnalysisException] {
