@@ -122,9 +122,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    val namespace = wrapNamespace(dbName)
-    val plan = ShowTables(UnresolvedNamespace(namespace), None)
-    makeTablesDataset(plan)
+    listTablesInternal(dbName, None)
   }
 
   /**
@@ -136,8 +134,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String, pattern: String): Dataset[Table] = {
-    val namespace = wrapNamespace(dbName)
-    val plan = ShowTables(UnresolvedNamespace(namespace), Some(pattern))
+    listTablesInternal(dbName, Some(pattern))
+  }
+
+  private def listTablesInternal(dbName: String, pattern: Option[String]): Dataset[Table] = {
+    val namespace = resolveNamespace(dbName)
+    val plan = ShowTables(UnresolvedNamespace(namespace), pattern)
     makeTablesDataset(plan)
   }
 
@@ -238,7 +240,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
-    val namespace = wrapNamespace(dbName)
+    val namespace = resolveNamespace(dbName)
     val functions = collection.mutable.ArrayBuilder.make[Function]
 
     // TODO: The SHOW FUNCTIONS should tell us the function type (built-in, temp, persistent) and
@@ -388,7 +390,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
-    val namespace = wrapNamespace(dbName)
+    val namespace = resolveNamespace(dbName)
     val plan = UnresolvedNamespace(namespace)
     sparkSession.sessionState.executePlan(plan).analyzed match {
       case ResolvedNamespace(catalog, namespace) =>
@@ -397,7 +399,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def wrapNamespace(dbName: String): Seq[String] = {
+  private def resolveNamespace(dbName: String): Seq[String] = {
     // `dbName` could be either a single database name (behavior in Spark 3.3 and prior) or
     // a qualified namespace with catalog name. We assume it's a single database name
     // and check if we can find it in the sessionCatalog. If so we list functions under
