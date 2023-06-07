@@ -77,6 +77,8 @@ message ListDatabases {
 message ListTables {
   // (Optional)
   optional string db_name = 1;
+  // (Optional) The pattern that the table name needs to match
+  optional string pattern = 2;
 }
 
 // See `spark.catalog.listFunctions`

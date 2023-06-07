@@ -77,6 +77,15 @@ abstract class Catalog {
   def listTables(dbName: String): Dataset[Table]
 
   /**
+   * Returns a list of tables/views in the specified database (namespace) which name match the
+   * specify pattern (the name can be qualified with catalog). This includes all temporary views.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listTables(dbName: String, pattern: String): Dataset[Table]
+
+  /**
    * Returns a list of functions registered in the current database (namespace). This includes all
    * temporary functions.
    *

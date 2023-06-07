@@ -888,7 +888,7 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "Cannot write to <tableName>, the reason is "
+      "Cannot write to <tableName>, the reason is"
     ],
     "subClass" : {
       "NOT_ENOUGH_DATA_COLUMNS" : {
