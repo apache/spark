@@ -931,8 +931,13 @@ object SparkProtobuf {
 
     (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
+    (Test / PB.protocOptions) += "--include_imports",
+
     (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources"
+      PB.gens.java -> target.value / "generated-test-sources",
+      PB.gens.descriptorSet -> target.value / "generated-test-sources/descriptor-set-sbt.desc",
+      // The above creates single descriptor file with all the proto files. This is different from
+      // Maven, which create one descriptor file for each proto file.
     ),
 
     (assembly / test) := { },

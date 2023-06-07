@@ -17,25 +17,57 @@
 
 package org.apache.spark.sql.protobuf
 
+import java.io.File
+
+import scala.collection.JavaConverters._
+
+import com.google.protobuf.DescriptorProtos.FileDescriptorSet
+
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
 trait ProtobufTestBase extends SQLTestUtils {
 
   /**
-   * Returns full path to the given file in the resource folder,
-   * if the first choice throw NPE, try to return the full path of alternative.
-   * The result path doesn't contain the `file:/` protocol part.
+   * Returns path for a Protobuf descriptor file used in the tests. These files are generated
+   * during the build. Maven and SBT create the descriptor files differently. Maven creates one
+   * descriptor file for each Protobuf file, where as SBT create one descriptor file that includes
+   * all the Protobuf files. As a result actual file path returned in each case is different.
    */
-  protected def testFile(fileName: String, alternateFileName: String): String = {
-    val ret = try {
-      testFile(fileName)
-    } catch {
-      case _: NullPointerException => testFile(alternateFileName)
+  protected def protobufDescriptorFile(fileName: String): String = {
+    val dir = "target/generated-test-sources"
+    if (new File(s"$dir/$fileName").exists) {
+      s"$dir/$fileName"
+    } else { // sbt test
+      s"$dir/descriptor-set-sbt.desc"  // Single file contains all the proto files in sbt.
     }
-    ret.replace("file:/", "/")
   }
 
   protected def structFromDDL(ddl: String): StructType =
     DataType.fromDDL(ddl).asInstanceOf[StructType]
+
+  /**
+   * Returns a new binary descriptor set that contains single FileDescriptor that has
+   * Protobuf message with the name `messageName`. It does not include any of its dependencies.
+   * This roughly simulates a case where `--include_imports` is missing for `protoc` command that
+   * generated the descriptor file. E.g.
+   * {{ protoc --descriptor_set_out=my_protos.desc my_protos.proto }}
+   */
+  protected def descriptorSetWithoutImports(
+    binaryDescriptorSet: Array[Byte],
+    messageName: String): Array[Byte] = {
+
+    val fdSet = FileDescriptorSet.parseFrom(binaryDescriptorSet)
+    val fdForMessage = fdSet.getFileList.asScala.find { fd =>
+      fd.getMessageTypeList.asScala.exists(_.getName == messageName)
+    }
+
+    fdForMessage match {
+      case Some(fd) =>
+        // Create a file descriptor with single FileDescriptor, no dependencies are included.
+        FileDescriptorSet.newBuilder().addFile(fd).build().toByteArray()
+      case None =>
+        throw new RuntimeException(s"Could not find FileDescriptor for '$messageName'")
+    }
+  }
 }
