@@ -86,6 +86,7 @@ SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
 USER_SCRIPTS_PATH = os.path.join(SPARK_HOME, "sbin")
 DATA_PATH = os.path.join(SPARK_HOME, "data")
 LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
+DOCKER_PATH = os.path.join(SPARK_HOME, "resource-managers/kubernetes/docker/src/main/dockerfiles/spark")
 
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
@@ -93,7 +94,7 @@ JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 DATA_TARGET = os.path.join(TEMP_PATH, "data")
 LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
-
+DOCKER_TARGET = os.path.join(TEMP_PATH, "k8s")
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
 # want to use the symlink farm. And if the symlink farm exists under while under Spark (e.g. a
@@ -192,6 +193,7 @@ try:
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
             os.symlink(DATA_PATH, DATA_TARGET)
             os.symlink(LICENSES_PATH, LICENSES_TARGET)
+            os.symlink(DOCKER_PATH, DOCKER_TARGET)
         else:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
@@ -200,6 +202,7 @@ try:
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
             copytree(DATA_PATH, DATA_TARGET)
             copytree(LICENSES_PATH, LICENSES_TARGET)
+            copytree(DOCKER_PATH, DOCKER_TARGET)
     else:
         # If we are not inside of SPARK_HOME verify we have the required symlink farm
         if not os.path.exists(JARS_TARGET):
@@ -273,6 +276,7 @@ try:
         package_dir={
             "pyspark.jars": "deps/jars",
             "pyspark.bin": "deps/bin",
+            'pyspark.k8s': 'deps/k8s',
             "pyspark.sbin": "deps/sbin",
             "pyspark.python.lib": "lib",
             "pyspark.data": "deps/data",
@@ -282,6 +286,7 @@ try:
         package_data={
             "pyspark.jars": ["*.jar"],
             "pyspark.bin": ["*"],
+            'pyspark.k8s': ["*"],
             "pyspark.sbin": [
                 "spark-config.sh",
                 "spark-daemon.sh",
@@ -349,6 +354,7 @@ finally:
             os.remove(os.path.join(TEMP_PATH, "examples"))
             os.remove(os.path.join(TEMP_PATH, "data"))
             os.remove(os.path.join(TEMP_PATH, "licenses"))
+            os.remove(os.path.join(TEMP_PATH, "k8s"))
         else:
             rmtree(os.path.join(TEMP_PATH, "jars"))
             rmtree(os.path.join(TEMP_PATH, "bin"))
@@ -356,4 +362,5 @@ finally:
             rmtree(os.path.join(TEMP_PATH, "examples"))
             rmtree(os.path.join(TEMP_PATH, "data"))
             rmtree(os.path.join(TEMP_PATH, "licenses"))
+            rmtree(os.path.join(TEMP_PATH, "k8s"))
         os.rmdir(TEMP_PATH)
