@@ -100,4 +100,17 @@ object Connect {
       .version("3.5.0")
       .intConf
       .createWithDefault(2048)
+
+  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    ConfigBuilder("spark.connect.copyFromLocalToFs.allowDestLocal")
+      .doc("""
+            |Allow `spark.copyFromLocalToFs` destination to be local file system
+            | path on spark driver node when
+            |`spark.connect.copyFromLocalToFs.allowDestLocal` is true.
+            |This will allow user to overwrite arbitrary file on spark
+            |driver node we should only enable it for testing purpose.
+            |""".stripMargin)
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 }

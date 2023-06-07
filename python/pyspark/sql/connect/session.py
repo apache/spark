@@ -646,7 +646,7 @@ class SparkSession:
         Parameters
         ----------
         local_path: str
-            Path to a local file (Directory is not supported yet).
+            Path to a local file. Directories are not supported.
             The path can be either an absolute path or a relative path.
 
         dest_path: str

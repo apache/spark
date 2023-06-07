@@ -35,7 +35,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val conf = super.sparkConf
     conf
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
-      .set("spark.fs.copyFromLocalToFs.allowDestLocal", "true")
+      .set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
   }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")

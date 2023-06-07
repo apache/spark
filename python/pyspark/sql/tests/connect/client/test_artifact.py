@@ -48,7 +48,7 @@ class ArtifactTests(ReusedConnectTestCase):
     @classmethod
     def conf(cls):
         conf = super().conf()
-        conf.set("spark.fs.copyFromLocalToFs.allowDestLocal", "true")
+        conf.set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
         return conf
 
     def test_basic_requests(self):
@@ -277,7 +277,7 @@ class ArtifactTests(ReusedConnectTestCase):
             self.spark.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
 
-    def test_copy_from_local_to_FS(self):
+    def test_copy_from_local_to_fs(self):
         with tempfile.TemporaryDirectory() as d:
             with tempfile.TemporaryDirectory() as d2:
                 file_path = os.path.join(d, "file1")
