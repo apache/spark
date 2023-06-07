@@ -138,6 +138,10 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
     window_time
 
 

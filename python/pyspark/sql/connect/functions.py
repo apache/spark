@@ -2148,6 +2148,34 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
 
 
+def unix_date(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_date", col)
+
+
+unix_date.__doc__ = pysparkfuncs.unix_date.__doc__
+
+
+def unix_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_micros", col)
+
+
+unix_micros.__doc__ = pysparkfuncs.unix_micros.__doc__
+
+
+def unix_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_millis", col)
+
+
+unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
+
+
+def unix_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_seconds", col)
+
+
+unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
+
+
 @overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...

@@ -3713,6 +3713,48 @@ object functions {
   }
 
   /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = withExpr {
+    UnixDate(e.expr)
+  }
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = withExpr {
+    UnixMicros(e.expr)
+  }
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = withExpr {
+    UnixMillis(e.expr)
+  }
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = withExpr {
+    UnixSeconds(e.expr)
+  }
+
+  /**
    * Returns date truncated to the unit specified by the format.
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
