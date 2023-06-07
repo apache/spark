@@ -320,7 +320,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             byName)
         })
       case table: InsertOverwriteTableContext =>
-        val (relationCtx, cols, partition, ifPartitionNotExists, _)
+        val (relationCtx, cols, partition, ifPartitionNotExists, byName)
         = visitInsertOverwriteTable(table)
         withIdentClause(relationCtx, ident => {
           InsertIntoStatement(
@@ -329,7 +329,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             cols,
             query,
             overwrite = true,
-            ifPartitionNotExists)
+            ifPartitionNotExists,
+            byName)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         withIdentClause(ctx.identifierReference, ident => {
@@ -379,7 +380,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (ctx.identifierReference, cols, partitionKeys, ctx.EXISTS() != null, false)
+    (ctx.identifierReference, cols, partitionKeys, ctx.EXISTS() != null, ctx.NAME() != null)
   }
 
   /**

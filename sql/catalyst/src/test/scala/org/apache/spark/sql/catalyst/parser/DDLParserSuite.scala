@@ -1686,17 +1686,22 @@ class DDLParserSuite extends AnalysisTest {
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
           overwrite = false, ifPartitionNotExists = false, byName = true))
     }
+
+    Seq(
+      "INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl BY NAME SELECT * FROM source",
+      "INSERT OVERWRITE testcat.ns1.ns2.tbl BY NAME SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Nil,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true, ifPartitionNotExists = false, byName = true))
+    }
   }
 
   test("insert table: by name unsupported case") {
-    checkError(
-      exception = parseException("INSERT OVERWRITE TABLE t1 BY NAME SELECT * FROM tmp_view"),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map(
-        "error" -> "'BY'",
-        "hint" -> "")
-    )
-
     checkError(
       exception = parseException(
         "INSERT INTO TABLE t1 BY NAME (c1,c2) SELECT * FROM tmp_view"),
