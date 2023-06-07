@@ -26,7 +26,10 @@ import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
+
 import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
@@ -97,6 +100,7 @@ class SparkConnectArtifactManager private[connect] {
    * @param session
    * @param remoteRelativePath
    * @param serverLocalStagingPath
+   * @param fragment
    */
   private[connect] def addArtifact(
       sessionHolder: SessionHolder,
@@ -135,8 +139,7 @@ class SparkConnectArtifactManager private[connect] {
       // previously added,
       if (Files.exists(target)) {
         throw new RuntimeException(
-          s"Duplicate Jar: $remoteRelativePath. " +
-            s"Jars cannot be overwritten.")
+          s"Duplicate file: $remoteRelativePath. Files cannot be overwritten.")
       }
       Files.move(serverLocalStagingPath, target)
       if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
@@ -154,12 +157,50 @@ class SparkConnectArtifactManager private[connect] {
         val canonicalUri =
           fragment.map(UriBuilder.fromUri(target.toUri).fragment).getOrElse(target.toUri)
         sessionHolder.session.sparkContext.addArchive(canonicalUri.toString)
+      } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
+        sessionHolder.session.sparkContext.addFile(target.toString)
       }
     }
+  }
+
+  private[connect] def uploadArtifactToFs(
+      sessionHolder: SessionHolder,
+      remoteRelativePath: Path,
+      serverLocalStagingPath: Path): Unit = {
+    val hadoopConf = sessionHolder.session.sparkContext.hadoopConfiguration
+    assert(
+      remoteRelativePath.startsWith(
+        SparkConnectArtifactManager.forwardToFSPrefix + File.separator))
+    val destFSPath = new FSPath(
+      Paths
+        .get("/")
+        .resolve(remoteRelativePath.subpath(1, remoteRelativePath.getNameCount))
+        .toString)
+    val localPath = serverLocalStagingPath
+    val fs = destFSPath.getFileSystem(hadoopConf)
+    if (fs.isInstanceOf[LocalFileSystem]) {
+      val allowDestLocalConf =
+        SparkEnv.get.conf.get(CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
+      if (!allowDestLocalConf) {
+        // To avoid security issue, by default,
+        // we don't support uploading file to local file system
+        // destination path, otherwise user is able to overwrite arbitrary file
+        // on spark driver node.
+        // We can temporarily allow the behavior by setting spark config
+        // `spark.connect.copyFromLocalToFs.allowDestLocal`
+        // to `true` when starting spark driver, we should only enable it for testing
+        // purpose.
+        throw new UnsupportedOperationException(
+          "Uploading artifact file to local file system destination path is not supported.")
+      }
+    }
+    fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)
   }
 }
 
 object SparkConnectArtifactManager {
+
+  val forwardToFSPrefix = "forward_to_fs"
 
   private var _activeArtifactManager: SparkConnectArtifactManager = _
 

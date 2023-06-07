@@ -116,8 +116,10 @@ class Catalog:
 
     databaseExists.__doc__ = PySparkCatalog.databaseExists.__doc__
 
-    def listTables(self, dbName: Optional[str] = None) -> List[Table]:
-        pdf = self._execute_and_fetch(plan.ListTables(db_name=dbName))
+    def listTables(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Table]:
+        pdf = self._execute_and_fetch(plan.ListTables(db_name=dbName, pattern=pattern))
         return [
             Table(
                 name=row.iloc[0],
