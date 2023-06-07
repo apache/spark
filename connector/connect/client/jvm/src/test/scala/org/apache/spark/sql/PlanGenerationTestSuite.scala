@@ -1362,10 +1362,6 @@ class PlanGenerationTestSuite
     fn.radians("b")
   }
 
-  functionTest("width_bucket") {
-    fn.width_bucket(fn.col("v"), fn.col("min"), fn.col("max"), fn.col("n"))
-  }
-
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -2170,6 +2166,10 @@ class PlanGenerationTestSuite
 
   test("pivot without column values") {
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
+  }
+
+  test("width_bucket") {
+    simple.select(fn.width_bucket(fn.col("b"), fn.col("b"), fn.col("b"), fn.col("a")))
   }
 
   test("test broadcast") {

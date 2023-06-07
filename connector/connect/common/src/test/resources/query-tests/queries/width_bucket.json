@@ -8,7 +8,7 @@
         "planId": "0"
       },
       "localRelation": {
-        "schema": "struct\u003cid:bigint,a:int,b:double,d:struct\u003cid:bigint,a:int,b:double\u003e,e:array\u003cint\u003e,f:map\u003cstring,struct\u003cid:bigint,a:int,b:double\u003e\u003e,g:string\u003e"
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
     "expressions": [{
@@ -16,19 +16,19 @@
         "functionName": "width_bucket",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "v"
+            "unparsedIdentifier": "b"
           }
         }, {
           "unresolvedAttribute": {
-            "unparsedIdentifier": "min"
+            "unparsedIdentifier": "b"
           }
         }, {
           "unresolvedAttribute": {
-            "unparsedIdentifier": "max"
+            "unparsedIdentifier": "b"
           }
         }, {
           "unresolvedAttribute": {
-            "unparsedIdentifier": "n"
+            "unparsedIdentifier": "a"
           }
         }]
       }
