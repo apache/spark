@@ -41,6 +41,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
 ARCHIVE_PREFIX: str = "archives"
+FILE_PREFIX: str = "files"
 CACHE_PREFIX: str = "cache"
 
 
@@ -125,6 +126,10 @@ def new_archive_artifact(file_name: str, storage: LocalData) -> Artifact:
     return _new_artifact(ARCHIVE_PREFIX, "", file_name, storage)
 
 
+def new_file_artifact(file_name: str, storage: LocalData) -> Artifact:
+    return _new_artifact(FILE_PREFIX, "", file_name, storage)
+
+
 def new_cache_artifact(id: str, storage: LocalData) -> Artifact:
     return _new_artifact(CACHE_PREFIX, "", id, storage)
 
@@ -163,7 +168,9 @@ class ArtifactManager:
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
 
-    def _parse_artifacts(self, path_or_uri: str, pyfile: bool, archive: bool) -> List[Artifact]:
+    def _parse_artifacts(
+        self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
+    ) -> List[Artifact]:
         # Currently only local files with .jar extension is supported.
         parsed = urlparse(path_or_uri)
         # Check if it is a file from the scheme
@@ -202,6 +209,8 @@ class ArtifactManager:
                     name = f"{name}#{parsed.fragment}"
 
                 artifact = new_archive_artifact(name, LocalFile(local_path))
+            elif file:
+                artifact = new_file_artifact(name, LocalFile(local_path))
             elif name.endswith(".jar"):
                 artifact = new_jar_artifact(name, LocalFile(local_path))
             else:
@@ -210,11 +219,13 @@ class ArtifactManager:
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
     def _create_requests(
-        self, *path: str, pyfile: bool, archive: bool
+        self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
         return self._add_artifacts(
-            chain(*(self._parse_artifacts(p, pyfile=pyfile, archive=archive) for p in path))
+            chain(
+                *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
+            )
         )
 
     def _retrieve_responses(
@@ -223,13 +234,13 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
         """
         Add a single artifact to the session.
         Currently only local files with .jar extension is supported.
         """
         requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
-            *path, pyfile=pyfile, archive=archive
+            *path, pyfile=pyfile, archive=archive, file=file
         )
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
         summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []

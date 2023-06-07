@@ -54,6 +54,14 @@ abstract class Catalog {
   def listDatabases(): Dataset[Database]
 
   /**
+   * Returns a list of databases (namespaces) which name match the specify pattern and
+   * available within the current catalog.
+   *
+   * @since 3.5.0
+   */
+  def listDatabases(pattern: String): Dataset[Database]
+
+  /**
    * Returns a list of tables/views in the current database (namespace).
    * This includes all temporary views.
    *

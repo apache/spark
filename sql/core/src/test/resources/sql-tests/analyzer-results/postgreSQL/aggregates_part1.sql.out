@@ -509,7 +509,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`o`.`unique1`",
-    "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`hundred`, `i`.`even`, `i`.`four`"
+    "proposal" : "`i`.`unique1`, `i`.`unique2`, `i`.`even`, `i`.`four`, `i`.`odd`"
   },
   "queryContext" : [ {
     "objectType" : "",

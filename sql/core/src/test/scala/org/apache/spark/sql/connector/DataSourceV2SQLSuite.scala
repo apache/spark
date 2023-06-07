@@ -2065,7 +2065,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> "`name`, `age`, `id`, `p`"
+          "proposal" -> "`age`, `id`, `name`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy='abc'",
@@ -2076,7 +2076,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> "`name`, `age`, `id`, `p`"
+          "proposal" -> "`age`, `id`, `name`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy",

@@ -1572,6 +1572,18 @@ class DataFrame:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
+        elif name in [
+            "rdd",
+            "toJSON",
+            "foreach",
+            "foreachPartition",
+            "checkpoint",
+            "localCheckpoint",
+        ]:
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": f"{name}()"},
+            )
         return self[name]
 
     @overload
@@ -1817,18 +1829,10 @@ class DataFrame:
 
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
-    def rdd(self, *args: Any, **kwargs: Any) -> None:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "RDD Support for Spark Connect"},
-        )
-
     def cache(self) -> "DataFrame":
         if self._plan is None:
             raise Exception("Cannot cache on empty plan.")
-        relation = self._plan.plan(self._session.client)
-        self._session.client._analyze(method="persist", relation=relation)
-        return self
+        return self.persist()
 
     cache.__doc__ = PySparkDataFrame.cache.__doc__
 
@@ -1872,18 +1876,6 @@ class DataFrame:
     def is_cached(self) -> bool:
         return self.storageLevel != StorageLevel.NONE
 
-    def foreach(self, *args: Any, **kwargs: Any) -> None:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "foreach()"},
-        )
-
-    def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "foreachPartition()"},
-        )
-
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 
@@ -1906,18 +1898,6 @@ class DataFrame:
                 yield from ArrowTableToRowsConversion.convert(table, schema)
 
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
-
-    def checkpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "checkpoint()"},
-        )
-
-    def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "localCheckpoint()"},
-        )
 
     def to_pandas_on_spark(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -2002,12 +1982,6 @@ class DataFrame:
         return DataStreamWriter(plan=self._plan, session=self._session)
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
-
-    def toJSON(self, *args: Any, **kwargs: Any) -> None:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "toJSON()"},
-        )
 
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None

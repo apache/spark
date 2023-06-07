@@ -18,14 +18,15 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, Literal, MetadataAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, Literal, MetadataAttribute}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Filter, LogicalPlan, Project, UpdateTable, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -74,14 +75,16 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
-    val updatedRowsPlan = buildUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
-    val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
-    val project = Project(operationType +: updatedRowsPlan.output, updatedRowsPlan)
+    val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
+      buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
+    } else {
+      buildUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
+    }
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(project, rowAttrs, rowIdAttrs, metadataAttrs)
-    WriteDelta(writeRelation, cond, project, relation, projections)
+    val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections)
   }
 
   // this method assumes the assignments have been already aligned before
@@ -116,6 +119,41 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    Project(updatedValues ++ originalRowIdValues, plan)
+    val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
+
+    Project(Seq(operationType) ++ updatedValues ++ originalRowIdValues, plan)
+  }
+
+  private def buildDeletesAndInserts(
+      matchedRowsPlan: LogicalPlan,
+      assignments: Seq[Assignment],
+      rowIdAttrs: Seq[Attribute]): Expand = {
+
+    val (metadataAttrs, rowAttrs) = matchedRowsPlan.output.partition { attr =>
+      MetadataAttribute.isValid(attr.metadata)
+    }
+    val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
+    val insertOutput = deltaInsertOutput(assignments.map(_.value), metadataAttrs)
+    val output = buildDeletesAndInsertsOutput(matchedRowsPlan, deleteOutput, insertOutput)
+    Expand(Seq(deleteOutput, insertOutput), output, matchedRowsPlan)
+  }
+
+  private def buildDeletesAndInsertsOutput(
+      child: LogicalPlan,
+      deleteOutput: Seq[Expression],
+      insertOutput: Seq[Expression]): Seq[Attribute] = {
+
+    val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
+    val attrs = operationTypeAttr +: child.output
+
+    // build a correct nullability map for output attributes
+    // an attribute is nullable if at least one output projection may produce null
+    val nullabilityMap = attrs.indices.map { index =>
+      index -> (deleteOutput(index).nullable || insertOutput(index).nullable)
+    }.toMap
+
+    attrs.zipWithIndex.map { case (attr, index) =>
+      AttributeReference(attr.name, attr.dataType, nullabilityMap(index))()
+    }
   }
 }

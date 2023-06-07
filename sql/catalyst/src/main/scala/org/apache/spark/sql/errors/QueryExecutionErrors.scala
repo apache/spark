@@ -2011,7 +2011,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def batchMetadataFileNotFoundError(batchMetadataFile: Path): SparkFileNotFoundException = {
     new SparkFileNotFoundException(
-      errorClass = "_LEGACY_ERROR_TEMP_2206",
+      errorClass = "BATCH_METADATA_NOT_FOUND",
       messageParameters = Map(
         "batchMetadataFile" -> batchMetadataFile.toString()))
   }
