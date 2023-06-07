@@ -21,6 +21,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 object Connect {
+  import org.apache.spark.sql.internal.SQLConf.buildStaticConf
 
   val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
@@ -102,7 +103,8 @@ object Connect {
       .createWithDefault(2048)
 
   val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
-    ConfigBuilder("spark.connect.copyFromLocalToFs.allowDestLocal")
+    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
+      .internal()
       .doc("""
             |Allow `spark.copyFromLocalToFs` destination to be local file system
             | path on spark driver node when
