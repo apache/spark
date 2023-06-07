@@ -877,7 +877,7 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "Cannot write to '<tableName>',"
+      "Cannot write to <tableName>,"
     ],
     "subClass" : {
       "NOT_ENOUGH_DATA_COLUMNS" : {
