@@ -1031,39 +1031,39 @@ class PlanGenerationTestSuite
   }
 
   functionTest("regr_avgx") {
-    fn.regr_avgx("a", "b")
+    fn.regr_avgx(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_avgy") {
-    fn.regr_avgy("a", "b")
+    fn.regr_avgy(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_count") {
-    fn.regr_count("a", "b")
+    fn.regr_count(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_intercept") {
-    fn.regr_intercept("a", "b")
+    fn.regr_intercept(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_r2") {
-    fn.regr_r2("a", "b")
+    fn.regr_r2(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_slope") {
-    fn.regr_slope("a", "b")
+    fn.regr_slope(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_sxx") {
-    fn.regr_sxx("a", "b")
+    fn.regr_sxx(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_sxy") {
-    fn.regr_sxy("a", "b")
+    fn.regr_sxy(fn.col("a"), fn.col("b"))
   }
 
   functionTest("regr_syy") {
-    fn.regr_syy("a", "b")
+    fn.regr_syy(fn.col("a"), fn.col("b"))
   }
 
   functionTest("array") {
