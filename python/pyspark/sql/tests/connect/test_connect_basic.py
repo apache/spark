@@ -19,7 +19,9 @@ import array
 import datetime
 import os
 import unittest
+import random
 import shutil
+import string
 import tempfile
 from collections import defaultdict
 
@@ -624,9 +626,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
 
     def test_streaming_local_relation(self):
-        import random
-        import string
-
         threshold = 1024 * 1024
         with self.sql_conf({"spark.sql.session.localRelationCacheThreshold": threshold}):
             suffix = "abcdef"

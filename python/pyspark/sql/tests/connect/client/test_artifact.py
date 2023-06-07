@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import hashlib
 import shutil
 import tempfile
 import unittest
@@ -295,8 +296,6 @@ class ArtifactTests(ReusedConnectTestCase):
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "Hello world!!")
 
     def test_cache_artifact(self):
-        import hashlib
-
         s = "Hello, World!"
         blob = bytearray(s, "utf-8")
         expected_hash = hashlib.sha256(blob).hexdigest()
