@@ -26,7 +26,10 @@ import javax.ws.rs.core.UriBuilder
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
+
 import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
@@ -159,9 +162,45 @@ class SparkConnectArtifactManager private[connect] {
       }
     }
   }
+
+  private[connect] def uploadArtifactToFs(
+      sessionHolder: SessionHolder,
+      remoteRelativePath: Path,
+      serverLocalStagingPath: Path): Unit = {
+    val hadoopConf = sessionHolder.session.sparkContext.hadoopConfiguration
+    assert(
+      remoteRelativePath.startsWith(
+        SparkConnectArtifactManager.forwardToFSPrefix + File.separator))
+    val destFSPath = new FSPath(
+      Paths
+        .get("/")
+        .resolve(remoteRelativePath.subpath(1, remoteRelativePath.getNameCount))
+        .toString)
+    val localPath = serverLocalStagingPath
+    val fs = destFSPath.getFileSystem(hadoopConf)
+    if (fs.isInstanceOf[LocalFileSystem]) {
+      val allowDestLocalConf =
+        SparkEnv.get.conf.get(CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
+      if (!allowDestLocalConf) {
+        // To avoid security issue, by default,
+        // we don't support uploading file to local file system
+        // destination path, otherwise user is able to overwrite arbitrary file
+        // on spark driver node.
+        // We can temporarily allow the behavior by setting spark config
+        // `spark.connect.copyFromLocalToFs.allowDestLocal`
+        // to `true` when starting spark driver, we should only enable it for testing
+        // purpose.
+        throw new UnsupportedOperationException(
+          "Uploading artifact file to local file system destination path is not supported.")
+      }
+    }
+    fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)
+  }
 }
 
 object SparkConnectArtifactManager {
+
+  val forwardToFSPrefix = "forward_to_fs"
 
   private var _activeArtifactManager: SparkConnectArtifactManager = _
 
