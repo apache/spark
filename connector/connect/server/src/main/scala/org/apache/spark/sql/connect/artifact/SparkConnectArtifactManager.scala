@@ -179,10 +179,9 @@ class SparkConnectArtifactManager private[connect] {
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
-      val allowDestLocalConf = SparkEnv.get.conf.get(
-        CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
-      )
-      if (allowDestLocalConf) {
+      val allowDestLocalConf =
+        SparkEnv.get.conf.get(CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
+      if (!allowDestLocalConf) {
         // To avoid security issue, by default,
         // we don't support uploading file to local file system
         // destination path, otherwise user is able to overwrite arbitrary file
