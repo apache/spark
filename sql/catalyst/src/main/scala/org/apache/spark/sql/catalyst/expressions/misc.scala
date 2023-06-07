@@ -312,8 +312,10 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
+    _FUNC_(expr, key[, mode[, padding[, iv[, aad]]]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
       Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS').
+      Optional initialization vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12 bytes for GCM. If not provided, a random vector will be generated and prepended to the output.
+      Optional additional authenticated data (AAD) is only supported for GCM. If provided for encryption, the identical AAD value must be provided for decryption.
       The default mode is GCM.
   """,
   arguments = """
@@ -324,6 +326,10 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
                Valid modes: ECB, GCM, CBC.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
                   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
+      * iv - Optional initialization vector. Only supported for CBC and GCM modes.
+             Valid values: None or ''. 16-byte array for CBC mode. 12-byte array for GCM mode.
+      * aad - Optional additional authenticated data. Only supported for GCM mode. This can be any free-form input and
+              must be provided for both encryption and decryption.
   """,
   examples = """
     Examples:
@@ -335,6 +341,10 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
        3lmwu+Mw0H3fi5NDvcu9lg==
       > SELECT base64(_FUNC_('Apache Spark', '1234567890abcdef', 'CBC', 'DEFAULT'));
        2NYmDCjgXTbbxGA3/SnJEfFC/JQ7olk2VQWReIAAFKo=
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'CBC', 'DEFAULT', unhex('00000000000000000000000000000000'));
+       AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'GCM', 'DEFAULT', unhex('000000000000000000000000'), 'This is an AAD mixed into the input');
+       AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -342,16 +352,22 @@ case class AesEncrypt(
     input: Expression,
     key: Expression,
     mode: Expression,
-    padding: Expression)
+    padding: Expression,
+    iv: Expression,
+    aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesEncrypt",
-    Seq(input, key, mode, padding),
+    Seq(input, key, mode, padding, iv, aad),
     inputTypes)
 
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
+    this(input, key, mode, padding, iv, Literal(""))
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
+    this(input, key, mode, padding, Literal(""))
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
@@ -359,13 +375,14 @@ case class AesEncrypt(
 
   override def prettyName: String = "aes_encrypt"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, BinaryType, StringType, StringType, BinaryType, BinaryType)
 
-  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+  override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3), newChildren(4), newChildren(5))
   }
 }
 
@@ -378,8 +395,9 @@ case class AesEncrypt(
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
+    _FUNC_(expr, key[, mode[, padding[, aad]]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
       Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS').
+      Optional additional authenticated data (AAD) is only supported for GCM. If provided for encryption, the identical AAD value must be provided for decryption.
       The default mode is GCM.
   """,
   arguments = """
@@ -390,6 +408,8 @@ case class AesEncrypt(
                Valid modes: ECB, GCM, CBC.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
                   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
+      * aad - Optional additional authenticated data. Only supported for GCM mode. This can be any free-form input and
+              must be provided for both encryption and decryption.
   """,
   examples = """
     Examples:
@@ -401,6 +421,10 @@ case class AesEncrypt(
        Spark SQL
       > SELECT _FUNC_(unbase64('2NYmDCjgXTbbxGA3/SnJEfFC/JQ7olk2VQWReIAAFKo='), '1234567890abcdef', 'CBC');
        Apache Spark
+      > SELECT _FUNC_(unbase64('AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg='), 'abcdefghijklmnop12345678ABCDEFGH', 'CBC', 'DEFAULT');
+       Spark
+      > SELECT _FUNC_(unbase64('AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4'), 'abcdefghijklmnop12345678ABCDEFGH', 'GCM', 'DEFAULT', 'This is an AAD mixed into the input');
+       Spark
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -408,37 +432,40 @@ case class AesDecrypt(
     input: Expression,
     key: Expression,
     mode: Expression,
-    padding: Expression)
+    padding: Expression,
+    aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesDecrypt",
-    Seq(input, key, mode, padding),
+    Seq(input, key, mode, padding, aad),
     inputTypes)
 
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
+    this(input, key, mode, padding, Literal(""))
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
     this(input, key, Literal("GCM"))
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(BinaryType, BinaryType, StringType, StringType)
+    Seq(BinaryType, BinaryType, StringType, StringType, BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"
 
-  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+  override def children: Seq[Expression] = Seq(input, key, mode, padding, aad)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3), newChildren(4))
   }
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr, key[, mode[, padding]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
+  usage = "_FUNC_(expr, key[, mode[, padding[, aad]]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
   examples = """
     Examples:
       > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
@@ -454,10 +481,17 @@ case class TryAesDecrypt(
     key: Expression,
     mode: Expression,
     padding: Expression,
+    aad: Expression,
     replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
 
+  def this(input: Expression,
+           key: Expression,
+           mode: Expression,
+           padding: Expression,
+           aad: Expression) =
+    this(input, key, mode, padding, aad, TryEval(AesDecrypt(input, key, mode, padding, aad)))
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
-    this(input, key, mode, padding, TryEval(AesDecrypt(input, key, mode, padding)))
+    this(input, key, mode, padding, Literal(""))
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
@@ -465,7 +499,7 @@ case class TryAesDecrypt(
 
   override def prettyName: String = "try_aes_decrypt"
 
-  override def parameters: Seq[Expression] = Seq(input, key, mode, padding)
+  override def parameters: Seq[Expression] = Seq(input, key, mode, padding, aad)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)

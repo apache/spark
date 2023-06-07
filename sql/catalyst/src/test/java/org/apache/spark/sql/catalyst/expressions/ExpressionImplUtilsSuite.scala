@@ -59,11 +59,27 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       "abcdefghijklmnop12345678ABCDEFGH",
       "9J3iZbIxnmaG+OIA9Amd+A==",
       "ECB"),
+    // Test passing non-null, but empty arrays for IV and AAD
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "9J3iZbIxnmaG+OIA9Amd+A==",
+      "ECB",
+      ivHexOpt = Some(""),
+      aadOpt = Some("")),
     TestCase(
       "Spark",
       "abcdefghijklmnop12345678ABCDEFGH",
       "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93KvhY=",
       "CBC"),
+    // Test passing non-null, but empty arrays for IV and AAD
+    TestCase(
+      "Spark",
+      "abcdefghijklmnop12345678ABCDEFGH",
+      "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93KvhY=",
+      "CBC",
+      ivHexOpt = Some(""),
+      aadOpt = Some("")),
     TestCase(
       "Apache Spark",
       "1234567890abcdef",

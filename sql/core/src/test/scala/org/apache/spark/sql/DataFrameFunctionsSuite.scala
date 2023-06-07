@@ -367,6 +367,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("aes IV test function") {
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val gcmIv = "000000000000000000000000"
+    val encryptedGcm = "AAAAAAAAAAAAAAAAQiYi+sRNYDAOTjdSEcYBFsAWPL1f"
+    val cbcIv = "00000000000000000000000000000000"
+    val encryptedCbc = "AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg="
+    val df1 = Seq("Spark").toDF
+    Seq(
+      (key32, encryptedGcm, "GCM", gcmIv),
+      (key32, encryptedCbc, "CBC", cbcIv)).foreach {
+      case (key, ciphertext, mode, iv) =>
+        checkAnswer(
+          df1.selectExpr(s"cast(aes_decrypt(unbase64('$ciphertext'), " +
+              s"'$key', '$mode', 'DEFAULT') as string)"),
+          Seq(Row("Spark")))
+        checkAnswer(
+          df1.selectExpr(s"cast(aes_decrypt(unbase64('$ciphertext'), " +
+            s"binary('$key'), '$mode', 'DEFAULT') as string)"),
+          Seq(Row("Spark")))
+        checkAnswer(
+          df1.selectExpr(
+            s"base64(aes_encrypt(value, '$key32', '$mode', 'DEFAULT', unhex('$iv')))"),
+          Seq(Row(ciphertext)))
+    }
+  }
+
+  test("aes IV and AAD test function") {
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val gcmIv = "000000000000000000000000"
+    val aad = "This is an AAD mixed into the input"
+    val encryptedGcm = "AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4"
+    val df1 = Seq("Spark").toDF
+    Seq(
+      (key32, encryptedGcm, "GCM", gcmIv, aad)).foreach {
+      case (key, ciphertext, mode, iv, aad) =>
+        checkAnswer(
+          df1.selectExpr(s"cast(aes_decrypt(unbase64('$ciphertext'), " +
+            s"'$key', '$mode', 'DEFAULT', '$aad') as string)"),
+          Seq(Row("Spark")))
+        checkAnswer(
+          df1.selectExpr(s"cast(aes_decrypt(unbase64('$ciphertext'), " +
+            s"binary('$key'), '$mode', 'DEFAULT', '$aad') as string)"),
+          Seq(Row("Spark")))
+        checkAnswer(
+          df1.selectExpr(
+            s"base64(aes_encrypt(value, '$key32', '$mode', 'DEFAULT', unhex('$iv'), '$aad'))"),
+          Seq(Row(ciphertext)))
+    }
+  }
+
   test("misc aes ECB function") {
     val key16 = "abcdefghijklmnop"
     val key24 = "abcdefghijklmnop12345678"
