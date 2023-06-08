@@ -1051,6 +1051,69 @@ def var_pop(col: "ColumnOrName") -> Column:
 var_pop.__doc__ = pysparkfuncs.var_pop.__doc__
 
 
+def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_avgx", y, x)
+
+
+regr_avgx.__doc__ = pysparkfuncs.regr_avgx.__doc__
+
+
+def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_avgy", y, x)
+
+
+regr_avgy.__doc__ = pysparkfuncs.regr_avgy.__doc__
+
+
+def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_count", y, x)
+
+
+regr_count.__doc__ = pysparkfuncs.regr_count.__doc__
+
+
+def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_intercept", y, x)
+
+
+regr_intercept.__doc__ = pysparkfuncs.regr_intercept.__doc__
+
+
+def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_r2", y, x)
+
+
+regr_r2.__doc__ = pysparkfuncs.regr_r2.__doc__
+
+
+def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_slope", y, x)
+
+
+regr_slope.__doc__ = pysparkfuncs.regr_slope.__doc__
+
+
+def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_sxx", y, x)
+
+
+regr_sxx.__doc__ = pysparkfuncs.regr_sxx.__doc__
+
+
+def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_sxy", y, x)
+
+
+regr_sxy.__doc__ = pysparkfuncs.regr_sxy.__doc__
+
+
+def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_syy", y, x)
+
+
+regr_syy.__doc__ = pysparkfuncs.regr_syy.__doc__
+
+
 def var_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_samp", col)
 
@@ -2194,6 +2257,69 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath", xml, path)
+
+
+xpath.__doc__ = pysparkfuncs.xpath.__doc__
+
+
+def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_boolean", xml, path)
+
+
+xpath_boolean.__doc__ = pysparkfuncs.xpath_boolean.__doc__
+
+
+def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_double", xml, path)
+
+
+xpath_double.__doc__ = pysparkfuncs.xpath_double.__doc__
+
+
+def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_number", xml, path)
+
+
+xpath_number.__doc__ = pysparkfuncs.xpath_number.__doc__
+
+
+def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_float", xml, path)
+
+
+xpath_float.__doc__ = pysparkfuncs.xpath_float.__doc__
+
+
+def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_int", xml, path)
+
+
+xpath_int.__doc__ = pysparkfuncs.xpath_int.__doc__
+
+
+def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_long", xml, path)
+
+
+xpath_long.__doc__ = pysparkfuncs.xpath_long.__doc__
+
+
+def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_short", xml, path)
+
+
+xpath_short.__doc__ = pysparkfuncs.xpath_short.__doc__
+
+
+def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_string", xml, path)
+
+
+xpath_string.__doc__ = pysparkfuncs.xpath_string.__doc__
 
 
 def trunc(date: "ColumnOrName", format: str) -> Column:

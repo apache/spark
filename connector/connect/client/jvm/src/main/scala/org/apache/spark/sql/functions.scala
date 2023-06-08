@@ -992,6 +992,88 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = Column.fn("regr_avgx", y, x)
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = Column.fn("regr_avgy", y, x)
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs in a group, where `y` is the
+   * dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = Column.fn("regr_count", y, x)
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line for
+   * non-null pairs in a group, where `y` is the dependent variable and `x` is the independent
+   * variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column = Column.fn("regr_intercept", y, x)
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = Column.fn("regr_r2", y, x)
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column = Column.fn("regr_slope", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = Column.fn("regr_sxx", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = Column.fn("regr_sxy", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4281,6 +4363,93 @@ object functions {
    */
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
+
+  /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(xml: Column, path: Column): Column =
+    Column.fn("xpath", xml, path)
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(xml: Column, path: Column): Column =
+    Column.fn("xpath_boolean", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(xml: Column, path: Column): Column =
+    Column.fn("xpath_double", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(xml: Column, path: Column): Column =
+    Column.fn("xpath_number", xml, path)
+
+  /**
+   * Returns a float value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(xml: Column, path: Column): Column =
+    Column.fn("xpath_float", xml, path)
+
+  /**
+   * Returns an integer value, or the value zero if no match is found, or a match is found but the
+   * value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(xml: Column, path: Column): Column =
+    Column.fn("xpath_int", xml, path)
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found, or a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(xml: Column, path: Column): Column =
+    Column.fn("xpath_long", xml, path)
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found, or a match is found
+   * but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(xml: Column, path: Column): Column =
+    Column.fn("xpath_short", xml, path)
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(xml: Column, path: Column): Column =
+    Column.fn("xpath_string", xml, path)
 
   private def newLambdaVariable(name: String): proto.Expression.UnresolvedNamedLambdaVariable = {
     proto.Expression.UnresolvedNamedLambdaVariable

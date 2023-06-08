@@ -1,0 +1,2 @@
+Aggregate [regrreplacement(if ((isnull(cast(a#0 as double)) OR isnull(b#0))) null else cast(a#0 as double)) AS regr_syy(a, b)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

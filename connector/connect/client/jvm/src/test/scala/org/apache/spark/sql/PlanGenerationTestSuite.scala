@@ -1030,6 +1030,42 @@ class PlanGenerationTestSuite
     fn.var_pop("a")
   }
 
+  functionTest("regr_avgx") {
+    fn.regr_avgx(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_avgy") {
+    fn.regr_avgy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_count") {
+    fn.regr_count(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_intercept") {
+    fn.regr_intercept(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_r2") {
+    fn.regr_r2(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_slope") {
+    fn.regr_slope(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_sxx") {
+    fn.regr_sxx(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_sxy") {
+    fn.regr_sxy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_syy") {
+    fn.regr_syy(fn.col("a"), fn.col("b"))
+  }
+
   functionTest("array") {
     fn.array("a", "a")
   }
@@ -1653,6 +1689,42 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("to_date with format") {
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
+  temporalFunctionTest("xpath") {
+    fn.xpath(fn.col("s"), lit("a/b/text()"))
+  }
+
+  temporalFunctionTest("xpath_boolean") {
+    fn.xpath_boolean(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_double") {
+    fn.xpath_double(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_number") {
+    fn.xpath_number(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_float") {
+    fn.xpath_float(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_int") {
+    fn.xpath_int(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_long") {
+    fn.xpath_long(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_short") {
+    fn.xpath_short(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_string") {
+    fn.xpath_string(fn.col("s"), lit("a/b"))
   }
 
   temporalFunctionTest("unix_date") {

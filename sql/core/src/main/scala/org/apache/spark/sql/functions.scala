@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -1043,6 +1044,89 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = withAggregateFunction { RegrAvgX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = withAggregateFunction { RegrAvgY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = withAggregateFunction { RegrCount(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line
+   * for non-null pairs in a group, where `y` is the dependent variable and
+   * `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column =
+    withAggregateFunction { RegrIntercept(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = withAggregateFunction { RegrR2(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column =
+    withAggregateFunction { RegrSlope(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = withAggregateFunction { RegrSXX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = withAggregateFunction { RegrSXY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = withAggregateFunction { RegrSYY(y.expr, x.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -5285,6 +5369,102 @@ object functions {
   def days(e: Column): Column = withExpr { Days(e.expr) }
 
   /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(x: Column, p: Column): Column = withExpr {
+    XPathList(x.expr, p.expr)
+  }
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(x: Column, p: Column): Column = withExpr {
+    XPathBoolean(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a float value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(x: Column, p: Column): Column = withExpr {
+    XPathFloat(x.expr, p.expr)
+  }
+
+  /**
+   * Returns an integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(x: Column, p: Column): Column = withExpr {
+    XPathInt(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(x: Column, p: Column): Column = withExpr {
+    XPathLong(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(x: Column, p: Column): Column = withExpr {
+    XPathShort(x.expr, p.expr)
+  }
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(x: Column, p: Column): Column = withExpr {
+    XPathString(x.expr, p.expr)
+  }
+
+    /**
    * A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
