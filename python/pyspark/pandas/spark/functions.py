@@ -26,6 +26,9 @@ from pyspark.sql.column import (
     _create_column_from_literal,
 )
 
+# For supporting Spark Connect
+from pyspark.sql.utils import is_remote
+
 
 def product(col: Column, dropna: bool) -> Column:
     sc = SparkContext._active_spark_context
@@ -58,8 +61,19 @@ def mode(col: Column, dropna: bool) -> Column:
 
 
 def covar(col1: Column, col2: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_covar",
+            col1,  # type: ignore[arg-type]
+            col2,  # type: ignore[arg-type]
+            lit(ddof),
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
 
 
 def repeat(col: Column, n: Union[int, Column]) -> Column:
