@@ -732,7 +732,7 @@ jobs:
   connect-maven:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).connect-maven == 'true'
-    name: Test connect modules with Maven
+    name: Test connect modules with Maven using Java ${{ matrix.java }}
     strategy:
       fail-fast: false
       matrix:
@@ -775,7 +775,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - name: Build with Maven
+      - name: Build and Test with Maven
         shell: 'script -q -e -c "bash {0}"'
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
@@ -795,6 +795,18 @@ jobs:
           # ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server
           ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm
           rm -rf ~/.m2/repository/org/apache/spark
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-connect-maven-${{ matrix.java }}
+          path: "**/target/test-reports/*.xml"
+      - name: Upload unit tests log files
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: unit-tests-log-connect-maven-${{ matrix.java }}
+          path: "**/target/unit-tests.log"
 
   scala-212:
     needs: precondition
