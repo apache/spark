@@ -3564,17 +3564,25 @@ def percentile(
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
     >>> df.select(
     ...     percentile("value", [0.25, 0.5, 0.75], lit(1)).alias("quantiles")
-    ... ).printSchema()
-    root
-     |-- quantiles: array (nullable = true)
-     |    |-- element: double (containsNull = false)
+    ... ).show()
+    +--------------------+
+    |           quantiles|
+    +--------------------+
+    |[0.74419914941216...|
+    +--------------------+
+    <BLANKLINE>
 
     >>> df.groupBy("key").agg(
     ...     percentile("value", 0.5, lit(1)).alias("median")
-    ... ).printSchema()
-    root
-     |-- key: long (nullable = true)
-     |-- median: double (nullable = true)
+    ... ).show()
+    +---+--------------------+
+    |key|              median|
+    +---+--------------------+
+    |  0|-0.03449962216667901|
+    |  1|   9.990389751837329|
+    |  2|  19.967859769284075|
+    +---+--------------------+
+    <BLANKLINE>
     """
     sc = get_active_spark_context()
 
