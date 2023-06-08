@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
+import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
@@ -35,6 +36,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
@@ -78,7 +80,7 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) {
+class SparkConnectPlanner(val session: SparkSession) extends Logging {
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -2606,15 +2608,13 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
-        if (command.getAwaitTermination.hasTimeoutMs) {
-          val terminated = query.awaitTermination(command.getAwaitTermination.getTimeoutMs)
-          respBuilder.getAwaitTerminationBuilder
-            .setTerminated(terminated)
+        val timeout = if (command.getAwaitTermination.hasTimeoutMs) {
+          Some(command.getAwaitTermination.getTimeoutMs)
         } else {
-          query.awaitTermination()
-          respBuilder.getAwaitTerminationBuilder
-            .setTerminated(true)
+          None
         }
+        val terminated = handleStreamingAwaitTermination(query, timeout)
+        respBuilder.getAwaitTerminationBuilder.setTerminated(terminated)
 
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
@@ -2626,6 +2626,48 @@ class SparkConnectPlanner(val session: SparkSession) {
         .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
         .build())
+  }
+
+  /**
+   * A helper function to handle streaming awaitTermination(). awaitTermination() can be a long
+   * running command. In this function, we periodically check if the RPC call has been cancelled.
+   * If so, we can stop the operation and release resources early.
+   * @param query
+   *   the query waits to be terminated
+   * @param timeoutOptionMs
+   *   optional. Timeout to wait for termination. If None, no timeout is set
+   * @return
+   *   if the query has terminated
+   */
+  private def handleStreamingAwaitTermination(
+      query: StreamingQuery,
+      timeoutOptionMs: Option[Long]): Boolean = {
+    // How often to check if RPC is cancelled and call awaitTermination()
+    val awaitTerminationIntervalMs = 10000
+    val startTimeMs = System.currentTimeMillis()
+
+    val timeoutTotalMs = timeoutOptionMs.getOrElse(Long.MaxValue)
+    var timeoutLeftMs = timeoutTotalMs
+    require(timeoutLeftMs > 0, "Timeout has to be positive")
+
+    val grpcContext = Context.current
+    while (!grpcContext.isCancelled) {
+      val awaitTimeMs = math.min(awaitTerminationIntervalMs, timeoutLeftMs)
+
+      val terminated = query.awaitTermination(awaitTimeMs)
+      if (terminated) {
+        return true
+      }
+
+      timeoutLeftMs = timeoutTotalMs - (System.currentTimeMillis() - startTimeMs)
+      if (timeoutLeftMs <= 0) {
+        return false
+      }
+    }
+
+    // gRPC is cancelled
+    logWarning("RPC context is cancelled when executing awaitTermination()")
+    throw new StatusRuntimeException(Status.CANCELLED)
   }
 
   private def buildStreamingQueryInstance(query: StreamingQuery): StreamingQueryInstance = {
