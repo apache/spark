@@ -149,8 +149,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       parameters = Map("statement" -> "CREATE VIEW body"),
       context = ExpectedContext(
-        fragment = "SELECT :p AS p",
-        start = 17,
+        fragment = sqlText,
+        start = 0,
         stop = sqlText.length - 1))
   }
 
@@ -164,18 +164,18 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       parameters = Map("statement" -> "CREATE VIEW body"),
       context = ExpectedContext(
-        fragment = "WITH cte(a) AS SELECT (SELECT :p) SELECT a FROM cte",
-        start = 17,
+        fragment = sqlText,
+        start = 0,
         stop = sqlText.length - 1))
   }
 
   test("parameters not allowed in view body - nested WITH and EXIST") {
     val sqlText =
-      """CREATE VIEW v AS
-        | SELECT *
-        |   FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END)
-        |         SELECT a FROM cte)
-        |"""".stripMargin
+      """
+        |CREATE VIEW v AS
+        |SELECT a as a
+        |FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END AS a)
+        |SELECT a FROM cte)""".stripMargin
     val args = Map("p" -> 1)
     checkError(
       exception = intercept[AnalysisException] {
@@ -184,12 +184,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       parameters = Map("statement" -> "CREATE VIEW body"),
       context = ExpectedContext(
-        fragment =
-          """SELECT *
-            |   FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END)
-            |         SELECT a FROM cte)
-            |"""".stripMargin,
-        start = 17,
+        fragment = sqlText,
+        start = 0,
         stop = sqlText.length - 1))
   }
 
