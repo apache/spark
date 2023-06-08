@@ -946,6 +946,34 @@ abstract class AvroSuite
     }
   }
 
+  Seq(
+    "time-millis",
+    "time-micros",
+    "timestamp-micros",
+    "local-timestamp-millis",
+    "local-timestamp-micros"
+  ).foreach { timeLogicalType =>
+    test(s"converting $timeLogicalType type to long in avro") {
+      withTempPath { path =>
+        val df = Seq(100L)
+          .toDF("dt")
+        val avroSchema =
+          s"""
+             |{
+             |  "type" : "record",
+             |  "name" : "test_schema",
+             |  "fields" : [
+             |    {"name": "dt", "type": {"type": "long", "logicalType": "$timeLogicalType"}}
+             |  ]
+             |}""".stripMargin
+        df.write.format("avro").option("avroSchema", avroSchema).save(path.getCanonicalPath)
+        checkAnswer(
+          spark.read.schema(s"dt long").format("avro").load(path.toString),
+          Row(100L))
+      }
+    }
+  }
+
   test("converting some specific sparkSQL types to avro") {
     withTempPath { tempDir =>
       val testSchema = StructType(Seq(

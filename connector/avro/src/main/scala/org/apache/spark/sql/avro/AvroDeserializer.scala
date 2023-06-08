@@ -158,7 +158,7 @@ private[sql] class AvroDeserializer(
         }
       case LONG =>
         (logicalDataType, catalystType) match {
-          case (LongType, LongType) => (updater, ordinal, value) =>
+          case (_, LongType) => (updater, ordinal, value) =>
             updater.setLong(ordinal, value.asInstanceOf[Long])
           case (LongType, TimestampType)
                | (TimestampType, TimestampType)
