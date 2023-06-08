@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
+class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
   override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -324,30 +324,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
         DateTimeUtils.toJavaTimestamp(1471022551949271L),
         DateTimeUtils.toJavaTimestamp(62551949000L)))
     }
-
-  test(s"Upsert existing table") {
-    val df = Seq(
-      (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568), // row unchanged
-      (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678), // updates v1
-      (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680), // updates v1 and v2
-      (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789) // inserts new row
-    ).toDF("id", "ts", "v1", "v2").repartition(10)
-
-    val options = Map("numPartitions" -> "10", "upsert" -> "true", "upsertKeyColumns" -> "id, ts")
-    df.write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, "upsert", new Properties)
-
-    val actual = spark.read.jdbc(jdbcUrl, "upsert", new Properties).collect.toSet
-    val expected = Set(
-      (1, Timestamp.valueOf("1996-01-01 01:23:45"), 1.234, 1.234567),
-      (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568),
-      (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678),
-      (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680),
-      (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789)
-    ).map { case (id, ts, v1, v2) =>
-      Row(Integer.valueOf(id), ts, v1.doubleValue(), v2.doubleValue())
-    }
-    assert(actual === expected)
-  }
 
   test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
     "should be recognized") {
