@@ -2601,9 +2601,12 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
    * A helper function to handle streaming awaitTermination(). awaitTermination() can be a long
    * running command. In this function, we periodically check if the RPC call has been cancelled.
    * If so, we can stop the operation and release resources early.
-   * @param query the query waits to be terminated
-   * @param timeoutOptionMs optional. Timeout to wait for termination. If None, no timeout is set
-   * @return if the query has terminated
+   * @param query
+   *   the query waits to be terminated
+   * @param timeoutOptionMs
+   *   optional. Timeout to wait for termination. If None, no timeout is set
+   * @return
+   *   if the query has terminated
    */
   private def handleStreamingAwaitTermination(
       query: StreamingQuery,
