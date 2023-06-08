@@ -42,7 +42,7 @@ case class SimpleCost(value: Long) extends Cost {
 case class SimpleCostEvaluator(
     forceOptimizeSkewedJoin: Boolean,
     forceOptimizeSkewsInRebalancePartitions: Boolean)
-    extends CostEvaluator {
+  extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
     val numShuffles = plan.collect {
       case s: ShuffleExchangeLike => s

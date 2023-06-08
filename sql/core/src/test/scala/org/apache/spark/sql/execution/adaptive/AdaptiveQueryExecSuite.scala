@@ -2866,19 +2866,19 @@ class AdaptiveQueryExecSuite
           .toDF("c1", "c2").createOrReplaceTempView("v")
 
         def checkPartitionNumber(
-            query: String, skewedPartitionNumber: Int, totalNumber: Int): Unit = {
+            query: String, numSkewedPartition: Int, numPartition: Int): Unit = {
           val (_, adaptive) = runAdaptiveAndVerifyResult(query)
           val read = collect(adaptive) {
             case read: AQEShuffleReadExec => read
           }
-          if (skewedPartitionNumber > 0) {
+          if (numSkewedPartition > 0) {
             assert(read.size == 2)
           } else {
             assert(read.size == 1)
           }
           assert(read.last.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
-            skewedPartitionNumber)
-          assert(read.last.partitionSpecs.size == totalNumber)
+            numSkewedPartition)
+          assert(read.last.partitionSpecs.size == numPartition)
         }
 
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
