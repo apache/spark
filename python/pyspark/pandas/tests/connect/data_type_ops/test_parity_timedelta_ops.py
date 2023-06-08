@@ -34,10 +34,6 @@ class TimedeltaOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    # @unittest.skip("TODO(SPARK-43701): Fix TimedeltaOps.sub to work with Spark Connect.")
-    def test_sub(self):
-        super().test_sub()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_timedelta_ops import *  # noqa: F401
