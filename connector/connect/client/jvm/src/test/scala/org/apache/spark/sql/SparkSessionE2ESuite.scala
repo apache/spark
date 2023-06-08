@@ -27,10 +27,10 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * Warning(SPARK-43648): Please don't import classes that only exist in
- * `spark-connect-client-jvm.jar` into the this class, as it will trigger udf deserialization
- * error during Maven testing.
+ * `spark-connect-client-jvm.jar` into the this class, whether explicit or implicit, as it will
+ * trigger udf deserialization error during Maven testing.
  */
-class SparkSessionCleanRoomE2ESuite extends RemoteSparkSession {
+class SparkSessionE2ESuite extends RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
     val session = spark
