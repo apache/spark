@@ -27,6 +27,8 @@ trait UpsertTests {
 
   import testImplicits._
 
+  def upsertTestOptions: Map[String, String] = Map.empty
+
   test(s"Upsert existing table") { doTestUpsert(true) }
   test(s"Upsert non-existing table") { doTestUpsert(false) }
 
@@ -38,8 +40,12 @@ trait UpsertTests {
       (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789) // inserts new row
     ).toDF("id", "ts", "v1", "v2").repartition(1) // .repartition(10)
 
-    val table = if (tableExists) "upsert" else "new_table"
-    val options = Map("numPartitions" -> "10", "upsert" -> "true", "upsertKeyColumns" -> "id, ts")
+    val table = if (tableExists) "upsert" else "new_upsert_table"
+    val options = upsertTestOptions ++ Map(
+      "numPartitions" -> "10",
+      "upsert" -> "true",
+      "upsertKeyColumns" -> "id, ts"
+    )
     df.write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, table, new Properties)
 
     val actual = spark.read.jdbc(jdbcUrl, table, new Properties).collect.toSet
