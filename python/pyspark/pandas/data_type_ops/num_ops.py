@@ -213,6 +213,22 @@ class NumericOps(DataTypeOps):
             F.abs(operand.spark.column), field=operand._internal.data_fields[0]
         )
 
+    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        result = pyspark_column_op("__eq__")(left, right)
+        if is_remote():
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(False)
+        return result
+
+    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        result = pyspark_column_op("__ne__")(left, right)
+        if is_remote():
+            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+            result = result.fillna(True)
+        return result
+
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         result = pyspark_column_op("__lt__")(left, right)
