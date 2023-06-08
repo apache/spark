@@ -24,9 +24,8 @@ import java.util.Base64
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.{ArrayNode, JsonNodeFactory}
-import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
