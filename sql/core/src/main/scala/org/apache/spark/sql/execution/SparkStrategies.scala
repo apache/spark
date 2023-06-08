@@ -288,6 +288,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM
+              // Build the smaller side unless the join requires a particular build side
+              // (e.g. NO_BROADCAST_AND_REPLICATION hint)
               val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
               val buildSide = requiredBuildSide.getOrElse(getSmallerSide(left, right))
               Seq(joins.BroadcastNestedLoopJoinExec(
@@ -379,6 +381,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM
+              // Build the desired side unless the join requires a particular build side
+              // (e.g. NO_BROADCAST_AND_REPLICATION hint)
               val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
               val buildSide = requiredBuildSide.getOrElse(desiredBuildSide)
               Seq(joins.BroadcastNestedLoopJoinExec(
