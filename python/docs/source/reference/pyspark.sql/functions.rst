@@ -373,3 +373,18 @@ Misc Functions
     hll_sketch_estimate
     hll_union
 
+Xml Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    xpath
+    xpath_boolean
+    xpath_double
+    xpath_float
+    xpath_int
+    xpath_long
+    xpath_number
+    xpath_short
+    xpath_string
+
