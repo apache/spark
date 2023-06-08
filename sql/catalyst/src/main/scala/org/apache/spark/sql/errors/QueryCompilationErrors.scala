@@ -2979,11 +2979,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-  def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
-    val threshold = if (delayThreshold == null) "" else delayThreshold
+  def cannotParseIntervalError(intervalString: String, e: Throwable): Throwable = {
+    val threshold = if (intervalString == null) "" else intervalString
     new AnalysisException(
       errorClass = "CANNOT_PARSE_INTERVAL",
-      messageParameters = Map("delayThreshold" -> threshold),
+      messageParameters = Map("intervalString" -> threshold),
       cause = Some(e))
   }
 
@@ -3119,12 +3119,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("errorMessage" -> errorMessage))
   }
 
-  def invalidViewText(viewText: String, tableName: String): Throwable = {
+  def invalidViewText(viewText: String, viewName: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_VIEW_TEXT",
       messageParameters = Map(
         "viewText" -> viewText,
-        "tableName" -> tableName))
+        "viewName" -> viewName))
   }
 
   def invalidTimeTravelSpecError(): Throwable = {

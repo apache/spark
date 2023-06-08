@@ -729,7 +729,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           sql("SELECT * FROM v")
         },
         errorClass = "INVALID_VIEW_TEXT",
-        parameters = Map("viewText" -> "DROP VIEW v", "tableName" -> "spark_catalog.default.v")
+        parameters = Map("viewText" -> "DROP VIEW v", "viewName" -> "spark_catalog.default.v")
       )
     }
   }

@@ -159,7 +159,7 @@
   },
   "CANNOT_PARSE_INTERVAL" : {
     "message" : [
-      "Unable to parse '<delayThreshold>'. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
+      "Unable to parse '<intervalString>'. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
     ]
   },
   "CANNOT_PARSE_JSON_FIELD" : {
@@ -1495,7 +1495,7 @@
   },
   "INVALID_VIEW_TEXT" : {
     "message" : [
-      "The view <tableName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
+      "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
     ]
   },
   "INVALID_WHERE_CONDITION" : {
@@ -2119,7 +2119,7 @@
   },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
-      "could not resolve `<name>` to a table-valued function. Please make sure that `<name>` is defined as a table-valued function and that all required parameters are provided correctly. If `<name>` is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation."
+      "could not resolve <name> to a table-valued function. Please make sure that `<name>` is defined as a table-valued function and that all required parameters are provided correctly. If `<name>` is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation."
     ]
   },
   "UNRESOLVED_ALL_IN_GROUP_BY" : {
