@@ -2074,6 +2074,286 @@ def var_pop(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the average of the independent variable for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the average of the independent variable for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_avgx("y", "x")).first()
+    Row(regr_avgx(y, x)=0.999)
+    """
+    return _invoke_function_over_columns("regr_avgx", y, x)
+
+
+@try_remote_functions
+def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the average of the dependent variable for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the average of the dependent variable for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_avgy("y", "x")).first()
+    Row(regr_avgy(y, x)=9.980732994136464)
+    """
+    return _invoke_function_over_columns("regr_avgy", y, x)
+
+
+@try_remote_functions
+def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the number of non-null number pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of non-null number pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_count("y", "x")).first()
+    Row(regr_count(y, x)=1000)
+    """
+    return _invoke_function_over_columns("regr_count", y, x)
+
+
+@try_remote_functions
+def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the intercept of the univariate linear regression line
+    for non-null pairs in a group, where `y` is the dependent variable and
+    `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the intercept of the univariate linear regression line for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_intercept("y", "x")).first()
+    Row(regr_intercept(y, x)=-0.04961745990969568)
+    """
+    return _invoke_function_over_columns("regr_intercept", y, x)
+
+
+@try_remote_functions
+def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the coefficient of determination for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the coefficient of determination for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_r2("y", "x")).first()
+    Row(regr_r2(y, x)=0.9851908293645436)
+    """
+    return _invoke_function_over_columns("regr_r2", y, x)
+
+
+@try_remote_functions
+def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the slope of the linear regression line for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the slope of the linear regression line for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_slope("y", "x")).first()
+    Row(regr_slope(y, x)=10.040390844891048)
+    """
+    return _invoke_function_over_columns("regr_slope", y, x)
+
+
+@try_remote_functions
+def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_sxx("y", "x")).first()
+    Row(regr_sxx(y, x)=666.9989999999996)
+    """
+    return _invoke_function_over_columns("regr_sxx", y, x)
+
+
+@try_remote_functions
+def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_sxy("y", "x")).first()
+    Row(regr_sxy(y, x)=6696.93065315148)
+    """
+    return _invoke_function_over_columns("regr_sxy", y, x)
+
+
+@try_remote_functions
+def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs
+    in a group, where `y` is the dependent variable and `x` is the independent variable.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    y : :class:`~pyspark.sql.Column` or str
+        the dependent variable.
+    x : :class:`~pyspark.sql.Column` or str
+        the independent variable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group.
+
+    Examples
+    --------
+    >>> x = (col("id") % 3).alias("x")
+    >>> y = (randn(42) + x * 10).alias("y")
+    >>> df = spark.range(0, 1000, 1, 1).select(x, y)
+    >>> df.select(regr_syy("y", "x")).first()
+    Row(regr_syy(y, x)=68250.53503811295)
+    """
+    return _invoke_function_over_columns("regr_syy", y, x)
+
+
+@try_remote_functions
 def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
@@ -3251,6 +3531,80 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
     """
     return _invoke_function_over_columns("nanvl", col1, col2)
+
+
+@try_remote_functions
+def percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    frequency: Union[Column, int] = 1,
+) -> Column:
+    """Returns the exact percentile(s) of numeric column `expr` at the given percentage(s)
+    with value range in [0.0, 1.0].
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str input column.
+    percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
+        percentage in decimal (must be between 0.0 and 1.0).
+    frequency : :class:`~pyspark.sql.Column` or int is a positive numeric literal which
+        controls frequency.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the exact `percentile` of the numeric column.
+
+    Examples
+    --------
+    >>> key = (col("id") % 3).alias("key")
+    >>> value = (randn(42) + key * 10).alias("value")
+    >>> df = spark.range(0, 1000, 1, 1).select(key, value)
+    >>> df.select(
+    ...     percentile("value", [0.25, 0.5, 0.75], lit(1)).alias("quantiles")
+    ... ).show()
+    +--------------------+
+    |           quantiles|
+    +--------------------+
+    |[0.74419914941216...|
+    +--------------------+
+    <BLANKLINE>
+
+    >>> df.groupBy("key").agg(
+    ...     percentile("value", 0.5, lit(1)).alias("median")
+    ... ).show()
+    +---+--------------------+
+    |key|              median|
+    +---+--------------------+
+    |  0|-0.03449962216667901|
+    |  1|   9.990389751837329|
+    |  2|  19.967859769284075|
+    +---+--------------------+
+    <BLANKLINE>
+    """
+    sc = get_active_spark_context()
+
+    if isinstance(percentage, (list, tuple)):
+        # A local list
+        percentage = _invoke_function(
+            "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
+        )._jc
+    elif isinstance(percentage, Column):
+        # Already a Column
+        percentage = _to_java_column(percentage)
+    else:
+        # Probably scalar
+        percentage = _create_column_from_literal(percentage)
+
+    frequency = (
+        _to_java_column(frequency)
+        if isinstance(frequency, Column)
+        else _create_column_from_literal(frequency)
+    )
+
+    return _invoke_function("percentile", _to_java_column(col), percentage, frequency)
 
 
 @try_remote_functions
@@ -4981,6 +5335,68 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_date", _to_java_column(col), format)
 
 
+@try_remote_functions
+def unix_date(col: "ColumnOrName") -> Column:
+    """Returns the number of days since 1970-01-01.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([('1970-01-02',)], ['t'])
+    >>> df.select(unix_date(to_date(df.t)).alias('n')).collect()
+    [Row(n=1)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("unix_date", col)
+
+
+@try_remote_functions
+def unix_micros(col: "ColumnOrName") -> Column:
+    """Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
+    >>> df.select(unix_micros(to_timestamp(df.t)).alias('n')).collect()
+    [Row(n=1437584400000000)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("unix_micros", col)
+
+
+@try_remote_functions
+def unix_millis(col: "ColumnOrName") -> Column:
+    """Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
+    >>> df.select(unix_millis(to_timestamp(df.t)).alias('n')).collect()
+    [Row(n=1437584400000)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("unix_millis", col)
+
+
+@try_remote_functions
+def unix_seconds(col: "ColumnOrName") -> Column:
+    """Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
+    >>> df.select(unix_seconds(to_timestamp(df.t)).alias('n')).collect()
+    [Row(n=1437584400)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("unix_seconds", col)
+
+
 @overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...
@@ -5031,6 +5447,139 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function_over_columns("to_timestamp", col)
     else:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
+
+
+@try_remote_functions
+def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns a string array of values within the nodes of xml that match the XPath expression.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>',)], ['x'])
+    >>> df.select(xpath(df.x, lit('a/b/text()')).alias('r')).collect()
+    [Row(r=['b1', 'b2', 'b3'])]
+    """
+    return _invoke_function_over_columns("xpath", xml, path)
+
+
+@try_remote_functions
+def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns true if the XPath expression evaluates to true, or if a matching node is found.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b></a>',)], ['x'])
+    >>> df.select(xpath_boolean(df.x, lit('a/b')).alias('r')).collect()
+    [Row(r=True)]
+    """
+    return _invoke_function_over_columns("xpath_boolean", xml, path)
+
+
+@try_remote_functions
+def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns a double value, the value zero if no match is found,
+    or NaN if a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_double(df.x, lit('sum(a/b)')).alias('r')).collect()
+    [Row(r=3.0)]
+    """
+    return _invoke_function_over_columns("xpath_double", xml, path)
+
+
+@try_remote_functions
+def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns a double value, the value zero if no match is found,
+    or NaN if a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_number(df.x, lit('sum(a/b)')).alias('r')).collect()
+    [Row(r=3.0)]
+    """
+    return _invoke_function_over_columns("xpath_number", xml, path)
+
+
+@try_remote_functions
+def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns a float value, the value zero if no match is found,
+    or NaN if a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_float(df.x, lit('sum(a/b)')).alias('r')).collect()
+    [Row(r=3.0)]
+    """
+    return _invoke_function_over_columns("xpath_float", xml, path)
+
+
+@try_remote_functions
+def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns an integer value, or the value zero if no match is found,
+    or a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_int(df.x, lit('sum(a/b)')).alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function_over_columns("xpath_int", xml, path)
+
+
+@try_remote_functions
+def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns a long integer value, or the value zero if no match is found,
+    or a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_long(df.x, lit('sum(a/b)')).alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function_over_columns("xpath_long", xml, path)
+
+
+@try_remote_functions
+def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns a short integer value, or the value zero if no match is found,
+    or a match is found but the value is non-numeric.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
+    >>> df.select(xpath_short(df.x, lit('sum(a/b)')).alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function_over_columns("xpath_short", xml, path)
+
+
+@try_remote_functions
+def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    """
+    Returns the text contents of the first xml node that matches the XPath expression.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('<a><b>b</b><c>cc</c></a>',)], ['x'])
+    >>> df.select(xpath_string(df.x, lit('a/c')).alias('r')).collect()
+    [Row(r='cc')]
+    """
+    return _invoke_function_over_columns("xpath_string", xml, path)
 
 
 @try_remote_functions

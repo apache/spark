@@ -138,6 +138,10 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
     window_time
 
 
@@ -252,8 +256,18 @@ Aggregate Functions
     min
     min_by
     mode
+    percentile
     percentile_approx
     product
+    regr_avgx
+    regr_avgy
+    regr_count
+    regr_intercept
+    regr_r2
+    regr_slope
+    regr_sxx
+    regr_sxy
+    regr_syy
     skewness
     stddev
     stddev_pop
@@ -359,4 +373,19 @@ Misc Functions
     raise_error
     hll_sketch_estimate
     hll_union
+
+Xml Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    xpath
+    xpath_boolean
+    xpath_double
+    xpath_float
+    xpath_int
+    xpath_long
+    xpath_number
+    xpath_short
+    xpath_string
 

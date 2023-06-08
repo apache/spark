@@ -21,6 +21,7 @@ import java.nio.file.Files
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -30,21 +31,23 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
-class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
   // Spark Result
   test("spark result schema") {
@@ -890,6 +893,51 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(message.contains("PARSE_SYNTAX_ERROR"))
   }
 
+  test("Dataset result destructive iterator") {
+    // Helper methods for accessing private field `idxToBatches` from SparkResult
+    val _idxToBatches =
+      PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+
+    def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
+      val idxToBatches = result invokePrivate _idxToBatches()
+
+      // Sort by key to get stable results.
+      idxToBatches.toSeq.sortBy(_._1).map(_._2)
+    }
+
+    val df = spark
+      .range(0, 10, 1, 10)
+      .filter("id > 5 and id < 9")
+
+    df.withResult { result =>
+      try {
+        // build and verify the destructive iterator
+        val iterator = result.destructiveIterator
+        // batches is empty before traversing the result iterator
+        assert(getColumnarBatches(result).isEmpty)
+        var previousBatch: ColumnarBatch = null
+        val buffer = mutable.Buffer.empty[Long]
+        while (iterator.hasNext) {
+          // always having 1 batch, since a columnar batch will be removed and closed after
+          // its data got consumed.
+          val batches = getColumnarBatches(result)
+          assert(batches.size === 1)
+          assert(batches.head != previousBatch)
+          previousBatch = batches.head
+
+          buffer.append(iterator.next())
+        }
+        // Batches should be closed and removed after traversing all the records.
+        assert(getColumnarBatches(result).isEmpty)
+
+        val expectedResult = Seq(6L, 7L, 8L)
+        assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+      } finally {
+        result.close()
+      }
+    }
+  }
+
   test("SparkSession.createDataFrame - large data set") {
     val threshold = 1024 * 1024
     withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
@@ -897,9 +945,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
       val data = Seq.tabulate(count)(i => (i, str))
-      val df = spark.createDataFrame(data)
-      assert(df.count() === count)
-      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+      for (_ <- 0 until 2) {
+        val df = spark.createDataFrame(data)
+        assert(df.count() === count)
+        assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+      }
     }
   }
 

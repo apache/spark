@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -853,6 +854,35 @@ object functions {
   def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr)
+    }
+  }
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(
+      e: Column,
+      percentage: Column,
+      frequency: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr, frequency.expr)
+    }
+  }
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
    * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
    * no more than `percentage` of `col` values is less than the value or equal to that value.
@@ -1043,6 +1073,89 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = withAggregateFunction { RegrAvgX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = withAggregateFunction { RegrAvgY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = withAggregateFunction { RegrCount(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line
+   * for non-null pairs in a group, where `y` is the dependent variable and
+   * `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column =
+    withAggregateFunction { RegrIntercept(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = withAggregateFunction { RegrR2(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column =
+    withAggregateFunction { RegrSlope(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = withAggregateFunction { RegrSXX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = withAggregateFunction { RegrSXY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = withAggregateFunction { RegrSYY(y.expr, x.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -3712,6 +3825,48 @@ object functions {
   }
 
   /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = withExpr {
+    UnixDate(e.expr)
+  }
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = withExpr {
+    UnixMicros(e.expr)
+  }
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = withExpr {
+    UnixMillis(e.expr)
+  }
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = withExpr {
+    UnixSeconds(e.expr)
+  }
+
+  /**
    * Returns date truncated to the unit specified by the format.
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
@@ -5243,6 +5398,102 @@ object functions {
   def days(e: Column): Column = withExpr { Days(e.expr) }
 
   /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(x: Column, p: Column): Column = withExpr {
+    XPathList(x.expr, p.expr)
+  }
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(x: Column, p: Column): Column = withExpr {
+    XPathBoolean(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a float value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(x: Column, p: Column): Column = withExpr {
+    XPathFloat(x.expr, p.expr)
+  }
+
+  /**
+   * Returns an integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(x: Column, p: Column): Column = withExpr {
+    XPathInt(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(x: Column, p: Column): Column = withExpr {
+    XPathLong(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(x: Column, p: Column): Column = withExpr {
+    XPathShort(x.expr, p.expr)
+  }
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(x: Column, p: Column): Column = withExpr {
+    XPathString(x.expr, p.expr)
+  }
+
+    /**
    * A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms

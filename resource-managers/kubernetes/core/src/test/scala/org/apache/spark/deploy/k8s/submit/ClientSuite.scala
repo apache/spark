@@ -181,6 +181,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
     when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
+    when(resourceList.forceConflicts()).thenReturn(resourceList)
+    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference())
     when(namedPods.create()).thenReturn(podWithOwnerReference())
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     val sId = submissionId(kconf.namespace, POD_NAME)
@@ -309,7 +311,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     when(podsWithNamespace.resource(fullExpectedPod(expectedKeyToPaths)))
       .thenReturn(namedPods)
-    when(namedPods.create()).thenReturn(podWithOwnerReference(expectedKeyToPaths))
+    when(namedPods.forceConflicts()).thenReturn(namedPods)
+    when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference(expectedKeyToPaths))
 
     kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))

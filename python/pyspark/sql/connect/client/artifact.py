@@ -39,6 +39,8 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
 ARCHIVE_PREFIX: str = "archives"
+FILE_PREFIX: str = "files"
+FORWARD_TO_FS_PREFIX: str = "forward_to_fs"
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -107,6 +109,10 @@ def new_archive_artifact(file_name: str, storage: LocalData) -> Artifact:
     return _new_artifact(ARCHIVE_PREFIX, "", file_name, storage)
 
 
+def new_file_artifact(file_name: str, storage: LocalData) -> Artifact:
+    return _new_artifact(FILE_PREFIX, "", file_name, storage)
+
+
 def _new_artifact(
     prefix: str, required_suffix: str, file_name: str, storage: LocalData
 ) -> Artifact:
@@ -141,7 +147,9 @@ class ArtifactManager:
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
 
-    def _parse_artifacts(self, path_or_uri: str, pyfile: bool, archive: bool) -> List[Artifact]:
+    def _parse_artifacts(
+        self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
+    ) -> List[Artifact]:
         # Currently only local files with .jar extension is supported.
         parsed = urlparse(path_or_uri)
         # Check if it is a file from the scheme
@@ -180,6 +188,8 @@ class ArtifactManager:
                     name = f"{name}#{parsed.fragment}"
 
                 artifact = new_archive_artifact(name, LocalFile(local_path))
+            elif file:
+                artifact = new_file_artifact(name, LocalFile(local_path))
             elif name.endswith(".jar"):
                 artifact = new_jar_artifact(name, LocalFile(local_path))
             else:
@@ -187,12 +197,27 @@ class ArtifactManager:
             return [artifact]
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
+    def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
+        abs_path: Path = Path(local_path).absolute()
+        # TODO: Support directory path.
+        assert abs_path.is_file(), "local path must be a file path."
+        storage = LocalFile(str(abs_path))
+
+        assert Path(dest_path).is_absolute(), "destination FS path must be an absolute path."
+
+        # The `dest_path` is an absolute path, to add the FORWARD_TO_FS_PREFIX,
+        # we cannot use `os.path.join`
+        artifact_path = FORWARD_TO_FS_PREFIX + dest_path
+        return [Artifact(artifact_path, storage)]
+
     def _create_requests(
-        self, *path: str, pyfile: bool, archive: bool
+        self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
         """Separated for the testing purpose."""
         return self._add_artifacts(
-            chain(*(self._parse_artifacts(p, pyfile=pyfile, archive=archive) for p in path))
+            chain(
+                *(self._parse_artifacts(p, pyfile=pyfile, archive=archive, file=file) for p in path)
+            )
         )
 
     def _retrieve_responses(
@@ -201,20 +226,29 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
-    def add_artifacts(self, *path: str, pyfile: bool, archive: bool) -> None:
-        """
-        Add a single artifact to the session.
-        Currently only local files with .jar extension is supported.
-        """
-        requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
-            *path, pyfile=pyfile, archive=archive
-        )
+    def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]) -> None:
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
         summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
 
         for summary in response.artifacts:
             summaries.append(summary)
             # TODO(SPARK-42658): Handle responses containing CRC failures.
+
+    def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
+        """
+        Add a single artifact to the session.
+        Currently only local files with .jar extension is supported.
+        """
+        requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
+            *path, pyfile=pyfile, archive=archive, file=file
+        )
+        self._request_add_artifacts(requests)
+
+    def _add_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> None:
+        requests: Iterator[proto.AddArtifactsRequest] = self._add_artifacts(
+            self._parse_forward_to_fs_artifacts(local_path, dest_path)
+        )
+        self._request_add_artifacts(requests)
 
     def _add_artifacts(self, artifacts: Iterable[Artifact]) -> Iterator[proto.AddArtifactsRequest]:
         """
