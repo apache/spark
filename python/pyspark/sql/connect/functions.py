@@ -1532,6 +1532,15 @@ def map_zip_with(
 map_zip_with.__doc__ = pysparkfuncs.map_zip_with.__doc__
 
 
+def str_to_map(
+    col1: "ColumnOrName",
+    col2: Optional["ColumnOrName"] = None,
+) -> Column:
+    col2 = lit(col2) if isinstance(col2, str) else col2
+    col3 = lit(col3) if isinstance(col3, str) else col3
+    return _invoke_function_over_columns("str_to_map", col1, col2)
+
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
@@ -1989,6 +1998,30 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
+def to_binary(expr: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_binary", expr, format)
+    else:
+        return _invoke_function_over_columns("to_binary", expr)
+
+
+to_binary.__doc__ = pysparkfuncs.to_binary.__doc__
+
+
+def to_char(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_char", left, right)
+
+
+to_char.__doc__ = pysparkfuncs.to_char.__doc__
+
+
+def to_number(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_number", left, right)
+
+
+to_number.__doc__ = pysparkfuncs.to_number.__doc__
+
+
 # Date/Timestamp functions
 # TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,
@@ -2349,6 +2382,46 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
 
 session_window.__doc__ = pysparkfuncs.session_window.__doc__
+
+
+def to_unix_timestamp(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    timeZoneId: Optional[str] = None,
+) -> Column:
+    if timeZoneId is not None:
+        return _invoke_function("to_unix_timestamp", _to_col(col1), _to_col(col2), lit(timeZoneId))
+    else:
+        return _invoke_function_over_columns("to_unix_timestamp", col1, col2)
+
+
+to_unix_timestamp.__doc__ = pysparkfuncs.to_unix_timestamp.__doc__
+
+
+def to_timestamp_ltz(
+    col1: "ColumnOrName",
+    col2: Optional["ColumnOrName"] = None,
+) -> Column:
+    if col2 is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", col1, col2)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ltz", col1)
+
+
+to_timestamp_ltz.__doc__ = pysparkfuncs.to_timestamp_ltz.__doc__
+
+
+def to_timestamp_ntz(
+    col1: "ColumnOrName",
+    col2: Optional["ColumnOrName"] = None,
+) -> Column:
+    if col2 is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", col1, col2)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ntz", col1)
+
+
+to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__
 
 
 # Partition Transformation Functions

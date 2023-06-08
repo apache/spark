@@ -130,7 +130,10 @@ Datetime Functions
     make_date
     from_unixtime
     unix_timestamp
+    to_unix_timestamp
     to_timestamp
+    to_timestamp_ltz
+    to_timestamp_ntz
     to_date
     trunc
     from_utc_timestamp
@@ -211,6 +214,7 @@ Collection Functions
     map_concat
     from_csv
     schema_of_csv
+    str_to_map
     to_csv
 
 
@@ -333,6 +337,9 @@ String Functions
     substring_index
     overlay
     sentences
+    to_binary
+    to_char
+    to_number
     translate
     trim
     upper

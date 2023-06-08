@@ -1964,6 +1964,34 @@ class PlanGenerationTestSuite
     fn.to_csv(fn.col("d"), Collections.singletonMap("sep", "|"))
   }
 
+  functionTest("str_to_map") {
+    fn.str_to_map(fn.col("g"))
+  }
+
+  functionTest("to_binary") {
+    fn.to_binary(fn.col("g"), lit("utf-8"))
+  }
+
+  functionTest("to_char") {
+    fn.to_char(fn.col("b"), lit("$99.99"))
+  }
+
+  functionTest("to_number") {
+    fn.to_char(fn.col("g"), lit("$99.99"))
+  }
+
+  functionTest("to_timestamp_ltz") {
+    fn.to_timestamp_ltz(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ntz") {
+    fn.to_timestamp_ntz(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("to_unix_timestamp") {
+    fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))

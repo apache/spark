@@ -5672,6 +5672,74 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     return _invoke_function("session_window", time_col, gap_duration)
 
 
+def to_unix_timestamp(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    timeZoneId: Optional[str] = None,
+) -> Column:
+    """
+    Returns the UNIX timestamp of the given time.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
+    >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    [Row(r=1460098800)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if timeZoneId is not None:
+        return _invoke_function(
+            "to_unix_timestamp", _to_java_column(col1), _to_java_column(col2), timeZoneId
+        )
+    else:
+        return _invoke_function("to_unix_timestamp", _to_java_column(col1), _to_java_column(col2))
+
+
+def to_timestamp_ltz(
+    col1: "ColumnOrName",
+    col2: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Parses the `timestamp_str` expression with the `fmt` expression
+    to a timestamp without time zone. Returns null with invalid input.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
+    >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    [Row(r=datetime.datetime(2016, 4, 8, 15, 0))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if col2 is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", col1, col2)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ltz", col1)
+
+
+def to_timestamp_ntz(
+    col1: "ColumnOrName",
+    col2: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Parses the `timestamp_str` expression with the `fmt` expression
+    to a timestamp without time zone. Returns null with invalid input.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
+    >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
+    [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if col2 is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", col1, col2)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ntz", col1)
+
+
 # ---------------------------- misc functions ----------------------------------
 
 
@@ -7227,6 +7295,87 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     [Row(r='1a2s3ae')]
     """
     return _invoke_function("translate", _to_java_column(srcCol), matching, replace)
+
+
+@try_remote_functions
+def to_binary(expr: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
+    """
+    Converts the input `str` to a binary value based on the supplied `fmt`.
+    `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
+    By default, the binary format for conversion is "hex" if `fmt` is omitted.
+    The function returns NULL if at least one of the input parameters is NULL.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("abc",)], ["e"])
+    >>> df.select(to_binary(df.e, lit("utf-8")).alias('r')).collect()
+    [Row(r=bytearray(b'abc'))]
+    """
+    if format is not None:
+        return _invoke_function_over_columns("to_binary", expr, format)
+    else:
+        return _invoke_function_over_columns("to_binary", expr)
+
+
+def to_char(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Convert `numberExpr` to a string based on the `formatExpr`.
+    Throws an exception if the conversion fails. The format can consist of the following
+    characters, case insensitive:
+       '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+         string matches a sequence of digits in the input value, generating a result string of the
+         same length as the corresponding sequence in the format string. The result string is
+         left-padded with zeros if the 0/9 sequence comprises more digits than the matching part of
+         the decimal value, starts with 0, and is before the decimal point. Otherwise, it is
+         padded with spaces.
+       '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+       ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+         a 0 or 9 to the left and right of each grouping separator.
+       '$': Specifies the location of the $ currency sign. This character may only be specified
+         once.
+       'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+         the beginning or end of the format string). Note that 'S' prints '+' for positive values
+         but 'MI' prints a space.
+       'PR': Only allowed at the end of the format string; specifies that the result string will be
+         wrapped by angle brackets if the input value is negative.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(78.12,)], ["e"])
+    >>> df.select(to_char(df.e, lit("$99.99")).alias('r')).collect()
+    [Row(r='$78.12')]
+    """
+    return _invoke_function_over_columns("to_char", left, right)
+
+
+def to_number(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Convert string 'expr' to a number based on the string format 'fmt'.
+    Throws an exception if the conversion fails. The format can consist of the following
+    characters, case insensitive:
+       '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+         string matches a sequence of digits in the input string. If the 0/9 sequence starts with
+         0 and is before the decimal point, it can only match a digit sequence of the same size.
+         Otherwise, if the sequence starts with 9 or is after the decimal point, it can match a
+         digit sequence that has the same or smaller size.
+       '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+       ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+         a 0 or 9 to the left and right of each grouping separator. 'expr' must match the
+         grouping separator relevant for the size of the number.
+       '$': Specifies the location of the $ currency sign. This character may only be specified
+         once.
+       'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+         the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
+       'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
+        negative number with wrapping angled brackets.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("$78.12",)], ["e"])
+    >>> df.select(to_number(df.e, lit("$99.99")).alias('r')).collect()
+    [Row(r=Decimal('78.12'))]
+    """
+    return _invoke_function_over_columns("to_number", left, right)
 
 
 # ---------------------- Collection functions ------------------------------
@@ -9927,6 +10076,26 @@ def map_zip_with(
     [('IT', 48.0), ('SALES', 16.8)]
     """
     return _invoke_higher_order_function("MapZipWith", [col1, col2], [f])
+
+
+def str_to_map(
+    col1: "ColumnOrName",
+    col2: Union["ColumnOrName", str],
+    col3: Union["ColumnOrName", str],
+) -> Column:
+    """
+    Creates a map after splitting the text into key/value pairs using delimiters.
+    Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
+    >>> df.select(str_to_map(df.e, lit(","), lit(":")).alias('r')).collect()
+    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+    """
+    col2 = lit(col2) if isinstance(col2, str) else col2
+    col3 = lit(col3) if isinstance(col3, str) else col3
+    return _invoke_function_over_columns("str_to_map", col1, col2, col3)
 
 
 # ---------------------- Partition transform functions --------------------------------
