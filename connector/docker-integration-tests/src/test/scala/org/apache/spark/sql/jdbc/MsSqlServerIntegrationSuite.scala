@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
+class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
   override val db = new MsSQLServerDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -146,6 +146,14 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
     conn.prepareStatement("""INSERT INTO test_rowversion (myKey, myValue) VALUES (1, 0)""")
       .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE upsert (id INT, ts DATETIME, v1 FLOAT, v2 FLOAT, " +
+      "CONSTRAINT pk_upsert PRIMARY KEY (id, ts))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsert VALUES " +
+      "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
+      "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
+      "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
+      "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
 
   test("Basic test") {
