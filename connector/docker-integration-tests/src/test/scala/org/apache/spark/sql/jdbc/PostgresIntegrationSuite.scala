@@ -200,6 +200,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTes
       "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
 
+  override val upsertTestOptions = Map(
+    "createTableOptions" -> "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
+  )
+
   test("Type mapping for various types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
     val rows = df.collect().sortBy(_.toString())
