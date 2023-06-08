@@ -223,7 +223,7 @@ class StreamingQueryProgress private[spark] (
 }
 
 private[spark] object StreamingQueryProgress {
-  private[spark] val mapper: ObjectMapper with ClassTagExtensions = {
+  private[spark] val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
     ret.registerModule(DefaultScalaModule)
     ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
