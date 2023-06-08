@@ -4683,6 +4683,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     ).observe("my_event", count("*"))
     df1.crossJoin(df1)
   }
+
+  test("SPARK-44007: Unresolved hint cause query failure") {
+    withTable("t0", "t1") {
+      sql("CREATE TABLE t0(c0 bigint) USING PARQUET")
+      sql("CREATE TABLE t1(c1 bigint) USING PARQUET")
+      sql(
+        """
+          |WITH
+          |w0 AS (SELECT * FROM t0),
+          |w1 AS (SELECT * FROM w0 group by c0),
+          |w2 AS (SELECT /*+ userHint(t1) */ c1 FROM t1 ),
+          |w3 AS (
+          |SELECT w2.c1, w0.c0, w1.c0
+          |FROM w2
+          |JOIN w0 on w2.c1 = w0.c0
+          |JOIN w1 on w2.c1 = w1.c0
+          |)
+          |SELECT * FROM w3;
+          |""".stripMargin)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

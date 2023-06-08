@@ -273,6 +273,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Hints", fixedPoint,
       ResolveHints.ResolveJoinStrategyHints,
       ResolveHints.ResolveCoalesceHints),
+    Batch("Remove Unresolved Hints", Once,
+      new ResolveHints.RemoveAllHints),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
@@ -330,8 +332,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
-    Batch("Remove Unresolved Hints", Once,
-      new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -974,7 +974,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case hint: UnresolvedHint => hint
       // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
