@@ -780,6 +780,7 @@ jobs:
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
+          # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
           set -e
           export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
