@@ -89,6 +89,7 @@
     <module>mllib-local</module>
     <module>tools</module>
     <module>streaming</module>
+    <module>sql/api</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
