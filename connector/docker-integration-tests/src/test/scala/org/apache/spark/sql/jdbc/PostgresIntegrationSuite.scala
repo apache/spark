@@ -24,7 +24,7 @@ import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Column, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -38,9 +38,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
-  import testImplicits._
-
+class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.2-alpine")
     override val env = Map(
@@ -331,30 +329,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
         .collect()
       rows.head.toSeq.tail.foreach(c => assert(c.isInstanceOf[java.sql.Timestamp]))
     }
-
-  test(s"Upsert existing table") {
-    val df = Seq(
-      (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568), // row unchanged
-      (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678), // updates v1
-      (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680), // updates v1 and v2
-      (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789) // inserts new row
-    ).toDF("id", "ts", "v1", "v2").repartition(10)
-
-    val options = Map("numPartitions" -> "10", "upsert" -> "true", "upsertKeyColumns" -> "id, ts")
-    df.write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, "upsert", new Properties)
-
-    val actual = spark.read.jdbc(jdbcUrl, "upsert", new Properties).collect.toSet
-    val expected = Set(
-      (1, Timestamp.valueOf("1996-01-01 01:23:45"), 1.234, 1.234567),
-      (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568),
-      (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678),
-      (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680),
-      (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789)
-    ).map { case (id, ts, v1, v2) =>
-      Row(Integer.valueOf(id), ts, v1.doubleValue(), v2.doubleValue())
-    }
-    assert(actual === expected)
-  }
 
   test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
     "should be recognized") {
