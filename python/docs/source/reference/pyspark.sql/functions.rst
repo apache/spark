@@ -256,6 +256,7 @@ Aggregate Functions
     min
     min_by
     mode
+    percentile
     percentile_approx
     product
     regr_avgx

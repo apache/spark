@@ -3534,6 +3534,80 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    frequency: Union[Column, int] = 1,
+) -> Column:
+    """Returns the exact percentile(s) of numeric column `expr` at the given percentage(s)
+    with value range in [0.0, 1.0].
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str input column.
+    percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
+        percentage in decimal (must be between 0.0 and 1.0).
+    frequency : :class:`~pyspark.sql.Column` or int is a positive numeric literal which
+        controls frequency.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the exact `percentile` of the numeric column.
+
+    Examples
+    --------
+    >>> key = (col("id") % 3).alias("key")
+    >>> value = (randn(42) + key * 10).alias("value")
+    >>> df = spark.range(0, 1000, 1, 1).select(key, value)
+    >>> df.select(
+    ...     percentile("value", [0.25, 0.5, 0.75], lit(1)).alias("quantiles")
+    ... ).show()
+    +--------------------+
+    |           quantiles|
+    +--------------------+
+    |[0.74419914941216...|
+    +--------------------+
+    <BLANKLINE>
+
+    >>> df.groupBy("key").agg(
+    ...     percentile("value", 0.5, lit(1)).alias("median")
+    ... ).show()
+    +---+--------------------+
+    |key|              median|
+    +---+--------------------+
+    |  0|-0.03449962216667901|
+    |  1|   9.990389751837329|
+    |  2|  19.967859769284075|
+    +---+--------------------+
+    <BLANKLINE>
+    """
+    sc = get_active_spark_context()
+
+    if isinstance(percentage, (list, tuple)):
+        # A local list
+        percentage = _invoke_function(
+            "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
+        )._jc
+    elif isinstance(percentage, Column):
+        # Already a Column
+        percentage = _to_java_column(percentage)
+    else:
+        # Probably scalar
+        percentage = _create_column_from_literal(percentage)
+
+    frequency = (
+        _to_java_column(frequency)
+        if isinstance(frequency, Column)
+        else _create_column_from_literal(frequency)
+    )
+
+    return _invoke_function("percentile", _to_java_column(col), percentage, frequency)
+
+
+@try_remote_functions
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],

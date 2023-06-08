@@ -967,6 +967,39 @@ def mode(col: "ColumnOrName") -> Column:
 mode.__doc__ = pysparkfuncs.mode.__doc__
 
 
+def percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    frequency: Union[Column, int] = 1,
+) -> Column:
+    if isinstance(percentage, Column):
+        _percentage = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        _percentage = lit(list(percentage))
+    else:
+        # Probably scalar
+        _percentage = lit(percentage)
+
+    if isinstance(frequency, int):
+        _frequency = lit(frequency)
+    elif isinstance(frequency, Column):
+        _frequency = frequency
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INT",
+            message_parameters={
+                "arg_name": "frequency",
+                "arg_type": type(frequency).__name__,
+            },
+        )
+
+    return _invoke_function("percentile", _to_col(col), _percentage, _frequency)
+
+
+percentile.__doc__ = pysparkfuncs.percentile.__doc__
+
+
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
