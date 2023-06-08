@@ -19,7 +19,9 @@ import array
 import datetime
 import os
 import unittest
+import random
 import shutil
+import string
 import tempfile
 from collections import defaultdict
 
@@ -648,6 +650,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.assertEqual(sdf.schema, cdf.schema)
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+    def test_streaming_local_relation(self):
+        threshold = 1024 * 1024
+        with self.sql_conf({"spark.sql.session.localRelationCacheThreshold": threshold}):
+            suffix = "abcdef"
+            letters = string.ascii_lowercase
+            str = "".join(random.choice(letters) for i in range(threshold)) + suffix
+            data = [[0, str], [1, str]]
+            cdf = self.connect.createDataFrame(data, ["a", "b"])
+            self.assert_eq(cdf.count(), len(data))
+            self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
