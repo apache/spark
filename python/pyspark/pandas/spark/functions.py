@@ -64,7 +64,13 @@ def covar(col1: Column, col2: Column, ddof: int) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns("pandas_covar", col1, col2, lit(ddof))
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_covar",
+            col1,  # type: ignore[arg-type]
+            col2,  # type: ignore[arg-type]
+            lit(ddof),
+        )
+
     else:
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
