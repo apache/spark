@@ -854,6 +854,35 @@ object functions {
   def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr)
+    }
+  }
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(
+      e: Column,
+      percentage: Column,
+      frequency: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr, frequency.expr)
+    }
+  }
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
    * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
    * no more than `percentage` of `col` values is less than the value or equal to that value.
