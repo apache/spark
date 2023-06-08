@@ -188,6 +188,16 @@ case object PREFER_SHUFFLE_HASH extends JoinStrategyHint {
 }
 
 /**
+ * An internal hint to prohibit broadcasting and replicating one side of a join. This hint is used
+ * by some rules where broadcasting or replicating a particular side of the join is not permitted,
+ * such as the cardinality check in MERGE operations.
+ */
+case object NO_BROADCAST_AND_REPLICATION extends JoinStrategyHint {
+  override def displayName: String = "no_broadcast_and_replication"
+  override def hintAliases: Set[String] = Set.empty
+}
+
+/**
  * The callback for implementing customized strategies of handling hint errors.
  */
 trait HintErrorHandler {
