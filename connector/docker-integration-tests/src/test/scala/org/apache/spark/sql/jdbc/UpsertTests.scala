@@ -21,13 +21,15 @@ import java.sql.Timestamp
 import java.util.Properties
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.functions.{lit, rand, when}
 
 trait UpsertTests {
   self: DockerJDBCIntegrationSuite =>
 
   import testImplicits._
 
-  def upsertTestOptions: Map[String, String] = Map.empty
+  def createTableOption: String
+  def upsertTestOptions: Map[String, String] = Map("createTableOptions" -> createTableOption)
 
   test(s"Upsert existing table") { doTestUpsert(true) }
   test(s"Upsert non-existing table") { doTestUpsert(false) }
@@ -64,6 +66,52 @@ trait UpsertTests {
       Row(Integer.valueOf(id), ts, v1.doubleValue(), v2.doubleValue())
     }
     assert(actual === expected)
+  }
+
+  test(s"Upsert concurrency") {
+    // create a table with 100k rows
+    val init =
+      spark.range(100000)
+        .withColumn("ts", lit(Timestamp.valueOf("2023-06-07 12:34:56")))
+        .withColumn("v", rand())
+
+    // upsert 100 batches of 100 rows each
+    // run in 32 tasks
+    val patch =
+      spark.range(100)
+        .join(spark.range(100).select(($"id" * 1000).as("offset")))
+        .repartition(32)
+        .select(
+          ($"id" + $"offset").as("id"),
+          lit(Timestamp.valueOf("2023-06-07 12:34:56")).as("ts"),
+          lit(-1.0).as("v")
+        )
+
+    spark.sparkContext.setJobDescription("init")
+    init
+      .write
+      .mode(SaveMode.Overwrite)
+      .option("createTableOptions", createTableOption)
+      .jdbc(jdbcUrl, "new_upsert_table", new Properties)
+
+    spark.sparkContext.setJobDescription("patch")
+    patch
+      .write
+      .mode(SaveMode.Append)
+      .option("upsert", true)
+      .option("upsertKeyColumns", "id, ts")
+      .options(upsertTestOptions)
+      .jdbc(jdbcUrl, "new_upsert_table", new Properties)
+
+    // check result table has 100*100 updated rows
+    val result = spark.read.jdbc(jdbcUrl, "new_upsert_table", new Properties)
+      .select($"id", when($"v" === -1.0, true).otherwise(false).as("patched"))
+      .groupBy($"patched")
+      .count()
+      .sort($"patched")
+      .as[(Boolean, Long)]
+      .collect()
+    assert(result === Seq((false, 90000), (true, 10000)))
   }
 
   test("Upsert null values") {}
