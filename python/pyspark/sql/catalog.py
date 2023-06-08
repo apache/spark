@@ -439,7 +439,9 @@ class Catalog:
             isTemporary=jtable.isTemporary(),
         )
 
-    def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
+    def listFunctions(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Function]:
         """
         Returns a list of functions registered in the specified database.
 
@@ -450,6 +452,11 @@ class Catalog:
         dbName : str
             name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
+        pattern : str
+            The pattern that the function name needs to match.
+
+            .. versionchanged: 3.5.0
+                Adds ``pattern`` argument.
 
         Returns
         -------
@@ -465,10 +472,20 @@ class Catalog:
         --------
         >>> spark.catalog.listFunctions()
         [Function(name=...
+
+        >>> spark.catalog.listFunctions(pattern="to_*")
+        [Function(name=...
+
+        >>> spark.catalog.listFunctions(pattern="*not_existing_func*")
+        []
         """
         if dbName is None:
             dbName = self.currentDatabase()
         iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
+        else:
+            iter = self._jcatalog.listFunctions(dbName, pattern).toLocalIterator()
         functions = []
         while iter.hasNext():
             jfunction = iter.next()

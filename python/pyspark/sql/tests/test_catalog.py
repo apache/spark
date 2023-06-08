@@ -257,6 +257,25 @@ class CatalogTestsMixin:
             self.assertTrue(functions["+"].isTemporary)
             self.assertEqual(functions, functionsDefault)
 
+            functionsWithPattern = dict(
+                (f.name, f) for f in spark.catalog.listFunctions(pattern="to*")
+            )
+            functionsDefaultWithPattern = dict(
+                (f.name, f) for f in spark.catalog.listFunctions("default", "to*")
+            )
+            self.assertTrue(len(functionsWithPattern) > 10)
+            self.assertFalse("+" in functionsWithPattern)
+            self.assertFalse("like" in functionsWithPattern)
+            self.assertFalse("month" in functionsWithPattern)
+            self.assertTrue("to_date" in functionsWithPattern)
+            self.assertTrue("to_timestamp" in functionsWithPattern)
+            self.assertTrue("to_unix_timestamp" in functionsWithPattern)
+            self.assertEqual(functionsWithPattern, functionsDefaultWithPattern)
+            functionsWithPattern = dict(
+                (f.name, f) for f in spark.catalog.listFunctions(pattern="*not_existing_func*")
+            )
+            self.assertTrue(len(functionsWithPattern) == 0)
+
             with self.function("func1", "some_db.func2"):
                 try:
                     spark.udf

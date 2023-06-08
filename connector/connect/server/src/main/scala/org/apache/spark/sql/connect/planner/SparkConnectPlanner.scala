@@ -2721,7 +2721,16 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformListFunctions(getListFunctions: proto.ListFunctions): LogicalPlan = {
     if (getListFunctions.hasDbName) {
-      session.catalog.listFunctions(getListFunctions.getDbName).logicalPlan
+      if (getListFunctions.hasPattern) {
+        session.catalog
+          .listFunctions(getListFunctions.getDbName, getListFunctions.getPattern)
+          .logicalPlan
+      } else {
+        session.catalog.listFunctions(getListFunctions.getDbName).logicalPlan
+      }
+    } else if (getListFunctions.hasPattern) {
+      val currentDatabase = session.catalog.currentDatabase
+      session.catalog.listFunctions(currentDatabase, getListFunctions.getPattern).logicalPlan
     } else {
       session.catalog.listFunctions().logicalPlan
     }
