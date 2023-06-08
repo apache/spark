@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIden
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.PandasCovar
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -1626,6 +1627,11 @@ class SparkConnectPlanner(val session: SparkSession) {
       case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
         Some(DistributedSequenceID())
 
+      case "pandas_covar" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val ddof = extractInteger(children(2), "ddof")
+        Some(PandasCovar(children(0), children(1), ddof).toAggregateExpression(false))
+
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>
         val expr = transformExpression(fun.getArguments(0))
@@ -1684,6 +1690,11 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
     case Literal(bool: Boolean, BooleanType) => bool
     case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
+  }
+
+  private def extractInteger(expr: Expression, field: String): Int = expr match {
+    case Literal(int: Int, IntegerType) => int
+    case other => throw InvalidPlanInput(s"$field should be a literal integer, but got $other")
   }
 
   private def extractString(expr: Expression, field: String): String = expr match {

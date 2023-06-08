@@ -23,12 +23,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 class SeriesParityStatTests(SeriesStatMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
     @unittest.skip(
-        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_cov(self):
-        super().test_cov()
-
-    @unittest.skip(
         "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.mode in Spark Connect."
     )
     def test_mode(self):
