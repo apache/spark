@@ -1089,6 +1089,9 @@ def ceil(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("ceil", col)
 
 
+ceiling = ceil
+
+
 @try_remote_functions
 def cos(col: "ColumnOrName") -> Column:
     """
@@ -1206,6 +1209,22 @@ def csc(col: "ColumnOrName") -> Column:
     Row(CSC(1.57079...)=1.0)
     """
     return _invoke_function_over_columns("csc", col)
+
+
+@try_remote_functions
+def e() -> Column:
+    """Returns Euler's number.
+
+    Examples
+    --------
+    >>> spark.range(1).select(e()).show()
+    +-----------------+
+    |              E()|
+    +-----------------+
+    |2.718281828459045|
+    +-----------------+
+    """
+    return _invoke_function("e")
 
 
 @try_remote_functions
@@ -1402,6 +1421,88 @@ def log1p(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def negative(col: "ColumnOrName") -> Column:
+    """
+    Returns the negative value.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to calculate negative value for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        negative value.
+
+    Examples
+    --------
+    >>> spark.range(3).select(negative("id").alias("n")).show()
+    +---+
+    |  n|
+    +---+
+    |  0|
+    | -1|
+    | -2|
+    +---+
+    """
+    return _invoke_function_over_columns("negative", col)
+
+
+negate = negative
+
+
+@try_remote_functions
+def pi() -> Column:
+    """Returns Pi.
+
+    Examples
+    --------
+    >>> spark.range(1).select(pi()).show()
+    +-----------------+
+    |             PI()|
+    +-----------------+
+    |3.141592653589793|
+    +-----------------+
+    """
+    return _invoke_function("pi")
+
+
+@try_remote_functions
+def positive(col: "ColumnOrName") -> Column:
+    """
+    Returns the value.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input value column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ['v'])
+    >>> df.select(positive("v").alias("p")).show()
+    +---+
+    |  p|
+    +---+
+    | -1|
+    |  0|
+    |  1|
+    +---+
+    """
+    return _invoke_function_over_columns("positive", col)
+
+
+@try_remote_functions
 def rint(col: "ColumnOrName") -> Column:
     """
     Returns the double value that is closest in value to the argument and
@@ -1509,6 +1610,9 @@ def signum(col: "ColumnOrName") -> Column:
     +---------+
     """
     return _invoke_function_over_columns("signum", col)
+
+
+sign = signum
 
 
 @try_remote_functions
@@ -1915,6 +2019,9 @@ def stddev(col: "ColumnOrName") -> Column:
     Row(stddev_samp(id)=1.87082...)
     """
     return _invoke_function_over_columns("stddev", col)
+
+
+std = stddev
 
 
 @try_remote_functions
@@ -2639,6 +2746,9 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     return _invoke_binary_math_function("pow", col1, col2)
 
 
+power = pow
+
+
 @try_remote_functions
 def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
     """
@@ -2685,6 +2795,57 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     +----------+
     """
     return _invoke_binary_math_function("pmod", dividend, divisor)
+
+
+def width_bucket(
+    v: "ColumnOrName",
+    min: "ColumnOrName",
+    max: "ColumnOrName",
+    numBucket: Union["ColumnOrName", int],
+) -> Column:
+    """
+    Returns the bucket number into which the value of this expression would fall
+    after being evaluated. Note that input arguments must follow conditions listed below;
+    otherwise, the method will return null.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    v : str or :class:`~pyspark.sql.Column`
+        value to compute a bucket number in the histogram
+    min : str or :class:`~pyspark.sql.Column`
+        minimum value of the histogram
+    max : str or :class:`~pyspark.sql.Column`
+        maximum value of the histogram
+    numBucket : str, :class:`~pyspark.sql.Column` or int
+        the number of buckets
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the bucket number into which the value would fall after being evaluated
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     (5.3, 0.2, 10.6, 5),
+    ...     (-2.1, 1.3, 3.4, 3),
+    ...     (8.1, 0.0, 5.7, 4),
+    ...     (-0.9, 5.2, 0.5, 2)],
+    ...     ['v', 'min', 'max', 'n'])
+    >>> df.select(width_bucket('v', 'min', 'max', 'n')).show()
+    +----------------------------+
+    |width_bucket(v, min, max, n)|
+    +----------------------------+
+    |                           3|
+    |                           0|
+    |                           5|
+    |                           3|
+    +----------------------------+
+    """
+    numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
+    return _invoke_function_over_columns("width_bucket", v, min, max, numBucket)
 
 
 @try_remote_functions
@@ -4253,6 +4414,35 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
         return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
     else:
         return _invoke_function("log", arg1, _to_java_column(arg2))
+
+
+@try_remote_functions
+def ln(col: "ColumnOrName") -> Column:
+    """Returns the natural logarithm of the argument.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column to calculate logariphm for.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        natural logarithm of given value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(4,)], ['a'])
+    >>> df.select(ln('a')).show()
+    +------------------+
+    |             ln(a)|
+    +------------------+
+    |1.3862943611198906|
+    +------------------+
+    """
+    return _invoke_function_over_columns("ln", col)
 
 
 @try_remote_functions
