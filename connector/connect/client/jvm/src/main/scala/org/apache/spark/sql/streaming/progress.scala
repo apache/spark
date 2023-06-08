@@ -24,19 +24,17 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJValue, safeMapToJValue}
+import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJsonNode, safeMapToJsonNode}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
+import org.apache.spark.sql.streaming.StreamingQueryProgress.{factory, mapper}
 import org.apache.spark.sql.util.ToJsonUtil
 
 /**
@@ -59,10 +57,10 @@ class StateOperatorProgress private[spark] (
     extends Serializable {
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = jsonNode.toString
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = jsonNode.toPrettyString
 
   private[sql] def copy(
       newNumRowsUpdated: Long,
@@ -81,26 +79,26 @@ class StateOperatorProgress private[spark] (
       numStateStoreInstances = numStateStoreInstances,
       customMetrics = customMetrics)
 
-  private[sql] def jsonValue: JValue = {
-    ("operatorName" -> JString(operatorName)) ~
-      ("numRowsTotal" -> JInt(numRowsTotal)) ~
-      ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-      ("allUpdatesTimeMs" -> JInt(allUpdatesTimeMs)) ~
-      ("numRowsRemoved" -> JInt(numRowsRemoved)) ~
-      ("allRemovalsTimeMs" -> JInt(allRemovalsTimeMs)) ~
-      ("commitTimeMs" -> JInt(commitTimeMs)) ~
-      ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
-      ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
-      ("numShufflePartitions" -> JInt(numShufflePartitions)) ~
-      ("numStateStoreInstances" -> JInt(numStateStoreInstances)) ~
-      ("customMetrics" -> {
-        if (!customMetrics.isEmpty) {
-          val keys = customMetrics.keySet.asScala.toSeq.sorted
-          keys.map { k => k -> JInt(customMetrics.get(k).toLong): JObject }.reduce(_ ~ _)
-        } else {
-          JNothing
-        }
-      })
+  private[sql] def jsonNode: JsonNode = {
+    val obj = factory.objectNode()
+    obj.put("operatorName", operatorName)
+    obj.put("numRowsTotal", numRowsTotal)
+    obj.put("numRowsUpdated", numRowsUpdated)
+    obj.put("allUpdatesTimeMs", allUpdatesTimeMs)
+    obj.put("numRowsRemoved", numRowsRemoved)
+    obj.put("allRemovalsTimeMs", allRemovalsTimeMs)
+    obj.put("commitTimeMs", commitTimeMs)
+    obj.put("memoryUsedBytes", memoryUsedBytes)
+    obj.put("numRowsDroppedByWatermark", numRowsDroppedByWatermark)
+    obj.put("numShufflePartitions", numShufflePartitions)
+    obj.put("numStateStoreInstances", numStateStoreInstances)
+    if (!customMetrics.isEmpty) {
+      val metrics = factory.objectNode()
+      val keys = customMetrics.keySet.asScala.toSeq.sorted
+      keys.foreach(k => metrics.put(k, customMetrics.get(k).toLong))
+      obj.set[JsonNode]("customMetrics", metrics)
+    }
+    obj
   }
 
   override def toString: String = prettyJson
@@ -169,40 +167,70 @@ class StreamingQueryProgress private[spark] (
   def processedRowsPerSecond: Double = sources.map(_.processedRowsPerSecond).sum
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = jsonNode.toString
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = jsonNode.toPrettyString
 
   override def toString: String = prettyJson
 
-  private[sql] def jsonValue: JValue = {
-    ("id" -> JString(id.toString)) ~
-      ("runId" -> JString(runId.toString)) ~
-      ("name" -> JString(name)) ~
-      ("timestamp" -> JString(timestamp)) ~
-      ("batchId" -> JInt(batchId)) ~
-      ("numInputRows" -> JInt(numInputRows)) ~
-      ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-      ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
-      ("durationMs" -> safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
-      ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
-      ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
-      ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
-      ("sink" -> sink.jsonValue) ~
-      ("observedMetrics" -> safeMapToJValue[Row](
-        observedMetrics,
-        row => ToJsonUtil.jsonValue(row)))
+  private[sql] def jsonNode: JsonNode = {
+    val obj = factory.objectNode()
+    obj.put("id", id.toString)
+    obj.put("runId", runId.toString)
+    obj.put("name", name)
+    obj.put("timestamp", timestamp)
+    obj.put("batchId", batchId)
+    obj.put("numInputRows", numInputRows)
+    val inputRowsPerSecondNode = safeDoubleToJsonNode(inputRowsPerSecond)
+    if (!inputRowsPerSecondNode.isMissingNode) {
+      obj.set[JsonNode]("inputRowsPerSecond", inputRowsPerSecondNode)
+    }
+    val processedRowsPerSecondNode = safeDoubleToJsonNode(processedRowsPerSecond)
+    if (!processedRowsPerSecondNode.isMissingNode) {
+      obj.set[JsonNode]("processedRowsPerSecond", processedRowsPerSecondNode)
+    }
+
+    val durationMsNode = safeMapToJsonNode[JLong](durationMs, v => factory.numberNode(v.toLong))
+    if (!durationMsNode.isMissingNode) {
+      obj.set[JsonNode]("durationMs", durationMsNode)
+    }
+
+    val eventTimeNode = safeMapToJsonNode[String](eventTime, v => factory.textNode(v))
+    if (!eventTimeNode.isMissingNode) {
+      obj.set[JsonNode]("eventTime", eventTimeNode)
+    }
+
+
+    val stateOperatorsList = stateOperators.map(_.jsonNode).toList.asJava
+    val stateOperatorsArrayNode = factory.arrayNode(stateOperatorsList.size())
+    stateOperatorsArrayNode.addAll(stateOperatorsList)
+    obj.set[JsonNode]("stateOperators", stateOperatorsArrayNode)
+
+    val sourcesList = sources.map(_.jsonNode).toList.asJava
+    val sourcesArrayNode = factory.arrayNode(sourcesList.size)
+    sourcesArrayNode.addAll(sourcesList)
+    obj.set[JsonNode]("sources", sourcesArrayNode)
+
+    obj.set[JsonNode]("sink", sink.jsonNode)
+    val observedMetricsNode =
+      safeMapToJsonNode[Row](observedMetrics, row => ToJsonUtil.jsonNode(row))
+    if (!observedMetricsNode.isMissingNode) {
+      obj.set[JsonNode]("observedMetrics", observedMetricsNode)
+    }
+    obj
   }
 }
 
 private[spark] object StreamingQueryProgress {
-  private val mapper = {
+  private[spark] val mapper: ObjectMapper with ClassTagExtensions = {
     val ret = new ObjectMapper() with ClassTagExtensions
     ret.registerModule(DefaultScalaModule)
     ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     ret
   }
+
+  private[spark] val factory: JsonNodeFactory = JsonNodeFactory.instance
 
   private[spark] def jsonString(progress: StreamingQueryProgress): String =
     mapper.writeValueAsString(progress)
@@ -244,28 +272,39 @@ class SourceProgress protected[spark] (
     extends Serializable {
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = jsonNode.toString
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = jsonNode.toPrettyString
 
   override def toString: String = prettyJson
 
-  private[sql] def jsonValue: JValue = {
-    ("description" -> JString(description)) ~
-      ("startOffset" -> tryParse(startOffset)) ~
-      ("endOffset" -> tryParse(endOffset)) ~
-      ("latestOffset" -> tryParse(latestOffset)) ~
-      ("numInputRows" -> JInt(numInputRows)) ~
-      ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-      ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
-      ("metrics" -> safeMapToJValue[String](metrics, s => JString(s)))
+  private[sql] def jsonNode: JsonNode = {
+    val node = factory.objectNode()
+    node.put("description", description)
+    node.set[JsonNode]("startOffset", tryParseNode(startOffset))
+    node.set[JsonNode]("endOffset", tryParseNode(endOffset))
+    node.set[JsonNode]("latestOffset", tryParseNode(latestOffset))
+    node.put("numInputRows", numInputRows)
+    val inputRowsPerSecondNode = safeDoubleToJsonNode(inputRowsPerSecond)
+    if (!inputRowsPerSecondNode.isMissingNode) {
+      node.set[JsonNode]("inputRowsPerSecond", inputRowsPerSecondNode)
+    }
+    val processedRowsPerSecondNode = safeDoubleToJsonNode(processedRowsPerSecond)
+    if (!processedRowsPerSecondNode.isMissingNode) {
+      node.set[JsonNode]("processedRowsPerSecond", processedRowsPerSecondNode)
+    }
+    val metricsNode = safeMapToJsonNode[String](metrics, s => factory.textNode(s))
+    if (!metricsNode.isMissingNode) {
+      node.set[JsonNode]("metrics", metricsNode)
+    }
+    node
   }
 
-  private def tryParse(json: String) = try {
-    parse(json)
+  private def tryParseNode(json: String): JsonNode = try {
+    mapper.readTree(json)
   } catch {
-    case NonFatal(e) => JString(json)
+    case NonFatal(_) => factory.textNode(json)
   }
 }
 
@@ -293,17 +332,22 @@ class SinkProgress protected[spark] (
   }
 
   /** The compact JSON representation of this progress. */
-  def json: String = compact(render(jsonValue))
+  def json: String = jsonNode.toString
 
   /** The pretty (i.e. indented) JSON representation of this progress. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = jsonNode.toPrettyString
 
   override def toString: String = prettyJson
 
-  private[sql] def jsonValue: JValue = {
-    ("description" -> JString(description)) ~
-      ("numOutputRows" -> JInt(numOutputRows)) ~
-      ("metrics" -> safeMapToJValue[String](metrics, s => JString(s)))
+  private[sql] def jsonNode: JsonNode = {
+    val obj = factory.objectNode()
+    obj.put("description", description)
+    obj.put("numOutputRows", numOutputRows)
+    val metricsNode = safeMapToJsonNode[String](metrics, s => factory.textNode(s))
+    if (!metricsNode.isMissingNode) {
+      obj.set[JsonNode]("metrics", metricsNode)
+    }
+    obj
   }
 }
 
@@ -318,14 +362,20 @@ private[sql] object SinkProgress {
 }
 
 private object SafeJsonSerializer {
-  def safeDoubleToJValue(value: Double): JValue = {
-    if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
+  def safeDoubleToJsonNode(value: Double): JsonNode = {
+    if (value.isNaN || value.isInfinity) {
+      factory.missingNode()
+    } else {
+      factory.numberNode(value)
+    }
   }
 
   /** Convert map to JValue while handling empty maps. Also, this sorts the keys. */
-  def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
-    if (map.isEmpty) return JNothing
+  def safeMapToJsonNode[T](map: ju.Map[String, T], valueToJsonNode: T => JsonNode): JsonNode = {
+    if (map.isEmpty) return factory.missingNode()
     val keys = map.asScala.keySet.toSeq.sorted
-    keys.map { k => k -> valueToJValue(map.get(k)): JObject }.reduce(_ ~ _)
+    val node = factory.objectNode()
+    keys.foreach { k => node.set[JsonNode](k, valueToJsonNode(map.get(k))) }
+    node
   }
 }

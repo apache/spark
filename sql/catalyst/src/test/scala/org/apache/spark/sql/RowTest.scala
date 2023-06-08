@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArraySeq
 
 import org.json4s.JsonAST.{JArray, JObject, JString}
+import org.json4s.jackson.JsonMethods.compact
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -102,7 +103,7 @@ class RowTest extends AnyFunSpec with Matchers {
       val values = ArraySeq("1", "2", "3")
       val row = new GenericRowWithSchema(Array(values), schema)
       val expectedList = JArray(JString("1") :: JString("2") :: JString("3") :: Nil)
-      ToJsonUtil.jsonValue(row) shouldBe new JObject(("list", expectedList) :: Nil)
+      assert(ToJsonUtil.jsonNode(row).toString === compact(JObject(("list", expectedList) :: Nil)))
     }
   }
 
