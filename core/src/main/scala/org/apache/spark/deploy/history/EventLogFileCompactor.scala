@@ -222,12 +222,13 @@ private class CompactedEventLogFileWriter(
     hadoopConf: Configuration)
   extends SingleEventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf) {
 
-  override val shouldCompress = EventLogFileWriter.codecName(originalFilePath).isDefined
+  private val originalCodecName = EventLogFileWriter.codecName(originalFilePath)
+
+  override val shouldCompress = originalCodecName.isDefined
 
   override val compressionCodec =
     if (shouldCompress) {
-      val originalCodecName = EventLogFileWriter.codecName(originalFilePath).getOrElse("")
-      Some(CompressionCodec.createCodec(sparkConf, originalCodecName))
+      Some(CompressionCodec.createCodec(sparkConf, originalCodecName.get))
     } else {
       None
     }
