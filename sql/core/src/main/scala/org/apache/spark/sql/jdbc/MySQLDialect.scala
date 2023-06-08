@@ -178,13 +178,13 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
 
   override def getUpsertStatement(
       tableName: String,
-      columns: Array[String],
+      columns: Array[StructField],
       isCaseSensitive: Boolean,
       options: JDBCOptions): String = {
     val insertColumns = columns.mkString(", ")
     val placeholders = columns.map(_ => "?").mkString(",")
     val upsertKeyColumns = options.upsertKeyColumns.map(quoteIdentifier)
-    val updateColumns = columns.filterNot(upsertKeyColumns.contains)
+    val updateColumns = columns.filterNot(c => upsertKeyColumns.contains(c.name))
     val updateClause =
       updateColumns.map(x => s"$x = VALUES($x)").mkString(", ")
 
