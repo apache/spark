@@ -284,7 +284,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
     }
   }
 
-  test("Use the value of spark.eventLog.compression.codec set by user") {
+  test("SPARK-43991: should follow the event log compress configuration set by user") {
     withTempDir { dir =>
       val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
 
@@ -296,8 +296,10 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
         (1 to 10).map(_ => testEvent): _*)
       val fileToCompact = fileStatuses.head.getPath
 
+      val sparkConf = new SparkConf()
+      sparkConf.set(EVENT_LOG_COMPRESS, false)
       val writer = new CompactedEventLogFileWriter(fileToCompact, "dummy", None,
-        fileToCompact.getParent.toUri, conf, hadoopConf)
+        fileToCompact.getParent.toUri, sparkConf, hadoopConf)
       assert(writer.compressionCodecName === Some("lz4"))
     }
   }
