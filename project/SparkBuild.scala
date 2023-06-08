@@ -58,10 +58,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, _*
+    commonUtils, sqlApi, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils"
+    "tags", "sketch", "kvstore", "common-utils", "sql-api"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
@@ -408,7 +408,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
-      commonUtils
+      commonUtils, sqlApi
     ).contains(x)
   }
 
