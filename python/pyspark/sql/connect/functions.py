@@ -2258,12 +2258,21 @@ def current_date() -> Column:
 
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
 
+curdate = current_date
+
 
 def current_timestamp() -> Column:
     return _invoke_function("current_timestamp")
 
 
 current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
+
+
+def current_timezone() -> Column:
+    return _invoke_function("current_timezone")
+
+
+current_timezone.__doc__ = pysparkfuncs.current_timezone.__doc__
 
 
 def localtimestamp() -> Column:
@@ -2761,6 +2770,33 @@ def hours(col: "ColumnOrName") -> Column:
 hours.__doc__ = pysparkfuncs.hours.__doc__
 
 # Misc Functions
+
+
+def current_catalog() -> Column:
+    return _invoke_function("current_catalog")
+
+
+current_catalog.__doc__ = pysparkfuncs.current_catalog.__doc__
+
+
+def current_database() -> Column:
+    return _invoke_function("current_database")
+
+
+current_database.__doc__ = pysparkfuncs.current_database.__doc__
+
+
+current_schema = current_database
+
+
+def current_user() -> Column:
+    return _invoke_function("current_user")
+
+
+current_user.__doc__ = pysparkfuncs.current_user.__doc__
+
+
+user = current_user
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:

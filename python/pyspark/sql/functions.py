@@ -4874,6 +4874,35 @@ def current_date() -> Column:
     return _invoke_function("current_date")
 
 
+curdate = current_date
+
+
+@try_remote_functions
+def current_timezone() -> Column:
+    """
+    Returns the current session local timezone.
+
+    .. versionadded:: 3.5.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        current session local timezone.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> spark.range(1).select(current_timezone()).show()
+    +-------------------+
+    | current_timezone()|
+    +-------------------+
+    |America/Los_Angeles|
+    +-------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function("current_timezone")
+
+
 @try_remote_functions
 def current_timestamp() -> Column:
     """
@@ -6492,6 +6521,60 @@ def to_timestamp_ntz(
 
 
 # ---------------------------- misc functions ----------------------------------
+
+
+@try_remote_functions
+def current_catalog() -> Column:
+    """Returns the current catalog.
+
+    Examples
+    --------
+    >>> spark.range(1).select(current_catalog()).show()
+    +-----------------+
+    |current_catalog()|
+    +-----------------+
+    |    spark_catalog|
+    +-----------------+
+    """
+    return _invoke_function("current_catalog")
+
+
+@try_remote_functions
+def current_database() -> Column:
+    """Returns the current database.
+
+    Examples
+    --------
+    >>> spark.range(1).select(current_database()).show()
+    +------------------+
+    |current_database()|
+    +------------------+
+    |           default|
+    +------------------+
+    """
+    return _invoke_function("current_database")
+
+
+current_schema = current_database
+
+
+@try_remote_functions
+def current_user() -> Column:
+    """Returns the current database.
+
+    Examples
+    --------
+    >>> spark.range(1).select(current_user()).show() # doctest: +SKIP
+    +--------------+
+    |current_user()|
+    +--------------+
+    | ruifeng.zheng|
+    +--------------+
+    """
+    return _invoke_function("current_user")
+
+
+user = current_user
 
 
 @try_remote_functions

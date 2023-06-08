@@ -2852,6 +2852,38 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = withExpr { CurrentCatalog() }
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = current_database()
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = withExpr { CurrentUser() }
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value
    * as a 32 character hex string.
    *
@@ -3018,6 +3050,14 @@ object functions {
   Column = {
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
   }
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def user(): Column = current_user()
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3693,9 +3733,26 @@ object functions {
    * All calls of current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = current_date()
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column.
+   * All calls of current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 1.5.0
    */
   def current_date(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = withExpr { CurrentTimeZone() }
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column.
