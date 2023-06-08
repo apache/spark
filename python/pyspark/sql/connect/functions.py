@@ -532,6 +532,9 @@ def ceil(col: "ColumnOrName") -> Column:
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
 
 
+ceiling = ceil
+
+
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     return _invoke_function("conv", _to_col(col), lit(fromBase), lit(toBase))
 
@@ -572,6 +575,13 @@ def degrees(col: "ColumnOrName") -> Column:
 
 
 degrees.__doc__ = pysparkfuncs.degrees.__doc__
+
+
+def e() -> Column:
+    return _invoke_function("e")
+
+
+e.__doc__ = pysparkfuncs.e.__doc__
 
 
 def exp(col: "ColumnOrName") -> Column:
@@ -642,6 +652,13 @@ def log1p(col: "ColumnOrName") -> Column:
 log1p.__doc__ = pysparkfuncs.log1p.__doc__
 
 
+def ln(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ln", col)
+
+
+ln.__doc__ = pysparkfuncs.ln.__doc__
+
+
 def log2(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log2", col)
 
@@ -649,11 +666,48 @@ def log2(col: "ColumnOrName") -> Column:
 log2.__doc__ = pysparkfuncs.log2.__doc__
 
 
+def negative(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("negative", col)
+
+
+negative.__doc__ = pysparkfuncs.negative.__doc__
+
+
+negate = negative
+
+
+def pi() -> Column:
+    return _invoke_function("pi")
+
+
+pi.__doc__ = pysparkfuncs.pi.__doc__
+
+
+def positive(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("positive", col)
+
+
+positive.__doc__ = pysparkfuncs.positive.__doc__
+
+
 def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
 pmod.__doc__ = pysparkfuncs.pmod.__doc__
+
+
+def width_bucket(
+    v: "ColumnOrName",
+    min: "ColumnOrName",
+    max: "ColumnOrName",
+    numBucket: Union["ColumnOrName", int],
+) -> Column:
+    numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
+    return _invoke_function_over_columns("width_bucket", v, min, max, numBucket)
+
+
+width_bucket.__doc__ = pysparkfuncs.width_bucket.__doc__
 
 
 def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
@@ -741,6 +795,9 @@ def signum(col: "ColumnOrName") -> Column:
 
 
 signum.__doc__ = pysparkfuncs.signum.__doc__
+
+
+sigh = signum
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -1039,6 +1096,9 @@ def stddev(col: "ColumnOrName") -> Column:
 
 
 stddev.__doc__ = pysparkfuncs.stddev.__doc__
+
+
+std = stddev
 
 
 def stddev_samp(col: "ColumnOrName") -> Column:

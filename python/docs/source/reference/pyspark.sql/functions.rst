@@ -64,11 +64,13 @@ Math Functions
     bin
     cbrt
     ceil
+    ceiling
     conv
     cos
     cosh
     cot
     csc
+    e
     exp
     expm1
     factorial
@@ -76,12 +78,18 @@ Math Functions
     hex
     unhex
     hypot
+    ln
     log
     log10
     log1p
     log2
+    negate
+    negative
+    pi
     pmod
+    positive
     pow
+    power
     rint
     round
     bround
@@ -89,6 +97,7 @@ Math Functions
     shiftleft
     shiftright
     shiftrightunsigned
+    sign
     signum
     sin
     sinh
@@ -98,6 +107,7 @@ Math Functions
     degrees
     toRadians
     radians
+    width_bucket
 
 
 Datetime Functions
@@ -269,6 +279,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    std
     stddev
     stddev_pop
     stddev_samp
