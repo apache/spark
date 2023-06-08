@@ -265,7 +265,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // List built-in functions. We don't need to specify the namespace here as SHOW FUNCTIONS with
     // only system scope does not need to know the catalog and namespace.
-    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), userScope = false, systemScope = true, pattern)
+    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), false, true, pattern)
     sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
       // Built-in functions do not belong to any catalog or namespace. We can only look it up with
       // a single part name.
