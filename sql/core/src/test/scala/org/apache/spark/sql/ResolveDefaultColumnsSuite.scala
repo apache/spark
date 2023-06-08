@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.analysis.{ResolveDefaultColumns, ResolveInlineTables, UnresolvedInlineTable}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
