@@ -5335,7 +5335,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_binary(e: Column, f: Column): Column = withExpr {
+  def to_binary(e: Column, format: Column): Column = withExpr {
     new ToBinary(e.expr, f.expr)
   }
 
@@ -5374,7 +5374,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_char(left: Column, right: Column): Column = withExpr {
+  def to_char(e: Column, format: Column): Column = withExpr {
     ToCharacter(left.expr, right.expr)
   }
 
@@ -5401,7 +5401,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def to_number(left: Column, right: Column): Column = withExpr {
+  def to_number(e: Column, format: Column): Column = withExpr {
     ToNumber(left.expr, right.expr)
   }
 
@@ -5412,7 +5412,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_timestamp_ltz(timestamp_str: Column, fmt: Column): Column = withExpr {
+  def to_timestamp_ltz(timestamp_str: Column, format: Column): Column = withExpr {
     ParseToTimestamp(timestamp_str.expr, Some(fmt.expr), TimestampType)
   }
 
@@ -5434,7 +5434,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_timestamp_ntz(timestamp_str: Column, fmt: Column): Column = withExpr {
+  def to_timestamp_ntz(timestamp_str: Column, format: Column): Column = withExpr {
     ParseToTimestamp(timestamp_str.expr, Some(fmt.expr), TimestampNTZType)
   }
 
@@ -5455,7 +5455,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_unix_timestamp(timeExp: Column, format: Column, timeZoneId: String): Column = withExpr {
+  def to_unix_timestamp(e: Column, format: Column, timeZoneId: String): Column = withExpr {
     ToUnixTimestamp(timeExp.expr, format.expr, Some(timeZoneId))
   }
 
@@ -5465,7 +5465,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def to_unix_timestamp(timeExp: Column, format: Column): Column = withExpr {
+  def to_unix_timestamp(e: Column, format: Column): Column = withExpr {
     new ToUnixTimestamp(timeExp.expr, format.expr)
   }
 

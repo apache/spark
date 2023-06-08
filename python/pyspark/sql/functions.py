@@ -5673,8 +5673,8 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
 
 def to_unix_timestamp(
-    col1: "ColumnOrName",
-    col2: "ColumnOrName",
+    col: "ColumnOrName",
+    format: "ColumnOrName",
     timeZoneId: Optional[str] = None,
 ) -> Column:
     """
@@ -7298,7 +7298,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
 
 @try_remote_functions
-def to_binary(expr: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
+def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
     """
     Converts the input `str` to a binary value based on the supplied `fmt`.
     `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
@@ -7317,7 +7317,7 @@ def to_binary(expr: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
         return _invoke_function_over_columns("to_binary", expr)
 
 
-def to_char(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
     Convert `numberExpr` to a string based on the `formatExpr`.
     Throws an exception if the conversion fails. The format can consist of the following
@@ -7348,7 +7348,7 @@ def to_char(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("to_char", left, right)
 
 
-def to_number(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
     Convert string 'expr' to a number based on the string format 'fmt'.
     Throws an exception if the conversion fails. The format can consist of the following
