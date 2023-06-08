@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.connector.IdentifierImpl;
 
 /**
  * Identifies an object in a catalog.
