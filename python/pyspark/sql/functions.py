@@ -11178,22 +11178,26 @@ def udtf(
 
     Examples
     --------
-    Implement the UDTF class.
+    Implement the UDTF class
+
     >>> class TestUDTF:
     ...     def eval(self, *args: Any):
     ...         yield "hello", "world"
 
     Create the UDTF
+
     >>> from pyspark.sql.functions import udtf
     >>> test_udtf = udtf(TestUDTF, returnType="c1: string, c2: string")
 
     Create the UDTF using the decorator
+
     >>> @udtf(returnType="c1: int, c2: int")
     ... class PlusOne:
     ...     def eval(self, x: int):
     ...         yield x, x + 1
 
     Invoke the UDTF
+
     >>> test_udtf().show()
     +-----+-----+
     |   c1|   c2|
@@ -11202,6 +11206,7 @@ def udtf(
     +-----+-----+
 
     Invoke the UDTF with parameters
+
     >>> from pyspark.sql.functions import lit
     >>> PlusOne(lit(1)).show()
     +---+---+
@@ -11212,7 +11217,7 @@ def udtf(
 
     Notes
     -----
-    User-defined table functions are considered deterministic by default.
+    User-defined table functions (UDTFs) are considered deterministic by default.
     Use `asNondeterministic()` to mark a function as non-deterministic. E.g.:
 
     >>> import random
@@ -11220,6 +11225,17 @@ def udtf(
     ...     def eval(self, a: int):
     ...         yield a * int(random.random() * 100),
     >>> random_udtf = udtf(RandomUDTF, returnType="r: int").asNondeterministic()
+
+    Use "yield" to produce one row for the UDTF result relation as many times
+    as needed. In the context of a lateral join, each such result row will be
+    associated with the most recent input row consumed from the "eval" method.
+    Or, use "return" to produce multiple rows for the UDTF result relation at
+    once.
+
+    >>> class TestUDTF:
+    ...     def eval(self, a: int):
+    ...         return [(a, a + 1), (a, a + 2)]
+    >>> test_udtf = udtf(TestUDTF, returnType="x: int, y: int")
 
     User-defined table functions are considered opaque to the optimizer by default.
     As a result, operations like filters from WHERE clauses or limits from

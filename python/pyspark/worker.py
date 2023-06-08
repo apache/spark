@@ -64,7 +64,7 @@ from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -463,28 +463,40 @@ def assign_cols_by_name(runner_conf):
 def read_udtf(pickleSer, infile, eval_type):
     num_udtfs = read_int(infile)
     if num_udtfs != 1:
-        raise RuntimeError("Got more than 1 UDTF")
+        raise PySparkValueError(f"Unexpected number of UDTFs. Expected 1 but got {num_udtfs}.")
 
     # See `PythonUDFRunner.writeUDFs`.
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for _ in range(num_arg)]
     num_chained_funcs = read_int(infile)
     if num_chained_funcs != 1:
-        raise RuntimeError("Got more than 1 chained UDTF")
+        raise PySparkValueError(
+            f"Unexpected number of chained UDTFs. Expected 1 but got {num_chained_funcs}."
+        )
 
     handler, return_type = read_command(pickleSer, infile)
     if not isinstance(handler, type):
-        raise RuntimeError(f"UDTF handler must be a class, but got {type(handler)}.")
+        raise PySparkRuntimeError(
+            f"Invalid UDTF handler type. Expected a class (type 'type'), but "
+            f"got an instance of {type(handler).__name__}."
+        )
 
     # Instantiate the UDTF class.
     try:
         udtf = handler()
     except Exception as e:
-        raise RuntimeError(f"Failed to init the UDTF handler: {str(e)}") from None
+        raise PySparkRuntimeError(
+            f"User defined table function encountered an error in "
+            f"the '__init__' method: {str(e)}"
+        )
 
     # Validate the UDTF
     if not hasattr(udtf, "eval"):
-        raise RuntimeError("Python UDTF must implement the eval method.")
+        raise PySparkRuntimeError(
+            "Failed to execute the user defined table function because it has not "
+            "implemented the 'eval' method. Please add the 'eval' method and try "
+            "the query again."
+        )
 
     # Wrap the UDTF and convert the results.
     def wrap_udtf(f, return_type):
@@ -514,13 +526,14 @@ def read_udtf(pickleSer, infile, eval_type):
                 try:
                     yield tuple(terminate())
                 except BaseException as e:
-                    raise RuntimeError(
-                        f"Failed to terminate the user defined table function: {str(e)}"
-                    ) from None
+                    raise PySparkRuntimeError(
+                        f"User defined table function encountered an error in "
+                        f"the 'terminate' method: {str(e)}"
+                    )
 
     ser = BatchedSerializer(CPickleSerializer(), 100)
 
-    return udtf, func, None, ser, ser
+    return func, None, ser, ser
 
 
 def read_udfs(pickleSer, infile, eval_type):
@@ -924,11 +937,10 @@ def main(infile, outfile):
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
-        udtf = None
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         elif eval_type == PythonEvalType.SQL_TABLE_UDF:
-            udtf, func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
+            func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 
@@ -947,16 +959,6 @@ def main(infile, outfile):
             profiler.profile(process)
         else:
             process()
-
-        if eval_type == PythonEvalType.SQL_TABLE_UDF:
-            assert udtf is not None
-            # Terminate the UDTF handler.
-            if hasattr(udtf, "terminate"):
-                try:
-                    # TODO: allow terminate to yield more rows.
-                    udtf.terminate()
-                except BaseException as e:
-                    raise RuntimeError(f"Failed to terminate UDTF: {str(e)}") from None
 
         # Reset task context to None. This is a guard code to avoid residual context when worker
         # reuse.

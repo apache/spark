@@ -130,6 +130,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 yield a
 
         func = udtf(TestUDTF, returnType="a: int")
+        # TODO(SPARK-44005): improve this error message
         with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
             func(lit(1)).collect()
 
@@ -139,6 +140,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 return (a,)
 
         func = udtf(TestUDTF, returnType="a: int")
+        # TODO(SPARK-44005): improve this error message
         with self.assertRaisesRegex(PythonException, "Unexpected tuple 1 with StructType"):
             func(lit(1)).collect()
 
@@ -183,6 +185,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             def eval(self, a: int):
                 yield
 
+        # TODO(SPARK-43967): Support Python UDTFs with empty return values
         with self.assertRaisesRegex(Py4JJavaError, "java.lang.NullPointerException"):
             TestUDTF(lit(1)).collect()
 
@@ -211,7 +214,24 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         df = self.spark.sql("SELECT * FROM testUDTF(null)")
         self.assertEqual(df.collect(), [Row(a=None)])
 
+    def test_udtf_with_wrong_num_input(self):
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        with self.assertRaisesRegex(
+            PythonException, r"eval\(\) missing 1 required positional argument: 'a'"
+        ):
+            TestUDTF().collect()
+
+        with self.assertRaisesRegex(
+            PythonException, r"eval\(\) takes 2 positional arguments but 3 were given"
+        ):
+            TestUDTF(lit(1), lit(2)).collect()
+
     def test_udtf_with_wrong_num_output(self):
+        # TODO(SPARK-43968): check this during compile time instead of runtime
         err_msg = (
             "java.lang.IllegalStateException: Input row doesn't have expected number of "
             + "values required by the schema."
@@ -295,7 +315,9 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 raise ValueError("terminate error")
 
         with self.assertRaisesRegex(
-            PythonException, "Failed to terminate the user defined table function: terminate error"
+            PythonException,
+            "User defined table function encountered an error in the 'terminate' "
+            "method: terminate error",
         ):
             TestUDTF(lit(1)).collect()
 
@@ -329,7 +351,12 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             def run(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(PythonException, "Python UDTF must implement the eval method"):
+        with self.assertRaisesRegex(
+            PythonException,
+            "Failed to execute the user defined table function because it has not "
+            "implemented the 'eval' method. Please add the 'eval' method and try the "
+            "query again.",
+        ):
             TestUDTF(lit(1)).collect()
 
     def test_udtf_with_no_handler_class(self):

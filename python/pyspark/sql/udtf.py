@@ -22,6 +22,7 @@ from typing import Type, TYPE_CHECKING, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.column import _to_java_column, _to_seq
 from pyspark.sql.types import StructType, _parse_datatype_string
 from pyspark.sql.udf import _wrap_function
@@ -68,14 +69,15 @@ class UserDefinedTableFunction:
         name: Optional[str] = None,
         deterministic: bool = True,
     ):
+
         if not isinstance(func, type):
-            raise TypeError(
-                f"Invalid user-defined table function: the function handler "
-                f"must be a class, but got {type(func)}."
+            raise PySparkTypeError(
+                f"Invalid user defined table function: the function handler "
+                f"must be a class, but got {type(func).__name__}. Please provide "
+                "a class as the handler."
             )
 
         # TODO(SPARK-43968): add more compile time checks for UDTFs
-
         self.func = func
         self._returnType = returnType
         self._returnType_placeholder: Optional[StructType] = None
@@ -95,9 +97,11 @@ class UserDefinedTableFunction:
                 assert isinstance(self._returnType, str)
                 parsed = _parse_datatype_string(self._returnType)
                 if not isinstance(parsed, StructType):
-                    raise TypeError(
-                        f"Invalid function return type string: {self._returnType}. "
-                        f"The return type of a UDTF must be a struct type."
+                    raise PySparkTypeError(
+                        f"Invalid return type for the user defined table function "
+                        f"'{self._name}': {self._returnType}. The return type of a "
+                        f"UDTF must be a 'StructType'. Please ensure the return "
+                        "type is a correctly formatted 'StructType' string."
                     )
                 self._returnType_placeholder = parsed
         return self._returnType_placeholder
@@ -164,14 +168,15 @@ class UDTFRegistration:
 
         Parameters
         ----------
-        name : str,
-            name of the user-defined table function in SQL statements.
-        f : function, :meth:`pyspark.sql.functions.udtf` a user-defined table function.
+        name : str
+            The name of the user-defined table function in SQL statements.
+        f : function or :meth:`pyspark.sql.functions.udtf`
+            The user-defined table function.
 
         Returns
         -------
         function
-            a user-defined table function
+            The registered user-defined table function.
 
         Notes
         -----
@@ -193,6 +198,7 @@ class UDTFRegistration:
         [Row(c1=1, c2=2)]
 
         Use it with lateral join
+
         >>> spark.sql("SELECT * FROM VALUES (0, 1), (1, 2) t(x, y), LATERAL plus_one(x)").collect()
         [Row(x=0, y=1, c1=0, c2=1), Row(x=1, y=2, c1=1, c2=2)]
         """
