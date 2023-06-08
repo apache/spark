@@ -211,6 +211,13 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       spark.catalog.getFunction(notExistsFunction)
     }.getMessage
     assert(message.contains("UNRESOLVED_ROUTINE"))
+
+    val functionsWithPattern1 = spark.catalog.listFunctions(dbName, "to*").collect()
+    assert(functionsWithPattern1.nonEmpty)
+    assert(functionsWithPattern1.exists(f => f.name == "to_date"))
+    val functionsWithPattern2 =
+      spark.catalog.listFunctions(dbName, "*not_existing_func*").collect()
+    assert(functionsWithPattern2.isEmpty)
   }
 
   test("recoverPartitions") {
