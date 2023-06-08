@@ -301,6 +301,10 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-42290: NotEnoughMemory error can't be create") {
+    QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(new OutOfMemoryError(), Seq())
+  }
+
   test("UNSUPPORTED_FEATURE - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
