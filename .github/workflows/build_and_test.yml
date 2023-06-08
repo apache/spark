@@ -86,7 +86,7 @@ jobs:
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build', 'scala-212', and 'java-11-17' are always true for now.
+          # 'build', 'scala-213', and 'java-11-17' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
@@ -95,9 +95,8 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"scala-212\": \"true\",
+              \"scala-213\": \"true\",
               \"java-11-17\": \"true\",
-              \"connect-maven\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"breaking-changes-buf\" : \"true\",
@@ -729,89 +728,10 @@ jobs:
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
-  connect-maven:
+  scala-213:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).connect-maven == 'true'
-    name: Test connect modules with Maven using Java ${{ matrix.java }}
-    strategy:
-      fail-fast: false
-      matrix:
-        java:
-          - ${{ inputs.java }}
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Spark repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          repository: apache/spark
-          ref: ${{ inputs.branch }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-      - name: Cache Scala, SBT and Maven
-        uses: actions/cache@v3
-        with:
-          path: |
-            build/apache-maven-*
-            build/scala-*
-            build/*.jar
-            ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-          restore-keys: |
-            build-
-      - name: Cache Maven local repository
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            java${{ matrix.java }}-maven-
-      - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: ${{ matrix.java }}
-      - name: Build and Test with Maven
-        shell: 'script -q -e -c "bash {0}"'
-        run: |
-          # Fix for TTY related issues when launching the Ammonite REPL in tests.
-          export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
-          export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-          export MAVEN_CLI_OPTS="--no-transfer-progress"
-          export JAVA_VERSION=${{ matrix.java }}
-          # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-          # 1. Test with -Phive
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -Phive
-          # TODO(SPARK-43989): Enable connect server module testing after resolving SPARK-43646
-          # ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server -Phive
-          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm -Phive
-          # 2. Test without -Phive
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl assembly
-          # TODO(SPARK-43989): Enable connect server module testing after resolving SPARK-43646
-          # ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/server
-          ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} test -pl connector/connect/client/jvm
-          rm -rf ~/.m2/repository/org/apache/spark
-      - name: Upload test results to report
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-results-connect-maven-${{ matrix.java }}
-          path: "**/target/test-reports/*.xml"
-      - name: Upload unit tests log files
-        if: failure()
-        uses: actions/upload-artifact@v3
-        with:
-          name: unit-tests-log-connect-maven-${{ matrix.java }}
-          path: "**/target/unit-tests.log"
-
-  scala-212:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).scala-212 == 'true'
-    name: Scala 2.12 build with SBT
+    if: fromJson(needs.precondition.outputs.required).scala-213 == 'true'
+    name: Scala 2.13 build with SBT
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout Spark repository
@@ -841,9 +761,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/coursier
-        key: scala-212-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          scala-212-coursier-
+          scala-213-coursier-
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
@@ -851,8 +771,8 @@ jobs:
         java-version: 8
     - name: Build with SBT
       run: |
-        ./dev/change-scala-version.sh 2.12
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.12 compile Test/compile
+        ./dev/change-scala-version.sh 2.13
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile Test/compile
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
