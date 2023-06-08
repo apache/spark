@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{ByteString, Any => ProtoAny}
+import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
