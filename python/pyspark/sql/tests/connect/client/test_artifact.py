@@ -33,9 +33,7 @@ class ArtifactTests(ReusedConnectTestCase):
     def setUpClass(cls):
         super(ArtifactTests, cls).setUpClass()
         cls.artifact_manager: ArtifactManager = cls.spark._client._artifact_manager
-        cls.base_resource_dir = os.path.join(
-            SPARK_HOME, "connector", "connect", "common", "src", "test", "resources"
-        )
+        cls.base_resource_dir = os.path.join(SPARK_HOME, "data")
         cls.artifact_file_path = os.path.join(
             cls.base_resource_dir,
             "artifact-tests",
