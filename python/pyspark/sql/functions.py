@@ -7700,6 +7700,183 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 
 
 @try_remote_functions
+def rlike(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
+    r"""Returns true if `str` matches a Java regex, or false otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if `str` matches a Java regex, or false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "pattern"])
+    >>> df.select(rlike('str', r'(\d+)').alias('d')).collect()
+    [Row(d=True)]
+    >>> df.select(rlike('str', r'\d{2}b').alias('d')).collect()
+    [Row(d=False)]
+    >>> df.select(rlike("str", col("pattern")).alias('d')).collect()
+    [Row(d=True)]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+
+    return _invoke_function("rlike", _to_java_column(string), _pattern)
+
+
+@try_remote_functions
+def regexp(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
+    r"""Returns true if `str` matches a Java regex, or false otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if `str` matches a Java regex, or false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "pattern"])
+    >>> df.select(regexp('str', r'(\d+)').alias('d')).collect()
+    [Row(d=True)]
+    >>> df.select(regexp('str', r'\d{2}b').alias('d')).collect()
+    [Row(d=False)]
+    >>> df.select(regexp("str", col("pattern")).alias('d')).collect()
+    [Row(d=True)]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+
+    return _invoke_function("regexp", _to_java_column(string), _pattern)
+
+
+@try_remote_functions
+def regexp_like(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
+    r"""Returns true if `str` matches a Java regex, or false otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if `str` matches a Java regex, or false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("1a 2b 14m", r"(\d+)")], ["str", "pattern"])
+    >>> df.select(regexp_like('str', r'(\d+)').alias('d')).collect()
+    [Row(d=True)]
+    >>> df.select(regexp_like('str', r'\d{2}b').alias('d')).collect()
+    [Row(d=False)]
+    >>> df.select(regexp_like("str", col("pattern")).alias('d')).collect()
+    [Row(d=True)]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+
+    return _invoke_function("regexp_like", _to_java_column(string), _pattern)
+
+
+@try_remote_functions
+def regexp_count(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
+    r"""Returns a count of the number of times that a Java regex pattern is matched
+    in the string `str`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of times that a Java regex pattern is matched in the string.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "pattern"])
+    >>> df.select(regexp_count('str', r'\d+').alias('d')).collect()
+    [Row(d=3)]
+    >>> df.select(regexp_count('str', r'mmm').alias('d')).collect()
+    [Row(d=0)]
+    >>> df.select(regexp_count("str", col("pattern")).alias('d')).collect()
+    [Row(d=3)]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+
+    return _invoke_function("regexp_count", _to_java_column(string), _pattern)
+
+
+@try_remote_functions
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     r"""Extract a specific group matched by a Java regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
@@ -7736,6 +7913,71 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     [Row(d='')]
     """
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
+
+
+@try_remote_functions
+def regexp_extract_all(
+    string: "ColumnOrName", pattern: Union[str, Column], idx: Optional[Union[int, Column]] = None
+) -> Column:
+    r"""Extract all strings in the `str` that match a Java regex
+    and corresponding to the regex group index.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+    idx : int
+        matched group id.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        all strings in the `str` that match a Java regex and corresponding to the regex group index.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("100-200, 300-400", r"(\d+)-(\d+)")], ["str", "pattern"])
+    >>> df.select(regexp_extract_all('str', r'(\d+)-(\d+)').alias('d')).collect()
+    [Row(d=['100', '300'])]
+    >>> df.select(regexp_extract_all('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
+    [Row(d=['100', '300'])]
+    >>> df.select(regexp_extract_all('str', r'(\d+)-(\d+)', 2).alias('d')).collect()
+    [Row(d=['200', '400'])]
+    >>> df.select(regexp_extract_all('str', col("pattern")).alias('d')).collect()
+    [Row(d=['100', '300'])]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+    if idx is None:
+        return _invoke_function("regexp_extract_all", _to_java_column(string), _pattern)
+    else:
+        if isinstance(idx, int):
+            _idx = _create_column_from_literal(idx)
+        elif isinstance(idx, Column):
+            _idx = _to_java_column(idx)
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={
+                    "arg_name": "idx",
+                    "arg_type": type(idx).__name__,
+                },
+            )
+        return _invoke_function("regexp_extract_all", _to_java_column(string), _pattern, _idx)
 
 
 @try_remote_functions
@@ -7780,6 +8022,116 @@ def regexp_replace(
     else:
         replacement_col = _to_java_column(replacement)
     return _invoke_function("regexp_replace", _to_java_column(string), pattern_col, replacement_col)
+
+
+@try_remote_functions
+def regexp_substr(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
+    r"""Returns the substring that matches a Java regex within the string `str`.
+    If the regular expression is not found, the result is null.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the substring that matches a Java regex within the string `str`.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+")], ["str", "pattern"])
+    >>> df.select(regexp_substr('str', r'\d+').alias('d')).collect()
+    [Row(d='1')]
+    >>> df.select(regexp_substr('str', r'mmm').alias('d')).collect()
+    [Row(d=None)]
+    >>> df.select(regexp_substr("str", col("pattern")).alias('d')).collect()
+    [Row(d='1')]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+
+    return _invoke_function("regexp_substr", _to_java_column(string), _pattern)
+
+
+@try_remote_functions
+def regexp_instr(
+    string: "ColumnOrName", pattern: Union[str, Column], idx: Optional[Union[int, Column]] = None
+) -> Column:
+    r"""Extract all strings in the `str` that match a Java regex
+    and corresponding to the regex group index.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : :class:`~pyspark.sql.Column` or str
+        regex pattern to apply.
+    idx : int
+        matched group id.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        all strings in the `str` that match a Java regex and corresponding to the regex group index.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("1a 2b 14m", r"\d+(a|b|m)")], ["str", "pattern"])
+    >>> df.select(regexp_instr('str', r'\d+(a|b|m)').alias('d')).collect()
+    [Row(d=1)]
+    >>> df.select(regexp_instr('str', r'\d+(a|b|m)', 1).alias('d')).collect()
+    [Row(d=1)]
+    >>> df.select(regexp_instr('str', r'\d+(a|b|m)', 2).alias('d')).collect()
+    [Row(d=1)]
+    >>> df.select(regexp_instr('str', col("pattern")).alias('d')).collect()
+    [Row(d=1)]
+    """
+    if isinstance(pattern, str):
+        _pattern = _create_column_from_literal(pattern)
+    elif isinstance(pattern, Column):
+        _pattern = _to_java_column(pattern)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={
+                "arg_name": "pattern",
+                "arg_type": type(pattern).__name__,
+            },
+        )
+    if idx is None:
+        return _invoke_function("regexp_instr", _to_java_column(string), _pattern)
+    else:
+        if isinstance(idx, int):
+            _idx = _create_column_from_literal(idx)
+        elif isinstance(idx, Column):
+            _idx = _to_java_column(idx)
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={
+                    "arg_name": "idx",
+                    "arg_type": type(idx).__name__,
+                },
+            )
+        return _invoke_function("regexp_instr", _to_java_column(string), _pattern, _idx)
 
 
 @try_remote_functions
