@@ -157,6 +157,11 @@
     ],
     "sqlState" : "22018"
   },
+  "CANNOT_PARSE_INTERVAL" : {
+    "message" : [
+      "Unable to parse '<delayThreshold>'. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
+    ]
+  },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
       "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>."
@@ -190,6 +195,11 @@
       "Renaming a <type> across schemas is not allowed."
     ],
     "sqlState" : "0AKD0"
+  },
+  "CANNOT_RESOLVE_STAR_EXPAND" : {
+    "message" : [
+      "Cannot resolve '<targetString>.*' given input columns '<columns>'. Please check that the specified table or struct exists and is accessible in the input columns."
+    ]
   },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
@@ -688,6 +698,11 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
     ],
     "sqlState" : "42K04"
+  },
+  "FAILED_SQL_EXPRESSION_EVALUATION" : {
+    "message" : [
+      "Failed to evaluate the SQL expression: <sqlExpr>. <msg>. Please check your syntax and ensure all required tables and columns are available."
+    ]
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
@@ -1203,6 +1218,11 @@
       }
     }
   },
+  "INVALID_NUMERIC_LITERAL_RANGE" : {
+    "message" : [
+      "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
+    ]
+  },
   "INVALID_OPTIONS" : {
     "message" : [
       "Invalid options:"
@@ -1471,6 +1491,11 @@
   "INVALID_URL" : {
     "message" : [
       "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
+  },
+  "INVALID_VIEW_TEXT" : {
+    "message" : [
+      "The view <tableName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
     ]
   },
   "INVALID_WHERE_CONDITION" : {
@@ -1754,6 +1779,11 @@
     ],
     "sqlState" : "42826"
   },
+  "OPERATION_NOT_ALLOWED" : {
+    "message" : [
+      "Operation not allowed: <message>. This error occurs when attempting an operation that is not currently supported. Please check the documentation for the list of allowable operations."
+    ]
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -2012,6 +2042,11 @@
     ],
     "sqlState" : "54000"
   },
+  "UDTF_ALIAS_NUMBER_MISMATCH" : {
+    "message" : [
+      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF. Expected <aliasesSize> aliases, but got <aliasesNames>. Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
+    ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
@@ -2081,6 +2116,11 @@
       "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
     ],
     "sqlState" : "42704"
+  },
+  "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
+    "message" : [
+      "could not resolve `<name>` to a table-valued function. Please make sure that `<name>` is defined as a table-valued function and that all required parameters are provided correctly. If `<name>` is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation."
+    ]
   },
   "UNRESOLVED_ALL_IN_GROUP_BY" : {
     "message" : [
@@ -2175,6 +2215,11 @@
       "Unsupported data type <typeName>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
+    ]
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
@@ -2648,11 +2693,6 @@
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0023" : {
-    "message" : [
-      "Numeric literal <rawStrippedQualifier> does not fit in range [<minValue>, <maxValue>] for type <typeName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0024" : {
     "message" : [
       "Can only have a single from-to unit in the interval literal syntax."
@@ -2696,11 +2736,6 @@
   "_LEGACY_ERROR_TEMP_0034" : {
     "message" : [
       "<operation> is not supported in Hive-style <command><msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0035" : {
-    "message" : [
-      "Operation not allowed: <message>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0036" : {
@@ -2929,11 +2964,6 @@
       "Number of column aliases does not match number of columns. Number of column aliases: <columnSize>; number of columns: <outputSize>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1029" : {
-    "message" : [
-      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF expected <aliasesSize> aliases but got <aliasesNames>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1030" : {
     "message" : [
       "Window aggregate function with filter predicate is not supported yet."
@@ -3018,11 +3048,6 @@
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1051" : {
-    "message" : [
-      "Cannot resolve '<targetString>.*' given input columns '<columns>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1052" : {
@@ -3408,11 +3433,6 @@
   "_LEGACY_ERROR_TEMP_1156" : {
     "message" : [
       "Column <colName> not found in schema <tableSchema>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1157" : {
-    "message" : [
-      "Unsupported data source type for direct query on files: <className>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1158" : {
@@ -4027,11 +4047,6 @@
       "Invalid partition transformation: <expr>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1318" : {
-    "message" : [
-      "Unable to parse '<delayThreshold>'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1319" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
@@ -4096,11 +4111,6 @@
   "_LEGACY_ERROR_TEMP_1332" : {
     "message" : [
       "<errorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1333" : {
-    "message" : [
-      "Invalid view text: <viewText>. The view <tableName> may have been tampered with."
     ]
   },
   "_LEGACY_ERROR_TEMP_1334" : {
@@ -5443,11 +5453,6 @@
       "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2308" : {
-    "message" : [
-      "could not resolve `<name>` to a table-valued function."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2309" : {
     "message" : [
       "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]."
@@ -5551,11 +5556,6 @@
   "_LEGACY_ERROR_TEMP_2330" : {
     "message" : [
       "Cannot change nullable column to non-nullable: <fieldName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2331" : {
-    "message" : [
-      "failed to evaluate expression <sqlExpr>: <msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2433" : {

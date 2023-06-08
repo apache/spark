@@ -229,7 +229,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def invalidNumericLiteralRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
       maxValue: BigDecimal, typeName: String, ctx: NumberContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       messageParameters = Map(
         "rawStrippedQualifier" -> rawStrippedQualifier,
         "minValue" -> minValue.toString(),
@@ -383,7 +383,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def operationNotAllowedError(message: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       messageParameters = Map("message" -> message),
       ctx)
   }

@@ -116,7 +116,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2331",
+              errorClass = "FAILED_SQL_EXPRESSION_EVALUATION",
               messageParameters = Map("sqlExpr" -> e.sql, "msg" -> ex.getMessage),
               cause = ex)
         }

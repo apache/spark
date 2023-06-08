@@ -65,7 +65,7 @@ insert into datetimes values
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2331",
+  "errorClass" : "FAILED_SQL_EXPRESSION_EVALUATION",
   "messageParameters" : {
     "msg" : "[CAST_INVALID_INPUT] The value '11:00 BST' of the type \"STRING\" cannot be cast to \"TIMESTAMP\" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL(line 2, position 24) ==\n(1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
     "sqlExpr" : "CAST('11:00 BST' AS TIMESTAMP)"

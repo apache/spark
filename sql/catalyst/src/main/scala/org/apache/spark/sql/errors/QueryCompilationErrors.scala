@@ -553,7 +553,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def aliasesNumberNotMatchUDTFOutputError(
       aliasesSize: Int, aliasesNames: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1029",
+      errorClass = "UDTF_ALIAS_NUMBER_MISMATCH",
       messageParameters = Map(
         "aliasesSize" -> aliasesSize.toString,
         "aliasesNames" -> aliasesNames))
@@ -737,7 +737,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotResolveStarExpandGivenInputColumnsError(
       targetString: String, columns: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1051",
+      errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
       messageParameters = Map(
         "targetString" -> targetString,
         "columns" -> columns))
@@ -1631,7 +1631,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def unsupportedDataSourceTypeForDirectQueryOnFilesError(className: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1157",
+      errorClass = "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY",
       messageParameters = Map("className" -> className))
   }
 
@@ -2982,7 +2982,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
     val threshold = if (delayThreshold == null) "" else delayThreshold
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1318",
+      errorClass = "CANNOT_PARSE_INTERVAL",
       messageParameters = Map("delayThreshold" -> threshold),
       cause = Some(e))
   }
@@ -3121,7 +3121,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidViewText(viewText: String, tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1333",
+      errorClass = "INVALID_VIEW_TEXT",
       messageParameters = Map(
         "viewText" -> viewText,
         "tableName" -> tableName))

@@ -2597,7 +2597,7 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"SELECT ns1.ns2.ns3.tbl.* from $t")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
         parameters = Map(
           "targetString" -> "ns1.ns2.ns3.tbl",
           "columns" -> "id, name"),
