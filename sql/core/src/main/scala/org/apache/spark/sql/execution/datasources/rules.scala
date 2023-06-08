@@ -406,8 +406,8 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         val newException = e.copy(
           errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
           messageParameters = e.messageParameters ++ Map(
-            "tableColumns" -> insert.table.output.map(c => s"'${c.name}'").mkString(", "),
-            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => s"'$c'").mkString(", ")
+            "tableColumns" -> insert.table.output.map(c => toSQLId(c.name)).mkString(", "),
+            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => toSQLId(c)).mkString(", ")
           ))
         newException.setStackTrace(e.getStackTrace)
         throw newException

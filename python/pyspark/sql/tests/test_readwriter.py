@@ -226,7 +226,9 @@ class ReadwriterV2TestsMixin:
 
     def test_create_without_provider(self):
         df = self.df
-        with self.assertRaisesRegex(AnalysisException, "Hive support is required"):
+        with self.assertRaisesRegex(
+            AnalysisException, "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT"
+        ):
             df.writeTo("test_table").create()
 
 

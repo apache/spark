@@ -228,18 +228,22 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)")
           },
           sqlState = None,
-          errorClass = "_LEGACY_ERROR_TEMP_1038",
-          parameters = Map("columnSize" -> "2", "outputSize" -> "3"),
-          context = ExpectedContext("values(1, 2, 3)", 24, 38)
+          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t1`",
+            "tableColumns" -> "`c1`, `c2`",
+            "dataColumns" -> "`col1`, `col2`, `col3`")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)")
           },
           sqlState = None,
-          errorClass = "_LEGACY_ERROR_TEMP_1038",
-          parameters = Map("columnSize" -> "3", "outputSize" -> "2"),
-          context = ExpectedContext("values(1, 2)", 28, 39)
+          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`t1`",
+            "tableColumns" -> "`c1`, `c2`, `c3`",
+            "dataColumns" -> "`col1`, `col2`")
         )
       }
     }

@@ -443,10 +443,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'", "too many data columns",
-      "Table columns: 'x', 'y'",
-      "Data columns: 'x', 'y', 'z'"))
+    assertAnalysisErrorClass(
+      inputPlan = parsedPlan,
+      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "tableColumns" -> "`x`, `y`",
+        "dataColumns" -> "`x`, `y`, `z`")
+    )
   }
 
   test("byName: fail extra data fields in struct") {
@@ -523,10 +527,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(requiredTable, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'", "not enough data columns",
-      "Table columns: 'x', 'y'",
-      "Data columns: 'y'"))
+    assertAnalysisErrorClass(
+      inputPlan = parsedPlan,
+      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "tableColumns" -> "`x`, `y`",
+        "dataColumns" -> "`y`")
+    )
   }
 
   test("byPosition: missing optional columns cause failure") {
@@ -537,10 +545,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'", "not enough data columns",
-      "Table columns: 'x', 'y'",
-      "Data columns: 'y'"))
+    assertAnalysisErrorClass(
+      inputPlan = parsedPlan,
+      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "tableColumns" -> "`x`, `y`",
+        "dataColumns" -> "`y`")
+    )
   }
 
   test("byPosition: insert safe cast") {
@@ -572,10 +584,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write", "'table-name'", "too many data columns",
-      "Table columns: 'x', 'y'",
-      "Data columns: 'a', 'b', 'c'"))
+    assertAnalysisErrorClass(
+      inputPlan = parsedPlan,
+      expectedErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "tableColumns" -> "`x`, `y`",
+        "dataColumns" -> "`a`, `b`, `c`")
+    )
   }
 
   test("bypass output column resolution") {

@@ -203,10 +203,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
 
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $viewName SELECT 1")
-      }.getMessage
-      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $viewName SELECT 1")
+        },
+        errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+        parameters = Map.empty
+      )
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
