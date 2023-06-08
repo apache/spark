@@ -107,6 +107,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests 
       "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
 
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
+
   def testConnection(): Unit = {
     Using.resource(getConnection()) { conn =>
       assert(conn.getClass.getName === "com.mysql.cj.jdbc.ConnectionImpl")
@@ -383,7 +385,7 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-        s"&useSSL=false"
+        s"&useSSL=false&allowMultiQueries=true"
   }
 
   override def testConnection(): Unit = {

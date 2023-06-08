@@ -160,6 +160,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with Upsert
       "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
 
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
+
   test("Basic test") {
     val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
