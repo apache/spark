@@ -43,7 +43,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests 
     override val usesIpc = false
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowMultiQueries=true"
   }
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -81,6 +81,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests 
       "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
       "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
   }
+
+  override val createTableOption = "; ALTER TABLE new_upsert_table ADD PRIMARY KEY (id, ts)"
 
   test("Basic test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
