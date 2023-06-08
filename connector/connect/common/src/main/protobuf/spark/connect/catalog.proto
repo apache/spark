@@ -85,6 +85,8 @@ message ListTables {
 message ListFunctions {
   // (Optional)
   optional string db_name = 1;
+  // (Optional) The pattern that the function name needs to match
+  optional string pattern = 2;
 }
 
 // See `spark.catalog.listColumns`
