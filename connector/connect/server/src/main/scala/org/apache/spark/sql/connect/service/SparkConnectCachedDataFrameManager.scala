@@ -24,35 +24,36 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 
 /**
- * This class caches DataFrame on the server side with a given key as id. The Spark Connect client
- * can create a DataFrame reference with the key. When server transforms the DataFrame reference,
- * it finds the DataFrame from the cache and replace the reference.
+ * This class caches DataFrame on the server side with given ids. The Spark Connect client can
+ * create a DataFrame reference with the id. When server transforms the DataFrame reference, it
+ * finds the DataFrame from the cache and replace the reference.
  *
  * Each (userId, sessionId) has a corresponding DataFrame map. A cached DataFrame can only be
- * accessed from the same user within the same session. The DataFrame will be removed from the cache
- * when the session expires.
+ * accessed from the same user within the same session. The DataFrame will be removed from the
+ * cache when the session expires.
  */
 private[connect] class SparkConnectCachedDataFrameManager extends Logging {
 
   // Each (userId, sessionId) has a DataFrame cache map.
   private val dataFrameCache = mutable.Map[(String, String), mutable.Map[String, DataFrame]]()
 
-  def put(userId: String, sessionId: String, key: String, value: DataFrame): Unit = synchronized {
-    val sessionKey = (userId, sessionId)
-    val sessionDataFrameMap = dataFrameCache
-      .getOrElseUpdate(sessionKey, mutable.Map[String, DataFrame]())
-    sessionDataFrameMap.put(key, value)
-  }
+  def put(userId: String, sessionId: String, dataFrameId: String, value: DataFrame): Unit =
+    synchronized {
+      val sessionKey = (userId, sessionId)
+      val sessionDataFrameMap = dataFrameCache
+        .getOrElseUpdate(sessionKey, mutable.Map[String, DataFrame]())
+      sessionDataFrameMap.put(dataFrameId, value)
+    }
 
-  def get(userId: String, sessionId: String, key: String): DataFrame = synchronized {
+  def get(userId: String, sessionId: String, dataFrameId: String): DataFrame = synchronized {
     val sessionKey = (userId, sessionId)
 
     val notFoundException = InvalidPlanInput(
-      s"No DataFrame found in the server cache for key = $key in the session $sessionId for " +
-        s"the user id $userId.")
+      s"No DataFrame found in the server cache for key = $dataFrameId in the session $sessionId " +
+        s"for the user id $userId.")
 
     val sessionDataFrameMap = dataFrameCache.getOrElse(sessionKey, throw notFoundException)
-    sessionDataFrameMap.getOrElse(key, throw notFoundException)
+    sessionDataFrameMap.getOrElse(dataFrameId, throw notFoundException)
   }
 
   def remove(userId: String, sessionId: String): Unit = synchronized {

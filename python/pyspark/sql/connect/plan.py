@@ -517,18 +517,18 @@ class WithWatermark(LogicalPlan):
         return plan
 
 
-class CachedDataFrame(LogicalPlan):
+class CachedRemoteRelation(LogicalPlan):
     """Logical plan object for a DataFrame reference which represents a DataFrame that's been
-    cached on the server with a given key."""
-    def __init__(self, key: str):
+    cached on the server with a given id."""
+    def __init__(self, relationId: str):
         super().__init__(None)
-        self._key = key
+        self._relationId = relationId
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-        plan.cached_dataframe.key = self._key
-        plan.cached_dataframe.userId = session._user_id
-        plan.cached_dataframe.sessionId = session._session_id
+        plan.cached_remote_relation.relationId = self._relationId
+        plan.cached_remote_relation.userId = session._user_id
+        plan.cached_remote_relation.sessionId = session._session_id
 
         return plan
 

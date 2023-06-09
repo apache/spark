@@ -789,7 +789,8 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformCachedDataFrame(rel: proto.CachedDataFrame): LogicalPlan = {
-    SparkConnectService.cachedDataFrameManager.get(rel.getUserId, rel.getSessionId, rel.getKey)
+    SparkConnectService.cachedDataFrameManager
+      .get(rel.getUserId, rel.getSessionId, rel.getKey)
       .logicalPlan
   }
 

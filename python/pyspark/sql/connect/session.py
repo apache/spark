@@ -51,7 +51,7 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation, CachedDataFrame
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation, CachedRemoteRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -476,10 +476,10 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def _createCachedDataFrame(self, key: str) -> "DataFrame":
-        """This function creates a DataFrame given a key. It expects that on the server side, the
-        actual DataFrame is cached with the key as the id. This function is for internal use."""
-        return DataFrame.withPlan(CachedDataFrame(key), self)
+    def _createCachedDataFrame(self, relationId: str) -> "DataFrame":
+        """This function creates a DataFrame given a id. It expects that on the server side, the
+        actual DataFrame is cached with relationId as the key. This function is for internal use."""
+        return DataFrame.withPlan(CachedRemoteRelation(relationId), self)
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
