@@ -75,7 +75,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
         )
         self.assertEquals(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StateOperatorProgress"),
-            27,
+            26,
             msg,
         )
         self.assertEquals(

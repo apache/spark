@@ -201,7 +201,6 @@ class StreamingQueryProgress private[spark] (
       obj.set[JsonNode]("eventTime", eventTimeNode)
     }
 
-
     val stateOperatorsList = stateOperators.map(_.jsonNode).toList.asJava
     val stateOperatorsArrayNode = factory.arrayNode(stateOperatorsList.size())
     stateOperatorsArrayNode.addAll(stateOperatorsList)
