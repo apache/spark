@@ -258,6 +258,13 @@ private[kafka010] class KafkaDataConsumer(
    */
   private val fetchedRecord: FetchedRecord = FetchedRecord(null, UNKNOWN_OFFSET)
 
+  // Total duration spent on reading from Kafka
+  private var totalTimeReadNanos: Long = 0
+  // Total number of records fetched from Kafka
+  private var totalRecordsRead: Long = 0
+  // Starting timestamp when the consumer is created.
+  private var startTimestampNano: Long = System.nanoTime()
+
   /**
    * Get the record for the given offset if available.
    *
@@ -343,6 +350,7 @@ private[kafka010] class KafkaDataConsumer(
     }
 
     if (isFetchComplete) {
+      totalRecordsRead += 1
       fetchedRecord.record
     } else {
       fetchedData.reset()
@@ -356,7 +364,9 @@ private[kafka010] class KafkaDataConsumer(
    */
   def getAvailableOffsetRange(): AvailableOffsetRange = runUninterruptiblyIfPossible {
     val consumer = getOrRetrieveConsumer()
-    consumer.getAvailableOffsetRange()
+    timeNanos {
+      consumer.getAvailableOffsetRange()
+    }
   }
 
   def getNumOffsetOutOfRange(): Long = offsetOutOfRange
@@ -367,6 +377,16 @@ private[kafka010] class KafkaDataConsumer(
    * must call method after using the instance to make sure resources are not leaked.
    */
   def release(): Unit = {
+    val kafkaMeta = _consumer
+      .map(c => s"topicPartition=${c.topicPartition} groupId=${c.groupId}")
+      .getOrElse("")
+    val walTime = System.nanoTime() - startTimestampNano
+
+    logInfo(
+      s"From Kafka $kafkaMeta read $totalRecordsRead records, " +
+      s"taking $totalTimeReadNanos nanos, during time span of $walTime nanos."
+    )
+
     releaseConsumer()
     releaseFetchedData()
   }
@@ -394,7 +414,9 @@ private[kafka010] class KafkaDataConsumer(
       consumer: InternalKafkaConsumer,
       offset: Long,
       untilOffset: Long): Long = {
-    val range = consumer.getAvailableOffsetRange()
+    val range = timeNanos {
+      consumer.getAvailableOffsetRange()
+    }
     logWarning(s"Some data may be lost. Recovering from the earliest offset: ${range.earliest}")
 
     val topicPartition = consumer.topicPartition
@@ -548,7 +570,9 @@ private[kafka010] class KafkaDataConsumer(
       fetchedData: FetchedData,
       offset: Long,
       pollTimeoutMs: Long): Unit = {
-    val (records, offsetAfterPoll, range) = consumer.fetch(offset, pollTimeoutMs)
+    val (records, offsetAfterPoll, range) = timeNanos {
+      consumer.fetch(offset, pollTimeoutMs)
+    }
     fetchedData.withNewPoll(records.listIterator, offsetAfterPoll, range)
   }
 
@@ -569,7 +593,13 @@ private[kafka010] class KafkaDataConsumer(
   }
 
   private def retrieveConsumer(): Unit = {
-    _consumer = Option(consumerPool.borrowObject(cacheKey, kafkaParams))
+    _consumer = timeNanos {
+      Option(consumerPool.borrowObject(cacheKey, kafkaParams))
+    }
+    startTimestampNano = System.nanoTime()
+    totalTimeReadNanos = 0
+    totalRecordsRead = 0
+
     require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
   }
 
@@ -619,6 +649,14 @@ private[kafka010] class KafkaDataConsumer(
       logWarning("KafkaDataConsumer is not running in UninterruptibleThread. " +
         "It may hang when KafkaDataConsumer's methods are interrupted because of KAFKA-1894")
       body
+  }
+
+  /** Records the duration of running `body` and increase totalTimeReadNanos accordingly. */
+  private def timeNanos[T](body: => T): T = {
+    val startTime = System.nanoTime()
+    val result = body
+    totalTimeReadNanos += System.nanoTime() - startTime
+    result
   }
 }
 
