@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 import uuid
-from typing import Optional, Dict, List
+import json
+from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
 
 from py4j.java_gateway import JavaObject
@@ -129,16 +130,16 @@ class JStreamingQueryListener:
         self.pylistener = pylistener
 
     def onQueryStarted(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryStarted(QueryStartedEvent(jevent))
+        self.pylistener.onQueryStarted(QueryStartedEvent.fromJObject(jevent))
 
     def onQueryProgress(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryProgress(QueryProgressEvent(jevent))
+        self.pylistener.onQueryProgress(QueryProgressEvent.fromJObject(jevent))
 
     def onQueryIdle(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryIdle(QueryIdleEvent(jevent))
+        self.pylistener.onQueryIdle(QueryIdleEvent.fromJObject(jevent))
 
     def onQueryTerminated(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryTerminated(QueryTerminatedEvent(jevent))
+        self.pylistener.onQueryTerminated(QueryTerminatedEvent.fromJObject(jevent))
 
     class Java:
         implements = ["org.apache.spark.sql.streaming.PythonStreamingQueryListener"]
@@ -149,17 +150,39 @@ class QueryStartedEvent:
     Event representing the start of a query.
 
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
-        self._name: Optional[str] = jevent.name()
-        self._timestamp: str = jevent.timestamp()
+    def __init__(
+        self, id: uuid.UUID, runId: uuid.UUID, name: Optional[str], timestamp: str
+    ) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._name: Optional[str] = name
+        self._timestamp: str = timestamp
+
+    @classmethod
+    def fromJObject(cls, jevent: JavaObject) -> "QueryStartedEvent":
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            name=jevent.name(),
+            timestamp=jevent.timestamp(),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryStartedEvent":
+        return cls(
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            name=j["name"],
+            timestamp=j["timestamp"],
+        )
 
     @property
     def id(self) -> uuid.UUID:
@@ -197,14 +220,24 @@ class QueryProgressEvent:
     Event representing any progress updates in a query.
 
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._progress: StreamingQueryProgress = StreamingQueryProgress(jevent.progress())
+    def __init__(self, progress: "StreamingQueryProgress") -> None:
+        self._progress: StreamingQueryProgress = progress
+
+    @classmethod
+    def fromJObject(cls, jevent: JavaObject) -> "QueryProgressEvent":
+        return cls(progress=StreamingQueryProgress.fromJObject(jevent.progress()))
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryProgressEvent":
+        return cls(progress=StreamingQueryProgress.fromJson(j["progress"]))
 
     @property
     def progress(self) -> "StreamingQueryProgress":
@@ -225,10 +258,22 @@ class QueryIdleEvent:
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
-        self._timestamp: str = jevent.timestamp()
+    def __init__(self, id: uuid.UUID, runId: uuid.UUID, timestamp: str) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._timestamp: str = timestamp
+
+    @classmethod
+    def fromJObject(cls, jevent: JavaObject) -> "QueryIdleEvent":
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            timestamp=jevent.timestamp(),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryIdleEvent":
+        return cls(id=uuid.UUID(j["id"]), runId=uuid.UUID(j["runId"]), timestamp=j["timestamp"])
 
     @property
     def id(self) -> uuid.UUID:
@@ -259,20 +304,44 @@ class QueryTerminatedEvent:
     Event representing that termination of a query.
 
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
+    def __init__(
+        self,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        exception: Optional[str],
+        errorClassOnException: Optional[str],
+    ) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._exception: Optional[str] = exception
+        self._errorClassOnException: Optional[str] = errorClassOnException
+
+    @classmethod
+    def fromJObject(cls, jevent: JavaObject) -> "QueryTerminatedEvent":
         jexception = jevent.exception()
-        self._exception: Optional[str] = jexception.get() if jexception.isDefined() else None
         jerrorclass = jevent.errorClassOnException()
-        self._errorClassOnException: Optional[str] = (
-            jerrorclass.get() if jerrorclass.isDefined() else None
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            exception=jexception.get() if jexception.isDefined() else None,
+            errorClassOnException=jerrorclass.get() if jerrorclass.isDefined() else None,
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryTerminatedEvent":
+        return cls(
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            exception=j["exception"],
+            errorClassOnException=j["errorClassOnException"],
         )
 
     @property
@@ -316,38 +385,105 @@ class QueryTerminatedEvent:
 class StreamingQueryProgress:
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
+    def __init__(
+        self,
+        json: str,
+        prettyJson: str,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        name: Optional[str],
+        timestamp: str,
+        batchId: int,
+        batchDuration: int,
+        durationMs: Dict[str, int],
+        eventTime: Dict[str, str],
+        stateOperators: List["StateOperatorProgress"],
+        sources: List["SourceProgress"],
+        sink: "SinkProgress",
+        numInputRows: Optional[str],
+        inputRowsPerSecond: float,
+        processedRowsPerSecond: float,
+        observedMetrics: Dict[str, Row]
+    ):
+        self._json: str = json
+        self._prettyJson: str = prettyJson
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._name: Optional[str] = name
+        self._timestamp: str = timestamp
+        self._batchId: int = batchId
+        self._batchDuration: int = batchDuration
+        self._durationMs: Dict[str, int] = durationMs
+        self._eventTime: Dict[str, str] = eventTime
+        self._stateOperators: List[StateOperatorProgress] = stateOperators
+        self._sources: List[SourceProgress] = sources
+        self._sink: SinkProgress = sink
+        self._numInputRows: Optional[str] = numInputRows
+        self._inputRowsPerSecond: float = inputRowsPerSecond
+        self._processedRowsPerSecond: float = processedRowsPerSecond
+        self._observedMetrics: Dict[str, Row] = observedMetrics
+
+    @classmethod
+    def fromJObject(cls, jprogress: JavaObject) -> "StreamingQueryProgress":
         from pyspark import SparkContext
 
-        self._jprogress: JavaObject = jprogress
-        self._id: uuid.UUID = uuid.UUID(jprogress.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jprogress.runId().toString())
-        self._name: Optional[str] = jprogress.name()
-        self._timestamp: str = jprogress.timestamp()
-        self._batchId: int = jprogress.batchId()
-        self._inputRowsPerSecond: float = jprogress.inputRowsPerSecond()
-        self._processedRowsPerSecond: float = jprogress.processedRowsPerSecond()
-        self._batchDuration: int = jprogress.batchDuration()
-        self._durationMs: Dict[str, int] = dict(jprogress.durationMs())
-        self._eventTime: Dict[str, str] = dict(jprogress.eventTime())
-        self._stateOperators: List[StateOperatorProgress] = [
-            StateOperatorProgress(js) for js in jprogress.stateOperators()
-        ]
-        self._sources: List[SourceProgress] = [SourceProgress(js) for js in jprogress.sources()]
-        self._sink: SinkProgress = SinkProgress(jprogress.sink())
+        return cls(
+            json=jprogress.json(),
+            prettyJson=jprogress.prettyJson(),
+            id=uuid.UUID(jprogress.id().toString()),
+            runId=uuid.UUID(jprogress.runId().toString()),
+            name=jprogress.name(),
+            timestamp=jprogress.timestamp(),
+            batchId=jprogress.batchId(),
+            batchDuration=jprogress.batchDuration(),
+            durationMs=dict(jprogress.durationMs()),
+            eventTime=dict(jprogress.eventTime()),
+            stateOperators=[StateOperatorProgress.fromJObject(js) for js in jprogress.stateOperators()],
+            sources=[SourceProgress.fromJObject(js) for js in jprogress.sources()],
+            sink=SinkProgress.fromJObject(jprogress.sink()),
+            numInputRows=jprogress.numInputRows(),
+            inputRowsPerSecond=jprogress.inputRowsPerSecond(),
+            processedRowsPerSecond=jprogress.processedRowsPerSecond(),
+            observedMetrics={
+                k: cloudpickle.loads(
+                    SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
+                )
+                for k, jr in dict(jprogress.observedMetrics()).items()
+            },
+        )
 
-        self._observedMetrics: Dict[str, Row] = {
-            k: cloudpickle.loads(
-                SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
-            )
-            for k, jr in dict(jprogress.observedMetrics()).items()
-        }
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "StreamingQueryProgress":
+        return cls(
+            json=json.dumps(j),
+            prettyJson=json.dumps(j, indent=4),
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            name=j["name"],
+            timestamp=j["timestamp"],
+            batchId=j["batchId"],
+            batchDuration=j["batchDuration"],
+            durationMs=dict(j["durationMs"]),
+            eventTime=dict(j["eventTime"]),
+            stateOperators=[StateOperatorProgress.fromJson(s) for s in j["stateOperators"]],
+            sources=[SourceProgress.fromJson(s) for s in j["sources"]],
+            sink=SinkProgress.fromJson(j["sink"]),
+            numInputRows=j["numInputRows"],
+            inputRowsPerSecond=j["inputRowsPerSecond"],
+            processedRowsPerSecond=j["processedRowsPerSecond"],
+            observedMetrics={
+                k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
+                for k, row_dict in j["observedMetrics"].items()
+            },
+        )
 
     @property
     def id(self) -> uuid.UUID:
@@ -452,7 +588,7 @@ class StreamingQueryProgress:
         """
         The aggregate (across all sources) number of records processed in a trigger.
         """
-        return self._jprogress.numInputRows()
+        return self._numInputRows
 
     @property
     def inputRowsPerSecond(self) -> float:
@@ -464,7 +600,7 @@ class StreamingQueryProgress:
     @property
     def processedRowsPerSecond(self) -> float:
         """
-        The aggregate (across all sources) rate at which Spark is processing data..
+        The aggregate (across all sources) rate at which Spark is processing data.
         """
         return self._processedRowsPerSecond
 
@@ -473,14 +609,14 @@ class StreamingQueryProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        return self._json
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        return self._prettyJson
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -489,26 +625,83 @@ class StreamingQueryProgress:
 class StateOperatorProgress:
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._operatorName: str = jprogress.operatorName()
-        self._numRowsTotal: int = jprogress.numRowsTotal()
-        self._numRowsUpdated: int = jprogress.numRowsUpdated()
-        self._allUpdatesTimeMs: int = jprogress.allUpdatesTimeMs()
-        self._numRowsRemoved: int = jprogress.numRowsRemoved()
-        self._allRemovalsTimeMs: int = jprogress.allRemovalsTimeMs()
-        self._commitTimeMs: int = jprogress.commitTimeMs()
-        self._memoryUsedBytes: int = jprogress.memoryUsedBytes()
-        self._numRowsDroppedByWatermark: int = jprogress.numRowsDroppedByWatermark()
-        self._numShufflePartitions: int = jprogress.numShufflePartitions()
-        self._numStateStoreInstances: int = jprogress.numStateStoreInstances()
-        self._customMetrics: Dict[str, int] = dict(jprogress.customMetrics())
+    def __init__(
+        self,
+        json: str,
+        prettyJson: str,
+        operatorName: str,
+        numRowsTotal: int,
+        numRowsUpdated: int,
+        numRowsRemoved: int,
+        allUpdatesTimeMs: int,
+        allRemovalsTimeMs: int,
+        commitTimeMs: int,
+        memoryUsedBytes: int,
+        numRowsDroppedByWatermark: int,
+        numShufflePartitions: int,
+        numStateStoreInstances: int,
+        customMetrics: Dict[str, int],
+    ):
+        self._json: str = json
+        self._prettyJson: str = prettyJson
+        self._operatorName: str = operatorName
+        self._numRowsTotal: int = numRowsTotal
+        self._numRowsUpdated: int = numRowsUpdated
+        self._numRowsRemoved: int = numRowsRemoved
+        self._allUpdatesTimeMs: int = allUpdatesTimeMs
+        self._allRemovalsTimeMs: int = allRemovalsTimeMs
+        self._commitTimeMs: int = commitTimeMs
+        self._memoryUsedBytes: int = memoryUsedBytes
+        self._numRowsDroppedByWatermark: int = numRowsDroppedByWatermark
+        self._numShufflePartitions: int = numShufflePartitions
+        self._numStateStoreInstances: int = numStateStoreInstances
+        self._customMetrics: Dict[str, int] = customMetrics
+
+    @classmethod
+    def fromJObject(cls, jprogress: JavaObject) -> "StateOperatorProgress":
+        return cls(
+            json=jprogress.json(),
+            prettyJson=jprogress.prettyJson(),
+            operatorName=jprogress.operatorName(),
+            numRowsTotal=jprogress.numRowsTotal(),
+            numRowsUpdated=jprogress.numRowsUpdated(),
+            allUpdatesTimeMs=jprogress.allUpdatesTimeMs(),
+            numRowsRemoved=jprogress.numRowsRemoved(),
+            allRemovalsTimeMs=jprogress.allRemovalsTimeMs(),
+            commitTimeMs=jprogress.commitTimeMs(),
+            memoryUsedBytes=jprogress.memoryUsedBytes(),
+            numRowsDroppedByWatermark=jprogress.numRowsDroppedByWatermark(),
+            numShufflePartitions=jprogress.numShufflePartitions(),
+            numStateStoreInstances=jprogress.numStateStoreInstances(),
+            customMetrics=dict(jprogress.customMetrics()),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "StateOperatorProgress":
+        return cls(
+            json=json.dumps(j),
+            prettyJson=json.dumps(j, indent=4),
+            operatorName=j["operatorName"],
+            numRowsTotal=j["numRowsTotal"],
+            numRowsUpdated=j["numRowsUpdated"],
+            numRowsRemoved=j["numRowsRemoved"],
+            allUpdatesTimeMs=j["allUpdatesTimeMs"],
+            allRemovalsTimeMs=j["allRemovalsTimeMs"],
+            commitTimeMs=j["commitTimeMs"],
+            memoryUsedBytes=j["memoryUsedBytes"],
+            numRowsDroppedByWatermark=j["numRowsDroppedByWatermark"],
+            numShufflePartitions=j["numShufflePartitions"],
+            numStateStoreInstances=j["numStateStoreInstances"],
+            customMetrics=dict(j["customMetrics"]),
+        )
 
     @property
     def operatorName(self) -> str:
@@ -563,14 +756,14 @@ class StateOperatorProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        return self._json
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        return self._prettyJson
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -579,22 +772,67 @@ class StateOperatorProgress:
 class SourceProgress:
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._description: str = jprogress.description()
-        self._startOffset: str = jprogress.startOffset()
-        self._endOffset: str = jprogress.endOffset()
-        self._latestOffset: str = jprogress.latestOffset()
-        self._numInputRows: int = jprogress.numInputRows()
-        self._inputRowsPerSecond: float = jprogress.inputRowsPerSecond()
-        self._processedRowsPerSecond: float = jprogress.processedRowsPerSecond()
-        self._metrics: Dict[str, str] = dict(jprogress.metrics())
+    def __init__(
+        self,
+        json: str,
+        prettyJson: str,
+        description: str,
+        startOffset: str,
+        endOffset: str,
+        latestOffset: str,
+        numInputRows: int,
+        inputRowsPerSecond: float,
+        processedRowsPerSecond: float,
+        metrics: Dict[str, str],
+    ) -> None:
+        self._json: str = json
+        self._prettyJson: str = prettyJson
+        self._description: str = description
+        self._startOffset: str = startOffset
+        self._endOffset: str = endOffset
+        self._latestOffset: str = latestOffset
+        self._numInputRows: int = numInputRows
+        self._inputRowsPerSecond: float = inputRowsPerSecond
+        self._processedRowsPerSecond: float = processedRowsPerSecond
+        self._metrics: Dict[str, str] = metrics
+
+    @classmethod
+    def fromJObject(cls, jprogress: JavaObject) -> "SourceProgress":
+        return cls(
+            json=jprogress.json(),
+            prettyJson=jprogress.prettyJson(),
+            description=jprogress.description(),
+            startOffset=str(jprogress.startOffset()),
+            endOffset=str(jprogress.endOffset()),
+            latestOffset=str(jprogress.latestOffset()),
+            numInputRows=jprogress.numInputRows(),
+            inputRowsPerSecond=jprogress.inputRowsPerSecond(),
+            processedRowsPerSecond=jprogress.processedRowsPerSecond(),
+            metrics=dict(jprogress.metrics())
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "SourceProgress":
+        return cls(
+            json=json.dumps(j),
+            prettyJson=json.dumps(j, indent=4),
+            description=j["description"],
+            startOffset=str(j["startOffset"]),
+            endOffset=str(j["endOffset"]),
+            latestOffset=str(j["latestOffset"]),
+            numInputRows=j["numInputRows"],
+            inputRowsPerSecond=j["inputRowsPerSecond"],
+            processedRowsPerSecond=j["processedRowsPerSecond"],
+            metrics=dict(j["metrics"]),
+        )
 
     @property
     def description(self) -> str:
@@ -654,14 +892,14 @@ class SourceProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        return self._json
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        return self._prettyJson
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -670,17 +908,47 @@ class SourceProgress:
 class SinkProgress:
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 3.5.0
+        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._description: str = jprogress.description()
-        self._numOutputRows: int = jprogress.numOutputRows()
-        self._metrics: Dict[str, str] = dict(jprogress.metrics())
+    def __init__(
+        self,
+        json: str,
+        prettyJson: str,
+        description: str,
+        numOutputRows: int,
+        metrics: Dict[str, str],
+    ) -> None:
+        self._json: str = json
+        self._prettyJson: str = prettyJson
+        self._description: str = description
+        self._numOutputRows: int = numOutputRows
+        self._metrics: Dict[str, str] = metrics
+
+    @classmethod
+    def fromJObject(cls, jprogress: JavaObject) -> "SinkProgress":
+        return cls(
+            json=jprogress.json(),
+            prettyJson=jprogress.prettyJson(),
+            description=jprogress.description(),
+            numOutputRows=jprogress.numOutputRows(),
+            metrics=dict(jprogress.metrics()),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "SinkProgress":
+        return cls(
+            json=json.dumps(j),
+            prettyJson=json.dumps(j, indent=4),
+            description=j["description"],
+            numOutputRows=j["numOutputRows"],
+            metrics=j["metrics"],
+        )
 
     @property
     def description(self) -> str:
@@ -706,14 +974,14 @@ class SinkProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        return self._json
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        return self._prettyJson
 
     def __str__(self) -> str:
         return self.prettyJson
