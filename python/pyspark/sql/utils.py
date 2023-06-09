@@ -238,7 +238,7 @@ def try_remote_observation(f: FuncT) -> FuncT:
 
 
 def pyspark_column_op(
-    func_name: str, left: IndexOpsLike, right: Any, fillna: Any = None
+    func_name: str, left: "IndexOpsLike", right: Any, fillna: Any = None
 ) -> Union["SeriesOrIndex", None]:
     """
     Wrapper function for column_op to get proper Column class.
