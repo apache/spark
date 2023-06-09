@@ -1242,6 +1242,41 @@ def variance(col: "ColumnOrName") -> Column:
 variance.__doc__ = pysparkfuncs.variance.__doc__
 
 
+def every(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_and", col)
+
+
+every.__doc__ = pysparkfuncs.every.__doc__
+
+
+def bool_and(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_and", col)
+
+
+bool_and.__doc__ = pysparkfuncs.bool_and.__doc__
+
+
+def _any(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_or", col)
+
+
+_any.__doc__ = pysparkfuncs._any.__doc__
+
+
+def some(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_or", col)
+
+
+some.__doc__ = pysparkfuncs.some.__doc__
+
+
+def bool_or(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_or", col)
+
+
+bool_or.__doc__ = pysparkfuncs.bool_or.__doc__
+
+
 # Window Functions
 
 

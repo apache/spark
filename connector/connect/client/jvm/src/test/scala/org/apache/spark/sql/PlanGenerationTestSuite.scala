@@ -188,6 +188,7 @@ class PlanGenerationTestSuite
     .add("e", "array<int>")
     .add("f", MapType(StringType, simpleSchema))
     .add("g", "string")
+    .add("h", "boolean")
 
   private val complexSchemaString = complexSchema.catalogString
 
@@ -1120,6 +1121,26 @@ class PlanGenerationTestSuite
 
   functionTest("regr_syy") {
     fn.regr_syy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("every") {
+    fn.every(fn.col("h"))
+  }
+
+  functionTest("bool_and") {
+    fn.bool_and(fn.col("h"))
+  }
+
+  functionTest("any") {
+    fn.any(fn.col("h"))
+  }
+
+  functionTest("some") {
+    fn.some(fn.col("h"))
+  }
+
+  functionTest("bool_or") {
+    fn.bool_or(fn.col("h"))
   }
 
   functionTest("array") {

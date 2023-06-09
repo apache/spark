@@ -476,6 +476,14 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(testData2.agg(regr_syy($"a", $"b")), testData2.selectExpr("regr_syy(a, b)"))
   }
 
+  test("every | bool_and | any | some | bool_or") {
+    checkAnswer(testData2.agg(every($"a")), testData2.selectExpr("every(a)"))
+    checkAnswer(testData2.agg(bool_and($"a")), testData2.selectExpr("bool_and(a)"))
+    checkAnswer(testData2.agg(any($"a")), testData2.selectExpr("any(a)"))
+    checkAnswer(testData2.agg(some($"a")), testData2.selectExpr("some(a)"))
+    checkAnswer(testData2.agg(bool_or($"a")), testData2.selectExpr("bool_or(a)"))
+  }
+
   test("zero moments") {
     withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val input = Seq((1, 2)).toDF("a", "b")
