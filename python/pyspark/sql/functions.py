@@ -6356,8 +6356,7 @@ def to_unix_timestamp(
     """
     Returns the UNIX timestamp of the given time.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -6394,8 +6393,7 @@ def to_timestamp_ltz(
     Parses the `timestamp` with the `format` to a timestamp without time zone.
     Returns null with invalid input.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -6432,8 +6430,7 @@ def to_timestamp_ntz(
     Parses the `timestamp` with the `format` to a timestamp without time zone.
     Returns null with invalid input.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -8028,8 +8025,7 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     `format` is omitted. The function returns NULL if at least one of the
     input parameters is NULL.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -8076,8 +8072,7 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
        'PR': Only allowed at the end of the format string; specifies that the result string will be
          wrapped by angle brackets if the input value is negative.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -8116,8 +8111,7 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
        'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
         negative number with wrapping angled brackets.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -10844,8 +10838,7 @@ def str_to_map(
     Creates a map after splitting the text into key/value pairs using delimiters.
     Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
