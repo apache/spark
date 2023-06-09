@@ -28,7 +28,8 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -90,6 +91,67 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
     operators.head
+  }
+
+  test("NO_BROADCAST_AND_REPLICATION hint is respected in cross joins") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val noBroadcastAndReplicationHint = JoinHint(
+        leftHint = None,
+        rightHint = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION))))
+
+      val join = testData.crossJoin(testData2).queryExecution.optimizedPlan.asInstanceOf[Join]
+      val joinWithHint = join.copy(hint = noBroadcastAndReplicationHint)
+
+      val planned = spark.sessionState.planner.JoinSelection(join)
+      assert(planned.size == 1)
+      assert(planned.head.isInstanceOf[CartesianProductExec])
+
+      val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
+      assert(plannedWithHint.size == 1)
+      assert(plannedWithHint.head.isInstanceOf[BroadcastNestedLoopJoinExec])
+      assert(plannedWithHint.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)
+    }
+  }
+
+  test("NO_BROADCAST_AND_REPLICATION hint disables broadcast hash joins") {
+    sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData2")
+
+    val noBroadcastAndReplicationHint = JoinHint(
+      leftHint = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION))),
+      rightHint = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION))))
+
+    val ds = sql("SELECT * FROM testData JOIN testData2 ON key = a")
+    val join = ds.queryExecution.optimizedPlan.asInstanceOf[Join]
+    val joinWithHint = join.copy(hint = noBroadcastAndReplicationHint)
+
+    val planned = spark.sessionState.planner.JoinSelection(join)
+    assert(planned.size == 1)
+    assert(planned.head.isInstanceOf[BroadcastHashJoinExec])
+
+    val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
+    assert(plannedWithHint.size == 1)
+    assert(plannedWithHint.head.isInstanceOf[SortMergeJoinExec])
+  }
+
+  test("NO_BROADCAST_AND_REPLICATION controls build side in BNLJ") {
+    val noBroadcastAndReplicationHint = JoinHint(
+      leftHint = None,
+      rightHint = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION))))
+
+    val ds = testData.join(testData2, $"key" === 1, "left_outer")
+    val join = ds.queryExecution.optimizedPlan.asInstanceOf[Join]
+    val joinWithHint = join.copy(hint = noBroadcastAndReplicationHint)
+
+    val planned = spark.sessionState.planner.JoinSelection(join)
+    assert(planned.size == 1)
+    assert(planned.head.isInstanceOf[BroadcastNestedLoopJoinExec])
+    assert(planned.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildRight)
+
+    val plannedWithHint = spark.sessionState.planner.JoinSelection(joinWithHint)
+    assert(plannedWithHint.size == 1)
+    assert(plannedWithHint.head.isInstanceOf[BroadcastNestedLoopJoinExec])
+    assert(plannedWithHint.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)
   }
 
   test("join operator selection") {

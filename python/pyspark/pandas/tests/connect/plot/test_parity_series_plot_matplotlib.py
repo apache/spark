@@ -36,14 +36,6 @@ class SeriesPlotMatplotlibParityTests(
     def test_kde_plot(self):
         super().test_kde_plot()
 
-    @unittest.skip("TODO(SPARK-43712): Enable SeriesPlotMatplotlibParityTests.test_line_plot.")
-    def test_line_plot(self):
-        super().test_line_plot()
-
-    @unittest.skip("TODO(SPARK-43713): Enable SeriesPlotMatplotlibParityTests.test_pie_plot.")
-    def test_pie_plot(self):
-        super().test_pie_plot()
-
     @unittest.skip("TODO(SPARK-43711): Fix Transformer.transform to work with Spark Connect.")
     def test_single_value_hist(self):
         super().test_single_value_hist()

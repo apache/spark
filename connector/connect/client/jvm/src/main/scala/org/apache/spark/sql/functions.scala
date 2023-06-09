@@ -813,6 +813,25 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = Column.fn("percentile", e, percentage)
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column, frequency: Column): Column =
+    Column.fn("percentile", e, percentage, frequency)
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
    * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
    * more than `percentage` of `col` values is less than the value or equal to that value.
@@ -853,6 +872,14 @@ object functions {
    * @since 3.4.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -991,6 +1018,88 @@ object functions {
    * @since 3.4.0
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = Column.fn("regr_avgx", y, x)
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = Column.fn("regr_avgy", y, x)
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs in a group, where `y` is the
+   * dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = Column.fn("regr_count", y, x)
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line for
+   * non-null pairs in a group, where `y` is the dependent variable and `x` is the independent
+   * variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column = Column.fn("regr_intercept", y, x)
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = Column.fn("regr_r2", y, x)
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column = Column.fn("regr_slope", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = Column.fn("regr_sxx", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = Column.fn("regr_sxy", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1878,6 +1987,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -1951,6 +2076,14 @@ object functions {
    * @since 3.4.0
    */
   def csc(e: Column): Column = Column.fn("csc", e)
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = Column.fn("e")
 
   /**
    * Computes the exponential of the given value.
@@ -2144,6 +2277,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 3.4.0
    */
   def log(e: Column): Column = Column.fn("log", e)
@@ -2221,6 +2362,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = Column.fn("negative", e)
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = Column.fn("pi")
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = Column.fn("positive", e)
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2283,6 +2448,14 @@ object functions {
    * @since 3.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2412,6 +2585,14 @@ object functions {
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2600,6 +2781,27 @@ object functions {
    * @since 3.4.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
+
+  /**
+   * Returns the bucket number into which the value of this expression would fall after being
+   * evaluated. Note that input arguments must follow conditions listed below; otherwise, the
+   * method will return null.
+   *
+   * @param v
+   *   value to compute a bucket number in the histogram
+   * @param min
+   *   minimum value of the histogram
+   * @param max
+   *   maximum value of the histogram
+   * @param numBucket
+   *   the number of buckets
+   * @return
+   *   the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column =
+    Column.fn("width_bucket", v, min, max, numBucket)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
@@ -4281,6 +4483,93 @@ object functions {
    */
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
+
+  /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(xml: Column, path: Column): Column =
+    Column.fn("xpath", xml, path)
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(xml: Column, path: Column): Column =
+    Column.fn("xpath_boolean", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(xml: Column, path: Column): Column =
+    Column.fn("xpath_double", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(xml: Column, path: Column): Column =
+    Column.fn("xpath_number", xml, path)
+
+  /**
+   * Returns a float value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(xml: Column, path: Column): Column =
+    Column.fn("xpath_float", xml, path)
+
+  /**
+   * Returns an integer value, or the value zero if no match is found, or a match is found but the
+   * value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(xml: Column, path: Column): Column =
+    Column.fn("xpath_int", xml, path)
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found, or a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(xml: Column, path: Column): Column =
+    Column.fn("xpath_long", xml, path)
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found, or a match is found
+   * but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(xml: Column, path: Column): Column =
+    Column.fn("xpath_short", xml, path)
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(xml: Column, path: Column): Column =
+    Column.fn("xpath_string", xml, path)
 
   private def newLambdaVariable(name: String): proto.Expression.UnresolvedNamedLambdaVariable = {
     proto.Expression.UnresolvedNamedLambdaVariable
