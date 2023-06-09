@@ -21,7 +21,7 @@ import java.sql.Timestamp
 import java.util.Properties
 
 import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.functions.{lit, rand, when}
+import org.apache.spark.sql.functions.{col, lit, rand, when}
 
 trait UpsertTests {
   self: DockerJDBCIntegrationSuite =>
@@ -31,8 +31,8 @@ trait UpsertTests {
   def createTableOption: String
   def upsertTestOptions: Map[String, String] = Map("createTableOptions" -> createTableOption)
 
-  test(s"Upsert existing table") { doTestUpsert(true) }
-  test(s"Upsert non-existing table") { doTestUpsert(false) }
+  test(s"Upsert existing table") { doTestUpsert(tableExists = true) }
+  test(s"Upsert non-existing table") { doTestUpsert(tableExists = false) }
 
   Seq(
     Seq("ts", "id", "v1", "v2"),
@@ -59,10 +59,10 @@ trait UpsertTests {
       "upsert" -> "true",
       "upsertKeyColumns" -> "id, ts"
     )
-    project.map(df.select(_: _*)).getOrElse(df)
+    project.map(columns => df.select(columns.map(col): _*)).getOrElse(df)
       .write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, table, new Properties)
 
-    val actual = spark.read.jdbc(jdbcUrl, table, new Properties).collect.toSet
+    val actual = spark.read.jdbc(jdbcUrl, table, new Properties).collect().toSet
     val existing = if (tableExists) {
       Set((1, Timestamp.valueOf("1996-01-01 01:23:45"), 1.234, 1.234567))
     } else {
@@ -110,7 +110,7 @@ trait UpsertTests {
     patch
       .write
       .mode(SaveMode.Append)
-      .option("upsert", true)
+      .option("upsert", value = true)
       .option("upsertKeyColumns", "id, ts")
       .options(upsertTestOptions)
       .jdbc(jdbcUrl, "new_upsert_table", new Properties)
@@ -126,7 +126,10 @@ trait UpsertTests {
     assert(result === Seq((false, 90000), (true, 10000)))
   }
 
+  test("Upsert with columns that require quotes") {}
+  test("Upsert with table name that requires quotes") {}
   test("Upsert null values") {}
+
   test("Write with unspecified mode with upsert") {}
   test("Write with overwrite mode with upsert") {}
   test("Write with error-if-exists mode with upsert") {}
