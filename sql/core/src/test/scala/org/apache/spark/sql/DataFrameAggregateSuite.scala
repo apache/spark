@@ -477,11 +477,11 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("every | bool_and | any | some | bool_or") {
-    checkAnswer(testData2.agg(every($"a")), testData2.selectExpr("every(a)"))
-    checkAnswer(testData2.agg(bool_and($"a")), testData2.selectExpr("bool_and(a)"))
-    checkAnswer(testData2.agg(any($"a")), testData2.selectExpr("any(a)"))
-    checkAnswer(testData2.agg(some($"a")), testData2.selectExpr("some(a)"))
-    checkAnswer(testData2.agg(bool_or($"a")), testData2.selectExpr("bool_or(a)"))
+    checkAnswer(complexData.agg(every($"b")), complexData.selectExpr("every(b)"))
+    checkAnswer(complexData.agg(bool_and($"b")), complexData.selectExpr("bool_and(b)"))
+    checkAnswer(complexData.agg(any($"b")), complexData.selectExpr("any(b)"))
+    checkAnswer(complexData.agg(some($"b")), complexData.selectExpr("some(b)"))
+    checkAnswer(complexData.agg(bool_or($"b")), complexData.selectExpr("bool_or(b)"))
   }
 
   test("zero moments") {
