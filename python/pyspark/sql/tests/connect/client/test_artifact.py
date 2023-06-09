@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import hashlib
 import shutil
 import tempfile
 import unittest
@@ -312,6 +313,15 @@ class ArtifactTests(ReusedConnectTestCase):
 
                 with open(dest_path, "r") as f:
                     self.assertEqual(f.read(), file_content)
+
+    def test_cache_artifact(self):
+        s = "Hello, World!"
+        blob = bytearray(s, "utf-8")
+        expected_hash = hashlib.sha256(blob).hexdigest()
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), False)
+        actualHash = self.artifact_manager.cache_artifact(blob)
+        self.assertEqual(actualHash, expected_hash)
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
 
 if __name__ == "__main__":

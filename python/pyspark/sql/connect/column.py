@@ -73,7 +73,17 @@ def _bin_op(
 ) -> Callable[["Column", Any], "Column"]:
     def wrapped(self: "Column", other: Any) -> "Column":
         if other is None or isinstance(
-            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+            other,
+            (
+                bool,
+                float,
+                int,
+                str,
+                datetime.datetime,
+                datetime.date,
+                decimal.Decimal,
+                datetime.timedelta,
+            ),
         ):
             other_expr = LiteralExpression._from_value(other)
         else:
