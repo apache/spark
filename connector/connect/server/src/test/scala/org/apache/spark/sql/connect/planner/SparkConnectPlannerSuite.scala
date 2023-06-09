@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProj
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectStreamHandler}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -52,13 +52,16 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     override def onCompleted(): Unit = {}
   }
 
+  protected val sparkConnectStreamHandler = new SparkConnectStreamHandler(new MockObserver())
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
+    new SparkConnectPlanner(SessionHolder.forTesting(spark), Some(sparkConnectStreamHandler))
+      .transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(SessionHolder.forTesting(spark))
-      .process(cmd, "clientId", "sessionId", new MockObserver())
+    new SparkConnectPlanner(SessionHolder.forTesting(spark), Some(sparkConnectStreamHandler))
+      .process(cmd, "clientId", "sessionId")
   }
 
   def readRel: proto.Relation =
@@ -110,7 +113,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
     assertThrows[IndexOutOfBoundsException] {
-      new SparkConnectPlanner(None.orNull)
+      new SparkConnectPlanner(None.orNull, Some(sparkConnectStreamHandler))
         .transformRelation(
           proto.Relation.newBuilder
             .setLimit(proto.Limit.newBuilder.setLimit(10))
@@ -121,10 +124,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
+      new SparkConnectPlanner(None.orNull, Some(sparkConnectStreamHandler))
+        .transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
-      new SparkConnectPlanner(None.orNull)
+      new SparkConnectPlanner(None.orNull, Some(sparkConnectStreamHandler))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
   }

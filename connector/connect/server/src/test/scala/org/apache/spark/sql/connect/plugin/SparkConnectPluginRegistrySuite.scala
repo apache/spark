@@ -196,8 +196,8 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
               .build()))
         .build()
 
-      new SparkConnectPlanner(SessionHolder.forTesting(spark))
-        .process(plan, "clientId", "sessionId", new MockObserver())
+      new SparkConnectPlanner(SessionHolder.forTesting(spark), Some(sparkConnectStreamHandler))
+        .process(plan, "clientId", "sessionId")
       assert(spark.sparkContext.getLocalProperty("testingProperty").equals("Martin"))
     }
   }

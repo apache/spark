@@ -29,8 +29,9 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 
 private[connect] class SparkConnectAnalyzeHandler(
-    responseObserver: StreamObserver[proto.AnalyzePlanResponse])
-    extends Logging {
+    val responseObserver: StreamObserver[proto.AnalyzePlanResponse])
+    extends SparkConnectResponseHandler[proto.AnalyzePlanResponse]
+    with Logging {
 
   def handle(request: proto.AnalyzePlanRequest): Unit = {
     val sessionHolder = SparkConnectService.getOrCreateIsolatedSession(
@@ -48,7 +49,7 @@ private[connect] class SparkConnectAnalyzeHandler(
   def process(
       request: proto.AnalyzePlanRequest,
       sessionHolder: SessionHolder): proto.AnalyzePlanResponse = {
-    lazy val planner = new SparkConnectPlanner(sessionHolder)
+    lazy val planner = new SparkConnectPlanner(sessionHolder, Some(this))
     val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
 

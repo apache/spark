@@ -41,8 +41,9 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
-    extends Logging {
+class SparkConnectStreamHandler(val responseObserver: StreamObserver[ExecutePlanResponse])
+    extends SparkConnectResponseHandler[ExecutePlanResponse]
+    with Logging {
 
   def handle(v: ExecutePlanRequest): Unit = {
     val sessionHolder =
@@ -96,16 +97,15 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(sessionHolder)
+    val planner = new SparkConnectPlanner(sessionHolder, Some(this))
     val dataframe =
       Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
-    responseObserver.onNext(
+    sendResponse(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
-    responseObserver.onNext(
-      SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
+    sendResponse(SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(
+      sendResponse(
         SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
     }
     responseObserver.onCompleted()
@@ -113,13 +113,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
   private def handleCommand(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(sessionHolder)
+    val planner = new SparkConnectPlanner(sessionHolder, Some(this))
     planner.process(
       command = command,
       userId = request.getUserContext.getUserId,
-      sessionId = request.getSessionId,
-      responseObserver = responseObserver)
+      sessionId = request.getSessionId)
     responseObserver.onCompleted()
+  }
+
+  private[connect] def sendResponse(response: ExecutePlanResponse): Unit = {
+    responseObserver.onNext(response)
   }
 }
 
