@@ -2095,41 +2095,29 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 split.__doc__ = pysparkfuncs.split.__doc__
 
 
-def rlike(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    return _invoke_function("rlike", _to_col(string), pattern)
+def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("rlike", str, regexp)
 
 
 rlike.__doc__ = pysparkfuncs.rlike.__doc__
 
 
-def regexp(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    return _invoke_function("regexp", _to_col(string), pattern)
+def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp", str, regexp)
 
 
 regexp.__doc__ = pysparkfuncs.regexp.__doc__
 
 
-def regexp_like(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    return _invoke_function("regexp_like", _to_col(string), pattern)
+def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_like", str, regexp)
 
 
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 
 
-def regexp_count(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    return _invoke_function("regexp_count", _to_col(string), pattern)
+def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_count", str, regexp)
 
 
 regexp_count.__doc__ = pysparkfuncs.regexp_count.__doc__
@@ -2143,17 +2131,14 @@ regexp_extract.__doc__ = pysparkfuncs.regexp_extract.__doc__
 
 
 def regexp_extract_all(
-    string: "ColumnOrName", pattern: Union[str, Column], idx: Optional[Union[int, Column]] = None
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
     if idx is None:
-        return _invoke_function("regexp_extract_all", _to_col(string), pattern)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
         if isinstance(idx, int):
             idx = lit(idx)
-        return _invoke_function("regexp_extract_all", _to_col(string), pattern, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
 
 
 regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
@@ -2174,28 +2159,22 @@ def regexp_replace(
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
 
 
-def regexp_substr(string: "ColumnOrName", pattern: Union[str, Column]) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    return _invoke_function("regexp_substr", _to_col(string), pattern)
+def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_substr", str, regexp)
 
 
 regexp_substr.__doc__ = pysparkfuncs.regexp_substr.__doc__
 
 
 def regexp_instr(
-    string: "ColumnOrName", pattern: Union[str, Column], idx: Optional[Union[int, Column]] = None
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
 ) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
     if idx is None:
-        return _invoke_function("regexp_instr", _to_col(string), pattern)
+        return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
         if isinstance(idx, int):
             idx = lit(idx)
-        return _invoke_function("regexp_instr", _to_col(string), pattern, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
 
 
 regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
