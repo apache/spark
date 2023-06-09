@@ -3458,9 +3458,8 @@ object Sequence {
         throw new ArithmeticException("Long overflow (Long.MinValue / -1)")
       }
       val len = if (stop == start) 1L else Math.addExact(1L, (delta / estimatedStep.toLong))
-      if (len > MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new IllegalArgumentException(s"Too long sequence: $len. Should be <= " +
-          s"$MAX_ROUNDED_ARRAY_LENGTH")
+      if (len > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(len)
       }
       len.toInt
     } catch {
@@ -3468,9 +3467,8 @@ object Sequence {
       case _: ArithmeticException =>
         val safeLen =
           BigInt(1) + (BigInt(stop.toLong) - BigInt(start.toLong)) / BigInt(estimatedStep.toLong)
-        if (safeLen > MAX_ROUNDED_ARRAY_LENGTH) {
-          throw new IllegalArgumentException(s"Too long sequence: $safeLen. Should be <= " +
-            s"$MAX_ROUNDED_ARRAY_LENGTH")
+        if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(safeLen)
         }
         throw internalError("Unreachable code reached.")
       case e: Exception => throw e
@@ -3509,9 +3507,7 @@ object Sequence {
        |  long $longLen =
        |    $stop == $start ? 1L : Math.addExact(1L, $delta / ((long) $estimatedStep));
        |  if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
-       |    throw new IllegalArgumentException(
-       |      "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
-       |    );
+       |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($longLen);
        |  }
        |  $len = (int) $longLen;
        |} catch (ArithmeticException _) {
@@ -3522,10 +3518,7 @@ object Sequence {
        |    )
        |  );
        |  if ($safeLen.compareTo($BigInt.valueOf($MAX_ROUNDED_ARRAY_LENGTH)) > 0) {
-       |    throw new IllegalArgumentException(
-       |      "Too long sequence: " + $safeLen.toString() +
-       |      ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
-       |    );
+       |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($safeLen);
        |  }
        |  throw new RuntimeException("Unreachable code reached.");
        |} catch (Exception e) {
