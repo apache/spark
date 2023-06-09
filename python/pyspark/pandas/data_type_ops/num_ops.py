@@ -214,7 +214,10 @@ class NumericOps(DataTypeOps):
         )
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        try:
+            _sanitize_list_like(right)
+        except TypeError:
+            return super().eq(left, right)
         result = pyspark_column_op("__eq__")(left, right)
         if is_remote():
             # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
