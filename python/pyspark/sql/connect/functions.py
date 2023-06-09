@@ -2772,6 +2772,51 @@ def udf(
 udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
+# Conditional Function
+
+
+def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ifnull", col1, col2)
+
+
+ifnull.__doc__ = pysparkfuncs.ifnull.__doc__
+
+
+def isnotnull(col1: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("isnotnull", col1)
+
+
+isnotnull.__doc__ = pysparkfuncs.isnotnull.__doc__
+
+
+def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("equal_null", col1, col2)
+
+
+equal_null.__doc__ = pysparkfuncs.equal_null.__doc__
+
+
+def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nullif", col1, col2)
+
+
+nullif.__doc__ = pysparkfuncs.nullif.__doc__
+
+
+def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nvl", col1, col2)
+
+
+nvl.__doc__ = pysparkfuncs.nvl.__doc__
+
+
+def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nvl2", col1, col2, col3)
+
+
+nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
+
+
 def _test() -> None:
     import sys
     import doctest
