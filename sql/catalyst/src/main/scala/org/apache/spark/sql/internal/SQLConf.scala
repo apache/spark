@@ -1437,12 +1437,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val BINARY_TO_HEX_STRING = buildConf("spark.sql.hive.bytesToHex")
-    .doc("When true, binary data will be outputted as hex strings in result.")
-    .version("3.5.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val PARTITION_COLUMN_TYPE_INFERENCE =
     buildConf("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
