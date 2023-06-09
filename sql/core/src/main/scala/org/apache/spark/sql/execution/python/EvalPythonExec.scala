@@ -57,25 +57,32 @@ import org.apache.spark.util.Utils
  * there should be always some rows buffered in the socket or Python process, so the pulling from
  * RowQueue ALWAYS happened after pushing into it.
  */
-trait BaseEvalPythonExec[T] extends UnaryExecNode {
+trait EvalPythonExec extends UnaryExecNode {
+  def udfs: Seq[PythonUDF]
   def resultAttrs: Seq[Attribute]
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
-  protected def getPyFuncsAndInputs(): (Seq[ChainedPythonFunctions], Seq[Seq[Expression]])
+  private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
+    udf.children match {
+      case Seq(u: PythonUDF) =>
+        val (chained, children) = collectFunctions(u)
+        (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
+      case children =>
+        // There should not be any other UDFs, or the children can't be evaluated directly.
+        assert(children.forall(!_.exists(_.isInstanceOf[PythonUDF])))
+        (ChainedPythonFunctions(Seq(udf.func)), udf.children)
+    }
+  }
 
   protected def evaluate(
       funcs: Seq[ChainedPythonFunctions],
       argOffsets: Array[Array[Int]],
       iter: Iterator[InternalRow],
       schema: StructType,
-      context: TaskContext): Iterator[T]
-
-  protected def getOutputRows(
-      inputRowQueue: HybridRowQueue,
-      outputRowIterator: Iterator[T]): Iterator[InternalRow]
+      context: TaskContext): Iterator[InternalRow]
 
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
@@ -92,7 +99,7 @@ trait BaseEvalPythonExec[T] extends UnaryExecNode {
         queue.close()
       }
 
-      val (pyFuncs, inputs) = getPyFuncsAndInputs()
+      val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
 
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
@@ -123,73 +130,12 @@ trait BaseEvalPythonExec[T] extends UnaryExecNode {
       val outputRowIterator = evaluate(
         pyFuncs, argOffsets, projectedRowIter, schema, context)
 
-      getOutputRows(queue, outputRowIterator)
-    }
-  }
-}
+      val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
 
-trait EvalPythonExec extends BaseEvalPythonExec[InternalRow] {
-  def udfs: Seq[PythonUDF]
-
-  private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
-    udf.children match {
-      case Seq(u: PythonUDF) =>
-        val (chained, children) = collectFunctions(u)
-        (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
-      case children =>
-        // There should not be any other UDFs, or the children can't be evaluated directly.
-        assert(children.forall(!_.exists(_.isInstanceOf[PythonUDF])))
-        (ChainedPythonFunctions(Seq(udf.func)), udf.children)
-    }
-  }
-
-  override def getPyFuncsAndInputs(): (Seq[ChainedPythonFunctions], Seq[Seq[Expression]]) = {
-    udfs.map(collectFunctions).unzip
-  }
-
-  override def getOutputRows(
-      inputRowQueue: HybridRowQueue,
-      outputRowIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
-    val joined = new JoinedRow
-    val resultProj = UnsafeProjection.create(output, output)
-
-    outputRowIterator.map { outputRow =>
-      resultProj(joined(inputRowQueue.remove(), outputRow))
-    }
-  }
-}
-
-/**
- * A physical plan that evaluates a [[PythonUDTF]], one partition of tuples at a time.
- */
-trait EvalPythonUDTFExec extends BaseEvalPythonExec[Iterator[InternalRow]] {
-  def udtf: PythonUDTF
-
-  def requiredChildOutput: Seq[Attribute]
-
-  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
-
-  override def getPyFuncsAndInputs(): (Seq[ChainedPythonFunctions], Seq[Seq[Expression]]) = {
-    (Seq(ChainedPythonFunctions(Seq(udtf.func))), Seq(udtf.children))
-  }
-
-  override def getOutputRows(
-      inputRowQueue: HybridRowQueue,
-      outputRowIterator: Iterator[Iterator[InternalRow]]): Iterator[InternalRow] = {
-    val pruneChildForResult: InternalRow => InternalRow =
-      if (child.outputSet == AttributeSet(requiredChildOutput)) {
-        identity
-      } else {
-        UnsafeProjection.create(requiredChildOutput, child.output)
+      outputRowIterator.map { outputRow =>
+        resultProj(joined(queue.remove(), outputRow))
       }
-
-    val joined = new JoinedRow
-    val resultProj = UnsafeProjection.create(output, output)
-
-    outputRowIterator.flatMap { outputRows =>
-      val left = inputRowQueue.remove()
-      joined.withLeft(pruneChildForResult(left))
-      outputRows.map(r => resultProj(joined.withRight(r)))
     }
   }
 }

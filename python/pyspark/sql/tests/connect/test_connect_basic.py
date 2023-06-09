@@ -3169,7 +3169,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.check_error(
             exception=e.exception,
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "udtf()"}
+            message_parameters={"feature": "udtf()"},
         )
 
     def test_unsupported_jvm_attribute(self):

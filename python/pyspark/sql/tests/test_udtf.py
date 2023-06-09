@@ -290,10 +290,10 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         self.assertEqual(
             df.collect(),
             [
-                Row(id=0, key="count", value=5.0),
-                Row(id=0, key="avg", value=2.0),
-                Row(id=0, key="count", value=5.0),
-                Row(id=0, key="avg", value=7.0),
+                Row(id=4, key="count", value=5.0),
+                Row(id=4, key="avg", value=2.0),
+                Row(id=9, key="count", value=5.0),
+                Row(id=9, key="avg", value=7.0),
             ],
         )
 

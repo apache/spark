@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 
 class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
@@ -27,13 +28,31 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
-  val pythonTestUDTF = TestPythonUDTF(name = "pyUDTF")
+  private val pythonScript: String =
+    """
+      |from pyspark.sql.types import StructType, StructField, IntegerType
+      |returnType = StructType([
+      |  StructField("a", IntegerType()),
+      |  StructField("b", IntegerType()),
+      |  StructField("c", IntegerType()),
+      |])
+      |class SimpleUDTF:
+      |    def eval(self, a: int, b: int):
+      |        yield a, b, a + b
+      |        yield a, b, a - b
+      |        yield a, b, b - a
+      |""".stripMargin
+
+  private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
+
+  private val pythonUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
 
   test("Simple PythonUDTF") {
     // scalastyle:off assume
     assume(shouldTestPythonUDFs)
     // scalastyle:on assume
-    val df = pythonTestUDTF(spark, lit(1), lit(2))
+    val df = pythonUDTF(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
@@ -42,13 +61,24 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     assume(shouldTestPythonUDFs)
     // scalastyle:on assume
     withTempView("t") {
-      val func = createUserDefinedPythonTableFunction("testUDTF")
-      spark.udtf.registerPython("testUDTF", func)
+      spark.udtf.registerPython("testUDTF", pythonUDTF)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
       checkAnswer(
         sql("SELECT f.* FROM t, LATERAL testUDTF(a, b) f"),
-        sql("SELECT * FROM t, LATERAL explode(array(a + b, a - b, b - a)) t(c)")
-      )
+        sql("SELECT * FROM t, LATERAL explode(array(a + b, a - b, b - a)) t(c)"))
+    }
+  }
+
+  test("PythonUDTF in correlated subquery") {
+    // scalastyle:off assume
+    assume(shouldTestPythonUDFs)
+    // scalastyle:on assume
+    withTempView("t") {
+      spark.udtf.registerPython("testUDTF", pythonUDTF)
+      Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
+      checkAnswer(
+        sql("SELECT (SELECT sum(f.b) AS r FROM testUDTF(1, 2) f WHERE f.a = t.a) FROM t"),
+        Seq(Row(6), Row(null)))
     }
   }
 }
