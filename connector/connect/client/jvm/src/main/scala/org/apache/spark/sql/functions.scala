@@ -1288,8 +1288,8 @@ object functions {
     Column.fn("map_from_arrays", keys, values)
 
   /**
-   * Creates a map after splitting the text into key/value pairs using delimiters.
-   * Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+   * Creates a map after splitting the text into key/value pairs using delimiters. Both
+   * `pairDelim` and `keyValueDelim` are treated as regular expressions.
    *
    * @group map_funcs
    * @since 3.5.0
@@ -1298,8 +1298,8 @@ object functions {
     Column.fn("str_to_map", text, pairDelim, keyValueDelim)
 
   /**
-   * Creates a map after splitting the text into key/value pairs using delimiters.
-   * The `pairDelim` is treated as regular expressions.
+   * Creates a map after splitting the text into key/value pairs using delimiters. The `pairDelim`
+   * is treated as regular expressions.
    *
    * @group map_funcs
    * @since 3.5.0
@@ -3220,10 +3220,10 @@ object functions {
   def upper(e: Column): Column = Column.fn("upper", e)
 
   /**
-   * Converts the input `e` to a binary value based on the supplied `f`.
-   * The `f` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
-   * By default, the binary format for conversion is "hex" if `fmt` is omitted.
-   * The function returns NULL if at least one of the input parameters is NULL.
+   * Converts the input `e` to a binary value based on the supplied `f`. The `f` can be a
+   * case-insensitive string literal of "hex", "utf-8", "utf8", or "base64". By default, the
+   * binary format for conversion is "hex" if `fmt` is omitted. The function returns NULL if at
+   * least one of the input parameters is NULL.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -3231,14 +3231,15 @@ object functions {
   def to_binary(e: Column, f: Column): Column = Column.fn("to_binary", e, f)
 
   /**
-   * Converts the input `e` to a binary value based on the format "hex".
-   * The function returns NULL if at least one of the input parameters is NULL.
+   * Converts the input `e` to a binary value based on the format "hex". The function returns NULL
+   * if at least one of the input parameters is NULL.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def to_binary(e: Column): Column = Column.fn("to_binary", e)
 
+  // format: off
   /**
    * Convert `e` to a string based on the `format`.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -3263,8 +3264,10 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  // format: on
   def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
 
+  // format: off
   /**
    * Convert string 'e' to a number based on the string format 'format'.
    * Throws an exception if the conversion fails. The format can consist of the following
@@ -3288,6 +3291,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  // format: on
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4164,8 +4168,8 @@ object functions {
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
   /**
-   * Parses the `timestamp` expression with the `format` expression
-   * to a timestamp without time zone. Returns null with invalid input.
+   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * zone. Returns null with invalid input.
    *
    * @group datetime_funcs
    * @since 3.5.0
@@ -4184,8 +4188,8 @@ object functions {
     Column.fn("to_timestamp_ltz", timestamp)
 
   /**
-   * Parses the `timestamp` expression with the `format` expression
-   * to a timestamp without time zone. Returns null with invalid input.
+   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * zone. Returns null with invalid input.
    *
    * @group datetime_funcs
    * @since 3.5.0
@@ -4220,7 +4224,6 @@ object functions {
    */
   def to_unix_timestamp(timeExp: Column): Column =
     Column.fn("to_unix_timestamp", timeExp)
-
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
