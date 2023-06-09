@@ -31,7 +31,7 @@ from pyspark.pandas.data_type_ops.base import (
 from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql.types import BooleanType, StringType
-from pyspark.sql.utils import pyspark_column_op, is_remote
+from pyspark.sql.utils import pyspark_column_op
 
 
 class NullOps(DataTypeOps):

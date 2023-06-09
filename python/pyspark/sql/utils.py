@@ -16,7 +16,7 @@
 #
 import functools
 import os
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar
+from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union
 
 from py4j.java_collections import JavaArray
 from py4j.java_gateway import (
@@ -45,7 +45,7 @@ from pyspark.find_spark_home import _find_spark_home
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.pandas._typing import SeriesOrIndex
+    from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy = False
 try:
@@ -237,7 +237,9 @@ def try_remote_observation(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def pyspark_column_op(func_name: str, left, right, fillna=None) -> Callable[..., "SeriesOrIndex"]:
+def pyspark_column_op(
+    func_name: str, left: IndexOpsLike, right: Any, fillna: Any = None
+) -> Union["SeriesOrIndex", None]:
     """
     Wrapper function for column_op to get proper Column class.
     """
