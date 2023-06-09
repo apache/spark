@@ -986,8 +986,12 @@ class PlanGenerationTestSuite
     fn.min_by(fn.col("a"), fn.col("b"))
   }
 
-  functionTest("percentile") {
+  functionTest("percentile without frequency") {
     fn.percentile(fn.col("a"), fn.lit(0.3))
+  }
+
+  functionTest("percentile with frequency") {
+    fn.percentile(fn.col("a"), fn.lit(0.3), fn.lit(2))
   }
 
   functionTest("percentile_approx") {
