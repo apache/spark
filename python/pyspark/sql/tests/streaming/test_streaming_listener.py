@@ -411,10 +411,13 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(progress.batchDuration == 5)
         self.assertTrue(progress.durationMs == {"getBatch": 0})
         self.assertTrue(progress.eventTime == {})
-        self.assertTrue(progress.observedMetrics == {
-            "event1": Row("c1", "c2")(1, 3.0),
-            "event2": Row("rc", "min_q", "max_q")(1, "hello", "world")
-        })
+        self.assertTrue(
+            progress.observedMetrics
+            == {
+                "event1": Row("c1", "c2")(1, 3.0),
+                "event2": Row("rc", "min_q", "max_q")(1, "hello", "world"),
+            }
+        )
 
         # Check stateOperators list
         self.assertTrue(len(progress.stateOperators) == 1)
@@ -431,11 +434,14 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(state_operator.numRowsDroppedByWatermark == 0)
         self.assertTrue(state_operator.numShufflePartitions == 2)
         self.assertTrue(state_operator.numStateStoreInstances == 2)
-        self.assertTrue(state_operator.customMetrics == {
-            "loadedMapCacheHitCount": 1,
-            "loadedMapCacheMissCount": 0,
-            "stateOnCurrentVersionSizeBytes": 2
-        })
+        self.assertTrue(
+            state_operator.customMetrics
+            == {
+                "loadedMapCacheHitCount": 1,
+                "loadedMapCacheMissCount": 0,
+                "stateOnCurrentVersionSizeBytes": 2,
+            }
+        )
 
         # Check sources list
         self.assertTrue(len(progress.sources) == 1)
