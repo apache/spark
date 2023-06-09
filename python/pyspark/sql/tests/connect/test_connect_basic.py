@@ -652,15 +652,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_streaming_local_relation(self):
-        threshold = 64 * 1024 * 1024
+        threshold = 1024 * 1024
         with self.sql_conf({"spark.sql.session.localRelationCacheThreshold": threshold}):
             suffix = "abcdef"
             letters = string.ascii_lowercase
             str = "".join(random.choice(letters) for i in range(threshold)) + suffix
             data = [[0, str], [1, str]]
-            cdf = self.connect.createDataFrame(data, ["a", "b"])
-            self.assert_eq(cdf.count(), len(data))
-            self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
+            for i in range(0, 2):
+                cdf = self.connect.createDataFrame(data, ["a", "b"])
+                self.assert_eq(cdf.count(), len(data))
+                self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
