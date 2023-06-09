@@ -813,6 +813,25 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = Column.fn("percentile", e, percentage)
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column, frequency: Column): Column =
+    Column.fn("percentile", e, percentage, frequency)
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
    * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
    * more than `percentage` of `col` values is less than the value or equal to that value.
@@ -853,6 +872,14 @@ object functions {
    * @since 3.4.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1960,6 +1987,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -2033,6 +2076,14 @@ object functions {
    * @since 3.4.0
    */
   def csc(e: Column): Column = Column.fn("csc", e)
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = Column.fn("e")
 
   /**
    * Computes the exponential of the given value.
@@ -2226,6 +2277,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 3.4.0
    */
   def log(e: Column): Column = Column.fn("log", e)
@@ -2303,6 +2362,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = Column.fn("negative", e)
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = Column.fn("pi")
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = Column.fn("positive", e)
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2365,6 +2448,14 @@ object functions {
    * @since 3.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2494,6 +2585,14 @@ object functions {
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2682,6 +2781,27 @@ object functions {
    * @since 3.4.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
+
+  /**
+   * Returns the bucket number into which the value of this expression would fall after being
+   * evaluated. Note that input arguments must follow conditions listed below; otherwise, the
+   * method will return null.
+   *
+   * @param v
+   *   value to compute a bucket number in the histogram
+   * @param min
+   *   minimum value of the histogram
+   * @param max
+   *   maximum value of the histogram
+   * @param numBucket
+   *   the number of buckets
+   * @return
+   *   the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column =
+    Column.fn("width_bucket", v, min, max, numBucket)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions

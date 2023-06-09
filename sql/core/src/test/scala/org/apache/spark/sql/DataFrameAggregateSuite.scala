@@ -1019,6 +1019,29 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
+  test("percentile_like") {
+    // percentile
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        percentile(col("year"), lit(0.3)),
+        percentile(col("year"), lit(Array(0.25, 0.75))),
+        percentile(col("year"), lit(0.3), lit(2)),
+        percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
+      ),
+      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+        Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
+    )
+
+    // median
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        median(col("year"))
+      ),
+      Row("Java", 2012.5) ::
+        Row("dotNET", 2012.0) :: Nil
+    )
+  }
+
   test("count_if") {
     withTempView("tempView") {
       Seq(("a", None), ("a", Some(1)), ("a", Some(2)), ("a", Some(3)),
