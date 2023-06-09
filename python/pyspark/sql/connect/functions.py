@@ -1533,12 +1533,17 @@ map_zip_with.__doc__ = pysparkfuncs.map_zip_with.__doc__
 
 
 def str_to_map(
-    col1: "ColumnOrName",
-    col2: Optional["ColumnOrName"] = None,
+    text: "ColumnOrName",
+    pairDelim: Optional["ColumnOrName"] = None,
+    keyValueDelim: Optional["ColumnOrName"] = None,
 ) -> Column:
-    col2 = lit(col2) if isinstance(col2, str) else col2
-    col3 = lit(col3) if isinstance(col3, str) else col3
-    return _invoke_function_over_columns("str_to_map", col1, col2)
+    _pairDelim = lit(",") if pairDelim is None else _to_col(pairDelim)
+    _keyValueDelim = lit(":") if keyValueDelim is None else _to_col(keyValueDelim)
+
+    return _invoke_function("str_to_map", _to_col(text), _pairDelim, _keyValueDelim)
+
+
+str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
 
 
 def posexplode(col: "ColumnOrName") -> Column:
@@ -1998,25 +2003,25 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
-def to_binary(expr: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
+def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
     if format is not None:
-        return _invoke_function_over_columns("to_binary", expr, format)
+        return _invoke_function_over_columns("to_binary", col, format)
     else:
-        return _invoke_function_over_columns("to_binary", expr)
+        return _invoke_function_over_columns("to_binary", col)
 
 
 to_binary.__doc__ = pysparkfuncs.to_binary.__doc__
 
 
-def to_char(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("to_char", left, right)
+def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_char", col, format)
 
 
 to_char.__doc__ = pysparkfuncs.to_char.__doc__
 
 
-def to_number(left: "ColumnOrName", right: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("to_number", left, right)
+def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_number", col, format)
 
 
 to_number.__doc__ = pysparkfuncs.to_number.__doc__
@@ -2385,40 +2390,39 @@ session_window.__doc__ = pysparkfuncs.session_window.__doc__
 
 
 def to_unix_timestamp(
-    col1: "ColumnOrName",
-    col2: "ColumnOrName",
-    timeZoneId: Optional[str] = None,
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if timeZoneId is not None:
-        return _invoke_function("to_unix_timestamp", _to_col(col1), _to_col(col2), lit(timeZoneId))
+    if format is not None:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
     else:
-        return _invoke_function_over_columns("to_unix_timestamp", col1, col2)
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp)
 
 
 to_unix_timestamp.__doc__ = pysparkfuncs.to_unix_timestamp.__doc__
 
 
 def to_timestamp_ltz(
-    col1: "ColumnOrName",
-    col2: Optional["ColumnOrName"] = None,
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if col2 is not None:
-        return _invoke_function_over_columns("to_timestamp_ltz", col1, col2)
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
     else:
-        return _invoke_function_over_columns("to_timestamp_ltz", col1)
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
 
 
 to_timestamp_ltz.__doc__ = pysparkfuncs.to_timestamp_ltz.__doc__
 
 
 def to_timestamp_ntz(
-    col1: "ColumnOrName",
-    col2: Optional["ColumnOrName"] = None,
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if col2 is not None:
-        return _invoke_function_over_columns("to_timestamp_ntz", col1, col2)
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
     else:
-        return _invoke_function_over_columns("to_timestamp_ntz", col1)
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
 
 
 to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__

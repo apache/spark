@@ -5673,9 +5673,8 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
 
 def to_unix_timestamp(
-    col: "ColumnOrName",
-    format: "ColumnOrName",
-    timeZoneId: Optional[str] = None,
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     Returns the UNIX timestamp of the given time.
@@ -5687,22 +5686,26 @@ def to_unix_timestamp(
     >>> df.select(to_unix_timestamp(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=1460098800)]
     >>> spark.conf.unset("spark.sql.session.timeZone")
+
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
+    >>> df.select(to_unix_timestamp(df.e).alias('r')).collect()
+    [Row(r=None)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if timeZoneId is not None:
-        return _invoke_function(
-            "to_unix_timestamp", _to_java_column(col1), _to_java_column(col2), timeZoneId
-        )
+    if format is not None:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
     else:
-        return _invoke_function("to_unix_timestamp", _to_java_column(col1), _to_java_column(col2))
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp)
 
 
 def to_timestamp_ltz(
-    col1: "ColumnOrName",
-    col2: Optional["ColumnOrName"] = None,
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Parses the `timestamp_str` expression with the `fmt` expression
-    to a timestamp without time zone. Returns null with invalid input.
+    Parses the `timestamp` with the `format` to a timestamp without time zone.
+    Returns null with invalid input.
 
     Examples
     --------
@@ -5711,20 +5714,26 @@ def to_timestamp_ltz(
     >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=datetime.datetime(2016, 4, 8, 15, 0))]
     >>> spark.conf.unset("spark.sql.session.timeZone")
+
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
+    >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
+    [Row(r=datetime.datetime(2016, 4, 8, 15, 0))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if col2 is not None:
-        return _invoke_function_over_columns("to_timestamp_ltz", col1, col2)
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
     else:
-        return _invoke_function_over_columns("to_timestamp_ltz", col1)
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
 
 
 def to_timestamp_ntz(
-    col1: "ColumnOrName",
-    col2: Optional["ColumnOrName"] = None,
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Parses the `timestamp_str` expression with the `fmt` expression
-    to a timestamp without time zone. Returns null with invalid input.
+    Parses the `timestamp` with the `format` to a timestamp without time zone.
+    Returns null with invalid input.
 
     Examples
     --------
@@ -5733,11 +5742,17 @@ def to_timestamp_ntz(
     >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
     [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
     >>> spark.conf.unset("spark.sql.session.timeZone")
+
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
+    >>> df.select(to_timestamp_ntz(df.e).alias('r')).collect()
+    [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if col2 is not None:
-        return _invoke_function_over_columns("to_timestamp_ntz", col1, col2)
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
     else:
-        return _invoke_function_over_columns("to_timestamp_ntz", col1)
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
 
 
 # ---------------------------- misc functions ----------------------------------
@@ -7298,28 +7313,33 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
 
 @try_remote_functions
-def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
+def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """
-    Converts the input `str` to a binary value based on the supplied `fmt`.
-    `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
-    By default, the binary format for conversion is "hex" if `fmt` is omitted.
-    The function returns NULL if at least one of the input parameters is NULL.
+    Converts the input `col` to a binary value based on the supplied `format`.
+    The `format` can be a case-insensitive string literal of "hex", "utf-8", "utf8",
+    or "base64". By default, the binary format for conversion is "hex" if
+    `format` is omitted. The function returns NULL if at least one of the
+    input parameters is NULL.
 
     Examples
     --------
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(to_binary(df.e, lit("utf-8")).alias('r')).collect()
     [Row(r=bytearray(b'abc'))]
+
+    >>> df = spark.createDataFrame([("abc",)], ["e"])
+    >>> df.select(to_binary(df.e).alias('r')).collect()
+    [Row(r=bytearray(b'\n\xbc'))]
     """
     if format is not None:
-        return _invoke_function_over_columns("to_binary", expr, format)
+        return _invoke_function_over_columns("to_binary", col, format)
     else:
-        return _invoke_function_over_columns("to_binary", expr)
+        return _invoke_function_over_columns("to_binary", col)
 
 
 def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
-    Convert `numberExpr` to a string based on the `formatExpr`.
+    Convert `col` to a string based on the `format`.
     Throws an exception if the conversion fails. The format can consist of the following
     characters, case insensitive:
        '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
@@ -7345,12 +7365,12 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     >>> df.select(to_char(df.e, lit("$99.99")).alias('r')).collect()
     [Row(r='$78.12')]
     """
-    return _invoke_function_over_columns("to_char", left, right)
+    return _invoke_function_over_columns("to_char", col, format)
 
 
 def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
-    Convert string 'expr' to a number based on the string format 'fmt'.
+    Convert string 'col' to a number based on the string format 'format'.
     Throws an exception if the conversion fails. The format can consist of the following
     characters, case insensitive:
        '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
@@ -7375,7 +7395,7 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     >>> df.select(to_number(df.e, lit("$99.99")).alias('r')).collect()
     [Row(r=Decimal('78.12'))]
     """
-    return _invoke_function_over_columns("to_number", left, right)
+    return _invoke_function_over_columns("to_number", col, format)
 
 
 # ---------------------- Collection functions ------------------------------
@@ -10079,9 +10099,9 @@ def map_zip_with(
 
 
 def str_to_map(
-    col1: "ColumnOrName",
-    col2: Union["ColumnOrName", str],
-    col3: Union["ColumnOrName", str],
+    text: "ColumnOrName",
+    pairDelim: Optional["ColumnOrName"] = None,
+    keyValueDelim: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     Creates a map after splitting the text into key/value pairs using delimiters.
@@ -10092,10 +10112,20 @@ def str_to_map(
     >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
     >>> df.select(str_to_map(df.e, lit(","), lit(":")).alias('r')).collect()
     [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
+    >>> df.select(str_to_map(df.e, lit(",")).alias('r')).collect()
+    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
+
+    >>> df = spark.createDataFrame([("a:1,b:2,c:3",)], ["e"])
+    >>> df.select(str_to_map(df.e).alias('r')).collect()
+    [Row(r={'a': '1', 'b': '2', 'c': '3'})]
     """
-    col2 = lit(col2) if isinstance(col2, str) else col2
-    col3 = lit(col3) if isinstance(col3, str) else col3
-    return _invoke_function_over_columns("str_to_map", col1, col2, col3)
+    if pairDelim is None:
+        pairDelim = lit(",")
+    if keyValueDelim is None:
+        keyValueDelim = lit(":")
+    return _invoke_function_over_columns("str_to_map", text, pairDelim, keyValueDelim)
 
 
 # ---------------------- Partition transform functions --------------------------------
