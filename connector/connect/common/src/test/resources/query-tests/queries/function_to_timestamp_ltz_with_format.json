@@ -13,8 +13,12 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "to_binary",
+        "functionName": "to_timestamp_ltz",
         "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
+          }
+        }, {
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }

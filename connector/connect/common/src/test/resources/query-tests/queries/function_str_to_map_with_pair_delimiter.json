@@ -13,10 +13,18 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "to_binary",
+        "functionName": "str_to_map",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
+          }
+        }, {
+          "literal": {
+            "string": ","
+          }
+        }, {
+          "literal": {
+            "string": "\u003d"
           }
         }]
       }

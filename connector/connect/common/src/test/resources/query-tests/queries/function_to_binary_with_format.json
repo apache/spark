@@ -18,6 +18,10 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }
+        }, {
+          "literal": {
+            "string": "utf-8"
+          }
         }]
       }
     }]

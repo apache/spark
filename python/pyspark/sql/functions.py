@@ -6356,6 +6356,16 @@ def to_unix_timestamp(
     """
     Returns the UNIX timestamp of the given time.
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    timestamp : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert UNIX timestamp values.
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -6384,6 +6394,16 @@ def to_timestamp_ltz(
     Parses the `timestamp` with the `format` to a timestamp without time zone.
     Returns null with invalid input.
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    timestamp : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert type `TimestampType` timestamp values.
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -6411,6 +6431,16 @@ def to_timestamp_ntz(
     """
     Parses the `timestamp` with the `format` to a timestamp without time zone.
     Returns null with invalid input.
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    timestamp : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert type `TimestampNTZType` timestamp values.
 
     Examples
     --------
@@ -7998,15 +8028,25 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     `format` is omitted. The function returns NULL if at least one of the
     input parameters is NULL.
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert binary values.
+
     Examples
     --------
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(to_binary(df.e, lit("utf-8")).alias('r')).collect()
     [Row(r=bytearray(b'abc'))]
 
-    >>> df = spark.createDataFrame([("abc",)], ["e"])
+    >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'\n\xbc'))]
+    [Row(r=bytearray(b'ABC'))]
     """
     if format is not None:
         return _invoke_function_over_columns("to_binary", col, format)
@@ -8035,6 +8075,16 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
          but 'MI' prints a space.
        'PR': Only allowed at the end of the format string; specifies that the result string will be
          wrapped by angle brackets if the input value is negative.
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert char values.
 
     Examples
     --------
@@ -8065,6 +8115,16 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
          the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
        'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
         negative number with wrapping angled brackets.
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert number values.
 
     Examples
     --------
@@ -10783,6 +10843,18 @@ def str_to_map(
     """
     Creates a map after splitting the text into key/value pairs using delimiters.
     Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    text : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    pairDelim : :class:`~pyspark.sql.Column` or str, optional
+        delimiter to use to split pair.
+    keyValueDelim : :class:`~pyspark.sql.Column` or str, optional
+        delimiter to use to split key/value.
 
     Examples
     --------

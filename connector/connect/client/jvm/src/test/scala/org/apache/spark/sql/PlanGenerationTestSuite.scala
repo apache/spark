@@ -2084,7 +2084,19 @@ class PlanGenerationTestSuite
     fn.str_to_map(fn.col("g"))
   }
 
+  functionTest("str_to_map with pair delimiter") {
+    fn.str_to_map(fn.col("g"), lit(","), lit("="))
+  }
+
+  functionTest("str_to_map with pair and keyValue delimiter") {
+    fn.str_to_map(fn.col("g"), lit(","))
+  }
+
   functionTest("to_binary") {
+    fn.to_binary(fn.col("g"))
+  }
+
+  functionTest("to_binary with format") {
     fn.to_binary(fn.col("g"), lit("utf-8"))
   }
 
@@ -2097,14 +2109,26 @@ class PlanGenerationTestSuite
   }
 
   functionTest("to_timestamp_ltz") {
+    fn.to_timestamp_ltz(fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ltz with format") {
     fn.to_timestamp_ltz(fn.col("g"), fn.col("g"))
   }
 
   functionTest("to_timestamp_ntz") {
+    fn.to_timestamp_ntz(fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ntz with format") {
     fn.to_timestamp_ntz(fn.col("g"), fn.col("g"))
   }
 
   functionTest("to_unix_timestamp") {
+    fn.to_unix_timestamp(fn.col("g"))
+  }
+
+  functionTest("to_unix_timestamp with format") {
     fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
