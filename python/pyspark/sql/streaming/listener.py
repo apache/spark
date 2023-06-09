@@ -408,7 +408,7 @@ class StreamingQueryProgress:
         stateOperators: List["StateOperatorProgress"],
         sources: List["SourceProgress"],
         sink: "SinkProgress",
-        numInputRows: Optional[str],
+        numInputRows: int,
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         observedMetrics: Dict[str, Row],
@@ -586,7 +586,7 @@ class StreamingQueryProgress:
         return self._observedMetrics
 
     @property
-    def numInputRows(self) -> Optional[str]:
+    def numInputRows(self) -> int:
         """
         The aggregate (across all sources) number of records processed in a trigger.
         """
