@@ -11165,8 +11165,7 @@ def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Returns `col2` if `col1` is null, or `col1` otherwise.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -11187,8 +11186,7 @@ def isnotnull(col1: "ColumnOrName") -> Column:
     """
     Returns true if `col` is not null, or false otherwise.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -11209,8 +11207,7 @@ def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Returns same result as the EQUAL(=) operator for non-null operands,
     but returns true if both are null, false if one of the them is null.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -11231,8 +11228,7 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -11253,8 +11249,7 @@ def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Returns `col2` if `col1` is null, or `col1` otherwise.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
@@ -11275,8 +11270,7 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     """
     Returns `col2` if `col1` is not null, or `col3` otherwise.
 
-    .. versionchanged:: 3.5.0
-        Supports Spark Connect.
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------

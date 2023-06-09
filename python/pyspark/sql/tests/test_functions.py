@@ -61,6 +61,7 @@ class FunctionsTestsMixin:
             "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
             "not",  # equivalent to python ~expression
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "if", # keyword Python in but not in Scala
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
