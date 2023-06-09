@@ -40,6 +40,7 @@ from pyspark.ml.param.shared import (
     HasFeaturesCol,
     HasPredictionCol,
 )
+from pyspark.mlv2.io_utils import ParamsReadWrite, ModelReadWrite
 from pyspark.mlv2.util import transform_dataframe_column
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ M = TypeVar("M", bound="Transformer")
 
 
 @inherit_doc
-class Estimator(Params, Generic[M], metaclass=ABCMeta):
+class Estimator(Params, Generic[M], ParamsReadWrite, metaclass=ABCMeta):
     """
     Abstract class for estimators that fit models to data.
 
@@ -115,7 +116,7 @@ _SPARKML_TRANSFORMER_TMP_OUTPUT_COLNAME = "_sparkML_transformer_tmp_output"
 
 
 @inherit_doc
-class Transformer(Params, metaclass=ABCMeta):
+class Transformer(Params, ParamsReadWrite, metaclass=ABCMeta):
     """
     Abstract class for transformers that transform one dataset into another.
 
@@ -190,7 +191,7 @@ class Transformer(Params, metaclass=ABCMeta):
 
 
 @inherit_doc
-class Evaluator(Params, metaclass=ABCMeta):
+class Evaluator(Params, ParamsReadWrite, metaclass=ABCMeta):
     """
     Base class for evaluators that compute metrics from predictions.
 
@@ -253,7 +254,7 @@ class Evaluator(Params, metaclass=ABCMeta):
 
 
 @inherit_doc
-class Model(Transformer, metaclass=ABCMeta):
+class Model(Transformer, ModelReadWrite, metaclass=ABCMeta):
     """
     Abstract class for models that are fitted by estimators.
 

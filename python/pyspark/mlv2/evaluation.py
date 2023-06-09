@@ -29,7 +29,7 @@ import torch
 import torcheval.metrics as torchmetrics
 
 
-class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
+class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
     """
     Evaluator for Regression, which expects input columns prediction and label.
     Supported metrics are 'mse' and 'r2'.

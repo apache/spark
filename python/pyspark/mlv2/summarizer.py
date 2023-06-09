@@ -70,6 +70,8 @@ class SummarizerAggState:
                     )
                     * (self.count / (self.count - 1))
                 )
+            if metric == "count":
+                result["count"] = self.count
 
         return result
 
@@ -90,7 +92,7 @@ def summarize_dataframe(
         and all values in the column must have the same length.
     metrics:
         The metrics to be summarized, available metrics are:
-        "min", "max",  "sum", "mean"
+        "min", "max",  "sum", "mean", "count"
 
     Returns
     -------

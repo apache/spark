@@ -16,6 +16,7 @@
 #
 
 import json
+import shutil
 import os
 import time
 from typing import Any, Dict, Optional
@@ -87,11 +88,20 @@ class ParamsReadWrite:
         return _get_metadata_to_save(self)
 
     # TODO: support saving to cloud storage file system.
-    def saveToLocal(self, path):
+    def saveToLocal(self, path, *, overwrite=False):
         """
         Save model to provided local path.
         """
         metadata = self._get_metadata()
+
+        if os.path.exists(path):
+            if overwrite:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+            else:
+                raise ValueError(f"The path {path} already exists.")
 
         os.makedirs(path)
         with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
@@ -136,7 +146,7 @@ class ModelReadWrite:
 
     def _save_core_model(self, path):
         """
-        Save the core model to provided path.
+        Save the core model to provided local path.
         Different pyspark models contain different type of core model,
         e.g. for LogisticRegressionModel, its core model is a pytorch model.
         """
@@ -144,7 +154,7 @@ class ModelReadWrite:
 
     def _load_core_model(self, path):
         """
-        Load the core model from provided path.
+        Load the core model from provided local path.
         """
         raise NotImplementedError()
 
