@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -56,6 +57,17 @@ class HiveResultSuite extends SharedSparkSession {
     val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
     val result2 = hiveResultString(executedPlan2)
     assert(result2 == timestamps.map(x => s"[$x]"))
+  }
+
+  test("SPARK-40637: binary output in hive result") {
+    val df = Seq(BigInt("1").toByteArray).toDF()
+    val executedPlan = df.queryExecution.executedPlan
+    val result = hiveResultString(executedPlan)
+    assert(result.head == new String(BigInt("1").toByteArray, StandardCharsets.UTF_8))
+    withSQLConf((SQLConf.BINARY_TO_HEX_STRING.key, "true")) {
+      val result = hiveResultString(executedPlan)
+      assert(result.head == "[01]")
+    }
   }
 
   test("toHiveString correctly handles UDTs") {

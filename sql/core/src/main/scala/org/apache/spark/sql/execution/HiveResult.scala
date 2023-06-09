@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, StringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
@@ -76,8 +76,9 @@ object HiveResult {
         val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
+        val hexString = executedPlan.conf.getConf(SQLConf.BINARY_TO_HEX_STRING)
         // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, hexString)))
           .map(_.mkString("\t"))
     }
 
@@ -94,7 +95,8 @@ object HiveResult {
   def toHiveString(
       a: (Any, DataType),
       nested: Boolean,
-      formatters: TimeFormatters): String = a match {
+      formatters: TimeFormatters,
+      hexString: Boolean = false): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
@@ -102,21 +104,23 @@ object HiveResult {
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
-    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
+    case (bin: Array[Byte], BinaryType) =>
+      if (hexString) StringUtils.getHexString(bin) else new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
     case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
+      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters, hexString))
+        .mkString("[", ",", "]")
     case (m: Map[_, _], MapType(kType, vType, _)) =>
       m.map { case (key, value) =>
-        toHiveString((key, kType), true, formatters) + ":" +
-          toHiveString((value, vType), true, formatters)
+        toHiveString((key, kType), true, formatters, hexString) + ":" +
+          toHiveString((value, vType), true, formatters, hexString)
       }.toSeq.sorted.mkString("{", ",", "}")
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map { case (v, t) =>
-        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
+        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters, hexString)}"""
       }.mkString("{", ",", "}")
     case (period: Period, YearMonthIntervalType(startField, endField)) =>
       toYearMonthIntervalString(
