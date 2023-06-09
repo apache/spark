@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
 
-class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
+class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =
@@ -606,14 +606,6 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
       """MERGE INTO primitive_table t USING primitive_table src
         |ON t.i = src.i
         |WHEN NOT MATCHED THEN
-        | INSERT (i, txt) VALUES (src.i, src.txt)
-        |""".stripMargin,
-      "No assignment for 'l'")
-
-    assertAnalysisException(
-      """MERGE INTO primitive_table t USING primitive_table src
-        |ON t.i = src.i
-        |WHEN NOT MATCHED THEN
         | INSERT (i, l, txt, txt) VALUES (src.i, src.l, src.txt, src.txt)
         |""".stripMargin,
       "Multiple assignments for 'txt'")
@@ -624,10 +616,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
         |WHEN NOT MATCHED THEN
         | INSERT (s.n_i) VALUES (1)
         |""".stripMargin,
-      "INSERT assignment keys cannot be nested fields: t.s.`n_i` = 1",
-      "No assignment for 'i'",
-      "No assignment for 's'",
-      "No assignment for 'txt'")
+      "INSERT assignment keys cannot be nested fields: t.s.`n_i` = 1")
   }
 
   test("updates to nested structs in arrays") {
@@ -866,6 +855,8 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
           |ON t.b = s.b
           |WHEN MATCHED THEN
           | UPDATE SET t.i = DEFAULT
+          |WHEN NOT MATCHED AND (s.i = 1) THEN
+          | INSERT (b) VALUES (false)
           |WHEN NOT MATCHED THEN
           | INSERT (i, b) VALUES (DEFAULT, false)
           |WHEN NOT MATCHED BY SOURCE THEN
@@ -889,8 +880,26 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
         fail(s"Unexpected actions: $other")
     }
 
-    notMatchedActions match {
-      case Seq(InsertAction(None, assignments)) =>
+    assert(notMatchedActions.length == 2)
+    notMatchedActions(0) match {
+      case InsertAction(Some(_), assignments) =>
+        assignments match {
+          case Seq(
+              Assignment(b: AttributeReference, BooleanLiteral(false)),
+              Assignment(i: AttributeReference, IntegerLiteral(42))) =>
+
+            assert(b.name == "b")
+            assert(i.name == "i")
+
+          case other =>
+            fail(s"Unexpected assignments: $other")
+        }
+
+      case other =>
+        fail(s"Unexpected actions: $other")
+    }
+    notMatchedActions(1) match {
+      case InsertAction(None, assignments) =>
         assignments match {
           case Seq(
               Assignment(b: AttributeReference, BooleanLiteral(false)),

@@ -14,9 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import unittest
-
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
@@ -24,15 +21,8 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
-    @unittest.skip(
-        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
-    )
     def test_udf_wrong_arg(self):
-        super().test_udf_wrong_arg()
-
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_timestamp_ntz(self):
-        super().test_pandas_udf_timestamp_ntz()
+        self.check_udf_wrong_arg()
 
     def test_pandas_udf_decorator_with_return_type_string(self):
         @pandas_udf("v double", PandasUDFType.GROUPED_MAP)

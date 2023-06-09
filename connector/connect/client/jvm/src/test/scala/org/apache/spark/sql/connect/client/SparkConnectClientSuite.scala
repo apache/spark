@@ -18,14 +18,16 @@ package org.apache.spark.sql.connect.client
 
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+
 import io.grpc.{Server, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
-import scala.collection.mutable
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -249,5 +251,27 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver.onNext(proto.AddArtifactsResponse.newBuilder().build())
       responseObserver.onCompleted()
     }
+  }
+
+  override def artifactStatus(
+      request: ArtifactStatusesRequest,
+      responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
+    val builder = proto.ArtifactStatusesResponse.newBuilder()
+    request.getNamesList().iterator().asScala.foreach { name =>
+      val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
+      val exists = if (name.startsWith("cache/")) {
+        inputArtifactRequests.exists { artifactReq =>
+          if (artifactReq.hasBatch) {
+            val batch = artifactReq.getBatch
+            batch.getArtifactsList.asScala.exists { singleArtifact =>
+              singleArtifact.getName == name
+            }
+          } else false
+        }
+      } else false
+      builder.putStatuses(name, status.setExists(exists).build())
+    }
+    responseObserver.onNext(builder.build())
+    responseObserver.onCompleted()
   }
 }

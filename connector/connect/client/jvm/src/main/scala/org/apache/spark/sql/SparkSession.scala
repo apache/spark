@@ -41,6 +41,7 @@ import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.DataStreamReader
+import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -314,6 +315,8 @@ class SparkSession private[sql] (
    * @since 3.5.0
    */
   def readStream: DataStreamReader = new DataStreamReader(this)
+
+  lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /**
    * Interface through which the user may create, drop, alter or query underlying databases,

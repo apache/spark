@@ -69,6 +69,8 @@ DATABASES	false
 DATE	false
 DATEADD	false
 DATEDIFF	false
+DATE_ADD	false
+DATE_DIFF	false
 DAY	false
 DAYOFYEAR	false
 DAYS	false
@@ -126,6 +128,7 @@ GROUPING	false
 HAVING	true
 HOUR	false
 HOURS	false
+IDENTIFIER	false
 IF	false
 IGNORE	false
 ILIKE	false
@@ -177,6 +180,7 @@ MINUTES	false
 MONTH	false
 MONTHS	false
 MSCK	false
+NAME	false
 NAMESPACE	false
 NAMESPACES	false
 NANOSECOND	false

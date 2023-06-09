@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
 
 private[sql] object Column {
@@ -81,17 +82,7 @@ class TypedColumn[-T, U](
   private[sql] def withInputType(
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
-
-    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
-    // the resolving is handled in the analyzer directly.
-    val newExpr = expr transform {
-      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.withInputInfo(
-          deser = unresolvedDeserializer,
-          cls = inputEncoder.clsTag.runtimeClass,
-          schema = inputEncoder.schema)
-    }
+    val newExpr = TypedAggUtils.withInputType(expr, inputEncoder, inputAttributes)
     new TypedColumn[T, U](newExpr, encoder)
   }
 

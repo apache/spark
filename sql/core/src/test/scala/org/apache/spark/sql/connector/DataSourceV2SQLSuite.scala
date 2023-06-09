@@ -132,7 +132,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`invalid_col`",
-          "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"),
+          "proposal" -> "`id`, `data`"),
         context = ExpectedContext(
           fragment = "DESCRIBE testcat.tbl invalid_col",
           start = 0,
@@ -1117,15 +1117,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO $t1(data, data) VALUES(5)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2305",
-        parameters = Map(
-          "numCols" -> "3",
-          "rowSize" -> "2",
-          "ri" -> "0"),
-        context = ExpectedContext(
-          fragment = s"INSERT INTO $t1(data, data)",
-          start = 0,
-          stop = 26))
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -1151,15 +1144,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2305",
-        parameters = Map(
-          "numCols" -> "3",
-          "rowSize" -> "2",
-          "ri" -> "0"),
-        context = ExpectedContext(
-          fragment = s"INSERT OVERWRITE $t1(data, data)",
-          start = 0,
-          stop = 31))
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -1186,15 +1172,8 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_2305",
-        parameters = Map(
-          "numCols" -> "4",
-          "rowSize" -> "3",
-          "ri" -> "0"),
-        context = ExpectedContext(
-          fragment = s"INSERT OVERWRITE $t1(data, data)",
-          start = 0,
-          stop = 31))
+        errorClass = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
@@ -2086,8 +2065,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+          "proposal" -> "`age`, `id`, `name`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy='abc'",
@@ -2098,8 +2076,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+          "proposal" -> "`age`, `id`, `name`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy",
@@ -2933,29 +2910,30 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1335",
-        parameters = Map("expr" -> "INTERVAL '1' DAY"))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+        parameters = Map(
+          "expr" -> "\"INTERVAL '1' DAY\""))
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF 'abc'").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1335",
-        parameters = Map("expr" -> "'abc'"))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+        parameters = Map("expr" -> "\"abc\""))
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF current_user()").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1335",
-        parameters = Map("expr" -> "current_user()"))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.UNEVALUABLE",
+        parameters = Map("expr" -> "\"current_user()\""))
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF CAST(rand() AS STRING)").collect()
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1335",
-        parameters = Map("expr" -> "CAST(rand() AS STRING)"))
+        errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.NON_DETERMINISTIC",
+        parameters = Map("expr" -> "\"CAST(rand() AS STRING)\""))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2979,17 +2957,17 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1336",
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         sqlState = None,
-        parameters = Map("target" -> "path-based tables"))
+        parameters = Map("relationId" -> "`parquet`.`/the/path`"))
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1336",
+        errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
         sqlState = None,
-        parameters = Map("target" -> "subqueries from WITH clause"))
+        parameters = Map("relationId" -> "`x`"))
 
       val subquery1 = "SELECT 1 FROM non_exist"
       checkError(

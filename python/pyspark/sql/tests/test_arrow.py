@@ -53,6 +53,8 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    ExamplePoint,
+    ExamplePointUDT,
 )
 from pyspark.testing.utils import QuietTest
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
@@ -192,11 +194,14 @@ class ArrowTestsMixin:
             + [np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]).astype(t) for t in float_dtypes]
         )
 
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_toPandas_fallback_enabled(self):
-        ts = datetime.datetime(2015, 11, 1, 0, 30)
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-            schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
-            df = self.spark.createDataFrame([([ts],)], schema=schema)
+            schema = StructType([StructField("a", ArrayType(StructType()), True)])
+            df = self.spark.createDataFrame([([Row()],)], schema=schema)
             with QuietTest(self.sc):
                 with self.warnings_lock:
                     with warnings.catch_warnings(record=True) as warns:
@@ -209,10 +214,14 @@ class ArrowTestsMixin:
                         ]
                         self.assertTrue(len(user_warns) > 0)
                         self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
-                        assert_frame_equal(pdf, pd.DataFrame({"a": [[ts]]}))
+                        assert_frame_equal(pdf, pd.DataFrame({"a": [[Row()]]}))
 
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_toPandas_fallback_disabled(self):
-        schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
+        schema = StructType([StructField("a", ArrayType(StructType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
@@ -221,8 +230,8 @@ class ArrowTestsMixin:
 
                 self.check_error(
                     exception=pe.exception,
-                    error_class="UNSUPPORTED_DATA_TYPE",
-                    message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                    message_parameters={"data_type": "Array of StructType"},
                 )
 
     def test_toPandas_empty_df_arrow_enabled(self):
@@ -566,7 +575,7 @@ class ArrowTestsMixin:
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 
         arrow_schema = to_arrow_schema(self.schema)
-        schema_rt = from_arrow_schema(arrow_schema)
+        schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
     def test_createDataFrame_with_ndarray(self):
@@ -653,6 +662,32 @@ class ArrowTestsMixin:
                         for row in result:
                             i, m = row
                             self.assertEqual(m, map_data[i])
+
+    def test_createDataFrame_with_struct_type(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_with_struct_type(arrow_enabled)
+
+    def check_createDataFrame_with_struct_type(self, arrow_enabled):
+        pdf = pd.DataFrame(
+            {"a": [Row(1, "a"), Row(2, "b")], "b": [{"s": 3, "t": "x"}, {"s": 4, "t": "y"}]}
+        )
+        for schema in (
+            "a struct<x int, y string>, b struct<s int, t string>",
+            StructType()
+            .add("a", StructType().add("x", LongType()).add("y", StringType()))
+            .add("b", StructType().add("s", LongType()).add("t", StringType())),
+        ):
+            with self.subTest(schema=schema):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                    df = self.spark.createDataFrame(pdf, schema)
+                result = df.collect()
+                expected = [(rec[0], Row(**rec[1])) for rec in pdf.to_records(index=False)]
+                for r in range(len(expected)):
+                    for e in range(len(expected[r])):
+                        self.assertTrue(
+                            expected[r][e] == result[r][e], f"{expected[r][e]} == {result[r][e]}"
+                        )
 
     def test_createDataFrame_with_string_dtype(self):
         # SPARK-34521: spark.createDataFrame does not support Pandas StringDtype extension type
@@ -741,15 +776,18 @@ class ArrowTestsMixin:
         pdf_col_names = [str(c) for c in pdf.columns]
         self.assertEqual(pdf_col_names, df.columns)
 
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_createDataFrame_fallback_enabled(self):
-        ts = datetime.datetime(2015, 11, 1, 0, 30)
         with QuietTest(self.sc):
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
                     # we want the warnings to appear even if this test is run from a subclass
                     warnings.simplefilter("always")
                     df = self.spark.createDataFrame(
-                        pd.DataFrame({"a": [[ts]]}), "a: array<timestamp>"
+                        pd.DataFrame({"a": [[Row()]]}), "a: array<struct<>>"
                     )
                     # Catch and check the last UserWarning.
                     user_warns = [
@@ -757,20 +795,21 @@ class ArrowTestsMixin:
                     ]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue("Attempting non-optimization" in str(user_warns[-1]))
-                    self.assertEqual(df.collect(), [Row(a=[ts])])
+                    self.assertEqual(df.collect(), [Row(a=[Row()])])
 
+    @unittest.skipIf(
+        not have_pyarrow or LooseVersion(pa.__version__) >= "2.0",
+        "will not fallback with pyarrow>=2.0",
+    )
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
             with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.createDataFrame(
-                    pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
-                    "a: array<timestamp>",
-                )
+                self.spark.createDataFrame(pd.DataFrame({"a": [[Row()]]}), "a: array<struct<>>")
 
             self.check_error(
                 exception=pe.exception,
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "Array of StructType"},
             )
 
     # Regression test for SPARK-23314
@@ -947,6 +986,231 @@ class ArrowTestsMixin:
                         else:
                             expected = pd.DataFrame.from_records(data, columns=schema.names)
                         assert_frame_equal(df.toPandas(), expected)
+
+    def test_createDataFrame_duplicate_field_names(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_duplicate_field_names(arrow_enabled)
+
+    def check_createDataFrame_duplicate_field_names(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+
+        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        pdf = pd.DataFrame.from_records(data, columns=schema.names)
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            df = self.spark.createDataFrame(pdf, schema)
+
+        self.assertEqual(df.collect(), data)
+
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43506): Enable ArrowTests.test_toPandas_empty_columns for pandas 2.0.0.",
+    )
+    def test_toPandas_empty_columns(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_empty_columns(arrow_enabled)
+
+    def check_toPandas_empty_columns(self, arrow_enabled):
+        df = self.spark.range(2).select([])
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            assert_frame_equal(df.toPandas(), pd.DataFrame(columns=[], index=range(2)))
+
+    def test_createDataFrame_nested_timestamp(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_nested_timestamp(arrow_enabled)
+
+    def check_createDataFrame_nested_timestamp(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add(
+                "struct", StructType().add("ts", TimestampType()).add("ts_ntz", TimestampNTZType())
+            )
+            .add("array", ArrayType(TimestampType()))
+            .add("array_ntz", ArrayType(TimestampNTZType()))
+            .add("map", MapType(StringType(), TimestampType()))
+            .add("map_ntz", MapType(StringType(), TimestampNTZType()))
+        )
+        data = [
+            Row(
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                Row(
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                ),
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                dict(ts=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+                dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+            )
+        ]
+        pdf = pd.DataFrame.from_records(data, columns=schema.names)
+
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            df = self.spark.createDataFrame(pdf, schema)
+
+        expected = Row(
+            ts=datetime.datetime(2022, 12, 31, 21, 0, 0),
+            ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0),
+            struct=Row(
+                ts=datetime.datetime(2022, 12, 31, 21, 0, 0),
+                ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0),
+            ),
+            array=[datetime.datetime(2022, 12, 31, 21, 0, 0)],
+            array_ntz=[datetime.datetime(2023, 1, 1, 0, 0, 0)],
+            map=dict(ts=datetime.datetime(2022, 12, 31, 21, 0, 0)),
+            map_ntz=dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+        )
+
+        self.assertEqual(df.first(), expected)
+
+    def test_toPandas_nested_timestamp(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_nested_timestamp(arrow_enabled)
+
+    def check_toPandas_nested_timestamp(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add(
+                "struct", StructType().add("ts", TimestampType()).add("ts_ntz", TimestampNTZType())
+            )
+            .add("array", ArrayType(TimestampType()))
+            .add("array_ntz", ArrayType(TimestampNTZType()))
+            .add("map", MapType(StringType(), TimestampType()))
+            .add("map_ntz", MapType(StringType(), TimestampNTZType()))
+        )
+        data = [
+            Row(
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                datetime.datetime(2023, 1, 1, 0, 0, 0),
+                Row(
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                    datetime.datetime(2023, 1, 1, 0, 0, 0),
+                ),
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                dict(ts=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+                dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0)),
+            )
+        ]
+        df = self.spark.createDataFrame(data, schema)
+
+        with self.sql_conf(
+            {
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+                "spark.sql.execution.pandas.structHandlingMode": "row",
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame(
+            {
+                "ts": [datetime.datetime(2023, 1, 1, 3, 0, 0)],
+                "ts_ntz": [datetime.datetime(2023, 1, 1, 0, 0, 0)],
+                "struct": [
+                    Row(
+                        datetime.datetime(2023, 1, 1, 3, 0, 0),
+                        datetime.datetime(2023, 1, 1, 0, 0, 0),
+                    )
+                ],
+                "array": [[datetime.datetime(2023, 1, 1, 3, 0, 0)]],
+                "array_ntz": [[datetime.datetime(2023, 1, 1, 0, 0, 0)]],
+                "map": [dict(ts=datetime.datetime(2023, 1, 1, 3, 0, 0))],
+                "map_ntz": [dict(ts_ntz=datetime.datetime(2023, 1, 1, 0, 0, 0))],
+            }
+        )
+
+        assert_frame_equal(pdf, expected)
+
+    def test_createDataFrame_udt(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_createDataFrame_udt(arrow_enabled)
+
+    def check_createDataFrame_udt(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("point", ExamplePointUDT())
+            .add("struct", StructType().add("point", ExamplePointUDT()))
+            .add("array", ArrayType(ExamplePointUDT()))
+            .add("map", MapType(StringType(), ExamplePointUDT()))
+        )
+        data = [
+            Row(
+                ExamplePoint(1.0, 2.0),
+                Row(ExamplePoint(3.0, 4.0)),
+                [ExamplePoint(5.0, 6.0)],
+                dict(point=ExamplePoint(7.0, 8.0)),
+            )
+        ]
+        pdf = pd.DataFrame.from_records(data, columns=schema.names)
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            df = self.spark.createDataFrame(pdf, schema)
+
+        self.assertEqual(df.collect(), data)
+
+    def test_toPandas_udt(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_udt(arrow_enabled)
+
+    def check_toPandas_udt(self, arrow_enabled):
+        schema = (
+            StructType()
+            .add("point", ExamplePointUDT())
+            .add("struct", StructType().add("point", ExamplePointUDT()))
+            .add("array", ArrayType(ExamplePointUDT()))
+            .add("map", MapType(StringType(), ExamplePointUDT()))
+        )
+        data = [
+            Row(
+                ExamplePoint(1.0, 2.0),
+                Row(ExamplePoint(3.0, 4.0)),
+                [ExamplePoint(5.0, 6.0)],
+                dict(point=ExamplePoint(7.0, 8.0)),
+            )
+        ]
+        df = self.spark.createDataFrame(data, schema)
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+                "spark.sql.execution.pandas.structHandlingMode": "row",
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame.from_records(data, columns=schema.names)
+
+        assert_frame_equal(pdf, expected)
 
 
 @unittest.skipIf(

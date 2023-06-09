@@ -24,6 +24,7 @@ import "spark/connect/types.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // Catalog messages are marked as unstable.
 message Catalog {
@@ -67,18 +68,25 @@ message SetCurrentDatabase {
 }
 
 // See `spark.catalog.listDatabases`
-message ListDatabases { }
+message ListDatabases {
+  // (Optional) The pattern that the database name needs to match
+  optional string pattern = 1;
+}
 
 // See `spark.catalog.listTables`
 message ListTables {
   // (Optional)
   optional string db_name = 1;
+  // (Optional) The pattern that the table name needs to match
+  optional string pattern = 2;
 }
 
 // See `spark.catalog.listFunctions`
 message ListFunctions {
   // (Optional)
   optional string db_name = 1;
+  // (Optional) The pattern that the function name needs to match
+  optional string pattern = 2;
 }
 
 // See `spark.catalog.listColumns`
@@ -229,4 +237,7 @@ message SetCurrentCatalog {
 }
 
 // See `spark.catalog.listCatalogs`
-message ListCatalogs { }
+message ListCatalogs {
+  // (Optional) The pattern that the catalog name needs to match
+  optional string pattern = 1;
+}

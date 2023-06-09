@@ -74,7 +74,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.sql.connect.client import Retrying
+    from pyspark.sql.connect.client.core import Retrying
 
 
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
@@ -1815,14 +1815,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         spark2 = RemoteSparkSession(connection="sc://localhost")
         df2 = spark2.range(10).limit(3)
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e1:
             df.union(df2).collect()
+        self.check_error(
+            exception=e1.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e2:
             df.unionByName(df2).collect()
+        self.check_error(
+            exception=e2.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
-        with self.assertRaises(SessionNotSameException):
+        with self.assertRaises(SessionNotSameException) as e3:
             df.join(df2).collect()
+        self.check_error(
+            exception=e3.exception,
+            error_class="SESSION_NOT_SAME",
+            message_parameters={},
+        )
 
     def test_extended_hint_types(self):
         cdf = self.connect.range(100).toDF("id")
@@ -3193,6 +3208,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             message_parameters={"attr_name": "_jreader"},
         )
 
+    def test_df_caache(self):
+        df = self.connect.range(10)
+        df.cache()
+        self.assert_eq(10, df.count())
+        self.assertTrue(df.is_cached)
+
 
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
@@ -3271,6 +3292,23 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
         )
         spark.stop()
+
+    def test_can_create_multiple_sessions_to_different_remotes(self):
+        self.assertIsNotNone(self.spark._client)
+        # Creates a new remote session.
+        other = PySparkSession.builder.remote("sc://other.remote:114/").create()
+        self.assertNotEquals(self.spark, other)
+
+        # Reuses an active session that was previously created.
+        same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
+        self.assertEquals(self.spark, same)
+        same.stop()
+
+        # Make sure the environment is clean.
+        self.spark.stop()
+        with self.assertRaises(RuntimeError) as e:
+            PySparkSession.builder.create()
+            self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -3404,13 +3442,15 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = ChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
-        self.assertEqual(chan.userAgent, "_SPARK_CONNECT_PYTHON")
+        self.assertRegex(
+            chan.userAgent, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_user_agent(self):
         chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
-        self.assertEqual("Agent123 /3.4", chan.userAgent)
+        self.assertIn("Agent123 /3.4", chan.userAgent)
 
     def test_user_agent_len(self):
         user_agent = "x" * 2049
@@ -3422,7 +3462,7 @@ class ChannelBuilderTests(unittest.TestCase):
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
-        self.assertEqual(expected, chan.userAgent)
+        self.assertIn(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
@@ -3438,7 +3478,7 @@ class ChannelBuilderTests(unittest.TestCase):
     def test_channel_properties(self):
         chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
         self.assertEqual("host:15002", chan.endpoint)
-        self.assertEqual("foo", chan.userAgent)
+        self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 

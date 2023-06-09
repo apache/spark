@@ -139,7 +139,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
   }
 
   test("block allocation to batch should not loose blocks from received queue") {
-    val tracker1 = spy(createTracker())
+    val tracker1 = spy[ReceivedBlockTracker](createTracker())
     tracker1.isWriteAheadLogEnabled should be (true)
     tracker1.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
 
