@@ -477,9 +477,9 @@ class SparkSession:
         else:
             local_relation = LocalRelation(_table)
 
-        cacheThreshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
+        cache_threshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
         plan: LogicalPlan = local_relation
-        if cacheThreshold[0] is not None and int(cacheThreshold[0]) <= _table.nbytes:
+        if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
             plan = CachedLocalRelation(self._cache_local_relation(local_relation))
 
         df = DataFrame.withPlan(plan, self)
