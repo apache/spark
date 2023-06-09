@@ -193,14 +193,13 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
 
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'##'"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 2,
@@ -208,8 +207,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
         start = 2,
@@ -220,8 +219,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'\"/'"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
         start = 2,
@@ -229,8 +228,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
         start = 2,
@@ -725,7 +724,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(".e3"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
+      parameters = Map("error" -> "'.'", "hint" -> ""))
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
@@ -807,7 +806,8 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("1.20E-38BD"),
       errorClass = "_LEGACY_ERROR_TEMP_0061",
-      parameters = Map("msg" -> "decimal can only support precision up to 38."),
+      parameters = Map("msg" ->
+        "[DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION] Decimal precision 40 exceeds max precision 38."),
       context = ExpectedContext(
         fragment = "1.20E-38BD",
         start = 0,
@@ -968,16 +968,6 @@ class ExpressionParserSuite extends AnalysisTest {
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
       }
     }
-
-    // Empty interval statement
-    checkError(
-      exception = parseException("interval"),
-      errorClass = "_LEGACY_ERROR_TEMP_0025",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "interval",
-        start = 0,
-        stop = 7))
 
     // Single Intervals.
     val forms = Seq("", "s")

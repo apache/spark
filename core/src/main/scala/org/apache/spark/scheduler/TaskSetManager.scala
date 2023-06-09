@@ -1054,6 +1054,7 @@ private[spark] class TaskSetManager(
     // can destroy the whole host). The reason is the next stage wouldn't be able to fetch the
     // data from this dead executor so we would need to rerun these tasks on other executors.
     val maybeShuffleMapOutputLoss = isShuffleMapTasks &&
+      !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
     if (maybeShuffleMapOutputLoss && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {

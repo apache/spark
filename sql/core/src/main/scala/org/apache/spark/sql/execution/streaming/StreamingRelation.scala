@@ -62,23 +62,16 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
     dataSource.providingClass match {
       // If the dataSource provided class is a same or subclass of FileFormat class
       case f if classOf[FileFormat].isAssignableFrom(f) =>
-        val resolve = conf.resolver
-        val outputNames = outputSet.map(_.name)
-        def isOutputColumn(col: AttributeReference): Boolean = {
-          outputNames.exists(name => resolve(col.name, name))
-        }
-        // filter out the metadata struct column if it has the name conflicting with output columns.
-        // if the file has a column "_metadata",
-        // then the data column should be returned not the metadata struct column
-        Seq(FileFormat.createFileMetadataCol(
-          dataSource.providingInstance().asInstanceOf[FileFormat])).filterNot(isOutputColumn)
+        metadataOutputWithOutConflicts(
+          Seq(dataSource.providingInstance().asInstanceOf[FileFormat].createFileMetadataCol))
       case _ => Nil
     }
   }
 
   override def withMetadataColumns(): LogicalPlan = {
-    if (metadataOutput.nonEmpty) {
-      this.copy(output = output ++ metadataOutput)
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      this.copy(output = output ++ newMetadata)
     } else {
       this
     }

@@ -81,22 +81,28 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       withTempView("temp_jtv1") {
         withGlobalTempView("global_temp_jtv1") {
           sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
-          var e = intercept[AnalysisException] {
-            sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`jtv1` by " +
-            "referencing a temporary view temp_jtv1. " +
-            "Please create a temp view instead by CREATE TEMP VIEW"))
-
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
+            },
+            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
+              "tempObj" -> "VIEW",
+              "tempObjName" -> "`temp_jtv1`"))
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
-          e = intercept[AnalysisException] {
-            sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`jtv1` by " +
-            "referencing a temporary view global_temp.global_temp_jtv1"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
+            },
+            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
+              "tempObj" -> "VIEW",
+              "tempObjName" -> "`global_temp`.`global_temp_jtv1`"))
         }
       }
     }
@@ -938,7 +944,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v1",
@@ -969,7 +975,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v4",

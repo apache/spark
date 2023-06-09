@@ -37,6 +37,37 @@ class UnresolvedException(function: String)
   extends AnalysisException(s"Invalid call to $function on unresolved object")
 
 /**
+ * A logical plan placeholder that holds the identifier clause string expression. It will be
+ * replaced by the actual logical plan with the evaluated identifier string.
+ */
+case class PlanWithUnresolvedIdentifier(
+    identifierExpr: Expression,
+    planBuilder: Seq[String] => LogicalPlan)
+  extends LeafNode {
+  override def output: Seq[Attribute] = Nil
+  override lazy val resolved = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+}
+
+/**
+ * An expression placeholder that holds the identifier clause string expression. It will be
+ * replaced by the actual expression with the evaluated identifier string.
+ */
+case class ExpressionWithUnresolvedIdentifier(
+    identifierExpr: Expression,
+    exprBuilder: Seq[String] => Expression)
+  extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+  override def child: Expression = identifierExpr
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(identifierExpr = newChild)
+  }
+}
+
+/**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name
@@ -459,7 +490,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     }
   }
 
-  override def toString: String = target.map(_ + ".").getOrElse("") + "*"
+  override def toString: String = target.map(_.mkString("", ".", ".")).getOrElse("") + "*"
 }
 
 /**
@@ -516,7 +547,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override lazy val resolved = false
 
-  override def toString: String = s"$child AS $names"
+  override def toString: String = s"$child AS ${names.mkString("(", ", ", ")")}"
 
   override protected def withNewChildInternal(newChild: Expression): MultiAlias =
     copy(child = newChild)
@@ -691,6 +722,7 @@ case class UnresolvedHaving(
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
     copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HAVING)
 }
 
 /**

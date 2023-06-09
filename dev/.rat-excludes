@@ -33,13 +33,12 @@ graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.css
-dataTables.bootstrap4.1.10.25.min.css
-dataTables.bootstrap4.1.10.25.min.js
+dataTables.bootstrap4.1.13.2.min.css
+dataTables.bootstrap4.1.13.2.min.js
 dataTables.rowsGroup.js
 jquery.blockUI.min.js
 jquery.cookies.2.2.0.min.js
-jquery.dataTables.1.10.25.min.css
-jquery.dataTables.1.10.25.min.js
+jquery.dataTables.1.13.2.min.js
 jquery.mustache.js
 jsonFormatter.min.css
 jsonFormatter.min.js
@@ -119,8 +118,6 @@ kafka-source-initial-offset-version-2.1.0.bin
 kafka-source-initial-offset-future-version.bin
 announce.tmpl
 vote.tmpl
-SessionManager.java
-SessionHandler.java
 GangliaReporter.java
 application_1578436911597_0052
 config.properties
@@ -142,3 +139,7 @@ spark-events-broken/*
 # Spark Connect related files with custom licence
 any.proto
 empty.proto
+.*\.explain
+.*\.proto.bin
+LimitedInputStream.java
+TimSort.java

@@ -17,7 +17,7 @@
 from typing import Any, Callable, no_type_check
 
 import numpy as np
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, LongType, BooleanType
 
@@ -222,7 +222,7 @@ def maybe_dispatch_ufunc_to_spark_func(
 
         @no_type_check
         def convert_arguments(*args):
-            args = [F.lit(inp) if not isinstance(inp, Column) else inp for inp in args]
+            args = [F.lit(inp) for inp in args]
             return np_spark_map_func(*args)
 
         return column_op(convert_arguments)(*inputs)

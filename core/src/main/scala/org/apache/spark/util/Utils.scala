@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -54,6 +54,8 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
+import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -89,7 +91,7 @@ private[spark] object CallSite {
 /**
  * Various utility methods used by Spark.
  */
-private[spark] object Utils extends Logging {
+private[spark] object Utils extends Logging with SparkClassUtils {
   val random = new Random()
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
@@ -192,42 +194,9 @@ private[spark] object Utils extends Logging {
     weakStringInterner.intern(s)
   }
 
-  /**
-   * Get the ClassLoader which loaded Spark.
-   */
-  def getSparkClassLoader: ClassLoader = getClass.getClassLoader
-
-  /**
-   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
-   * loaded Spark.
-   *
-   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
-   * active loader when setting up ClassLoader delegation chains.
-   */
-  def getContextOrSparkClassLoader: ClassLoader =
-    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
-
   /** Determines whether the provided class is loadable in the current thread. */
   def classIsLoadable(clazz: String): Boolean = {
     Try { classForName(clazz, initialize = false) }.isSuccess
-  }
-
-  // scalastyle:off classforname
-  /**
-   * Preferred alternative to Class.forName(className), as well as
-   * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
-   */
-  def classForName[C](
-      className: String,
-      initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[C] = {
-    if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
-    } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
-        asInstanceOf[Class[C]]
-    }
-    // scalastyle:on classforname
   }
 
   /**
@@ -324,13 +293,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Create a temporary directory inside the `java.io.tmpdir` prefixed with `spark`.
+   * The directory will be automatically deleted when the VM shuts down.
+   */
+  def createTempDir(): File =
+    createTempDir(System.getProperty("java.io.tmpdir"), "spark")
+
+  /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */
   def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
-    JavaUtils.createTempDir(root, namePrefix)
+    val dir = createDirectory(root, namePrefix)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
+    dir
   }
 
   /**
@@ -589,7 +567,7 @@ private[spark] object Utils extends Logging {
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
-      // TODO(SPARK-37677): should keep file permissions. Java implementation doesn't.
+      // After issue HADOOP-18145, unzip could keep file permissions.
       FileUtil.unZip(source, dest)
     } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
       FileUtil.unTar(source, dest)
@@ -1305,41 +1283,30 @@ private[spark] object Utils extends Logging {
     (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
+  private[this] val siByteSizes =
+    Array(1L << 60, 1L << 50, 1L << 40, 1L << 30, 1L << 20, 1L << 10, 1)
+  private[this] val siByteSuffixes =
+    Array("EiB", "PiB", "TiB", "GiB", "MiB", "KiB", "B")
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MiB".
    */
-  def bytesToString(size: Long): String = bytesToString(BigInt(size))
+  def bytesToString(size: Long): String = {
+    var i = 0
+    while (i < siByteSizes.length - 1 && size < 2 * siByteSizes(i)) i += 1
+    "%.1f %s".formatLocal(Locale.US, size.toDouble / siByteSizes(i), siByteSuffixes(i))
+  }
 
   def bytesToString(size: BigInt): String = {
     val EiB = 1L << 60
-    val PiB = 1L << 50
-    val TiB = 1L << 40
-    val GiB = 1L << 30
-    val MiB = 1L << 20
-    val KiB = 1L << 10
-
-    if (size >= BigInt(1L << 11) * EiB) {
+    if (size.isValidLong) {
+      // Common case, most sizes fit in 64 bits and all ops on BigInt are order(s) of magnitude
+      // slower than Long/Double.
+      bytesToString(size.toLong)
+    } else if (size < BigInt(2L << 10) * EiB) {
+      "%.1f EiB".formatLocal(Locale.US, BigDecimal(size) / EiB)
+    } else {
       // The number is too large, show it in scientific notation.
       BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
-    } else {
-      val (value, unit) = {
-        if (size >= 2 * EiB) {
-          (BigDecimal(size) / EiB, "EiB")
-        } else if (size >= 2 * PiB) {
-          (BigDecimal(size) / PiB, "PiB")
-        } else if (size >= 2 * TiB) {
-          (BigDecimal(size) / TiB, "TiB")
-        } else if (size >= 2 * GiB) {
-          (BigDecimal(size) / GiB, "GiB")
-        } else if (size >= 2 * MiB) {
-          (BigDecimal(size) / MiB, "MiB")
-        } else if (size >= 2 * KiB) {
-          (BigDecimal(size) / KiB, "KiB")
-        } else {
-          (BigDecimal(size), "B")
-        }
-      }
-      "%.1f %s".formatLocal(Locale.US, value, unit)
     }
   }
 
@@ -3278,24 +3245,29 @@ private[spark] object Utils extends Logging {
       case _ => math.max(sortedSize(len / 2), 1)
     }
   }
+
+  /**
+   * Return whether we are using G1GC or not
+   */
+  lazy val isG1GC: Boolean = {
+    Try {
+      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[_ <: PlatformManagedObject]]
+      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
+      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
+      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
+      val valueMethod = vmOptionClazz.getMethod("getValue")
+
+      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
+      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
+      "true".equals(useG1GC)
+    }.getOrElse(false)
+  }
 }
 
 private[util] object CallerContext extends Logging {
-  val callerContextSupported: Boolean = {
-    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
-      try {
-        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        true
-      } catch {
-        case _: ClassNotFoundException =>
-          false
-        case NonFatal(e) =>
-          logWarning("Fail to load the CallerContext class", e)
-          false
-      }
-    }
-  }
+  val callerContextEnabled: Boolean =
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false)
 }
 
 /**
@@ -3355,22 +3327,11 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
+   * [[HadoopCallerContext]].
    */
-  def setCurrentContext(): Unit = {
-    if (CallerContext.callerContextSupported) {
-      try {
-        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder: Class[AnyRef] =
-          Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
-        val hdfsContext = builder.getMethod("build").invoke(builderInst)
-        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Fail to set Spark caller context", e)
-      }
-    }
+  def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
+    val hdfsContext = new HadoopCallerContextBuilder(context).build()
+    HadoopCallerContext.setCurrent(hdfsContext)
   }
 }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, NonFoldableLiteral, RangeFrame, SortOrder, SpecifiedWindowFrame, UnaryMinus, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
@@ -132,12 +132,33 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
     )
 
-    val e = intercept[AnalysisException](
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
-    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
+      errorClass = "INVALID_BOUNDARY.START",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`start`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMinValue" -> "-9223372036854775808L"))
+
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
+      errorClass = "INVALID_BOUNDARY.END",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`end`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMaxValue" -> "9223372036854775807L"))
   }
 
   test("range between should accept at most one ORDER BY expression when unbounded") {
@@ -473,5 +494,23 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
     assert(ws.size === 1)
     checkAnswer(df,
       Row(3, 1.5) :: Row(3, 1.5) :: Row(6, 2.0) :: Row(6, 2.0) :: Row(6, 2.0) :: Nil)
+  }
+
+  test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
+    "decimals") {
+    val window = new WindowSpec(Seq($"a".expr), Seq(SortOrder($"b".expr, Ascending)),
+      SpecifiedWindowFrame(RangeFrame,
+        UnaryMinus(Literal(BigDecimal(10.2345))), Literal(BigDecimal(6.7890))))
+
+    val df = Seq(
+      1 -> "11342371013783243717493546650944543.47",
+      1 -> "999999999999999999999999999999999999.99"
+    ).toDF("a", "b")
+      .select($"a", $"b".cast("decimal(38, 2)"))
+      .select(count("*").over(window))
+
+    checkAnswer(
+      df,
+      Row(1) :: Row(1) :: Nil)
   }
 }

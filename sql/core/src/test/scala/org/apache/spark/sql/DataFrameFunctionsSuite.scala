@@ -74,8 +74,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val excludedSqlFunctions = Set(
-      "random", "ceiling", "negative", "sign", "first_value", "last_value",
-      "approx_percentile", "std", "array_agg", "char_length", "character_length",
+      "random", "first_value", "last_value",
+      "approx_percentile", "array_agg", "char_length", "character_length",
       "lcase", "position", "printf", "substr", "ucase", "day", "cardinality", "sha",
       "getbit",
       // aliases for existing functions
@@ -344,6 +344,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("misc aes function") {
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val encryptedEcb = "9J3iZbIxnmaG+OIA9Amd+A=="
+    val encryptedGcm = "y5la3muiuxN2suj6VsYXB+0XUFjtrUD0/zv5eDafsA3U"
+    val encryptedCbc = "+MgyzJxhusYVGWCljk7fhhl6C6oUqWmtdqoaG93KvhY="
+    val df1 = Seq("Spark").toDF
+
+    // Successful decryption of fixed values
+    Seq(
+      (key32, encryptedEcb, "ECB"),
+      (key32, encryptedGcm, "GCM"),
+      (key32, encryptedCbc, "CBC")).foreach {
+      case (key, encryptedText, mode) =>
+        checkAnswer(
+          df1.selectExpr(
+            s"cast(aes_decrypt(unbase64('$encryptedText'), '$key', '$mode') as string)"),
+          Seq(Row("Spark")))
+        checkAnswer(
+          df1.selectExpr(
+            s"cast(aes_decrypt(unbase64('$encryptedText'), binary('$key'), '$mode') as string)"),
+          Seq(Row("Spark")))
+    }
+  }
+
+  test("misc aes ECB function") {
     val key16 = "abcdefghijklmnop"
     val key24 = "abcdefghijklmnop12345678"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
@@ -358,15 +382,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // Successful encryption
     Seq(
-      (key16, encryptedText16, encryptedEmptyText16),
-      (key24, encryptedText24, encryptedEmptyText24),
-      (key32, encryptedText32, encryptedEmptyText32)).foreach {
-      case (key, encryptedText, encryptedEmptyText) =>
+      (key16, encryptedText16, encryptedEmptyText16, "ECB"),
+      (key24, encryptedText24, encryptedEmptyText24, "ECB"),
+      (key32, encryptedText32, encryptedEmptyText32, "ECB")).foreach {
+      case (key, encryptedText, encryptedEmptyText, mode) =>
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(value, '$key', 'ECB'))"),
+          df1.selectExpr(s"base64(aes_encrypt(value, '$key', '$mode'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key', 'ECB'))"),
+          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key', '$mode'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
     }
 
@@ -2651,6 +2675,90 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-41233: array prepend") {
+    val df = Seq(
+      (Array[Int](2, 3, 4), Array("b", "c", "d"), Array("", ""), 2),
+      (Array.empty[Int], Array.empty[String], Array.empty[String], 2),
+      (null, null, null, 2)).toDF("a", "b", "c", "d")
+    checkAnswer(
+      df.select(array_prepend($"a", 1), array_prepend($"b", "a"), array_prepend($"c", "")),
+      Seq(
+        Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "", "")),
+        Row(Seq(1), Seq("a"), Seq("")),
+        Row(null, null, null)))
+    checkAnswer(
+      df.select(array_prepend($"a", $"d")),
+      Seq(
+        Row(Seq(2, 2, 3, 4)),
+        Row(Seq(2)),
+        Row(null)))
+    checkAnswer(
+      df.selectExpr("array_prepend(a, d)"),
+      Seq(
+        Row(Seq(2, 2, 3, 4)),
+        Row(Seq(2)),
+        Row(null)))
+    checkAnswer(
+      OneRowRelation().selectExpr("array_prepend(array(1, 2), 1.23D)"),
+      Seq(
+        Row(Seq(1.23, 1.0, 2.0))
+      )
+    )
+    checkAnswer(
+      df.selectExpr("array_prepend(a, 1)", "array_prepend(b, \"a\")", "array_prepend(c, \"\")"),
+      Seq(
+        Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "", "")),
+        Row(Seq(1), Seq("a"), Seq("")),
+        Row(null, null, null)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("a string element", "a")).toDF().selectExpr("array_prepend(_1, _2)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "paramIndex" -> "0",
+        "sqlExpr" -> "\"array_prepend(_1, _2)\"",
+        "inputSql" -> "\"_1\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"ARRAY\""),
+      queryContext = Array(ExpectedContext("", "", 0, 20, "array_prepend(_1, _2)")))
+    checkError(
+      exception = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_prepend(array(1, 2), '1')")
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_prepend(array(1, 2), 1)\"",
+        "functionName" -> "`array_prepend`",
+        "dataType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<INT>\"",
+        "rightType" -> "\"STRING\""),
+      queryContext = Array(ExpectedContext("", "", 0, 30, "array_prepend(array(1, 2), '1')")))
+    val df2 = Seq((Array[String]("a", "b", "c"), "d"),
+      (null, "d"),
+      (Array[String]("x", "y", "z"), null),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(df2.selectExpr("array_prepend(a, b)"),
+      Seq(Row(Seq("d", "a", "b", "c")), Row(null), Row(Seq(null, "x", "y", "z")), Row(null)))
+    val dataA = Seq[Array[Byte]](
+      Array[Byte](5, 6),
+      Array[Byte](1, 2),
+      Array[Byte](1, 2),
+      Array[Byte](5, 6))
+    val dataB = Seq[Array[Int]](Array[Int](1, 2), Array[Int](3, 4))
+    val df3 = Seq((dataA, dataB)).toDF("a", "b")
+    val dataToPrepend = Array[Byte](5, 6)
+    checkAnswer(
+      df3.select(array_prepend($"a", null), array_prepend($"a", dataToPrepend)),
+      Seq(Row(null +: dataA, dataToPrepend +: dataA)))
+    checkAnswer(
+      df3.select(array_prepend($"b", Array.empty[Int]), array_prepend($"b", Array[Int](5, 6))),
+      Seq(Row(
+        Seq(Seq.empty[Int], Seq[Int](1, 2), Seq[Int](3, 4)),
+        Seq(Seq[Int](5, 6), Seq[Int](1, 2), Seq[Int](3, 4)))))
+  }
+
   test("array remove") {
     val df = Seq(
       (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", ""), 2),
@@ -3123,17 +3231,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq[Double](3.0, 3.0, 2.0, 5.0, 1.0, 2.0)))
     )
     checkAnswer(df4.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(true, false, false))))
-    checkAnswer(df5.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("d", "a", "b", "c"))))
+
+    val e1 = intercept[SparkException] {
+      df5.selectExpr("array_insert(a, b, c)").show()
+    }
+    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "INVALID_INDEX_OF_ZERO",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "array_insert(a, b, c)",
+        start = 0,
+        stop = 20)
+    )
+
     checkAnswer(df5.select(
       array_insert(col("a"), lit(1), col("c"))),
       Seq(Row(Seq("d", "a", "b", "c")))
     )
     // null checks
     checkAnswer(df6.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("a", null, "b", "c", "d"))))
-    checkAnswer(df5.select(
-      array_insert(col("a"), col("b"), lit(null).cast("string"))),
-      Seq(Row(Seq(null, "a", "b", "c")))
-    )
     checkAnswer(df6.select(
       array_insert(col("a"), col("b"), lit(null).cast("string"))),
       Seq(Row(Seq("a", null, "b", "c", null)))
@@ -5429,6 +5547,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df10.selectExpr("array_append(a, b)"),
       Seq(Row(Seq(1, 2, 3, null, null)))
+    )
+  }
+
+  test("SPARK-42401: array_insert - explicitly insert null") {
+    checkAnswer(
+      sql("select array_insert(array('b', 'a', 'c'), 2, cast(null as string))"),
+      Seq(Row(Seq("b", null, "a", "c")))
+    )
+  }
+
+  test("SPARK-42401: array_insert - implicitly insert null") {
+    checkAnswer(
+      sql("select array_insert(array('b', 'a', 'c'), 5, 'q')"),
+      Seq(Row(Seq("b", "a", "c", null, "q")))
+    )
+  }
+
+  test("SPARK-42401: array_append - append null") {
+    checkAnswer(
+      sql("select array_append(array('b', 'a', 'c'), cast(null as string))"),
+      Seq(Row(Seq("b", "a", "c", null)))
     )
   }
 }

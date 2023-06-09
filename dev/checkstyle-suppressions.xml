@@ -29,6 +29,8 @@
 
 <suppressions>
     <suppress checks=".*"
+              files="core/target/*"/>
+    <suppress checks=".*"
               files="core/src/main/java/org/apache/spark/util/collection/TimSort.java"/>
     <suppress checks=".*"
               files="connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java"/>
@@ -56,4 +58,6 @@
               files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
     <suppress checks="MethodName"
               files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+    <suppress checks="MethodName"
+              files="connector/connect/client/jvm/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
 </suppressions>

@@ -50,40 +50,41 @@ trait ColumnResolutionHelper extends Logging {
       (exprs, plan)
     } else {
       plan match {
-        case p: Project =>
-          // Resolving expressions against current plan.
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, p))
-          // Recursively resolving expressions on the child of current plan.
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-          // If some attributes used by expressions are resolvable only on the rewritten child
-          // plan, we need to add them into original projection.
-          val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
-          (newExprs, Project(p.projectList ++ missingAttrs, newChild))
-
-        case a @ Aggregate(groupExprs, aggExprs, child) =>
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, a))
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, child)
-          val missingAttrs = (AttributeSet(newExprs) -- a.outputSet).intersect(newChild.outputSet)
-          if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
-            // All the missing attributes are grouping expressions, valid case.
-            (newExprs, a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
-          } else {
-            // Need to add non-grouping attributes, invalid case.
-            (exprs, a)
-          }
-
-        case g: Generate =>
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, g))
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, g.child)
-          (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
-
         // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
         // via its children.
         case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
-          (newExprs, u.withNewChildren(Seq(newChild)))
+          val (newExprs, newChild) = {
+            // Resolving expressions against current plan.
+            val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
+            // Recursively resolving expressions on the child of current plan.
+            resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
+          }
+          // If some attributes used by expressions are resolvable only on the rewritten child
+          // plan, we need to add them into original projection.
+          lazy val missingAttrs =
+            (AttributeSet(newExprs) -- u.outputSet).intersect(newChild.outputSet)
+          u match {
+            case p: Project =>
+              val newProject = Project(p.projectList ++ missingAttrs, newChild)
+              newProject.copyTagsFrom(p)
+              (newExprs, newProject)
 
+            case a @ Aggregate(groupExprs, aggExprs, child) =>
+              if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
+                // All the missing attributes are grouping expressions, valid case.
+                (newExprs,
+                  a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
+              } else {
+                // Need to add non-grouping attributes, invalid case.
+                (exprs, a)
+              }
+
+            case g: Generate =>
+              (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
+
+            case _ =>
+              (newExprs, u.withNewChildren(Seq(newChild)))
+          }
         // For other operators, we can't recursively resolve and add attributes via its children.
         case other =>
           (exprs.map(resolveExpressionByPlanOutput(_, other)), other)
@@ -357,8 +358,21 @@ trait ColumnResolutionHelper extends Logging {
       e: Expression,
       q: LogicalPlan,
       allowOuter: Boolean = false): Expression = {
+    val newE = if (e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
+      // If the TreeNodeTag 'LogicalPlan.PLAN_ID_TAG' is attached, it means that the plan and
+      // expression are from Spark Connect, and need to be resolved in this way:
+      //    1, extract the attached plan id from the expression (UnresolvedAttribute only for now);
+      //    2, top-down traverse the query plan to find the plan node that matches the plan id;
+      //    3, if can not find the matching node, fail the analysis due to illegal references;
+      //    4, resolve the expression with the matching node, if any error occurs here, apply the
+      //    old code path;
+      resolveExpressionByPlanId(e, q)
+    } else {
+      e
+    }
+
     resolveExpression(
-      e,
+      newE,
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, conf.resolver)
       },
@@ -368,5 +382,56 @@ trait ColumnResolutionHelper extends Logging {
       },
       throws = true,
       allowOuter = allowOuter)
+  }
+
+  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
+    resolveExpressionByPlanChildren(expr, hostPlan) match {
+      // Assignment key and value does not need the alias when resolving nested columns.
+      case Alias(child: ExtractValue, _) => child
+      case other => other
+    }
+  }
+
+  private def resolveExpressionByPlanId(
+      e: Expression,
+      q: LogicalPlan): Expression = {
+    if (!e.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty)) {
+      return e
+    }
+
+    e match {
+      case u: UnresolvedAttribute =>
+        resolveUnresolvedAttributeByPlanId(u, q).getOrElse(u)
+      case _ =>
+        e.mapChildren(c => resolveExpressionByPlanId(c, q))
+    }
+  }
+
+  private def resolveUnresolvedAttributeByPlanId(
+      u: UnresolvedAttribute,
+      q: LogicalPlan): Option[NamedExpression] = {
+    val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
+    if (planIdOpt.isEmpty) return None
+    val planId = planIdOpt.get
+    logDebug(s"Extract plan_id $planId from $u")
+
+    val planOpt = q.find(_.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId))
+    if (planOpt.isEmpty) {
+      // For example:
+      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+      //  df1.select(df2.a)   <-   illegal reference df2.a
+      throw new AnalysisException(s"When resolving $u, " +
+        s"fail to find subplan with plan_id=$planId in $q")
+    }
+    val plan = planOpt.get
+
+    try {
+      plan.resolve(u.nameParts, conf.resolver)
+    } catch {
+      case e: AnalysisException =>
+        logDebug(s"Fail to resolve $u with $plan due to $e")
+        None
+    }
   }
 }

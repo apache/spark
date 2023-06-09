@@ -55,20 +55,8 @@
             <artifactId>scala-library</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${guava.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>failureaccess</artifactId>
-            <version>${guava.failureaccess.version}</version>
-        </dependency>
-        <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -167,43 +155,6 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <!-- Shade all GRPC / Guava / Protobuf dependencies of this build -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <configuration>
-                    <shadedArtifactAttached>false</shadedArtifactAttached>
-                    <artifactSet>
-                        <includes>
-                            <include>com.google.guava:*</include>
-                        </includes>
-                    </artifactSet>
-                    <relocations>
-                        <relocation>
-                            <pattern>com.google.common</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-                            <includes>
-                                <include>com.google.common.**</include>
-                            </includes>
-                        </relocation>
-                        <relocation>
-                            <pattern>com.google.thirdparty</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-                            <includes>
-                                <include>com.google.thirdparty.**</include>
-                            </includes>
-                        </relocation>
-                        <relocation>
-                            <pattern>android.annotation</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.android_annotation</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>com.google.errorprone.annotations</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.errorprone_annotations</shadedPattern>
-                        </relocation>
-                    </relocations>
-                </configuration>
             </plugin>
         </plugins>
     </build>

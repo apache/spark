@@ -18,12 +18,14 @@ import unittest
 import uuid
 import datetime
 import decimal
+import math
 
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
     should_test_connect,
     connect_requirement_message,
 )
+from pyspark.errors import PySparkValueError
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
@@ -31,7 +33,8 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
-    from pyspark.sql.connect.functions import col, lit
+    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.functions import col, lit, max, min, sum
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
         StringType,
@@ -40,6 +43,7 @@ if should_test_connect:
         IntegerType,
         MapType,
         ArrayType,
+        DoubleType,
     )
 
 
@@ -85,7 +89,18 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         right_input = self.connect.readTable(table_name=self.tbl_name)
         crossJoin_plan = left_input.crossJoin(other=right_input)._plan.to_proto(self.connect)
         join_plan = left_input.join(other=right_input, how="cross")._plan.to_proto(self.connect)
-        self.assertEqual(crossJoin_plan, join_plan)
+        self.assertEqual(
+            crossJoin_plan.root.join.left.read.named_table,
+            join_plan.root.join.left.read.named_table,
+        )
+        self.assertEqual(
+            crossJoin_plan.root.join.right.read.named_table,
+            join_plan.root.join.right.read.named_table,
+        )
+        self.assertEqual(
+            crossJoin_plan.root.join.join_type,
+            join_plan.root.join.join_type,
+        )
 
     def test_filter(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -192,9 +207,12 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
-        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(plan.root.unpivot.HasField("values"), True)
+        self.assertTrue(
+            all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values.values)
+        )
         self.assertEqual(
-            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+            plan.root.unpivot.values.values[0].unresolved_attribute.unparsed_identifier, "name"
         )
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
@@ -207,7 +225,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertTrue(len(plan.root.unpivot.ids) == 1)
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
-        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.HasField("values"), False)
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
@@ -221,9 +239,12 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
-        self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values))
+        self.assertEqual(plan.root.unpivot.HasField("values"), True)
+        self.assertTrue(
+            all(isinstance(c, proto.Expression) for c in plan.root.unpivot.values.values)
+        )
         self.assertEqual(
-            plan.root.unpivot.values[0].unresolved_attribute.unparsed_identifier, "name"
+            plan.root.unpivot.values.values[0].unresolved_attribute.unparsed_identifier, "name"
         )
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
@@ -236,7 +257,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertTrue(len(plan.root.unpivot.ids) == 1)
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
-        self.assertTrue(len(plan.root.unpivot.values) == 0)
+        self.assertEqual(plan.root.unpivot.HasField("values"), True)
+        self.assertTrue(len(plan.root.unpivot.values.values) == 0)
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
@@ -275,6 +297,68 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         relations = df.filter(df.col_name > 3).randomSplit([1.0, 2.0, 3.0])
         checkRelations(relations)
+
+    def test_observe(self):
+        # SPARK-41527: test DataFrame.observe()
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .observe("my_metric", min("id"), max("id"), sum("id"))
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.collect_metrics.name, "my_metric")
+        self.assertTrue(
+            all(isinstance(c, proto.Expression) for c in plan.root.collect_metrics.metrics)
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0].unresolved_function.function_name, "min"
+        )
+        self.assertTrue(
+            len(plan.root.collect_metrics.metrics[0].unresolved_function.arguments) == 1
+        )
+        self.assertTrue(
+            all(
+                isinstance(c, proto.Expression)
+                for c in plan.root.collect_metrics.metrics[0].unresolved_function.arguments
+            )
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0]
+            .unresolved_function.arguments[0]
+            .unresolved_attribute.unparsed_identifier,
+            "id",
+        )
+
+        from pyspark.sql.observation import Observation
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .observe(Observation("my_metric"), min("id"), max("id"), sum("id"))
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.collect_metrics.name, "my_metric")
+        self.assertTrue(
+            all(isinstance(c, proto.Expression) for c in plan.root.collect_metrics.metrics)
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0].unresolved_function.function_name, "min"
+        )
+        self.assertTrue(
+            len(plan.root.collect_metrics.metrics[0].unresolved_function.arguments) == 1
+        )
+        self.assertTrue(
+            all(
+                isinstance(c, proto.Expression)
+                for c in plan.root.collect_metrics.metrics[0].unresolved_function.arguments
+            )
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0]
+            .unresolved_function.arguments[0]
+            .unresolved_attribute.unparsed_identifier,
+            "id",
+        )
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -425,14 +509,18 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         plan = df.filter(df.col_name > 3).drop("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.cols],
+            plan.root.drop.column_names,
             ["col_a", "col_b"],
         )
 
         plan = df.filter(df.col_name > 3).drop(df.col_x, "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.cols],
-            ["col_x", "col_b"],
+            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.columns],
+            ["col_x"],
+        )
+        self.assertEqual(
+            plan.root.drop.column_names,
+            ["col_b"],
         )
 
     def test_deduplicate(self):
@@ -550,13 +638,23 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan2 = df.repartition(20)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.repartition.shuffle)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(PySparkValueError) as pe:
             df.coalesce(-1)._plan.to_proto(self.connect)
-        self.assertTrue("numPartitions must be positive" in str(context.exception))
 
-        with self.assertRaises(ValueError) as context:
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_POSITIVE",
+            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
             df.repartition(-1)._plan.to_proto(self.connect)
-        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_POSITIVE",
+            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+        )
 
     def test_repartition_by_expression(self):
         # SPARK-41354: test dataframe.repartition(expressions)
@@ -604,21 +702,23 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         wo.mode = "overwrite"
         wo.source = "parquet"
 
-        # Missing path or table name.
-        with self.assertRaises(AssertionError):
-            wo.command(None)
+        p = wo.command(None)
+        self.assertIsNotNone(p)
+        self.assertFalse(p.write_operation.HasField("path"))
+        self.assertFalse(p.write_operation.HasField("table"))
 
         wo.path = "path"
         p = wo.command(None)
         self.assertIsNotNone(p)
         self.assertTrue(p.write_operation.HasField("path"))
-        self.assertFalse(p.write_operation.HasField("table_name"))
+        self.assertFalse(p.write_operation.HasField("table"))
 
         wo.path = None
         wo.table_name = "table"
+        wo.table_save_method = "save_as_table"
         p = wo.command(None)
         self.assertFalse(p.write_operation.HasField("path"))
-        self.assertTrue(p.write_operation.HasField("table_name"))
+        self.assertTrue(p.write_operation.HasField("table"))
 
         wo.bucket_cols = ["a", "b", "c"]
         p = wo.command(None)
@@ -647,7 +747,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_print(self):
         # SPARK-41717: test print
         self.assertEqual(
-            self.connect.sql("SELECT 1")._plan.print().strip(), "<SQL query='SELECT 1'>"
+            self.connect.sql("SELECT 1")._plan.print().strip(),
+            "<SQL query='SELECT 1', args='None'>",
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),
@@ -685,10 +786,21 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             (None, proto.Join.JoinType.JOIN_TYPE_INNER),
             ("inner", proto.Join.JoinType.JOIN_TYPE_INNER),
             ("outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("full", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("fullouter", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("full_outer", proto.Join.JoinType.JOIN_TYPE_FULL_OUTER),
+            ("left", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
             ("leftouter", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("left_outer", proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER),
+            ("right", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
             ("rightouter", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
-            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("right_outer", proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER),
+            ("semi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
             ("leftsemi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("left_semi", proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI),
+            ("anti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("leftanti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
+            ("left_anti", proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI),
             ("cross", proto.Join.JoinType.JOIN_TYPE_CROSS),
         ]:
             joined_df = df_left.join(df_right, on=col("name"), how=join_type_str)._plan.to_proto(
@@ -713,7 +825,12 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         self.assertIsNotNone(cp1)
         self.assertEqual(cp1, cp2)
-        self.assertEqual(cp2, cp3)
+        self.assertEqual(
+            cp2.unresolved_attribute.unparsed_identifier,
+            cp3.unresolved_attribute.unparsed_identifier,
+        )
+        self.assertTrue(cp2.unresolved_attribute.HasField("plan_id"))
+        self.assertFalse(cp3.unresolved_attribute.HasField("plan_id"))
 
     def test_null_literal(self):
         null_lit = lit(None)
@@ -798,9 +915,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         p = multi_type_lit.to_plan(None)
         self.assertIsNotNone(p)
 
-        lit_list_plan = lit([lit(10), lit("str")]).to_plan(None)
-        self.assertIsNotNone(lit_list_plan)
-
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases
         col0 = col("a").alias("martin")
@@ -843,6 +957,95 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(
             mod_fun.unresolved_function.arguments[0].unresolved_attribute.unparsed_identifier, "id"
         )
+
+    def test_literal_expression_with_arrays(self):
+        l0 = LiteralExpression._from_value(["x", "y", "z"]).to_plan(None).literal
+        self.assertTrue(l0.array.element_type.HasField("string"))
+        self.assertEqual(len(l0.array.elements), 3)
+        self.assertEqual(l0.array.elements[0].string, "x")
+        self.assertEqual(l0.array.elements[1].string, "y")
+        self.assertEqual(l0.array.elements[2].string, "z")
+
+        l1 = LiteralExpression._from_value([3, -3]).to_plan(None).literal
+        self.assertTrue(l1.array.element_type.HasField("integer"))
+        self.assertEqual(len(l1.array.elements), 2)
+        self.assertEqual(l1.array.elements[0].integer, 3)
+        self.assertEqual(l1.array.elements[1].integer, -3)
+
+        l2 = LiteralExpression._from_value([float("nan"), -3.0, 0.0]).to_plan(None).literal
+        self.assertTrue(l2.array.element_type.HasField("double"))
+        self.assertEqual(len(l2.array.elements), 3)
+        self.assertTrue(math.isnan(l2.array.elements[0].double))
+        self.assertEqual(l2.array.elements[1].double, -3.0)
+        self.assertEqual(l2.array.elements[2].double, 0.0)
+
+        l3 = LiteralExpression._from_value([[3, 4], [5, 6, 7]]).to_plan(None).literal
+        self.assertTrue(l3.array.element_type.HasField("array"))
+        self.assertTrue(l3.array.element_type.array.element_type.HasField("integer"))
+        self.assertEqual(len(l3.array.elements), 2)
+        self.assertEqual(len(l3.array.elements[0].array.elements), 2)
+        self.assertEqual(len(l3.array.elements[1].array.elements), 3)
+
+        l4 = (
+            LiteralExpression._from_value([[float("inf"), 0.4], [0.5, float("nan")], []])
+            .to_plan(None)
+            .literal
+        )
+        self.assertTrue(l4.array.element_type.HasField("array"))
+        self.assertTrue(l4.array.element_type.array.element_type.HasField("double"))
+        self.assertEqual(len(l4.array.elements), 3)
+        self.assertEqual(len(l4.array.elements[0].array.elements), 2)
+        self.assertEqual(len(l4.array.elements[1].array.elements), 2)
+        self.assertEqual(len(l4.array.elements[2].array.elements), 0)
+
+    def test_literal_to_any_conversion(self):
+        for value in [
+            b"binary\0\0asas",
+            True,
+            False,
+            0,
+            12,
+            -1,
+            0.0,
+            1.234567,
+            decimal.Decimal(0.0),
+            decimal.Decimal(1.234567),
+            "sss",
+            datetime.date(2022, 12, 13),
+            datetime.datetime.now(),
+            datetime.timedelta(1, 2, 3),
+            [1, 2, 3, 4, 5, 6],
+            [-1.0, 2.0, 3.0],
+            ["x", "y", "z"],
+            [[1.0, 2.0, 3.0], [4.0, 5.0], [6.0]],
+        ]:
+            lit = LiteralExpression._from_value(value)
+            proto_lit = lit.to_plan(None).literal
+            value2 = LiteralExpression._to_value(proto_lit)
+            self.assertEqual(value, value2)
+
+        with self.assertRaises(AssertionError):
+            lit = LiteralExpression._from_value(1.234567)
+            proto_lit = lit.to_plan(None).literal
+            LiteralExpression._to_value(proto_lit, StringType())
+
+        with self.assertRaises(AssertionError):
+            lit = LiteralExpression._from_value("1.234567")
+            proto_lit = lit.to_plan(None).literal
+            LiteralExpression._to_value(proto_lit, DoubleType())
+
+        with self.assertRaises(AssertionError):
+            # build a array<string> proto literal, but with incorrect elements
+            proto_lit = proto.Expression().literal
+            proto_lit.array.element_type.CopyFrom(pyspark_types_to_proto_types(StringType()))
+            proto_lit.array.elements.append(
+                LiteralExpression("string", StringType()).to_plan(None).literal
+            )
+            proto_lit.array.elements.append(
+                LiteralExpression(1.234, DoubleType()).to_plan(None).literal
+            )
+
+            LiteralExpression._to_value(proto_lit, DoubleType)
 
 
 if __name__ == "__main__":

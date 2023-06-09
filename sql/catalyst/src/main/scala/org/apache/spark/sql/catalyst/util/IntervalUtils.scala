@@ -381,7 +381,7 @@ object IntervalUtils {
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
     val minutes = toLongWithRange(minuteStr, minute, 0, 59)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(second))
+    micros = Math.addExact(micros, sign * parseSecondNano(second, 0, 59))
     micros
   }
 
@@ -391,7 +391,7 @@ object IntervalUtils {
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
     val minutes = toLongWithRange(minuteStr, minute, 0, 59)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(second))
+    micros = Math.addExact(micros, sign * parseSecondNano(second, 0, 59))
     micros
   }
 
@@ -399,7 +399,7 @@ object IntervalUtils {
     var micros = 0L
     val minutes = toLongWithRange(minuteStr, minute, 0, MAX_MINUTE)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(second))
+    micros = Math.addExact(micros, sign * parseSecondNano(second, 0, 59))
     micros
   }
 
@@ -549,9 +549,12 @@ object IntervalUtils {
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
-  private def parseSecondNano(secondNano: String): Long = {
+  private def parseSecondNano(
+      secondNano: String,
+      minSecond: Long = MIN_SECOND,
+      maxSecond: Long = MAX_SECOND): Long = {
     def parseSeconds(secondsStr: String): Long = {
-      toLongWithRange(secondStr, secondsStr, MIN_SECOND, MAX_SECOND) * MICROS_PER_SECOND
+      toLongWithRange(secondStr, secondsStr, minSecond, maxSecond) * MICROS_PER_SECOND
     }
 
     secondNano.split("\\.") match {

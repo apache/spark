@@ -21,6 +21,7 @@ package spark.connect;
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
 
 // This message describes the logical [[DataType]] of something. It does not carry the value
 // itself but only describes it.
@@ -64,6 +65,9 @@ message DataType {
 
     // UserDefinedType
     UDT udt = 23;
+
+    // UnparsedDataType
+    Unparsed unparsed = 24;
   }
 
   message Boolean {
@@ -182,5 +186,10 @@ message DataType {
     optional string python_class = 3;
     optional string serialized_python_class = 4;
     DataType sql_type = 5;
+  }
+
+  message Unparsed {
+    // (Required) The unparsed data type string
+    string data_type_string = 1;
   }
 }

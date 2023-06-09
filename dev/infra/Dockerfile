@@ -38,10 +38,10 @@ RUN apt update
 RUN $APT_INSTALL gfortran libopenblas-dev liblapack-dev
 RUN $APT_INSTALL build-essential
 
-RUN mkdir -p /usr/local/pypy/pypy3.7 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.7-v7.3.7-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.7 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3.7 && \
-    ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3
+RUN mkdir -p /usr/local/pypy/pypy3.8 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
@@ -64,11 +64,11 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=1.5.3' scipy coverage matplotlib
-RUN python3.9 -m pip install numpy pyarrow 'pandas<=1.5.3' scipy unittest-xml-reporting plotly>=4.8 scikit-learn 'mlflow>=1.0' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN pypy3 -m pip install numpy 'pandas<=2.0.2' scipy coverage matplotlib
+RUN python3.9 -m pip install numpy pyarrow 'pandas<=2.0.2' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status
 
 # Add torch as a testing dependency for TorchDistributor
-RUN python3.9 -m pip install torch torchvision
+RUN python3.9 -m pip install torch torchvision torcheval

@@ -50,6 +50,10 @@ class StreamingQueryListener(ABC):
     ...        # Do something with event.
     ...        pass
     ...
+    ...    def onQueryIdle(self, event: QueryIdleEvent) -> None:
+    ...        # Do something with event.
+    ...        pass
+    ...
     ...    def onQueryTerminated(self, event: QueryTerminatedEvent) -> None:
     ...        # Do something with event.
     ...        pass
@@ -88,6 +92,13 @@ class StreamingQueryListener(ABC):
         pass
 
     @abstractmethod
+    def onQueryIdle(self, event: "QueryIdleEvent") -> None:
+        """
+        Called when the query is idle and waiting for new data to process.
+        """
+        pass
+
+    @abstractmethod
     def onQueryTerminated(self, event: "QueryTerminatedEvent") -> None:
         """
         Called when a query is stopped, with or without error.
@@ -122,6 +133,9 @@ class JStreamingQueryListener:
 
     def onQueryProgress(self, jevent: JavaObject) -> None:
         self.pylistener.onQueryProgress(QueryProgressEvent(jevent))
+
+    def onQueryIdle(self, jevent: JavaObject) -> None:
+        self.pylistener.onQueryIdle(QueryIdleEvent(jevent))
 
     def onQueryTerminated(self, jevent: JavaObject) -> None:
         self.pylistener.onQueryTerminated(QueryTerminatedEvent(jevent))
@@ -200,6 +214,46 @@ class QueryProgressEvent:
         return self._progress
 
 
+class QueryIdleEvent:
+    """
+    Event representing that query is idle and waiting for new data to process.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    This API is evolving.
+    """
+
+    def __init__(self, jevent: JavaObject) -> None:
+        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
+        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
+        self._timestamp: str = jevent.timestamp()
+
+    @property
+    def id(self) -> uuid.UUID:
+        """
+        A unique query id that persists across restarts. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
+        """
+        return self._id
+
+    @property
+    def runId(self) -> uuid.UUID:
+        """
+        A query id that is unique for every start/restart. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
+        """
+        return self._runId
+
+    @property
+    def timestamp(self) -> str:
+        """
+        The timestamp when the latest no-batch trigger happened.
+        """
+        return self._timestamp
+
+
 class QueryTerminatedEvent:
     """
     Event representing that termination of a query.
@@ -216,6 +270,10 @@ class QueryTerminatedEvent:
         self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
         jexception = jevent.exception()
         self._exception: Optional[str] = jexception.get() if jexception.isDefined() else None
+        jerrorclass = jevent.errorClassOnException()
+        self._errorClassOnException: Optional[str] = (
+            jerrorclass.get() if jerrorclass.isDefined() else None
+        )
 
     @property
     def id(self) -> uuid.UUID:
@@ -241,6 +299,19 @@ class QueryTerminatedEvent:
         """
         return self._exception
 
+    @property
+    def errorClassOnException(self) -> Optional[str]:
+        """
+        The error class from the exception if the query was terminated
+        with an exception which is a part of error class framework.
+        If the query was terminated without an exception, or the
+        exception is not a part of error class framework, it will be
+        `None`.
+
+        .. versionadded:: 3.5.0
+        """
+        return self._errorClassOnException
+
 
 class StreamingQueryProgress:
     """
@@ -260,6 +331,8 @@ class StreamingQueryProgress:
         self._name: Optional[str] = jprogress.name()
         self._timestamp: str = jprogress.timestamp()
         self._batchId: int = jprogress.batchId()
+        self._inputRowsPerSecond: float = jprogress.inputRowsPerSecond()
+        self._processedRowsPerSecond: float = jprogress.processedRowsPerSecond()
         self._batchDuration: int = jprogress.batchDuration()
         self._durationMs: Dict[str, int] = dict(jprogress.durationMs())
         self._eventTime: Dict[str, str] = dict(jprogress.eventTime())
@@ -382,18 +455,18 @@ class StreamingQueryProgress:
         return self._jprogress.numInputRows()
 
     @property
-    def inputRowsPerSecond(self) -> str:
+    def inputRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate of data arriving.
         """
-        return self._jprogress.inputRowsPerSecond()
+        return self._inputRowsPerSecond
 
     @property
-    def processedRowsPerSecond(self) -> str:
+    def processedRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate at which Spark is processing data..
         """
-        return self._jprogress.processedRowsPerSecond()
+        return self._processedRowsPerSecond
 
     @property
     def json(self) -> str:

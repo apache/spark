@@ -272,7 +272,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createCartesianProduct() = {
-          if (joinType.isInstanceOf[InnerLike]) {
+          if (joinType.isInstanceOf[InnerLike] && !hintToNotBroadcastAndReplicate(hint)) {
             // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
             // pass the original condition which includes both equal and non-equal conditions.
             Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), j.condition)))
@@ -288,7 +288,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM
-              val buildSide = getSmallerSide(left, right)
+              // Build the smaller side unless the join requires a particular build side
+              // (e.g. NO_BROADCAST_AND_REPLICATION hint)
+              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
+              val buildSide = requiredBuildSide.getOrElse(getSmallerSide(left, right))
               Seq(joins.BroadcastNestedLoopJoinExec(
                 planLater(left), planLater(right), buildSide, joinType, j.condition))
             }
@@ -336,7 +339,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
         }
 
-        def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
+        def createBroadcastNLJoin(onlyLookingAtHint: Boolean) = {
+          val buildLeft = if (onlyLookingAtHint) {
+            hintToBroadcastLeft(hint)
+          } else {
+            canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
+          }
+
+          val buildRight = if (onlyLookingAtHint) {
+            hintToBroadcastRight(hint)
+          } else {
+            canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
+          }
+
           val maybeBuildSide = if (buildLeft && buildRight) {
             Some(desiredBuildSide)
           } else if (buildLeft) {
@@ -354,7 +369,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createCartesianProduct() = {
-          if (joinType.isInstanceOf[InnerLike]) {
+          if (joinType.isInstanceOf[InnerLike] && !hintToNotBroadcastAndReplicate(hint)) {
             Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
           } else {
             None
@@ -362,19 +377,23 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastNLJoin(canBroadcastBySize(left, conf), canBroadcastBySize(right, conf))
+          createBroadcastNLJoin(false)
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM
+              // Build the desired side unless the join requires a particular build side
+              // (e.g. NO_BROADCAST_AND_REPLICATION hint)
+              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
+              val buildSide = requiredBuildSide.getOrElse(desiredBuildSide)
               Seq(joins.BroadcastNestedLoopJoinExec(
-                planLater(left), planLater(right), desiredBuildSide, joinType, condition))
+                planLater(left), planLater(right), buildSide, joinType, condition))
             }
         }
 
         if (hint.isEmpty) {
           createJoinWithoutHint()
         } else {
-          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+          createBroadcastNLJoin(true)
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
             .getOrElse(createJoinWithoutHint())
         }
@@ -400,7 +419,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
+        if (aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF])) {
           throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
@@ -453,6 +472,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplicate(keys, child) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
+
+      case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
+        StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
     }
@@ -522,12 +544,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
-        val aggregateExpressions = aggExpressions.map(expr =>
-          expr.asInstanceOf[AggregateExpression])
-
+        if !aggExpressions.exists(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
         val (functionsWithDistinct, functionsWithoutDistinct) =
-          aggregateExpressions.partition(_.isDistinct)
+          aggExpressions.partition(_.isDistinct)
         val distinctAggChildSets = functionsWithDistinct.map { ae =>
           ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable))
         }.distinct
@@ -552,7 +571,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           if (functionsWithDistinct.isEmpty) {
             AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
-              aggregateExpressions,
+              aggExpressions,
               resultExpressions,
               planLater(child))
           } else {
@@ -592,19 +611,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         aggregateOperator
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
-        if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
-        val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
-
+          if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
         Seq(execution.python.AggregateInPandasExec(
           groupingExpressions,
-          udfExpressions,
+          aggExpressions,
           resultExpressions,
           planLater(child)))
 
       case PhysicalAggregation(_, aggExpressions, _, _) =>
         val groupAggPandasUDFNames = aggExpressions
-          .filter(_.isInstanceOf[PythonUDF])
-          .map(_.asInstanceOf[PythonUDF].name)
+          .map(_.aggregateFunction)
+          .filter(_.isInstanceOf[PythonUDAF])
+          .map(_.asInstanceOf[PythonUDAF].name)
         // If cannot match the two cases above, then it's an error
         throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
 
@@ -624,6 +642,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.WindowInPandasExec(
           windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
+      case _ => Nil
+    }
+  }
+
+  object WindowGroupLimit extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
+        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
+          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
+        val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
+          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
+        finalWindowGroupLimit :: Nil
       case _ => Nil
     }
   }
@@ -794,10 +824,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.FlatMapCoGroupsInPandasExec(
           f.leftAttributes, f.rightAttributes,
           func, output, planLater(left), planLater(right)) :: Nil
-      case logical.MapInPandas(func, output, child) =>
-        execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
-      case logical.PythonMapInArrow(func, output, child) =>
-        execution.python.PythonMapInArrowExec(func, output, planLater(child)) :: Nil
+      case logical.MapInPandas(func, output, child, isBarrier) =>
+        execution.python.MapInPandasExec(func, output, planLater(child), isBarrier) :: Nil
+      case logical.PythonMapInArrow(func, output, child, isBarrier) =>
+        execution.python.PythonMapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
@@ -881,14 +911,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           REPARTITION_BY_NUM
         }
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child),
+          shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case r: logical.RebalancePartitions =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty) {
           REBALANCE_PARTITIONS_BY_NONE
         } else {
           REBALANCE_PARTITIONS_BY_COL
         }
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child),
+          shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

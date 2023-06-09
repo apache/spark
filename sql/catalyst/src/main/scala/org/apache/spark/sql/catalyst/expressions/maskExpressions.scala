@@ -223,8 +223,23 @@ case class Mask(
     val fifthGen = children(4).genCode(ctx)
     val resultCode =
       f(firstGen.value, secondGen.value, thirdGen.value, fourthGen.value, fifthGen.value)
-    ev.copy(
-      code = code"""
+    if (nullable) {
+      // this function is somewhat like a `UnaryExpression`, in that only the first child
+      // determines whether the result is null
+      val nullSafeEval = ctx.nullSafeExec(children(0).nullable, firstGen.isNull)(resultCode)
+      ev.copy(code = code"""
+        ${firstGen.code}
+        ${secondGen.code}
+        ${thirdGen.code}
+        ${fourthGen.code}
+        ${fifthGen.code}
+        boolean ${ev.isNull} = ${firstGen.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval
+      """)
+    } else {
+      ev.copy(
+        code = code"""
         ${firstGen.code}
         ${secondGen.code}
         ${thirdGen.code}
@@ -232,7 +247,8 @@ case class Mask(
         ${fifthGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""",
-      isNull = FalseLiteral)
+        isNull = FalseLiteral)
+    }
   }
 
   /**

@@ -17,10 +17,12 @@
 
 package org.apache.spark.ui.scope
 
+import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.rdd.DeterministicLevel
 
-class RDDOperationGraphSuite extends SparkFunSuite {
+class RDDOperationGraphSuite extends SparkFunSuite with PrivateMethodTester {
   test("Test simple cluster equals") {
     // create a 2-cluster chain with a child
     val c1 = new RDDOperationCluster("1", false, "Bender")
@@ -35,5 +37,11 @@ class RDDOperationGraphSuite extends SparkFunSuite {
     c1copy.attachChildCluster(c2copy)
 
     assert(c1 == c1copy)
+  }
+
+  test("SPARK-43441: makeDotNode should not fail when DeterministicLevel is absent") {
+    val node = new RDDOperationNode(0, "", false, false, "", null)
+    val _makeDotNode = PrivateMethod[String](Symbol("makeDotNode"))
+    RDDOperationGraph.invokePrivate(_makeDotNode(node))
   }
 }

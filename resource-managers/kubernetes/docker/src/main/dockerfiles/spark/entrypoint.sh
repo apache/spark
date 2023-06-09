@@ -75,12 +75,16 @@ elif ! [ -z ${SPARK_HOME+x} ]; then
   SPARK_CLASSPATH="$SPARK_HOME/conf:$SPARK_CLASSPATH";
 fi
 
+# SPARK-43540: add current working directory into executor classpath
+SPARK_CLASSPATH="$SPARK_CLASSPATH:$PWD"
+
 case "$1" in
   driver)
     shift 1
     CMD=(
       "$SPARK_HOME/bin/spark-submit"
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --conf "spark.executorEnv.SPARK_DRIVER_POD_IP=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
       "$@"
     )

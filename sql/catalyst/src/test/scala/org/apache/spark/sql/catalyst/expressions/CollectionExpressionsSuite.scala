@@ -169,8 +169,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    checkExceptionInExpression[RuntimeException](
-      MapConcat(Seq(m0, m1)), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapConcat(Seq(m0, m1)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // overlapping maps should remove duplicated map keys w.r.t. last win policy.
       checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
@@ -324,8 +329,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
 
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(ai4), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapFromEntries(ai4),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
@@ -351,8 +361,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
 
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(as4), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapFromEntries(as4),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
@@ -2297,7 +2312,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     // index edge cases
     checkEvaluation(ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 3, 2, 4))
-    checkEvaluation(ArrayInsert(a1, Literal(0), Literal(3)), Seq(3, 1, 2, 4))
     checkEvaluation(ArrayInsert(a1, Literal(1), Literal(3)), Seq(3, 1, 2, 4))
     checkEvaluation(ArrayInsert(a1, Literal(4), Literal(3)), Seq(1, 2, 4, 3))
     checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 3, 2, 4))
@@ -2736,5 +2750,26 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       )
     )
 
+  }
+
+  test("SPARK-42401: Array insert of null value (explicit)") {
+    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    checkEvaluation(ArrayInsert(
+      a, Literal(2), Literal.create(null, StringType)), Seq("b", null, "a", "c")
+    )
+  }
+
+  test("SPARK-42401: Array insert of null value (implicit)") {
+    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    checkEvaluation(ArrayInsert(
+      a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
+    )
+  }
+
+  test("SPARK-42401: Array append of null value") {
+    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    checkEvaluation(ArrayAppend(
+      a, Literal.create(null, StringType)), Seq("b", "a", "c", null)
+    )
   }
 }

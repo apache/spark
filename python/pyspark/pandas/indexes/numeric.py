@@ -48,6 +48,8 @@ class Int64Index(IntegerIndex):
     storing axis labels for all pandas objects. Int64Index is a special case
     of `Index` with purely integer labels.
 
+    .. deprecated:: 3.4.0
+
     Parameters
     ----------
     data : array-like (1-dimensional)
@@ -68,19 +70,19 @@ class Int64Index(IntegerIndex):
 
     Examples
     --------
-    >>> ps.Int64Index([1, 2, 3])
+    >>> ps.Int64Index([1, 2, 3])  # doctest: +SKIP
     Int64Index([1, 2, 3], dtype='int64')
 
     From a Series:
 
     >>> s = ps.Series([1, 2, 3], index=[10, 20, 30])
-    >>> ps.Int64Index(s)
+    >>> ps.Int64Index(s)  # doctest: +SKIP
     Int64Index([1, 2, 3], dtype='int64')
 
     From an Index:
 
     >>> idx = ps.Index([1, 2, 3])
-    >>> ps.Int64Index(idx)
+    >>> ps.Int64Index(idx)  # doctest: +SKIP
     Int64Index([1, 2, 3], dtype='int64')
     """
 
@@ -110,6 +112,8 @@ class Float64Index(NumericIndex):
     storing axis labels for all pandas objects. Float64Index is a special case
     of `Index` with purely float labels.
 
+    .. deprecated:: 3.4.0
+
     Parameters
     ----------
     data : array-like (1-dimensional)
@@ -130,19 +134,19 @@ class Float64Index(NumericIndex):
 
     Examples
     --------
-    >>> ps.Float64Index([1.0, 2.0, 3.0])
+    >>> ps.Float64Index([1.0, 2.0, 3.0])  # doctest: +SKIP
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
 
     From a Series:
 
     >>> s = ps.Series([1, 2, 3], index=[10, 20, 30])
-    >>> ps.Float64Index(s)
+    >>> ps.Float64Index(s)  # doctest: +SKIP
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
 
     From an Index:
 
     >>> idx = ps.Index([1, 2, 3])
-    >>> ps.Float64Index(idx)
+    >>> ps.Float64Index(idx)  # doctest: +SKIP
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
     """
 

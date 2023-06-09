@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
@@ -271,15 +272,15 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
-    val newDf = toDF()
+    val newDf = logicalPlan match {
+      case c: CommandResult =>
+        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
+        // avoid triggering a job
+        Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
+      case _ => toDF()
+    }
     val castCols = newDf.logicalPlan.output.map { col =>
-      // Since binary types in top-level schema fields have a specific format to print,
-      // so we do not cast them to strings here.
-      if (col.dataType == BinaryType) {
-        Column(col)
-      } else {
-        Column(col).cast(StringType)
-      }
+      Column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -288,13 +289,9 @@ class Dataset[T] private[sql](
     // first `truncate-3` and "..."
     schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
-        val str = cell match {
-          case null => "null"
-          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ =>
-            // Escapes meta-characters not to break the `showString` format
-            SchemaUtils.escapeMetaCharacters(cell.toString)
-        }
+        assert(cell != null, "ToPrettyString is not nullable and should not return null value")
+        // Escapes meta-characters not to break the `showString` format
+        val str = SchemaUtils.escapeMetaCharacters(cell.toString)
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
           if (truncate < 4) str.substring(0, truncate)
@@ -397,6 +394,43 @@ class Dataset[T] private[sql](
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
       sb.append(s"only showing top $numRows $rowsString\n")
+    }
+
+    sb.toString()
+  }
+
+  /**
+   * Compose the HTML representing rows for output
+   *
+   * @param _numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
+   */
+  private[sql] def htmlString(
+      _numRows: Int,
+      truncate: Int = 20): String = {
+    val numRows = _numRows.max(0).min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH - 1)
+    // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
+    val tmpRows = getRows(numRows, truncate)
+
+    val hasMoreData = tmpRows.length - 1 > numRows
+    val rows = tmpRows.take(numRows + 1)
+
+    val sb = new StringBuilder
+
+    sb.append("<table border='1'>\n")
+
+    sb.append(rows.head.map(StringEscapeUtils.escapeHtml4)
+      .mkString("<tr><th>", "</th><th>", "</th></tr>\n"))
+    rows.tail.foreach { row =>
+      sb.append(row.map(StringEscapeUtils.escapeHtml4)
+        .mkString("<tr><td>", "</td><td>", "</td></tr>\n"))
+    }
+
+    sb.append("</table>\n")
+
+    if (hasMoreData) {
+      sb.append(s"only showing top $numRows ${if (numRows == 1) "row" else "rows"}\n")
     }
 
     sb.toString()
@@ -1477,6 +1511,18 @@ class Dataset[T] private[sql](
       }
   }
 
+  /**
+   * Selects a metadata column based on its logical column name, and returns it as a [[Column]].
+   *
+   * A metadata column can be accessed this way even if the underlying data source defines a data
+   * column with a conflicting name.
+   *
+   * @group untypedrel
+   * @since 3.5.0
+   */
+  def metadataColumn(colName: String): Column =
+    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
@@ -1858,7 +1904,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def reduce(func: (T, T) => T): T = withNewRDDExecutionId {
+  def reduce(func: (T, T) => T): T = withNewRDDExecutionId("reduce") {
     rdd.reduce(func)
   }
 
@@ -2380,8 +2426,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col0|col1|col2|col3|
    *   // +----+----+----+----+
-   *   // |   1|   2|   3|null|
-   *   // |   5|   4|null|   6|
+   *   // |   1|   2|   3|NULL|
+   *   // |   5|   4|NULL|   6|
    *   // +----+----+----+----+
    *
    *   df2.unionByName(df1, true).show
@@ -2390,8 +2436,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col1|col0|col3|col2|
    *   // +----+----+----+----+
-   *   // |   4|   5|   6|null|
-   *   // |   2|   1|null|   3|
+   *   // |   4|   5|   6|NULL|
+   *   // |   2|   1|NULL|   3|
    *   // +----+----+----+----+
    * }}}
    *
@@ -2886,6 +2932,67 @@ class Dataset[T] private[sql](
    * This method can only be used to drop top level columns. the colName string is treated
    * literally without further interpretation.
    *
+   * Note: `drop(colName)` has different semantic with `drop(col(colName))`, for example:
+   * 1, multi column have the same colName:
+   * {{{
+   *   val df1 = spark.range(0, 2).withColumn("key1", lit(1))
+   *   val df2 = spark.range(0, 2).withColumn("key2", lit(2))
+   *   val df3 = df1.join(df2)
+   *
+   *   df3.show
+   *   // +---+----+---+----+
+   *   // | id|key1| id|key2|
+   *   // +---+----+---+----+
+   *   // |  0|   1|  0|   2|
+   *   // |  0|   1|  1|   2|
+   *   // |  1|   1|  0|   2|
+   *   // |  1|   1|  1|   2|
+   *   // +---+----+---+----+
+   *
+   *   df3.drop("id").show()
+   *   // output: the two 'id' columns are both dropped.
+   *   // |key1|key2|
+   *   // +----+----+
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // +----+----+
+   *
+   *   df3.drop(col("id")).show()
+   *   // ...AnalysisException: [AMBIGUOUS_REFERENCE] Reference `id` is ambiguous...
+   * }}}
+   *
+   * 2, colName contains special characters, like dot.
+   * {{{
+   *   val df = spark.range(0, 2).withColumn("a.b.c", lit(1))
+   *
+   *   df.show()
+   *   // +---+-----+
+   *   // | id|a.b.c|
+   *   // +---+-----+
+   *   // |  0|    1|
+   *   // |  1|    1|
+   *   // +---+-----+
+   *
+   *   df.drop("a.b.c").show()
+   *   // +---+
+   *   // | id|
+   *   // +---+
+   *   // |  0|
+   *   // |  1|
+   *   // +---+
+   *
+   *   df.drop(col("a.b.c")).show()
+   *   // no column match the expression 'a.b.c'
+   *   // +---+-----+
+   *   // | id|a.b.c|
+   *   // +---+-----+
+   *   // |  0|    1|
+   *   // |  1|    1|
+   *   // +---+-----+
+   * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -2924,6 +3031,9 @@ class Dataset[T] private[sql](
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
+   *
+   * Note: `drop(col(colName))` has different semantic with `drop(colName)`,
+   * please refer to `Dataset#drop(colName: String)`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -2987,20 +3097,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val allColumns = queryExecution.analyzed.output
-    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
-    // (the Streaming's state store depends on the `groupCols` order).
-    val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
-      // It is possibly there are more than one columns with the same name,
-      // so we call filter instead of find.
-      val cols = allColumns.filter(col => resolver(col.name, colName))
-      if (cols.isEmpty) {
-        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-          colName, schema.fieldNames.mkString(", "))
-      }
-      cols
-    }
+    val groupCols = groupColsFromDropDuplicates(colNames)
     Deduplicate(groupCols, logicalPlan)
   }
 
@@ -3036,6 +3133,114 @@ class Dataset[T] private[sql](
   def dropDuplicates(col1: String, cols: String*): Dataset[T] = {
     val colNames: Seq[String] = col1 +: cols
     dropDuplicates(colNames)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def dropDuplicatesWithinWatermark(): Dataset[T] = {
+    dropDuplicatesWithinWatermark(this.columns)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
+   * within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    DeduplicateWithinWatermark(groupCols, logicalPlan)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
+   * within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
+    dropDuplicatesWithinWatermark(colNames.toSeq)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
+   * within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
+    val colNames: Seq[String] = col1 +: cols
+    dropDuplicatesWithinWatermark(colNames)
+  }
+
+  private def groupColsFromDropDuplicates(colNames: Seq[String]): Seq[Attribute] = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
+    // (the Streaming's state store depends on the `groupCols` order).
+    colNames.toSet.toSeq.flatMap { (colName: String) =>
+      // It is possibly there are more than one columns with the same name,
+      // so we call filter instead of find.
+      val cols = allColumns.filter(col => resolver(col.name, colName))
+      if (cols.isEmpty) {
+        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+          colName, schema.fieldNames.mkString(", "))
+      }
+      cols
+    }
   }
 
   /**
@@ -3283,13 +3488,14 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapInPandas(func: PythonUDF): DataFrame = {
+  private[sql] def mapInPandas(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
-        logicalPlan))
+        logicalPlan,
+        isBarrier))
   }
 
   /**
@@ -3297,13 +3503,14 @@ class Dataset[T] private[sql](
    * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
-  private[sql] def pythonMapInArrow(func: PythonUDF): DataFrame = {
+  private[sql] def pythonMapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       PythonMapInArrow(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
-        logicalPlan))
+        logicalPlan,
+        isBarrier))
   }
 
   /**
@@ -3336,7 +3543,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit = withNewRDDExecutionId {
+  def foreach(f: T => Unit): Unit = withNewRDDExecutionId("foreach") {
     rdd.foreach(f)
   }
 
@@ -3355,7 +3562,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId {
+  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId("foreachPartition") {
     rdd.foreachPartition(f)
   }
 
@@ -3973,11 +4180,7 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    Dataset.ofRows(
-      sparkSession,
-      AttachDistributedSequence(
-        AttributeReference(name, LongType, nullable = false)(),
-        logicalPlan))
+    select(Column(DistributedSequenceID()).alias(name), col("*"))
   }
 
   /**
@@ -4034,7 +4237,8 @@ class Dataset[T] private[sql](
       withAction("collectAsArrowToR", queryExecution) { plan =>
         val buffer = new ByteArrayOutputStream()
         val out = new DataOutputStream(outputStream)
-        val batchWriter = new ArrowBatchStreamWriter(schema, buffer, timeZoneId)
+        val batchWriter =
+          new ArrowBatchStreamWriter(schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true)
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
@@ -4083,11 +4287,14 @@ class Dataset[T] private[sql](
    */
   private[sql] def collectAsArrowToPython: Array[Any] = {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val errorOnDuplicatedFieldNames =
+      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
 
     PythonRDD.serveToStream("serve-Arrow") { outputStream =>
       withAction("collectAsArrowToPython", queryExecution) { plan =>
         val out = new DataOutputStream(outputStream)
-        val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
+        val batchWriter =
+          new ArrowBatchStreamWriter(schema, out, timeZoneId, errorOnDuplicatedFieldNames)
 
         // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = ArrayBuffer.empty[(Int, Int)]
@@ -4148,8 +4355,8 @@ class Dataset[T] private[sql](
    * them with an execution. Before performing the action, the metrics of the executed plan will be
    * reset.
    */
-  private def withNewRDDExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(rddQueryExecution) {
+  private def withNewRDDExecutionId[U](name: String)(body: => U): U = {
+    SQLExecution.withNewExecutionId(rddQueryExecution, Some(name)) {
       rddQueryExecution.executedPlan.resetMetrics()
       body
     }
@@ -4216,10 +4423,12 @@ class Dataset[T] private[sql](
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val errorOnDuplicatedFieldNames =
+      sparkSession.sessionState.conf.pandasStructHandlingMode == "legacy"
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toBatchIterator(
-        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
+        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, context)
     }
   }
 

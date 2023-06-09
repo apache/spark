@@ -49,9 +49,10 @@ from pyspark.sql.types import (
     StructType,
     StructField,
     NullType,
-    TimestampType,
+    MapType,
+    YearMonthIntervalType,
 )
-from pyspark.errors import PythonException
+from pyspark.errors import PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -73,7 +74,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedMapInPandasTests(ReusedSQLTestCase):
+class GroupedApplyInPandasTestsMixin:
     @property
     def data(self):
         return (
@@ -210,13 +211,23 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def test_register_grouped_map_udf(self):
-        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                ValueError,
-                "f.*SQL_BATCHED_UDF.*SQL_SCALAR_PANDAS_UDF.*SQL_GROUPED_AGG_PANDAS_UDF.*",
-            ):
-                self.spark.catalog.registerFunction("foo_udf", foo_udf)
+            self.check_register_grouped_map_udf()
+
+    def check_register_grouped_map_udf(self):
+        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.catalog.registerFunction("foo_udf", foo_udf)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_UDF_EVAL_TYPE",
+            message_parameters={
+                "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
+                "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
+            },
+        )
 
     def test_decorator(self):
         df = self.data
@@ -270,79 +281,114 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected, result)
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        df = self.data
-
-        def stats(key, _):
-            return key
-
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Return type of the user-defined function should be pandas.DataFrame, "
-                "but is <class 'tuple'>",
-            ):
-                df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
+            self.check_apply_in_pandas_not_returning_pandas_dataframe()
 
-    def test_apply_in_pandas_returning_wrong_number_of_columns(self):
-        df = self.data
+    def check_apply_in_pandas_not_returning_pandas_dataframe(self):
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be pandas.DataFrame, "
+            "but is <class 'tuple'>",
+        ):
+            self._test_apply_in_pandas(lambda key, pdf: key)
 
+    @staticmethod
+    def stats_with_column_names(key, pdf):
+        # order of column can be different to applyInPandas schema when column names are given
+        return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
+
+    @staticmethod
+    def stats_with_no_column_names(key, pdf):
+        # columns must be in order of applyInPandas schema when no columns given
+        return pd.DataFrame([key + (pdf.v.mean(),)])
+
+    def test_apply_in_pandas_returning_column_names(self):
+        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_column_names)
+
+    def test_apply_in_pandas_returning_no_column_names(self):
+        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_no_column_names)
+
+    def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
-            v = pdf.v
-            # returning three columns
-            res = pd.DataFrame([key + (v.mean(), v.std())])
-            return res
+            if key[0] % 2:
+                return GroupedApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
+            else:
+                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
 
+        self._test_apply_in_pandas(stats)
+
+    def test_apply_in_pandas_returning_wrong_column_names(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Number of columns of the returned pandas.DataFrame doesn't match "
-                "specified schema. Expected: 2 Actual: 3",
-            ):
-                # stats returns three columns while here we set schema with two columns
-                df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
+            self.check_apply_in_pandas_returning_wrong_column_names()
+
+    def check_apply_in_pandas_returning_wrong_column_names(self):
+        with self.assertRaisesRegex(
+            PythonException,
+            "Column names of the returned pandas.DataFrame do not match specified schema. "
+            "Missing: mean. Unexpected: median, std.\n",
+        ):
+            self._test_apply_in_pandas(
+                lambda key, pdf: pd.DataFrame(
+                    [key + (pdf.v.median(), pdf.v.std())], columns=["id", "median", "std"]
+                )
+            )
+
+    def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
+        with QuietTest(self.sc):
+            self.check_apply_in_pandas_returning_no_column_names_and_wrong_amount()
+
+    def check_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
+        with self.assertRaisesRegex(
+            PythonException,
+            "Number of columns of the returned pandas.DataFrame doesn't match "
+            "specified schema. Expected: 2 Actual: 3\n",
+        ):
+            self._test_apply_in_pandas(
+                lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
+            )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
-        df = self.data
+        self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
-        def odd_means(key, pdf):
-            if key[0] % 2 == 0:
-                return pd.DataFrame([])
-            else:
-                return pd.DataFrame([key + (pdf.v.mean(),)])
-
-        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 != 0}
-
-        result = (
-            df.groupby("id")
-            .applyInPandas(odd_means, schema="id integer, m double")
-            .sort("id", "m")
-            .collect()
-        )
-
-        actual_ids = {row[0] for row in result}
-        self.assertSetEqual(expected_ids, actual_ids)
-
-        self.assertEqual(len(expected_ids), len(result))
-        for row in result:
-            self.assertEqual(24.5, row[1])
-
-    def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
-        df = self.data
-
-        def odd_means(key, pdf):
-            if key[0] % 2 == 0:
-                return pd.DataFrame([], columns=["id"])
-            else:
-                return pd.DataFrame([key + (pdf.v.mean(),)])
-
+    def test_apply_in_pandas_returning_incompatible_type(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Number of columns of the returned pandas.DataFrame doesn't match "
-                "specified schema. Expected: 2 Actual: 1",
+            self.check_apply_in_pandas_returning_incompatible_type()
+
+    def check_apply_in_pandas_returning_incompatible_type(self):
+        for safely in [True, False]:
+            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
+                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
             ):
-                # stats returns one column for even keys while here we set schema with two columns
-                df.groupby("id").applyInPandas(odd_means, schema="id integer, m double").collect()
+                # sometimes we see ValueErrors
+                with self.subTest(convert="string to double"):
+                    expected = (
+                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
+                        r"with name 'mean' to Arrow Array \(double\)."
+                    )
+                    if safely:
+                        expected = expected + (
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                        )
+                    with self.assertRaisesRegex(PythonException, expected + "\n"):
+                        self._test_apply_in_pandas(
+                            lambda key, pdf: pd.DataFrame([key + (str(pdf.v.mean()),)]),
+                            output_schema="id long, mean double",
+                        )
+
+                # sometimes we see TypeErrors
+                with self.subTest(convert="double to string"):
+                    with self.assertRaisesRegex(
+                        PythonException,
+                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
+                        r"with name 'mean' to Arrow Array \(string\).\n",
+                    ):
+                        self._test_apply_in_pandas(
+                            lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
+                            output_schema="id long, mean string",
+                        )
 
     def test_datatype_string(self):
         df = self.data
@@ -359,47 +405,58 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                NotImplementedError,
-                "Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType",
-            ):
-                pandas_udf(
-                    lambda pdf: pdf, "id long, v array<timestamp>", PandasUDFType.GROUPED_MAP
-                )
+            self.check_wrong_return_type()
+
+    def check_wrong_return_type(self):
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            "Invalid return type.*grouped map Pandas UDF.*ArrayType.*YearMonthIntervalType",
+        ):
+            pandas_udf(
+                lambda pdf: pdf,
+                StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType())),
+                PandasUDFType.GROUPED_MAP,
+            )
 
     def test_wrong_args(self):
+        with QuietTest(self.sc):
+            self.check_wrong_args()
+
+    def check_wrong_args(self):
         df = self.data
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(ValueError, "Invalid udf"):
-                df.groupby("id").apply(lambda x: x)
-            with self.assertRaisesRegex(ValueError, "Invalid udf"):
-                df.groupby("id").apply(udf(lambda x: x, DoubleType()))
-            with self.assertRaisesRegex(ValueError, "Invalid udf"):
-                df.groupby("id").apply(sum(df.v))
-            with self.assertRaisesRegex(ValueError, "Invalid udf"):
-                df.groupby("id").apply(df.v + 1)
-            with self.assertRaisesRegex(ValueError, "Invalid function"):
-                df.groupby("id").apply(
-                    pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())]))
-                )
-            with self.assertRaisesRegex(ValueError, "Invalid udf"):
-                df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType()))
-            with self.assertRaisesRegex(ValueError, "Invalid udf.*GROUPED_MAP"):
-                df.groupby("id").apply(
-                    pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR)
-                )
+        with self.assertRaisesRegex(ValueError, "Invalid udf"):
+            df.groupby("id").apply(lambda x: x)
+        with self.assertRaisesRegex(ValueError, "Invalid udf"):
+            df.groupby("id").apply(udf(lambda x: x, DoubleType()))
+        with self.assertRaisesRegex(ValueError, "Invalid udf"):
+            df.groupby("id").apply(sum(df.v))
+        with self.assertRaisesRegex(ValueError, "Invalid udf"):
+            df.groupby("id").apply(df.v + 1)
+        with self.assertRaisesRegex(ValueError, "Invalid function"):
+            df.groupby("id").apply(
+                pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())]))
+            )
+        with self.assertRaisesRegex(ValueError, "Invalid udf"):
+            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType()))
+        with self.assertRaisesRegex(ValueError, "Invalid udf.*GROUPED_MAP"):
+            df.groupby("id").apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
+        with QuietTest(self.sc):
+            self.check_unsupported_types()
+
+    def check_unsupported_types(self):
         common_err_msg = "Invalid return type.*grouped map Pandas UDF.*"
         unsupported_types = [
-            StructField("arr_ts", ArrayType(TimestampType())),
-            StructField("struct", StructType([StructField("l", LongType())])),
+            StructField("array_struct", ArrayType(YearMonthIntervalType())),
+            StructField("map", MapType(StringType(), YearMonthIntervalType())),
         ]
 
         for unsupported_type in unsupported_types:
-            schema = StructType([StructField("id", LongType(), True), unsupported_type])
-            with QuietTest(self.sc):
+            with self.subTest(unsupported_type=unsupported_type.name):
+                schema = StructType([StructField("id", LongType(), True), unsupported_type])
+
                 with self.assertRaisesRegex(NotImplementedError, common_err_msg):
                     pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
@@ -498,6 +555,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         assert_frame_equal(expected4, result4)
 
     def test_column_order(self):
+        with QuietTest(self.sc):
+            self.check_column_order()
+
+    def check_column_order(self):
 
         # Helper function to set column names from a list
         def rename_pdf(pdf, names):
@@ -565,11 +626,14 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             return pd.DataFrame([(1, datetime.date(2020, 10, 5))])
 
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegex(Exception, "KeyError: 'id'"):
-                    grouped_df.apply(column_name_typo).collect()
-                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
-                    grouped_df.apply(invalid_positional_types).collect()
+            with self.assertRaisesRegex(
+                PythonException,
+                "Column names of the returned pandas.DataFrame do not match "
+                "specified schema. Missing: id. Unexpected: iid.\n",
+            ):
+                grouped_df.apply(column_name_typo).collect()
+            with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
+                grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         with self.sql_conf(
@@ -655,10 +719,11 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             df.groupby("group", window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
+            .orderBy("id")
             .collect()
         )
-        for r in result:
-            self.assertListEqual(expected[r[0]], r[1])
+
+        self.assertListEqual([Row(id=key, result=val) for key, val in expected.items()], result)
 
     def test_grouped_over_window_with_key(self):
 
@@ -672,19 +737,31 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             (6, 3, "2018-03-21T00:00:00+00:00", [0]),
         ]
 
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
         expected_window = [
             {
-                "start": datetime.datetime(2018, 3, 10, 0, 0),
-                "end": datetime.datetime(2018, 3, 15, 0, 0),
-            },
-            {
-                "start": datetime.datetime(2018, 3, 15, 0, 0),
-                "end": datetime.datetime(2018, 3, 20, 0, 0),
-            },
-            {
-                "start": datetime.datetime(2018, 3, 20, 0, 0),
-                "end": datetime.datetime(2018, 3, 25, 0, 0),
-            },
+                key: (
+                    pd.Timestamp(ts)
+                    .tz_localize(datetime.timezone.utc)
+                    .tz_convert(timezone)
+                    .tz_localize(None)
+                )
+                for key, ts in w.items()
+            }
+            for w in [
+                {
+                    "start": datetime.datetime(2018, 3, 10, 0, 0),
+                    "end": datetime.datetime(2018, 3, 15, 0, 0),
+                },
+                {
+                    "start": datetime.datetime(2018, 3, 15, 0, 0),
+                    "end": datetime.datetime(2018, 3, 20, 0, 0),
+                },
+                {
+                    "start": datetime.datetime(2018, 3, 20, 0, 0),
+                    "end": datetime.datetime(2018, 3, 25, 0, 0),
+                },
+            ]
         ]
 
         expected_key = {
@@ -720,11 +797,11 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             df.groupby("group", window("ts", "5 days"))
             .applyInPandas(f, df.schema)
             .select("id", "result")
+            .orderBy("id")
             .collect()
         )
 
-        for r in result:
-            self.assertListEqual(expected[r[0]], r[1])
+        self.assertListEqual([Row(id=key, result=val) for key, val in expected.items()], result)
 
     def test_case_insensitive_grouping_column(self):
         # SPARK-31915: case-insensitive grouping column should work.
@@ -738,6 +815,48 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
+
+    def _test_apply_in_pandas(self, f, output_schema="id long, mean double"):
+        df = self.data
+
+        result = (
+            df.groupby("id").applyInPandas(f, schema=output_schema).sort("id", "mean").toPandas()
+        )
+        expected = df.select("id").distinct().withColumn("mean", lit(24.5)).toPandas()
+
+        assert_frame_equal(expected, result)
+
+    def _test_apply_in_pandas_returning_empty_dataframe(self, empty_df):
+        """Tests some returned DataFrames are empty."""
+        df = self.data
+
+        def stats(key, pdf):
+            if key[0] % 2 == 0:
+                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+            return empty_df
+
+        result = (
+            df.groupby("id")
+            .applyInPandas(stats, schema="id long, mean double")
+            .sort("id", "mean")
+            .collect()
+        )
+
+        actual_ids = {row[0] for row in result}
+        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 == 0}
+        self.assertSetEqual(expected_ids, actual_ids)
+        self.assertEqual(len(expected_ids), len(result))
+        for row in result:
+            self.assertEqual(24.5, row[1])
+
+    def _test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(PythonException, error):
+                self._test_apply_in_pandas_returning_empty_dataframe(empty_df)
+
+
+class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

@@ -24,8 +24,10 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -33,7 +35,7 @@ import org.apache.spark.sql.types._
 private object MsSqlServerDialect extends JdbcDialect {
 
   // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v8.2.2/src/main/java/microsoft/sql/Types.java
+  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
   private object SpecificTypes {
     val GEOMETRY = -157
     val GEOGRAPHY = -158
@@ -63,6 +65,20 @@ private object MsSqlServerDialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
+    override def visitSortOrder(
+        sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
+      (sortDirection, nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) =>
+          s"$sortKey $sortDirection"
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_LAST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 1 ELSE 0 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 0 ELSE 1 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) =>
+          s"$sortKey $sortDirection"
+      }
+    }
+
     override def dialectFunctionName(funcName: String): String = funcName match {
       case "VAR_POP" => "VARP"
       case "VAR_SAMP" => "VAR"
@@ -118,8 +134,9 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"EXEC sp_rename $oldTable, $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"EXEC sp_rename ${getFullyQualifiedQuotedTableName(oldTable)}, " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   // scalastyle:off line.size.limit
@@ -168,7 +185,7 @@ private object MsSqlServerDialect extends JdbcDialect {
   }
 
   override def getLimitClause(limit: Integer): String = {
-    ""
+    if (limit > 0) s"TOP ($limit)" else ""
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
@@ -181,4 +198,21 @@ private object MsSqlServerDialect extends JdbcDialect {
       case _ => super.classifyException(message, e)
     }
   }
+
+  class MsSqlServerSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      val limitClause = dialect.getLimitClause(limit)
+
+      options.prepareQuery +
+        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new MsSqlServerSQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
 }

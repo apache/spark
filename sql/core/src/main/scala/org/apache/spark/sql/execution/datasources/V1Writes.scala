@@ -93,13 +93,8 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
   }
 
   private def prepareQuery(write: V1WriteCommand, query: LogicalPlan): LogicalPlan = {
-    val hasEmpty2Null = query.exists(p => hasEmptyToNull(p.expressions))
-    val empty2NullPlan = if (hasEmpty2Null) {
-      query
-    } else {
-      val projectList = convertEmptyToNull(query.output, write.partitionColumns)
-      if (projectList.isEmpty) query else Project(projectList, query)
-    }
+    val projectList = convertEmptyToNull(query.output, write.partitionColumns)
+    val empty2NullPlan = if (projectList.isEmpty) query else Project(projectList, query)
     assert(empty2NullPlan.output.length == query.output.length)
     val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
 
@@ -108,7 +103,6 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
       case a: Attribute => attrMap.getOrElse(a, a)
     }.asInstanceOf[SortOrder])
     val outputOrdering = query.outputOrdering
-    // Check if the ordering is already matched to ensure the idempotency of the rule.
     val orderingMatched = isOrderingMatched(requiredOrdering, outputOrdering)
     if (orderingMatched) {
       empty2NullPlan

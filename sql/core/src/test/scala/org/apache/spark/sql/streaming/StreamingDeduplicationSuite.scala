@@ -150,7 +150,6 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
-      .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
       .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
@@ -484,3 +483,6 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     )
   }
 }
+
+class RocksDBStateStoreStreamingDeduplicationSuite
+  extends StreamingDeduplicationSuite with RocksDBStateStoreTest

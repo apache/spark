@@ -21,7 +21,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison, CurrentDate, CurrentTimestampLike, Expression, GreaterThan, GreaterThanOrEqual, GroupingSets, LessThan, LessThanOrEqual, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -37,6 +36,10 @@ object UnsupportedOperationChecker extends Logging {
     plan.foreachUp {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
+
+      case d: DeduplicateWithinWatermark =>
+        throwError("dropDuplicatesWithinWatermark is not supported with batch " +
+          "DataFrames/DataSets")(d)
 
       case _ =>
     }
@@ -84,9 +87,6 @@ object UnsupportedOperationChecker extends Logging {
    */
   private def ifCannotBeFollowedByStatefulOperation(
       p: LogicalPlan, outputMode: OutputMode): Boolean = p match {
-    case ExtractEquiJoinKeys(_, _, _, otherCondition, _, left, right, _) =>
-      left.isStreaming && right.isStreaming &&
-        otherCondition.isDefined && hasRangeExprAgainstEventTimeCol(otherCondition.get)
     // FlatMapGroupsWithState configured with event time
     case f @ FlatMapGroupsWithState(_, _, _, _, _, _, _, _, _, timeout, _, _, _, _, _, _)
       if f.isStreaming && timeout == GroupStateTimeout.EventTimeTimeout => true
@@ -118,6 +118,7 @@ object UnsupportedOperationChecker extends Logging {
     case f: FlatMapGroupsWithState if f.isStreaming => true
     case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
+    case d: DeduplicateWithinWatermark if d.isStreaming => true
     case _ => false
   }
 
@@ -466,6 +467,19 @@ object UnsupportedOperationChecker extends Logging {
 
             case _ =>
               throwError(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
+          }
+
+        case d: DeduplicateWithinWatermark if d.isStreaming =>
+          // Find any attributes that are associated with an eventTime watermark.
+          val watermarkAttributes = d.child.output.collect {
+            case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+          }
+
+          // DeduplicateWithinWatermark requires event time column being set in the input DataFrame
+          if (watermarkAttributes.isEmpty) {
+            throwError(
+              "dropDuplicatesWithinWatermark is not supported on streaming DataFrames/DataSets " +
+                "without watermark")(plan)
           }
 
         case c: CoGroup if c.children.exists(_.isStreaming) =>

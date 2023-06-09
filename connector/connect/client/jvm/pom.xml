@@ -33,7 +33,8 @@
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
     <guava.version>31.0.1-jre</guava.version>
-    <mima.version>1.1.0</mima.version>
+    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
+    <mima.version>1.1.2</mima.version>
   </properties>
 
   <dependencies>
@@ -53,11 +54,17 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -66,20 +73,49 @@
       <version>${guava.version}</version>
       <scope>compile</scope>
     </dependency>
-    <!--
-      SPARK-42213: Add `repl` as test dependency to solve the issue that
-      `ClientE2ETestSuite` cannot find `repl.Main` when maven test.
-    -->
     <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>test</scope>
-      <!-- Exclude sql module to resolve compilation conflicts -->
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
+      <version>${guava.failureaccess.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-http2</artifactId>
+      <version>${netty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-handler-proxy</artifactId>
+      <version>${netty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-unix-common</artifactId>
+      <version>${netty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.lihaoyi</groupId>
+      <artifactId>ammonite_${scala.version}</artifactId>
+      <version>${ammonite.version}</version>
+      <scope>provided</scope>
       <exclusions>
         <exclusion>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-sql_${scala.binary.version}</artifactId>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-xml_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -104,7 +140,8 @@
   <build>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
-      <!-- Shade all Guava / Protobuf dependencies of this build -->
+      <!-- Shade all Guava / Protobuf / Netty dependencies of this build -->
+      <!-- TODO (SPARK-42449): Ensure shading rules are handled correctly in `native-image.properties` and support GraalVM   -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -112,40 +149,57 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
+              <include>com.google.android:*</include>
+              <include>com.google.api.grpc:*</include>
+              <include>com.google.code.findbugs:*</include>
+              <include>com.google.code.gson:*</include>
+              <include>com.google.errorprone:*</include>
               <include>com.google.guava:*</include>
-              <include>io.grpc:*</include>
+              <include>com.google.j2objc:*</include>
               <include>com.google.protobuf:*</include>
+              <include>io.grpc:*</include>
+              <include>io.netty:*</include>
+              <include>io.perfmark:*</include>
+              <include>org.codehaus.mojo:*</include>
+              <include>org.checkerframework:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>
             <relocation>
               <pattern>io.grpc</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.grpc</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io.grpc</shadedPattern>
               <includes>
                 <include>io.grpc.**</include>
               </includes>
             </relocation>
             <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
+              <pattern>com.google</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.com.google</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
-              <includes>
-                <include>com.google.common.**</include>
-              </includes>
+              <pattern>io.netty</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io.netty</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>com.google.thirdparty</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.client.guava</shadedPattern>
-              <includes>
-                <include>com.google.thirdparty.**</include>
-              </includes>
+              <pattern>org.checkerframework</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.org.checkerframework</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>javax.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.javax.annotation</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.io.perfmark</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.codehaus</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.org.codehaus</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>android.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.client.android.annotation</shadedPattern>
             </relocation>
           </relocations>
           <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->
@@ -153,6 +207,19 @@
             <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
           </transformers>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-test-jar</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

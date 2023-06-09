@@ -22,7 +22,6 @@ import random
 import warnings
 from collections.abc import Iterable
 from functools import reduce
-from html import escape as html_escape
 from typing import (
     Any,
     Callable,
@@ -39,12 +38,12 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -61,6 +60,7 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -83,7 +83,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -180,7 +180,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -224,7 +224,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -254,7 +254,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -304,6 +304,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         .. deprecated:: 2.0.0
             Use :meth:`DataFrame.createOrReplaceTempView` instead.
 
@@ -337,7 +340,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -356,7 +359,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throw an exception if the table already exists.
 
-        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
+        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -375,16 +378,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -416,16 +415,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -439,7 +434,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throws an exception if the global temporary view already exists.
 
-        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -457,16 +452,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -497,7 +488,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -538,13 +529,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> import tempfile
         >>> df = spark.readStream.format("rate").load()
         >>> type(df.writeStream)
-        <class 'pyspark.sql.streaming.readwriter.DataStreamWriter'>
+        <class '...streaming.readwriter.DataStreamWriter'>
 
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
-        ...         "my_table", checkpointLocation=d) # doctest: +ELLIPSIS
-        <pyspark.sql.streaming.query.StreamingQuery object at 0x...>
+        ...         "my_table", checkpointLocation=d)
+        <...streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
@@ -555,7 +546,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -578,20 +569,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     StructType, _parse_datatype_json_string(self._jdf.schema().json())
                 )
             except Exception as e:
-                raise ValueError("Unable to parse datatype from schema. %s" % e) from e
+                raise PySparkValueError(
+                    error_class="CANNOT_PARSE_DATATYPE",
+                    message_parameters={"error": str(e)},
+                )
         return self._schema
 
-    def printSchema(self) -> None:
+    def printSchema(self, level: Optional[int] = None) -> None:
         """Prints out the schema in the tree format.
+        Optionally allows to specify how many levels to print if schema is nested.
 
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
-        Returns
-        -------
-        None
+        Parameters
+        ----------
+        level : int, optional, default None
+            How many levels to print for nested schemas.
+
+            .. versionchanged:: 3.5.0
+                Added Level parameter.
 
         Examples
         --------
@@ -601,8 +600,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
+
+        >>> df = spark.createDataFrame([(1, (2,2))], ["a", "b"])
+        >>> df.printSchema(1)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+
+        >>> df.printSchema(2)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+         |    |-- _1: long (nullable = true)
+         |    |-- _2: long (nullable = true)
         """
-        print(self._jdf.schema().treeString())
+        if level:
+            print(self._jdf.schema().treeString(level))
+        else:
+            print(self._jdf.schema().treeString())
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
@@ -612,7 +627,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -674,7 +689,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if extended is not None and mode is not None:
-            raise ValueError("extended and mode should not be set together.")
+            raise PySparkValueError(
+                error_class="CANNOT_SET_TOGETHER",
+                message_parameters={"arg_list": "extended and mode"},
+            )
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -729,7 +747,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -765,7 +783,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -791,7 +809,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -816,7 +834,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -840,7 +858,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -853,10 +871,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         vertical : bool, optional
             If set to ``True``, print output rows vertically (one line
             per column value).
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -946,32 +960,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sparkSession._jconf.isReplEagerEvalEnabled():
-            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
-            sock_info = self._jdf.getRowsToPython(
-                max_num_rows,
+            return self._jdf.htmlString(
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
                 self.sparkSession._jconf.replEagerEvalTruncate(),
             )
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
-            head = rows[0]
-            row_data = rows[1:]
-            has_more_data = len(row_data) > max_num_rows
-            row_data = row_data[:max_num_rows]
-
-            html = "<table border='1'>\n"
-            # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
-            # generate table rows
-            for row in row_data:
-                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: html_escape(x), row)
-                )
-            html += "</table>\n"
-            if has_more_data:
-                html += "only showing top %d %s\n" % (
-                    max_num_rows,
-                    "row" if max_num_rows == 1 else "rows",
-                )
-            return html
         else:
             return None
 
@@ -1126,7 +1118,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1189,7 +1181,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1214,7 +1206,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1241,10 +1233,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         prefetchPartitions : bool, optional
-            If Spark should pre-fetch the next partition  before it is needed.
+            If Spark should pre-fetch the next partition before it is needed.
+
+            .. versionchanged:: 3.4.0
+                This argument does not take effect for Spark Connect.
 
         Returns
         -------
@@ -1268,7 +1266,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1300,13 +1298,48 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.limit(num)
         return DataFrame(jdf, self.sparkSession)
 
+    def offset(self, num: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to skip.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.offset(1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+        >>> df.offset(10).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        +---+----+
+        """
+        jdf = self._jdf.offset(num)
+        return DataFrame(jdf, self.sparkSession)
+
     def take(self, num: int) -> List[Row]:
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1341,7 +1374,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1418,6 +1451,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
@@ -1432,6 +1468,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.range(1)
         >>> df.cache()
         DataFrame[id: bigint]
+
+        >>> df.explain()
+        == Physical Plan ==
+        InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1447,6 +1487,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         If no storage level is specified defaults to (`MEMORY_AND_DISK_DESER`)
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Notes
         -----
@@ -1468,6 +1511,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.persist()
         DataFrame[id: bigint]
 
+        >>> df.explain()
+        == Physical Plan ==
+        InMemoryTableScan ...
+
         Persists the data in the disk by specifying the storage level.
 
         >>> from pyspark.storagelevel import StorageLevel
@@ -1484,6 +1531,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Get the :class:`DataFrame`'s current storage level.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1517,6 +1567,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         memory and disk.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Notes
         -----
@@ -1567,7 +1620,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1604,7 +1657,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1681,6 +1734,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         numPartitions : int
@@ -1719,7 +1775,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
-                raise ValueError("At least one partition-by expression must be specified.")
+                raise PySparkValueError(
+                    error_class="CANNOT_BE_EMPTY",
+                    message_parameters={"item": "partition-by expression"},
+                )
             else:
                 return DataFrame(
                     self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)),
@@ -1743,7 +1802,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1786,7 +1845,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1845,13 +1904,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             or is_withReplacement_omitted_kwargs
             or is_withReplacement_omitted_args
         ):
-            argtypes = [
-                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None
-            ]
+            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
             raise PySparkTypeError(
-                "withReplacement (optional), fraction (required) and seed (optional)"
-                " should be a bool, float and number; however, "
-                "got [%s]." % ", ".join(argtypes)
+                error_class="NOT_BOOL_OR_FLOAT_OR_INT",
+                message_parameters={
+                    "arg_name": "withReplacement (optional), "
+                    + "fraction (required) and seed (optional)",
+                    "arg_type": ", ".join(argtypes),
+                },
             )
 
         if is_withReplacement_omitted_args:
@@ -1873,6 +1933,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         fraction given on each stratum.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1942,7 +2005,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1975,7 +2038,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         for w in weights:
             if w < 0.0:
-                raise ValueError("Weights must be positive. Found weight value: %s" % w)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "weights", "arg_value": str(w)},
+                )
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         df_array = self._jdf.randomSplit(
             _to_list(self.sparkSession._sc, cast(List["ColumnOrName"], weights)), int(seed)
@@ -1989,7 +2055,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -2012,7 +2078,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -2036,7 +2102,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2075,7 +2141,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2133,7 +2199,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2172,7 +2238,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2218,7 +2284,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2279,8 +2345,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | name|height|
         +-----+------+
         |  Bob|    85|
-        |Alice|  null|
-        | null|    80|
+        |Alice|  NULL|
+        | NULL|    80|
         +-----+------+
         >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).show()
         +-----+------+
@@ -2288,7 +2354,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+------+
         |  Tom|    80|
         |  Bob|    85|
-        |Alice|  null|
+        |Alice|  NULL|
         +-----+------+
 
         Outer join for both DataFrams with multiple columns.
@@ -2455,7 +2521,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.6.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2491,7 +2557,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2605,7 +2671,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     ) -> JavaObject:
         """Return a JVM Seq of Columns that describes the sort order"""
         if not cols:
-            raise ValueError("should sort by at least one column")
+            raise PySparkValueError(
+                error_class="CANNOT_BE_EMPTY",
+                message_parameters={"item": "column"},
+            )
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         jcols = [_to_java_column(cast("ColumnOrName", c)) for c in cols]
@@ -2628,7 +2697,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         This includes count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
@@ -2703,7 +2772,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2775,7 +2844,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -2812,7 +2881,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -2841,6 +2910,28 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        item : int, str, :class:`Column`, list or tuple
+            column index, column name, column, or a list or tuple of columns
+
+        Returns
+        -------
+        :class:`Column` or :class:`DataFrame`
+            a specified column, or a filtered or projected dataframe.
+
+            * If the input `item` is an int or str, the output is a :class:`Column`.
+
+            * If the input `item` is a :class:`Column`, the output is a :class:`DataFrame`
+                filtered by this given :class:`Column`.
+
+            * If the input `item` is a list or tuple, the output is a :class:`DataFrame`
+                projected by this given list or tuple.
+
+
         Examples
         --------
         >>> df = spark.createDataFrame([
@@ -2855,6 +2946,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |  2|
         |  5|
         +---+
+
+        >>> df.select(df[1]).show()
+        +-----+
+        | name|
+        +-----+
+        |Alice|
+        |  Bob|
+        +-----+
 
         Select multiple string columns as index.
 
@@ -2899,6 +2998,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         name : str
@@ -2931,6 +3033,47 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.apply(name)
         return Column(jc)
 
+    def __dir__(self) -> List[str]:
+        """
+        Examples
+        --------
+        >>> from pyspark.sql.functions import lit
+
+        Create a dataframe with a column named 'id'.
+
+        >>> df = spark.range(3)
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes column id
+        ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming']
+
+        Add a column named 'i_like_pancakes'.
+
+        >>> df = df.withColumn('i_like_pancakes', lit(1))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes columns i_like_pancakes, id
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add an existed column 'inputFiles'.
+
+        >>> df = df.withColumn('inputFiles', lit(2))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't duplicate inputFiles
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add a column named 'id2'.
+
+        >>> df = df.withColumn('id2', lit(3))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+
+        Don't include columns that are not valid python identifiers.
+
+        >>> df = df.withColumn('1', lit(4))
+        >>> df = df.withColumn('name 1', lit(5))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't include 1 or name 1
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+        """
+        attrs = set(super().__dir__())
+        attrs.update(filter(lambda s: s.isidentifier(), self.columns))
+        return sorted(attrs)
+
     @overload
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
         ...
@@ -2945,7 +3088,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3003,7 +3146,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -3035,7 +3178,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3112,7 +3255,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3191,6 +3334,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         cols : list, str or :class:`Column`
@@ -3210,10 +3356,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|null|    2|
-        |Alice|null|    1|
+        | NULL|NULL|    2|
+        |Alice|NULL|    1|
         |Alice|   2|    1|
-        |  Bob|null|    1|
+        |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
         """
@@ -3237,6 +3383,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         cols : list, str or :class:`Column`
@@ -3256,12 +3405,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|null|    2|
-        | null|   2|    1|
-        | null|   5|    1|
-        |Alice|null|    1|
+        | NULL|NULL|    2|
+        | NULL|   2|    1|
+        | NULL|   5|    1|
+        |Alice|NULL|    1|
         |Alice|   2|    1|
-        |  Bob|null|    1|
+        |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
         """
@@ -3301,7 +3450,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3418,7 +3567,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3529,6 +3678,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...            # Trigger alert
         ...            pass
         ...
+        ...    def onQueryIdle(self, event):
+        ...        pass
+        ...
         ...    def onQueryTerminated(self, event):
         ...        pass
         ...
@@ -3543,9 +3695,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         from pyspark.sql import Observation
 
         if len(exprs) == 0:
-            raise ValueError("'exprs' should not be empty")
+            raise PySparkValueError(
+                error_class="CANNOT_BE_EMPTY",
+                message_parameters={"item": "exprs"},
+            )
         if not all(isinstance(c, Column) for c in exprs):
-            raise ValueError("all 'exprs' should be Column")
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN",
+                message_parameters={"arg_name": "exprs"},
+            )
 
         if isinstance(observation, Observation):
             return observation._on(self, *exprs)
@@ -3557,7 +3715,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 self.sparkSession,
             )
         else:
-            raise ValueError("'observation' should be either `Observation` or `str`.")
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN",
+                message_parameters={
+                    "arg_name": "observation",
+                    "arg_type": type(observation).__name__,
+                },
+            )
 
     def union(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing union of rows in this and another
@@ -3566,7 +3730,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3616,7 +3780,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3653,7 +3817,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3695,8 +3859,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+----+----+----+
         |col0|col1|col2|col3|
         +----+----+----+----+
-        |   1|   2|   3|null|
-        |null|   4|   5|   6|
+        |   1|   2|   3|NULL|
+        |NULL|   4|   5|   6|
         +----+----+----+----+
         """
         return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
@@ -3710,7 +3874,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3750,7 +3914,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3784,7 +3948,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3828,7 +3992,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3880,6 +4044,62 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+         optionally only considering certain columns, within watermark.
+
+         This only works with streaming :class:`DataFrame`, and watermark for the input
+         :class:`DataFrame` must be set via :func:`withWatermark`.
+
+        For a streaming :class:`DataFrame`, this will keep all data across triggers as intermediate
+        state to drop duplicated rows. The state will be kept to guarantee the semantic, "Events
+        are deduplicated as long as the time distance of earliest and latest events are smaller
+        than the delay threshold of watermark." Users are encouraged to set the delay threshold of
+        watermark longer than max timestamp differences among duplicated events.
+
+        Note: too late data older than watermark will be dropped.
+
+         .. versionadded:: 3.5.0
+
+         Parameters
+         ----------
+         subset : List of column names, optional
+             List of columns to use for duplicate comparison (default All columns).
+
+         Returns
+         -------
+         :class:`DataFrame`
+             DataFrame without duplicates.
+
+         Examples
+         --------
+         >>> from pyspark.sql import Row
+         >>> from pyspark.sql.functions import timestamp_seconds
+         >>> df = spark.readStream.format("rate").load().selectExpr(
+         ...     "value % 5 AS value", "timestamp")
+         >>> df.select("value", df.timestamp.alias("time")).withWatermark("time", '10 minutes')
+         DataFrame[value: bigint, time: timestamp]
+
+         Deduplicate the same rows.
+
+         >>> df.dropDuplicatesWithinWatermark() # doctest: +SKIP
+
+         Deduplicate values on 'value' columns.
+
+         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+        """
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            jdf = self._jdf.dropDuplicatesWithinWatermark()
+        else:
+            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
+        return DataFrame(jdf, self.sparkSession)
+
     def dropna(
         self,
         how: str = "any",
@@ -3892,7 +4112,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3929,7 +4149,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-----+
         """
         if how is not None and how not in ["any", "all"]:
-            raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ANY_OR_ALL",
+                message_parameters={"arg_name": "how", "arg_type": how},
+            )
 
         if subset is None:
             subset = self.columns
@@ -3969,7 +4192,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4004,10 +4227,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-----+----+
         |age|height| name|bool|
         +---+------+-----+----+
-        | 10|  80.5|Alice|null|
-        |  5|  50.0|  Bob|null|
-        | 50|  50.0|  Tom|null|
-        | 50|  50.0| null|true|
+        | 10|  80.5|Alice|NULL|
+        |  5|  50.0|  Bob|NULL|
+        | 50|  50.0|  Tom|NULL|
+        | 50|  50.0| NULL|true|
         +---+------+-----+----+
 
         Fill all null values with ``False`` for boolean columns.
@@ -4017,9 +4240,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height| name| bool|
         +----+------+-----+-----+
         |  10|  80.5|Alice|false|
-        |   5|  null|  Bob|false|
-        |null|  null|  Tom|false|
-        |null|  null| null| true|
+        |   5|  NULL|  Bob|false|
+        |NULL|  NULL|  Tom|false|
+        |NULL|  NULL| NULL| true|
         +----+------+-----+-----+
 
         Fill all null values with to 50 and "unknown" for 'age' and 'name' column respectively.
@@ -4028,10 +4251,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-------+----+
         |age|height|   name|bool|
         +---+------+-------+----+
-        | 10|  80.5|  Alice|null|
-        |  5|  null|    Bob|null|
-        | 50|  null|    Tom|null|
-        | 50|  null|unknown|true|
+        | 10|  80.5|  Alice|NULL|
+        |  5|  NULL|    Bob|NULL|
+        | 50|  NULL|    Tom|NULL|
+        | 50|  NULL|unknown|true|
         +---+------+-------+----+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
@@ -4119,7 +4342,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4159,9 +4382,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height| name|
         +----+------+-----+
         |  20|    80|Alice|
-        |   5|  null|  Bob|
-        |null|    20|  Tom|
-        |null|  null| null|
+        |   5|  NULL|  Bob|
+        |NULL|    20|  Tom|
+        |NULL|  NULL| NULL|
         +----+------+-----+
 
         Replace 'Alice' to null in all columns.
@@ -4170,10 +4393,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+------+----+
         | age|height|name|
         +----+------+----+
-        |  10|    80|null|
-        |   5|  null| Bob|
-        |null|    10| Tom|
-        |null|  null|null|
+        |  10|    80|NULL|
+        |   5|  NULL| Bob|
+        |NULL|    10| Tom|
+        |NULL|  NULL|NULL|
         +----+------+----+
 
         Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
@@ -4183,9 +4406,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height|name|
         +----+------+----+
         |  10|    80|   A|
-        |   5|  null|   B|
-        |null|    10| Tom|
-        |null|  null|null|
+        |   5|  NULL|   B|
+        |NULL|    10| Tom|
+        |NULL|  NULL|NULL|
         +----+------+----+
         """
         if value is _NoValue:
@@ -4234,16 +4457,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             and not isinstance(to_replace, dict)
         ):
             raise PySparkTypeError(
-                "If to_replace is not a dict, value should be "
-                "a bool, float, int, string, list, tuple or None. "
-                "Got {0}".format(type(value))
+                error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE",
+                message_parameters={
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
             )
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
             if len(to_replace) != len(value):
-                raise ValueError(
-                    "to_replace and value lists should be of the same length. "
-                    "Got {0} and {1}".format(len(to_replace), len(value))
+                raise PySparkValueError(
+                    error_class="LENGTH_SHOULD_BE_THE_SAME",
+                    message_parameters={
+                        "arg1": "to_replace",
+                        "arg2": "value",
+                        "arg1_length": str(len(to_replace)),
+                        "arg2_length": str(len(value)),
+                    },
                 )
 
         if not (subset is None or isinstance(subset, (list, tuple, str))):
@@ -4274,7 +4504,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             and all_of_type(x for x in rep_dict.values() if x is not None)
             for all_of_type in [all_of_bool, all_of_str, all_of_numeric]
         ):
-            raise ValueError("Mixed type replacements are not supported")
+            raise PySparkValueError(
+                error_class="MIXED_TYPE_REPLACEMENT",
+                message_parameters={},
+            )
 
         if subset is None:
             return DataFrame(self._jdf.na().replace("*", rep_dict), self.sparkSession)
@@ -4327,6 +4560,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         by Greenwald and Khanna.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4400,7 +4636,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             probabilities = list(probabilities)
         for p in probabilities:
             if not isinstance(p, (float, int)) or p < 0 or p > 1:
-                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_FLOAT_OR_INT",
+                    message_parameters={
+                        "arg_name": "probabilities",
+                        "arg_type": type(p).__name__,
+                    },
+                )
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
         if not isinstance(relativeError, (float, int)):
@@ -4412,7 +4654,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
         if relativeError < 0:
-            raise ValueError("relativeError should be >= 0.")
+            raise PySparkValueError(
+                error_class="NEGATIVE_VALUE",
+                message_parameters={
+                    "arg_name": "relativeError",
+                    "arg_value": str(relativeError),
+                },
+            )
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
@@ -4426,6 +4674,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`DataFrame.corr` and :func:`DataFrameStatFunctions.corr` are aliases of each other.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4464,9 +4715,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not method:
             method = "pearson"
         if not method == "pearson":
-            raise ValueError(
-                "Currently only the calculation of the Pearson Correlation "
-                + "coefficient is supported."
+            raise PySparkValueError(
+                error_class="VALUE_NOT_PEARSON",
+                message_parameters={"arg_name": "method", "arg_value": method},
             )
         return self._jdf.stat().corr(col1, col2, method)
 
@@ -4476,6 +4727,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4523,7 +4777,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4575,6 +4829,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         cols : list or tuple
@@ -4618,6 +4875,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sparkSession
         )
 
+    def _ipython_key_completions_(self) -> List[str]:
+        """Returns the names of columns in this :class:`DataFrame`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df._ipython_key_completions_()
+        ['age', 'name']
+
+        Would return illegal identifiers.
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age 1", "name?1"])
+        >>> df._ipython_key_completions_()
+        ['age 1', 'name?1']
+        """
+        return self.columns
+
     def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
@@ -4630,7 +4903,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
            Added support for multiple columns adding
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4682,7 +4955,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4728,7 +5001,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4764,7 +5037,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
            Added support for multiple columns renaming
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4806,6 +5079,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         columnName : str
@@ -4830,9 +5106,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 error_class="NOT_DICT",
                 message_parameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
             )
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
+        sc = get_active_spark_context()
+        jmeta = cast(JVMView, sc._jvm).org.apache.spark.sql.types.Metadata.fromJson(
+            json.dumps(metadata)
+        )
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
 
     @overload
@@ -4850,7 +5127,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4862,9 +5139,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             DataFrame without given columns.
 
+        Notes
+        -----
+        When an input is a column name, it is treated literally without further interpretation.
+        Otherwise, will try to match the equivalent expression.
+        So that dropping column by its name `drop(colName)` has different semantic with directly
+        dropping the column `drop(col(colName))`.
+
         Examples
         --------
         >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import col, lit
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df2 = spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
@@ -4888,29 +5173,98 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Drop the column that joined both DataFrames on.
 
-        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').show()
+        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').sort('age').show()
         +---+------+
         |age|height|
         +---+------+
-        | 16|    85|
         | 14|    80|
+        | 16|    85|
         +---+------+
+
+        >>> df3 = df.join(df2)
+        >>> df3.show()
+        +---+-----+------+----+
+        |age| name|height|name|
+        +---+-----+------+----+
+        | 14|  Tom|    80| Tom|
+        | 14|  Tom|    85| Bob|
+        | 23|Alice|    80| Tom|
+        | 23|Alice|    85| Bob|
+        | 16|  Bob|    80| Tom|
+        | 16|  Bob|    85| Bob|
+        +---+-----+------+----+
+
+        Drop two column by the same name.
+
+        >>> df3.drop("name").show()
+        +---+------+
+        |age|height|
+        +---+------+
+        | 14|    80|
+        | 14|    85|
+        | 23|    80|
+        | 23|    85|
+        | 16|    80|
+        | 16|    85|
+        +---+------+
+
+        Can not drop col('name') due to ambiguous reference.
+
+        >>> df3.drop(col("name")).show()
+        Traceback (most recent call last):
+        ...
+        pyspark.errors.exceptions.captured.AnalysisException: [AMBIGUOUS_REFERENCE] Reference...
+
+        >>> df4 = df.withColumn("a.b.c", lit(1))
+        >>> df4.show()
+        +---+-----+-----+
+        |age| name|a.b.c|
+        +---+-----+-----+
+        | 14|  Tom|    1|
+        | 23|Alice|    1|
+        | 16|  Bob|    1|
+        +---+-----+-----+
+
+        >>> df4.drop("a.b.c").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 14|  Tom|
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+
+        Can not find a column matching the expression "a.b.c".
+
+        >>> df4.drop(col("a.b.c")).show()
+        +---+-----+-----+
+        |age| name|a.b.c|
+        +---+-----+-----+
+        | 14|  Tom|    1|
+        | 23|Alice|    1|
+        | 16|  Bob|    1|
+        +---+-----+-----+
         """
-        if len(cols) == 1:
-            col = cols[0]
-            if isinstance(col, str):
-                jdf = self._jdf.drop(col)
-            elif isinstance(col, Column):
-                jdf = self._jdf.drop(col._jc)
+        column_names: List[str] = []
+        java_columns: List[JavaObject] = []
+
+        for c in cols:
+            if isinstance(c, str):
+                column_names.append(c)
+            elif isinstance(c, Column):
+                java_columns.append(c._jc)
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+                    message_parameters={"arg_name": "col", "arg_type": type(c).__name__},
                 )
-        else:
-            jcols = [_to_java_column(c) for c in cols]
-            first_column, *remaining_columns = jcols
-            jdf = self._jdf.drop(first_column, self._jseq(remaining_columns))
+
+        jdf = self._jdf
+        if len(java_columns) > 0:
+            first_column, *remaining_columns = java_columns
+            jdf = jdf.drop(first_column, self._jseq(remaining_columns))
+        if len(column_names) > 0:
+            jdf = jdf.drop(self._jseq(column_names))
 
         return DataFrame(jdf, self.sparkSession)
 
@@ -4918,7 +5272,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a new :class:`DataFrame` that with new specified column names
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4954,7 +5308,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -5090,7 +5444,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -5143,7 +5497,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -5254,7 +5608,7 @@ class DataFrameNaFunctions:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: DataFrame):
@@ -5332,7 +5686,7 @@ class DataFrameStatFunctions:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: DataFrame):

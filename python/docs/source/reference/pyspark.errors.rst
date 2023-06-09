@@ -30,6 +30,7 @@ Classes
 
     PySparkException
     AnalysisException
+    TempTableAlreadyExistsException
     ParseException
     IllegalArgumentException
     StreamingQueryException
@@ -37,12 +38,6 @@ Classes
     PythonException
     UnknownException
     SparkUpgradeException
-    SparkConnectAnalysisException
-    SparkConnectException
-    SparkConnectGrpcException
-    SparkConnectParseException
-    SparkConnectTempTableAlreadyExistsException
-    SparkConnectIllegalArgumentException
 
 
 Methods

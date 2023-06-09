@@ -39,12 +39,15 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+@ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
   import StateStoreTestsHelper._
@@ -277,7 +280,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val timeoutDuration = 1.minute
 
     quietly {
-      withSpark(new SparkContext(conf)) { sc =>
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
@@ -387,7 +390,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val timeoutDuration = 1.minute
 
     quietly {
-      withSpark(new SparkContext(conf)) { sc =>
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
@@ -1103,11 +1106,16 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "3", 33, 300)
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
-      val expected = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300)  // The final state.
+      val intermediateState = Set(("1", 11) -> 100, ("2", 22) -> 200) // The intermediate state.
+      val finalState = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300) // The final state.
       // Itr1 does not see any updates - original state of the store (SPARK-38320)
       assert(rowPairsToDataSet(itr1) === Set.empty[Set[((String, Int), Int)]])
-      assert(rowPairsToDataSet(itr2) === expected)
-      assert(rowPairsToDataSet(itr3) === expected)
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(rowPairsToDataSet(itr2) === intermediateState)
+      } else {
+        assert(rowPairsToDataSet(itr2) === finalState)
+      }
+      assert(rowPairsToDataSet(itr3) === finalState)
 
       version = store.commit()
     }
@@ -1125,6 +1133,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "5", 55, 500)
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
+      // The intermediate state
+      val intermediate = Set(
+        ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 400)
       // The final state.
       val expected = Set(
         ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 401, ("5", 55) -> 500)
@@ -1135,7 +1146,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       } else {
         assert(rowPairsToDataSet(itr1) === expected)
       }
-      assert(rowPairsToDataSet(itr2) === expected)
+
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(rowPairsToDataSet(itr2) === intermediate)
+      } else {
+        assert(rowPairsToDataSet(itr2) === expected)
+      }
+
       assert(rowPairsToDataSet(itr3) === expected)
 
       version = store.commit()
@@ -1143,59 +1160,69 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("StateStore.get") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
     quietly {
-      val dir = newDir()
-      val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
-      val storeConf = getDefaultStoreConf
-      val hadoopConf = new Configuration()
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+        withCoordinatorRef(sc) { coordinatorRef =>
+          val dir = newDir()
+          val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
+          val storeConf = getDefaultStoreConf
+          val hadoopConf = new Configuration()
 
-      // Verify that trying to get incorrect versions throw errors
-      intercept[IllegalArgumentException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+          // Verify that trying to get incorrect versions throw errors
+          intercept[IllegalArgumentException] {
+            StateStore.get(
+              storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+          }
+          assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
+
+          intercept[IllegalStateException] {
+            StateStore.get(
+              storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          }
+
+          // Increase version of the store and try to get again
+          val store0 = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+          assert(store0.version === 0)
+          put(store0, "a", 0, 1)
+          store0.commit()
+
+          val store1 = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          assert(StateStore.isLoaded(storeId))
+          assert(store1.version === 1)
+          assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
+
+          // Verify that you can also load older version
+          val store0reloaded = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+          assert(store0reloaded.version === 0)
+          assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
+
+          // Verify that you can remove the store and still reload and use it
+          StateStore.unload(storeId)
+          assert(!StateStore.isLoaded(storeId))
+
+          val store1reloaded = StateStore.get(
+            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+          assert(StateStore.isLoaded(storeId))
+          assert(store1reloaded.version === 1)
+          put(store1reloaded, "a", 0, 2)
+          assert(store1reloaded.commit() === 2)
+          assert(rowPairsToDataSet(store1reloaded.iterator()) === Set(("a", 0) -> 2))
+        }
       }
-      assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
-
-      intercept[IllegalStateException] {
-        StateStore.get(
-          storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      }
-
-      // Increase version of the store and try to get again
-      val store0 = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
-      assert(store0.version === 0)
-      put(store0, "a", 0, 1)
-      store0.commit()
-
-      val store1 = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      assert(StateStore.isLoaded(storeId))
-      assert(store1.version === 1)
-      assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
-
-      // Verify that you can also load older version
-      val store0reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
-      assert(store0reloaded.version === 0)
-      assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
-
-      // Verify that you can remove the store and still reload and use it
-      StateStore.unload(storeId)
-      assert(!StateStore.isLoaded(storeId))
-
-      val store1reloaded = StateStore.get(
-        storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
-      assert(StateStore.isLoaded(storeId))
-      assert(store1reloaded.version === 1)
-      put(store1reloaded, "a", 0, 2)
-      assert(store1reloaded.commit() === 2)
-      assert(rowPairsToDataSet(store1reloaded.iterator()) === Set(("a", 0) -> 2))
     }
   }
 
   test("reports memory usage") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+    // RocksDB metrics is only guaranteed to update when snapshot is created, so we set
+    // minDeltasForSnapshot = 1 to enable snapshot generation here.
+    tryWithProviderResource(newStoreProvider(minDeltasForSnapshot = 1,
+      numOfVersToRetainInMemory = 1)) { provider =>
       val store = provider.getStore(0)
       val noDataMemoryUsed = store.metrics.memoryUsedBytes
       put(store, "a", 0, 1)
@@ -1246,11 +1273,36 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(metricNew.name === "m1", "incorrect name in copied instance")
 
     val conf = new SparkConf().setMaster("local").setAppName("SPARK-35763")
-    withSpark(new SparkContext(conf)) { sc =>
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
       val sqlMetric = metric.createSQLMetric(sc)
       assert(sqlMetric != null)
       assert(sqlMetric.name === Some("desc1"))
     }
+  }
+
+  test("SPARK-42572: StateStoreProvider.validateStateRowFormat shouldn't check" +
+    " value row format when SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED is false") {
+    // By default, when there is an invalid pair of value row and value schema, it should throw
+    val keyRow = dataToKeyRow("key", 1)
+    val valueRow = dataToValueRow(2)
+    val e = intercept[InvalidUnsafeRowException] {
+      // Here valueRow doesn't match with prefixKeySchema
+      StateStoreProvider.validateStateRowFormat(
+        keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
+    }
+    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+
+    // When sqlConf.stateStoreFormatValidationEnabled is set to false and
+    // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
+    // don't check value row
+    val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
+    sqlConf.setConf(SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED, false)
+    val storeConf = new StateStoreConf(sqlConf,
+      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "true"))
+    // Shouldn't throw
+    StateStoreProvider.validateStateRowFormat(
+      keyRow, keySchema, valueRow, keySchema, storeConf)
   }
 
   /** Return a new provider with a random id */

@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
+import java.nio.file.Files
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -41,7 +42,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
@@ -386,8 +387,21 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(Level.toLevel(upperCased))
   }
 
+  /**
+   * :: Private ::
+   * Returns the directory that stores artifacts transferred through Spark Connect.
+   */
+  @Private
+  private[spark] lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
+
   try {
     _conf = config.clone()
+    _conf.get(SPARK_LOG_LEVEL).foreach { level =>
+      if (Logging.setLogLevelPrinted) {
+        System.err.printf("Setting Spark log level to \"%s\".\n", level)
+      }
+      setLogLevel(level)
+    }
     _conf.validateSettings()
     _conf.set("spark.app.startTime", startTime.toString)
 
@@ -465,7 +479,18 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
+    _conf.getOption("spark.repl.class.outputDir").orElse {
+      if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
+        // For Spark Connect, we piggyback on the existing REPL integration to load class
+        // files on the executors.
+        // This is a temporary intermediate step due to unavailable classloader isolation.
+        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
+        Files.createDirectories(classDirectory)
+        Some(classDirectory.toString)
+      } else {
+        None
+      }
+    }.foreach { path =>
       val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
       _conf.set("spark.repl.class.uri", replUri)
     }
@@ -551,11 +576,6 @@ class SparkContext(config: SparkConf) extends Logging {
       executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
     }
 
-    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
-    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
-      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
-    }
-
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
@@ -596,6 +616,13 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set(APP_ATTEMPT_ID, attemptId)
       _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
     }
+
+    // initialize after application id and attempt id has been initialized
+    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(_conf).driver()
+    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
+      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+    }
+
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL).getOrElse("").stripSuffix("/")
       System.setProperty("spark.ui.proxyBase", proxyUrl + "/proxy/" + _applicationId)
@@ -635,7 +662,8 @@ class SparkContext(config: SparkConf) extends Logging {
           case b: ExecutorAllocationClient =>
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
-              cleaner = cleaner, resourceProfileManager = resourceProfileManager))
+              cleaner = cleaner, resourceProfileManager = resourceProfileManager,
+              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage()))
           case _ =>
             None
         }
@@ -2149,16 +2177,16 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
+    if (_shuffleDriverComponents != null) {
+      Utils.tryLogNonFatalError {
+        _shuffleDriverComponents.cleanupApplication()
+      }
+    }
     if (_heartbeater != null) {
       Utils.tryLogNonFatalError {
         _heartbeater.stop()
       }
       _heartbeater = null
-    }
-    if (_shuffleDriverComponents != null) {
-      Utils.tryLogNonFatalError {
-        _shuffleDriverComponents.cleanupApplication()
-      }
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {
@@ -2657,7 +2685,7 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
-  private val VALID_LOG_LEVELS =
+  private[spark] val VALID_LOG_LEVELS =
     Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**

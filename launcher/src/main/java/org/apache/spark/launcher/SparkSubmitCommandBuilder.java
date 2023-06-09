@@ -87,6 +87,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
       SparkLauncher.NO_RESOURCE);
+    specialClasses.put("org.apache.spark.sql.connect.service.SparkConnectServer",
+      SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> userArgs;
@@ -267,8 +269,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String extraClassPath = isClientMode ? config.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
-    // Take Thrift Server as daemon
-    if (isThriftServer(mainClass)) {
+    // Take Thrift/Connect Server as daemon
+    if (isThriftServer(mainClass) || isConnectServer(mainClass)) {
       addOptionString(cmd, System.getenv("SPARK_DAEMON_JAVA_OPTS"));
     }
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
@@ -288,9 +290,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
       // - default value (1g)
-      // Take Thrift Server as daemon
+      // Take Thrift/Connect Server as daemon
       String tsMemory =
-        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
+        isThriftServer(mainClass) || isConnectServer(mainClass) ?
+          System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
@@ -360,6 +363,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
+      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
     if (!isEmpty(pyOpts)) {
@@ -421,6 +425,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private boolean isThriftServer(String mainClass) {
     return (mainClass != null &&
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
+  }
+
+  /**
+   * Return whether the given main class represents a connect server.
+   */
+  private boolean isConnectServer(String mainClass) {
+    return (mainClass != null &&
+      mainClass.equals("org.apache.spark.sql.connect.service.SparkConnectServer"));
   }
 
   private String findExamplesAppJar() {

@@ -32,7 +32,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-42017): Different error type AnalysisException vs SparkConnectAnalysisException
+    # TODO(SPARK-42017): df["bad_key"] does not raise AnalysisException
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_access_column(self):
         super().test_access_column()

@@ -278,10 +278,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -340,10 +342,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -395,10 +399,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -413,10 +419,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -578,10 +586,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -593,10 +603,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -608,10 +620,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -623,10 +637,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -669,8 +685,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 64,
-    "stopIndex" : 74,
-    "fragment" : "v10_temp t2"
+    "stopIndex" : 71,
+    "fragment" : "v10_temp"
   } ]
 }
 
@@ -777,10 +793,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal1`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal1`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -824,10 +842,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal2`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal2`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -871,10 +891,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal3`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal3`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -918,10 +940,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal4`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal4`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -933,10 +957,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal5`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal5`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 

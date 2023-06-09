@@ -21,10 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -181,6 +183,11 @@ private[sql] object CatalogV2Implicits {
 
       }
     }
+  }
+
+  implicit class ColumnsHelper(columns: Array[Column]) {
+    def asSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
+    def toAttributes: Seq[AttributeReference] = asSchema.toAttributes
   }
 
   def parseColumnPath(name: String): Seq[String] = {

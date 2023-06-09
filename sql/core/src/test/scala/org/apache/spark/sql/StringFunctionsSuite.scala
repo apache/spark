@@ -129,6 +129,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+    checkAnswer(df.select(levenshtein($"l", lit(null))), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("levenshtein(l, null)"), Seq(Row(null), Row(null)))
+
+    checkAnswer(df.select(levenshtein($"l", $"r", 3)), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r, 3)"), Seq(Row(3), Row(1)))
+    checkAnswer(df.select(levenshtein(lit(null), $"r", 3)), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("levenshtein(null, r, 3)"), Seq(Row(null), Row(null)))
+
+    checkAnswer(df.select(levenshtein($"l", $"r", 0)), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r, 0)"), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.select(levenshtein($"l", lit(null), 0)), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
   }
 
   test("string regex_replace / regex_extract") {
@@ -700,6 +712,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> toSQLId("rlike"),
         "value" -> "'[a\\\\d]{0, 2}'"
       )
+    )
+  }
+
+  test("SPARK-42384: mask with null input") {
+    val df = Seq(
+      ("AbCD123-@$#"),
+      (null)
+    ).toDF("a")
+
+    checkAnswer(
+      df.selectExpr("mask(a,'Q','q','d','o')"),
+      Row("QqQQdddoooo") :: Row(null) :: Nil
     )
   }
 }

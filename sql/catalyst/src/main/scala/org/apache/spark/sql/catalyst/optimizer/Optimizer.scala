@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -87,7 +88,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseProject,
         OptimizeWindowFunctions,
         CollapseWindow,
-        CombineFilters,
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
@@ -679,6 +679,8 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
       d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
+    case d @ DeduplicateWithinWatermark(_, u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
@@ -1202,15 +1204,16 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     }
     // Case 2: When a RepartitionByExpression has a child of global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
-    case r @ RepartitionByExpression(_, child @ (Sort(_, true, _) | _: RepartitionOperation), _) =>
+    case r @ RepartitionByExpression(
+        _, child @ (Sort(_, true, _) | _: RepartitionOperation), _, _) =>
       r.withNewChildren(child.children)
     // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
-    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation), _) =>
+    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation), _, _) =>
       r.withNewChildren(child.children)
     // Case 4: When a RebalancePartitions has a child of RebalancePartitions we can remove the
     // child.
-    case r @ RebalancePartitions(_, child: RebalancePartitions, _) =>
+    case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
   }
 }
@@ -1222,7 +1225,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 object OptimizeRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(REPARTITION_OPERATION), ruleId) {
-    case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
+    case r @ RepartitionByExpression(partitionExpressions, _, numPartitions, _)
       if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
         numPartitions.isEmpty =>
       r.copy(optNumPartitions = Some(1))
@@ -1251,9 +1254,14 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  *   independent and are of the same window function type, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
+  private def specCompatible(s1: Seq[Expression], s2: Seq[Expression]): Boolean = {
+    s1.length == s2.length &&
+      s1.zip(s2).forall(e => e._1.semanticEquals(e._2))
+  }
+
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
-    w1.partitionSpec == w2.partitionSpec &&
-      w1.orderSpec == w2.orderSpec &&
+    specCompatible(w1.partitionSpec, w2.partitionSpec) &&
+      specCompatible(w1.orderSpec, w2.orderSpec) &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
       w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
       // This assumes Window contains the same type of window expressions. This is ensured
@@ -1445,6 +1453,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     // Only handle distinct-like 'Deduplicate', where the keys == output
     case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
+    case DeduplicateWithinWatermark(keys: Seq[Attribute], u: Union)
+      if AttributeSet(keys) == u.outputSet =>
+      DeduplicateWithinWatermark(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
@@ -1607,7 +1618,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
       // Arithmetic operations for floating-point values are order-sensitive
       // (they are not associative).
       case _: Sum | _: Average | _: CentralMomentAgg =>
-        !Seq(FloatType, DoubleType).exists(_.sameType(func.children.head.dataType))
+        !Seq(FloatType, DoubleType)
+          .exists(e => DataTypeUtils.sameType(e, func.children.head.dataType))
       case _ => false
     }
 

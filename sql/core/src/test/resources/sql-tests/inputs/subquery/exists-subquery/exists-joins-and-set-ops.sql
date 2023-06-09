@@ -238,23 +238,83 @@ WHERE  EXISTS (SELECT *
                  WHERE  dept_id >= 30 
                         AND dept_id <= 50);
 
--- Correlated predicates under UNION - unsupported
-SELECT * 
-FROM   emp 
-WHERE  EXISTS (SELECT * 
-               FROM   dept 
+-- Correlated predicates under set ops - unsupported
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
                WHERE  dept_id = emp.dept_id and state = "CA"
-               UNION 
-               SELECT * 
-               FROM   dept 
+               UNION
+               SELECT *
+               FROM   dept
                WHERE  dept_id = emp.dept_id and state = "TX");
 
-SELECT * 
-FROM   emp 
-WHERE NOT EXISTS (SELECT * 
-               FROM   dept 
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
                WHERE  dept_id = emp.dept_id and state = "CA"
-               UNION 
+               UNION
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT DISTINCT
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT DISTINCT
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT DISTINCT
                SELECT * 
                FROM   dept 
                WHERE  dept_id = emp.dept_id and state = "TX");

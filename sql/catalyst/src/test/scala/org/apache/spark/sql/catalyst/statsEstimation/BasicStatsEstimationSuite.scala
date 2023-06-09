@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -326,6 +326,37 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       distinct,
       expectedStatsCboOn = Statistics(sizeInBytes, Some(plan.rowCount), plan.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
+  test("SPARK-39851: Improve join stats estimation if one side can keep uniqueness") {
+    val brandId = attr("brand_id")
+    val classId = attr("class_id")
+    val aliasedBrandId = brandId.as("new_brand_id")
+    val aliasedClassId = classId.as("new_class_id")
+
+    val tableSize = 4059900
+    val tableRowCnt = 202995
+
+    val tbl = StatsTestPlan(
+      outputList = Seq(brandId, classId),
+      size = Some(tableSize),
+      rowCount = tableRowCnt,
+      attributeStats =
+        AttributeMap(Seq(
+          brandId -> ColumnStat(Some(858), Some(101001), Some(1016017), Some(0), Some(4), Some(4)),
+          classId -> ColumnStat(Some(16), Some(1), Some(16), Some(0), Some(4), Some(4)))))
+
+    val join = Join(
+      tbl,
+      tbl.groupBy(brandId, classId)(aliasedBrandId, aliasedClassId),
+      Inner,
+      Some(brandId === aliasedBrandId.toAttribute && classId === aliasedClassId.toAttribute),
+      JoinHint.NONE)
+
+    checkStats(
+      join,
+      expectedStatsCboOn = Statistics(4871880, Some(tableRowCnt), join.stats.attributeStats),
+      expectedStatsCboOff = Statistics(sizeInBytes = 4059900 * 2))
   }
 
   test("row size and column stats estimation for sort") {

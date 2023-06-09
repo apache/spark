@@ -14,63 +14,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import unittest
-
+from pyspark.sql.connect.types import UnparsedDataType
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions import SparkConnectGrpcException
-from pyspark.sql.connect.functions import udf
-from pyspark.sql.functions import pandas_udf, PandasUDFType
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
-    @unittest.skip(
-        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
-    )
     def test_udf_wrong_arg(self):
-        super().test_udf_wrong_arg()
+        self.check_udf_wrong_arg()
 
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_timestamp_ntz(self):
-        super().test_pandas_udf_timestamp_ntz()
-
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_detect_unsafe_type_conversion(self):
-        super().test_pandas_udf_detect_unsafe_type_conversion()
-
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_arrow_overflow(self):
-        super().test_pandas_udf_arrow_overflow()
-
-    # TODO(SPARK-42247): standardize `returnType` attribute of UDF
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_pandas_udf_decorator(self):
-        super().test_pandas_udf_decorator()
-
-    # TODO(SPARK-42247): standardize `returnType` attribute of UDF
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_pandas_udf_basic(self):
-        super().test_pandas_udf_basic()
-
-    def test_stopiteration_in_udf(self):
-        # The vanilla PySpark throws PythonException instead.
+    def test_pandas_udf_decorator_with_return_type_string(self):
+        @pandas_udf("v double", PandasUDFType.GROUPED_MAP)
         def foo(x):
-            raise StopIteration()
+            return x
 
-        exc_message = "Caught StopIteration thrown from user's code; failing the task"
-        df = self.spark.range(0, 100)
+        self.assertEqual(foo.returnType, UnparsedDataType("v double"))
+        self.assertEqual(foo.evalType, PandasUDFType.GROUPED_MAP)
 
-        self.assertRaisesRegex(
-            SparkConnectGrpcException, exc_message, df.withColumn("v", udf(foo)("id")).collect
-        )
+        @pandas_udf(returnType="double", functionType=PandasUDFType.SCALAR)
+        def foo(x):
+            return x
 
-        # pandas scalar udf
-        self.assertRaisesRegex(
-            SparkConnectGrpcException,
-            exc_message,
-            df.withColumn("v", pandas_udf(foo, "double", PandasUDFType.SCALAR)("id")).collect,
-        )
+        self.assertEqual(foo.returnType, UnparsedDataType("double"))
+        self.assertEqual(foo.evalType, PandasUDFType.SCALAR)
+
+    def test_pandas_udf_basic_with_return_type_string(self):
+        udf = pandas_udf(lambda x: x, "double", PandasUDFType.SCALAR)
+        self.assertEqual(udf.returnType, UnparsedDataType("double"))
+        self.assertEqual(udf.evalType, PandasUDFType.SCALAR)
+
+        udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
+
+        udf = pandas_udf(lambda x: x, "v double", functionType=PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
+
+        udf = pandas_udf(lambda x: x, returnType="v double", functionType=PandasUDFType.GROUPED_MAP)
+        self.assertEqual(udf.returnType, UnparsedDataType("v double"))
+        self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
 
 
 if __name__ == "__main__":

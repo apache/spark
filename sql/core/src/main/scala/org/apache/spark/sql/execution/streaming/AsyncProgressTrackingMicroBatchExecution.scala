@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
 
@@ -194,9 +195,7 @@ class AsyncProgressTrackingMicroBatchExecution(
       } else {
         if (!commitLog.addInMemory(
           currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))) {
-          throw new IllegalStateException(
-            s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId"
-          )
+          throw QueryExecutionErrors.concurrentStreamLogUpdate(currentBatchId)
         }
       }
       offsetLog.removeAsyncOffsetWrite(currentBatchId)
@@ -232,10 +231,8 @@ class AsyncProgressTrackingMicroBatchExecution(
   private def validateAndGetTrigger(): TriggerExecutor = {
     // validate that the pipeline is using a supported sink
     if (!extraOptions
-      .get(
-        ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK
-      )
-      .getOrElse("false")
+      .getOrElse(
+        ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK, "false")
       .toBoolean) {
       try {
         plan.sink.name() match {

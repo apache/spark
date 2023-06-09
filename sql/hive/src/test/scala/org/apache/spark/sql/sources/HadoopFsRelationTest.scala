@@ -240,9 +240,15 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - non-partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[AnalysisException] {
-        testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          testDF.write.format(dataSourceName)
+            .mode(SaveMode.ErrorIfExists).save(file.getCanonicalPath)
+        },
+        errorClass = "PATH_ALREADY_EXISTS",
+        parameters = Map("outputPath" -> "file:.*"),
+        matchPVals = true
+      )
     }
   }
 
@@ -339,13 +345,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - partitioned table - ErrorIfExists") {
     withTempDir { file =>
-      intercept[AnalysisException] {
-        partitionedTestDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.ErrorIfExists)
-          .partitionBy("p1", "p2")
-          .save(file.getCanonicalPath)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          partitionedTestDF.write
+            .format(dataSourceName)
+            .mode(SaveMode.ErrorIfExists)
+            .partitionBy("p1", "p2")
+            .save(file.getCanonicalPath)
+        },
+        errorClass = "PATH_ALREADY_EXISTS",
+        parameters = Map("outputPath" -> "file:.*"),
+        matchPVals = true
+      )
     }
   }
 

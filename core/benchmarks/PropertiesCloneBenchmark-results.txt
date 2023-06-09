@@ -2,39 +2,39 @@
 Properties Cloning
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Empty Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.2        5599.0       1.0X
+SerializationUtils.clone                              0              0           0          0.2        5499.0       1.0X
 Utils.cloneProperties                                 0              0           0     Infinity           0.0  InfinityX
 
-OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 System Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              0              0           0          0.0      272997.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.9        1099.0     248.4X
+SerializationUtils.clone                              0              0           0          0.0      272200.0       1.0X
+Utils.cloneProperties                                 0              0           0          1.0        1000.0     272.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Small Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              1              1           0          0.0      538293.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.2        4299.0     125.2X
+SerializationUtils.clone                              1              1           0          0.0      524300.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.2        4200.0     124.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Medium Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              2              2           0          0.0     2328670.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       21099.0     110.4X
+SerializationUtils.clone                              2              2           0          0.0     2229001.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       20100.0     110.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_352-b08 on Linux 5.15.0-1023-azure
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
 Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Large Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SerializationUtils.clone                              5              5           0          0.0     4522650.0       1.0X
-Utils.cloneProperties                                 0              0           0          0.0       41300.0     109.5X
+SerializationUtils.clone                              4              4           0          0.0     4347705.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.0       39700.0     109.5X
 
 

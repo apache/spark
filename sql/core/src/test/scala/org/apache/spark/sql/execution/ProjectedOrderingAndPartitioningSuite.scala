@@ -177,4 +177,18 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering3 = df3.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering3.size == 0)
   }
+
+  test("SPARK-42049: Improve AliasAwareOutputExpression - no alias but still prune expressions") {
+    val df = spark.range(2).select($"id" + 1 as "a", $"id" + 2 as "b")
+
+    val df1 = df.repartition($"a", $"b").selectExpr("a")
+    val outputPartitioning = stripAQEPlan(df1.queryExecution.executedPlan).outputPartitioning
+    assert(outputPartitioning.isInstanceOf[UnknownPartitioning])
+
+    val df2 = df.orderBy("a", "b").select("a")
+    val outputOrdering = df2.queryExecution.optimizedPlan.outputOrdering
+    assert(outputOrdering.size == 1)
+    assert(outputOrdering.head.child.asInstanceOf[Attribute].name == "a")
+    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+  }
 }

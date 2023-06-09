@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.{toFieldStr, ProtoMatchedField}
 import org.apache.spark.sql.types._
@@ -103,13 +103,26 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) =>
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
-            throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufEnumTypeError(
+            throw QueryExecutionErrors.cannotConvertCatalystValueToProtobufEnumTypeError(
               catalystPath,
               toFieldStr(protoPath),
               data,
               enumSymbols.mkString("\"", "\", \"", "\""))
           }
           fieldDescriptor.getEnumType.findValueByName(data)
+      case (IntegerType, ENUM) =>
+        val enumValues: Set[Int] =
+          fieldDescriptor.getEnumType.getValues.asScala.map(e => e.getNumber).toSet
+        (getter, ordinal) =>
+          val data = getter.getInt(ordinal)
+          if (!enumValues.contains(data)) {
+            throw QueryExecutionErrors.cannotConvertCatalystValueToProtobufEnumTypeError(
+              catalystPath,
+              toFieldStr(protoPath),
+              data.toString,
+              enumValues.mkString(", "))
+          }
+          fieldDescriptor.getEnumType.findValueByNumber(data)
       case (StringType, STRING) =>
         (getter, ordinal) => {
           String.valueOf(getter.getUTF8String(ordinal))
@@ -160,7 +173,7 @@ private[sql] class ProtobufSerializer(
       case (MapType(kt, vt, valueContainsNull), MESSAGE) =>
         var keyField: FieldDescriptor = null
         var valueField: FieldDescriptor = null
-        fieldDescriptor.getMessageType.getFields.asScala.map { field =>
+        fieldDescriptor.getMessageType.getFields.asScala.foreach { field =>
           field.getName match {
             case "key" =>
               keyField = field

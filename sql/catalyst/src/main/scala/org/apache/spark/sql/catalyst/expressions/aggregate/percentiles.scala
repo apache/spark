@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -154,12 +155,7 @@ abstract class PercentileBase
       return Seq.empty
     }
 
-    val ordering = child.dataType match {
-      case numericType: NumericType => numericType.ordering
-      case intervalType: YearMonthIntervalType => intervalType.ordering
-      case intervalType: DayTimeIntervalType => intervalType.ordering
-      case otherType => QueryExecutionErrors.unsupportedTypeError(otherType)
-    }
+    val ordering = PhysicalDataType.ordering(child.dataType)
     val sortedCounts = if (reverse) {
       buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]].reverse)
     } else {
@@ -368,7 +364,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     val direction = if (reverse) " DESC" else ""
-    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY v$direction)"
+    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PercentileCont =
@@ -408,7 +404,7 @@ case class PercentileDisc(
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     val direction = if (reverse) " DESC" else ""
-    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY v$direction)"
+    s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
   }
 
   override protected def withNewChildrenInternal(

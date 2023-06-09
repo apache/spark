@@ -35,7 +35,8 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
-from typing import Any, Callable, Iterator, List, Mapping, Protocol, TYPE_CHECKING, Tuple, Union
+from pyspark.ml.util import try_remote_functions
+from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
@@ -50,26 +51,25 @@ supported_scalar_types = (
     StringType,
 )
 
-
-class PredictBatchFunction(Protocol):
-    """Callable type for end user predict functions that take a variable number of ndarrays as
-    input and returns one of the following as output:
-    - single ndarray (single output)
-    - dictionary of named ndarrays (multiple outputs represented in columnar form)
-    - list of dictionaries of named ndarrays (multiple outputs represented in row form)
-    """
-
-    def __call__(
-        self, *args: np.ndarray
-    ) -> np.ndarray | Mapping[str, np.ndarray] | List[Mapping[str, np.dtype]]:
-        ...
+# Callable type for end user predict functions that take a variable number of ndarrays as
+# input and returns one of the following as output:
+# - single ndarray (single output)
+# - dictionary of named ndarrays (multiple outputs represented in columnar form)
+# - list of dictionaries of named ndarrays (multiple outputs represented in row form)
+PredictBatchFunction = Callable[
+    [np.ndarray], Union[np.ndarray, Mapping[str, np.ndarray], List[Mapping[str, np.dtype]]]
+]
 
 
+@try_remote_functions
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -117,12 +117,16 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     )
 
 
+@try_remote_functions
 def array_to_vector(col: Column) -> Column:
     """
     Converts a column of array of numeric type into a column of pyspark.ml.linalg.DenseVector
     instances
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -153,7 +157,7 @@ def array_to_vector(col: Column) -> Column:
 
 
 def _batched(
-    data: pd.Series | pd.DataFrame | Tuple[pd.Series], batch_size: int
+    data: Union[pd.Series, pd.DataFrame, Tuple[pd.Series]], batch_size: int
 ) -> Iterator[pd.DataFrame]:
     """Generator that splits a pandas dataframe/series into batches."""
     if isinstance(data, pd.DataFrame):
@@ -170,7 +174,7 @@ def _batched(
         index += batch_size
 
 
-def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
+def _is_tensor_col(data: Union[pd.Series, pd.DataFrame]) -> bool:
     if isinstance(data, pd.Series):
         return data.dtype == np.object_ and isinstance(data.iloc[0], (np.ndarray, list))
     elif isinstance(data, pd.DataFrame):
@@ -183,7 +187,7 @@ def _is_tensor_col(data: pd.Series | pd.DataFrame) -> bool:
         )
 
 
-def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
+def _has_tensor_cols(data: Union[pd.Series, pd.DataFrame, Tuple[pd.Series]]) -> bool:
     """Check if input Series/DataFrame/Tuple contains any tensor-valued columns."""
     if isinstance(data, (pd.Series, pd.DataFrame)):
         return _is_tensor_col(data)
@@ -192,7 +196,7 @@ def _has_tensor_cols(data: pd.Series | pd.DataFrame | Tuple[pd.Series]) -> bool:
 
 
 def _validate_and_transform_multiple_inputs(
-    batch: pd.DataFrame, input_shapes: List[List[int] | None], num_input_cols: int
+    batch: pd.DataFrame, input_shapes: List[Optional[List[int]]], num_input_cols: int
 ) -> List[np.ndarray]:
     multi_inputs = [batch[col].to_numpy() for col in batch.columns]
     if input_shapes:
@@ -232,7 +236,8 @@ def _validate_and_transform_single_input(
         # scalar columns
         if len(batch.columns) == 1:
             # single scalar column, remove extra dim
-            single_input = np.squeeze(batch.to_numpy())
+            np_batch = batch.to_numpy()
+            single_input = np.squeeze(np_batch, -1) if len(np_batch.shape) > 1 else np_batch
             if input_shapes and input_shapes[0] not in [None, [], [1]]:
                 raise ValueError("Invalid input_tensor_shape for scalar column.")
         elif not has_tuple:
@@ -340,7 +345,7 @@ def _validate_and_transform_prediction_result(
         ):
             raise ValueError("Invalid shape for scalar prediction result.")
 
-        output = np.squeeze(preds)  # type: ignore[arg-type]
+        output = np.squeeze(preds_array, -1) if len(preds_array.shape) > 1 else preds_array
         return pd.Series(output).astype(output.dtype)
     else:
         raise ValueError("Unsupported return type")
@@ -354,7 +359,7 @@ def predict_batch_udf(
     *,
     return_type: DataType,
     batch_size: int,
-    input_tensor_shapes: List[List[int] | None] | Mapping[int, List[int]] | None = None,
+    input_tensor_shapes: Optional[Union[List[Optional[List[int]]], Mapping[int, List[int]]]] = None,
 ) -> UserDefinedFunctionLike:
     """Given a function which loads a model and returns a `predict` function for inference over a
     batch of numpy inputs, returns a Pandas UDF wrapper for inference over a Spark DataFrame.
@@ -383,7 +388,7 @@ def predict_batch_udf(
 
     Parameters
     ----------
-    make_predict_fn : Callable[[], PredictBatchFunction]
+    make_predict_fn : callable
         Function which is responsible for loading a model and returning a
         :py:class:`PredictBatchFunction` which takes one or more numpy arrays as input and returns
         one of the following:
@@ -408,7 +413,8 @@ def predict_batch_udf(
     batch_size : int
         Batch size to use for inference.  This is typically a limitation of the model
         and/or available hardware resources and is usually smaller than the Spark partition size.
-    input_tensor_shapes : List[List[int] | None] | Mapping[int, List[int]] | None, optional
+    input_tensor_shapes : list, dict, optional.
+        A list of ints or a dictionary of ints (key) and list of ints (value).
         Input tensor shapes for models with tensor inputs.  This can be a list of shapes,
         where each shape is a list of integers or None (for scalar inputs).  Alternatively, this
         can be represented by a "sparse" dictionary, where the keys are the integer indices of the
@@ -525,7 +531,7 @@ def predict_batch_udf(
         only showing top 5 rows
 
     * Multiple scalar columns
-        Input DataFrame has muliple columns of scalar values.  If the user-provided `predict`
+        Input DataFrame has multiple columns of scalar values.  If the user-provided `predict`
         function expects a single input, then the user must combine the multiple columns into a
         single tensor using `pyspark.sql.functions.array`.
 

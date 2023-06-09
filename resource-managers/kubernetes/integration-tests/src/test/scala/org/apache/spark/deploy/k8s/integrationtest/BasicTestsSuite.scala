@@ -58,9 +58,13 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     // Verify there is no dangling statefulset
     // This depends on the garbage collection happening inside of K8s so give it some time.
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val sets = kubernetesTestComponents.kubernetesClient.apps().statefulSets().list().getItems
-      val scalaSets = sets.asScala
-      scalaSets.size shouldBe (0)
+      val sets = kubernetesTestComponents.kubernetesClient
+        .apps()
+        .statefulSets()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .list()
+        .getItems
+      sets.asScala.size shouldBe 0
     }
   }
 
@@ -135,6 +139,22 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
+  test("SPARK-42474: Run extraJVMOptions JVM GC option check - G1GC", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-XX:+UseG1GC")
+      .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC")
+    runSparkJVMCheckAndVerifyCompletion(
+      expectedJVMValue = Seq("JVM G1GC Flag: true"))
+  }
+
+  test("SPARK-42474: Run extraJVMOptions JVM GC option check - Other GC", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-XX:+UseParallelGC")
+      .set("spark.executor.extraJavaOptions", "-XX:+UseParallelGC")
+    runSparkJVMCheckAndVerifyCompletion(
+      expectedJVMValue = Seq("JVM G1GC Flag: false"))
+  }
+
   test("Run SparkRemoteFileTest using a remote data file", k8sTestTag, localTestTag) {
     assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
     TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>
@@ -142,6 +162,17 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
           REMOTE_PAGE_RANK_DATA_FILE.replace(sys.props("spark.test.home"), "").substring(1))
       runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
     }
+  }
+
+  test("SPARK-42769: All executor pods have SPARK_DRIVER_POD_IP env variable", k8sTestTag) {
+    runSparkPiAndVerifyCompletion(
+      executorPodChecker = (executorPod: Pod) => {
+        doBasicExecutorPodCheck(executorPod)
+        assert {
+          executorPod.getSpec.getContainers.get(0).getEnv.asScala
+            .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        }
+      })
   }
 }
 

@@ -21,6 +21,7 @@ import string
 import tempfile
 import unittest
 import sys
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -30,11 +31,11 @@ from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
+class DataFrameConversionTestsMixin:
     """Test cases for "small data" conversion and I/O."""
 
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp(prefix=DataFrameConversionTest.__name__)
+        self.tmp_dir = tempfile.mkdtemp(prefix=DataFrameConversionTests.__name__)
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -201,6 +202,10 @@ class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
             psdf.to_clipboard(sep=";", index=False), pdf.to_clipboard(sep=";", index=False)
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43561): Enable DataFrameConversionTests.test_to_latex for pandas 2.0.0.",
+    )
     def test_to_latex(self):
         pdf = self.pdf
         psdf = self.psdf
@@ -256,6 +261,12 @@ class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
             ps.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
             pd.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
         )
+
+
+class DataFrameConversionTests(
+    DataFrameConversionTestsMixin, ComparisonTestBase, SQLTestUtils, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

@@ -20,30 +20,22 @@ package org.apache.spark.sql.hive
 import java.rmi.server.UID
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.SerializationUtilities
 import org.apache.hadoop.hive.ql.exec.UDF
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 
 private[hive] object HiveShim {
-  // Precision and scale to pass for unlimited decimals; these are the same as the precision and
-  // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
-  val UNLIMITED_DECIMAL_PRECISION = 38
-  val UNLIMITED_DECIMAL_SCALE = 18
   val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
@@ -217,55 +209,6 @@ private[hive] object HiveShim {
         }
         func
       }
-    }
-  }
-
-  /*
-   * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
-   * Fix it through wrapper.
-   */
-  implicit def wrapperToFileSinkDesc(w: ShimFileSinkDesc): FileSinkDesc = {
-    val f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
-    f.setCompressCodec(w.compressCodec)
-    f.setCompressType(w.compressType)
-    f.setTableInfo(w.tableInfo)
-    f.setDestTableId(w.destTableId)
-    f
-  }
-
-  /*
-   * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
-   * Fix it through wrapper.
-   */
-  private[hive] class ShimFileSinkDesc(
-      var dir: String,
-      var tableInfo: TableDesc,
-      var compressed: Boolean)
-    extends Serializable with Logging {
-    var compressCodec: String = _
-    var compressType: String = _
-    var destTableId: Int = _
-
-    def setCompressed(compressed: Boolean): Unit = {
-      this.compressed = compressed
-    }
-
-    def getDirName(): String = dir
-
-    def setDestTableId(destTableId: Int): Unit = {
-      this.destTableId = destTableId
-    }
-
-    def setTableInfo(tableInfo: TableDesc): Unit = {
-      this.tableInfo = tableInfo
-    }
-
-    def setCompressCodec(intermediateCompressorCodec: String): Unit = {
-      compressCodec = intermediateCompressorCodec
-    }
-
-    def setCompressType(intermediateCompressType: String): Unit = {
-      compressType = intermediateCompressType
     }
   }
 }

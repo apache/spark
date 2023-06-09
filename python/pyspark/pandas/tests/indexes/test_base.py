@@ -34,7 +34,7 @@ from pyspark.pandas.missing.indexes import (
 from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
-class IndexesTest(ComparisonTestBase, TestUtils):
+class IndexesTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -42,6 +42,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43606): Enable IndexesTests.test_index_basic for pandas 2.0.0.",
+    )
     def test_index_basic(self):
         for pdf in [
             pd.DataFrame(np.random.randn(10, 5), index=np.random.randint(100, size=10)),
@@ -59,15 +63,29 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         ]:
             psdf = ps.from_pandas(pdf)
             self.assert_eq(psdf.index, pdf.index)
-            self.assert_eq(type(psdf.index).__name__, type(pdf.index).__name__)
+            # Int64Index is removed from pandas 2.0.0, so we should compare the dtype itself.
+            if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+                self.assert_eq(psdf.index.dtype, pdf.index.dtype)
+            else:
+                self.assert_eq(type(psdf.index).__name__, type(pdf.index).__name__)
 
         self.assert_eq(ps.Index([])._summary(), "Index: 0 entries")
-        with self.assertRaisesRegexp(ValueError, "The truth value of a Int64Index is ambiguous."):
-            bool(ps.Index([1]))
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-            ps.Int64Index([1, 2, 3], name=[(1, 2, 3)])
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
-            ps.Float64Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            with self.assertRaisesRegexp(ValueError, "The truth value of a Index is ambiguous."):
+                bool(ps.Index([1]))
+            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+                ps.Index([1, 2, 3], name=[(1, 2, 3)])
+            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+                ps.Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
+        else:
+            with self.assertRaisesRegexp(
+                ValueError, "The truth value of a Int64Index is ambiguous."
+            ):
+                bool(ps.Index([1]))
+            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+                ps.Int64Index([1, 2, 3], name=[(1, 2, 3)])
+            with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+                ps.Float64Index([1.0, 2.0, 3.0], name=[(1, 2, 3)])
 
     def test_index_from_series(self):
         pser = pd.Series([1, 2, 3], name="a", index=[10, 20, 30])
@@ -77,7 +95,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index(psser, dtype="float"), pd.Index(pser, dtype="float"))
         self.assert_eq(ps.Index(psser, name="x"), pd.Index(pser, name="x"))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(ps.Index(psser, dtype="int64"), pd.Index(pser, dtype="int64"))
+            self.assert_eq(ps.Index(psser, dtype="float64"), pd.Index(pser, dtype="float64"))
+        elif LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(ps.Int64Index(psser), pd.Int64Index(pser))
             self.assert_eq(ps.Float64Index(psser), pd.Float64Index(pser))
         else:
@@ -99,8 +120,12 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(ps.Index(psidx, name="x"), pd.Index(pidx, name="x"))
         self.assert_eq(ps.Index(psidx, copy=True), pd.Index(pidx, copy=True))
 
-        self.assert_eq(ps.Int64Index(psidx), pd.Int64Index(pidx))
-        self.assert_eq(ps.Float64Index(psidx), pd.Float64Index(pidx))
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(ps.Index(psidx, dtype="int64"), pd.Index(pidx, dtype="int64"))
+            self.assert_eq(ps.Index(psidx, dtype="float64"), pd.Index(pidx, dtype="float64"))
+        else:
+            self.assert_eq(ps.Int64Index(psidx), pd.Int64Index(pidx))
+            self.assert_eq(ps.Float64Index(psidx), pd.Float64Index(pidx))
 
         pidx = pd.DatetimeIndex(["2021-03-01", "2021-03-02"])
         psidx = ps.from_pandas(pidx)
@@ -284,8 +309,12 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             psidx.name = ["renamed"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psidx.name = ["0", "1"]
-        with self.assertRaisesRegex(TypeError, expected_error_message):
-            ps.Index([(1, 2), (3, 4)], names=["a", ["b"]])
+        # Specifying `names` when creating Index is no longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pass
+        else:
+            with self.assertRaisesRegex(TypeError, expected_error_message):
+                ps.Index([(1, 2), (3, 4)], names=["a", ["b"]])
 
     def test_multi_index_names(self):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
@@ -455,10 +484,17 @@ class IndexesTest(ComparisonTestBase, TestUtils):
             (psidx1 + 1).symmetric_difference(psidx2).sort_values(),
             (pidx1 + 1).symmetric_difference(pidx2).sort_values(),
         )
-        self.assert_eq(
-            (psidx1 ^ psidx2).sort_values(),
-            (pidx1 ^ pidx2).sort_values(),
-        )
+        # No longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                (psidx1 ^ psidx2).sort_values(),
+                ps.Index([1, 5], dtype="int64"),
+            )
+        else:
+            self.assert_eq(
+                (psidx1 ^ psidx2).sort_values(),
+                (pidx1 ^ pidx2).sort_values(),
+            )
         self.assert_eq(
             psidx1.symmetric_difference(psidx2, result_name="result").sort_values(),
             pidx1.symmetric_difference(pidx2, result_name="result").sort_values(),
@@ -1129,13 +1165,29 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psmidx1 = ps.from_pandas(pmidx1)
         psmidx2 = ps.from_pandas(pmidx2)
 
-        self.assert_eq(pmidx1.append(pmidx2), psmidx1.append(psmidx2))
+        # TODO(SPARK-43241): MultiIndex.append not checking names for equality.
+        # Also refer to https://github.com/pandas-dev/pandas/pull/48288.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                pmidx1.append(pmidx2), psmidx1.append(psmidx2).rename([None, None, None])
+            )
+        else:
+            self.assert_eq(pmidx1.append(pmidx2), psmidx1.append(psmidx2))
 
-        self.assert_eq(pmidx2.append(pmidx1), psmidx2.append(psmidx1))
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                pmidx2.append(pmidx1), psmidx2.append(psmidx1).rename([None, None, None])
+            )
+        else:
+            self.assert_eq(pmidx2.append(pmidx1), psmidx2.append(psmidx1))
 
-        self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
-
-        self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                pmidx1.append(pmidx2).names,
+                psmidx1.append(psmidx2).rename([None, None, None]).names,
+            )
+        else:
+            self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
 
         # Index & MultiIndex is currently not supported
         expected_error_message = r"append\(\) between Index & MultiIndex is currently not supported"
@@ -1550,6 +1602,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psmidx = ps.MultiIndex.from_tuples([("a", "a"), ("a", "b"), ("a", "c")])
         self.assertRaises(NotImplementedError, lambda: psmidx.asof(("a", "b")))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43608): Enable IndexesTests.test_union for pandas 2.0.0.",
+    )
     def test_union(self):
         # Index
         pidx1 = pd.Index([1, 2, 3, 4])
@@ -1564,7 +1620,11 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psidx1.union(psidx3), pidx1.union(pidx3))
         # Deprecated case, but adding to track if pandas stop supporting union
         # as a set operation. It should work fine until stop supporting anyway.
-        self.assert_eq(pidx1 | pidx2, psidx1 | psidx2)
+        # No longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(psidx1 | psidx2, ps.Index([3, 4], dtype="int64"))
+        else:
+            self.assert_eq(pidx1 | pidx2, psidx1 | psidx2)
 
         self.assert_eq(psidx1.union([3, 4, 5, 6]), pidx1.union([3, 4, 5, 6]), almost=True)
         self.assert_eq(psidx2.union([1, 2, 3, 4]), pidx2.union([1, 2, 3, 4]), almost=True)
@@ -1869,6 +1929,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psmidx = ps.Index([("a", 1), ("b", 2)])
         self.assertRaises(NotImplementedError, lambda: psmidx.hasnans())
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43607): Enable IndexesTests.test_intersection for pandas 2.0.0.",
+    )
     def test_intersection(self):
         pidx = pd.Index([1, 2, 3, 4], name="Koalas")
         psidx = ps.from_pandas(pidx)
@@ -1882,7 +1946,13 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         )
         # Deprecated case, but adding to track if pandas stop supporting intersection
         # as a set operation. It should work fine until stop supporting anyway.
-        self.assert_eq(pidx & pidx_other, (psidx & psidx_other).sort_values())
+        # No longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                (psidx & psidx_other).sort_values(), ps.Index([3, 1, 7, 1], dtype="int64")
+            )
+        else:
+            self.assert_eq(pidx & pidx_other, (psidx & psidx_other).sort_values())
 
         pidx_other_different_name = pd.Index([3, 4, 5, 6], name="Databricks")
         psidx_other_different_name = ps.from_pandas(pidx_other_different_name)
@@ -2098,8 +2168,15 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(pmidx, psmidx)
 
         # Specify the `names`
-        pmidx = pd.Index(tuples, names=["Hello", "Koalas"])
-        psmidx = ps.Index(tuples, names=["Hello", "Koalas"])
+        # Specify the `names` while Index creating is no longer supported from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pmidx = pd.Index(tuples)
+            pmidx.names = ["Hello", "Koalas"]
+            psmidx = ps.Index(tuples)
+            psmidx.names = ["Hello", "Koalas"]
+        else:
+            pmidx = pd.Index(tuples, names=["Hello", "Koalas"])
+            psmidx = ps.Index(tuples, names=["Hello", "Koalas"])
 
         self.assertTrue(isinstance(psmidx, ps.MultiIndex))
         self.assert_eq(pmidx, psmidx)
@@ -2164,73 +2241,139 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         # Integer
         pidx = pd.Index([1, 2, 3])
         psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
+        # is_type_compatible is removed from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            expected_results = [True, False, False, False]
+            for data_type, expected_result in zip(data_types, expected_results):
+                self.assert_eq(psidx.is_type_compatible(data_type), expected_result)
+        else:
+            for data_type in data_types:
+                self.assert_eq(
+                    pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type)
+                )
 
         # Floating
         pidx = pd.Index([1.0, 2.0, 3.0])
         psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
+        # is_type_compatible is removed from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            expected_results = [False, True, False, False]
+            for data_type, expected_result in zip(data_types, expected_results):
+                self.assert_eq(psidx.is_type_compatible(data_type), expected_result)
+        else:
+            for data_type in data_types:
+                self.assert_eq(
+                    pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type)
+                )
 
         # String
         pidx = pd.Index(["a", "b", "c"])
         psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
+        # is_type_compatible is removed from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            expected_results = [False, False, True, False]
+            for data_type, expected_result in zip(data_types, expected_results):
+                self.assert_eq(psidx.is_type_compatible(data_type), expected_result)
+        else:
+            for data_type in data_types:
+                self.assert_eq(
+                    pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type)
+                )
 
         # Boolean
         pidx = pd.Index([True, False, True, False])
         psidx = ps.from_pandas(pidx)
-        for data_type in data_types:
-            self.assert_eq(pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type))
+        # is_type_compatible is removed from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            expected_results = [False, False, False, True]
+            for data_type, expected_result in zip(data_types, expected_results):
+                self.assert_eq(psidx.is_type_compatible(data_type), expected_result)
+        else:
+            for data_type in data_types:
+                self.assert_eq(
+                    pidx.is_type_compatible(data_type), psidx.is_type_compatible(data_type)
+                )
 
         # MultiIndex
         pmidx = pd.MultiIndex.from_tuples([("a", "x")])
         psmidx = ps.from_pandas(pmidx)
-        for data_type in data_types:
-            self.assert_eq(
-                pmidx.is_type_compatible(data_type), psmidx.is_type_compatible(data_type)
-            )
+        # is_type_compatible is removed from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            expected_results = [False, False, False, False]
+            for data_type, expected_result in zip(data_types, expected_results):
+                self.assert_eq(psmidx.is_type_compatible(data_type), expected_result)
+        else:
+            for data_type in data_types:
+                self.assert_eq(
+                    pmidx.is_type_compatible(data_type), psmidx.is_type_compatible(data_type)
+                )
 
     def test_asi8(self):
         # Integer
         pidx = pd.Index([1, 2, 3])
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
-        self.assert_eq(pidx.astype("int").asi8, psidx.astype("int").asi8)
-        self.assert_eq(pidx.astype("int16").asi8, psidx.astype("int16").asi8)
-        self.assert_eq(pidx.astype("int8").asi8, psidx.astype("int8").asi8)
+        # asi8 is removed from pandas 2.0.0.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(np.array(pidx), psidx.asi8)
+            self.assert_eq(np.array(pidx.astype("int")), psidx.astype("int").asi8)
+            self.assert_eq(np.array(pidx.astype("int16")), psidx.astype("int16").asi8)
+            self.assert_eq(np.array(pidx.astype("int8")), psidx.astype("int8").asi8)
+        else:
+            self.assert_eq(pidx.asi8, psidx.asi8)
+            self.assert_eq(pidx.astype("int").asi8, psidx.astype("int").asi8)
+            self.assert_eq(pidx.astype("int16").asi8, psidx.astype("int16").asi8)
+            self.assert_eq(pidx.astype("int8").asi8, psidx.astype("int8").asi8)
 
         # Integer with missing value
         pidx = pd.Index([1, 2, None, 4, 5])
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(None, psidx.asi8)
+        else:
+            self.assert_eq(pidx.asi8, psidx.asi8)
 
         # Datetime
         pidx = pd.date_range(end="1/1/2018", periods=3)
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(
+                np.array([1514592000000000000, 1514678400000000000, 1514764800000000000]),
+                psidx.asi8,
+            )
+        else:
+            self.assert_eq(pidx.asi8, psidx.asi8)
 
         # Floating
         pidx = pd.Index([1.0, 2.0, 3.0])
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(None, psidx.asi8)
+        else:
+            self.assert_eq(pidx.asi8, psidx.asi8)
 
         # String
         pidx = pd.Index(["a", "b", "c"])
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(None, psidx.asi8)
+        else:
+            self.assert_eq(pidx.asi8, psidx.asi8)
 
         # Boolean
         pidx = pd.Index([True, False, True, False])
         psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.asi8, psidx.asi8)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(None, psidx.asi8)
+        else:
+            self.assert_eq(pidx.asi8, psidx.asi8)
 
         # MultiIndex
         pmidx = pd.MultiIndex.from_tuples([(1, 2)])
         psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.asi8, psmidx.asi8)
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(None, psmidx.asi8)
+        else:
+            self.assert_eq(pmidx.asi8, psmidx.asi8)
 
     def test_index_is_unique(self):
         indexes = [("a", "b", "c"), ("a", "a", "c"), (1, 3, 3), (1, 2, 3)]
@@ -2340,7 +2483,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx = ps.Index(pidx)
 
         self.assert_eq(psidx.astype(int), pidx.astype(int))
-        self.assert_eq(psidx.astype(np.int), pidx.astype(np.int))
         self.assert_eq(psidx.astype(np.int8), pidx.astype(np.int8))
         self.assert_eq(psidx.astype(np.int16), pidx.astype(np.int16))
         self.assert_eq(psidx.astype(np.int32), pidx.astype(np.int32))
@@ -2356,7 +2498,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psidx.astype("i"), pidx.astype("i"))
         self.assert_eq(psidx.astype("long"), pidx.astype("long"))
         self.assert_eq(psidx.astype("short"), pidx.astype("short"))
-        self.assert_eq(psidx.astype(np.float), pidx.astype(np.float))
         self.assert_eq(psidx.astype(np.float32), pidx.astype(np.float32))
         self.assert_eq(psidx.astype(np.float64), pidx.astype(np.float64))
         self.assert_eq(psidx.astype("float"), pidx.astype("float"))
@@ -2584,6 +2725,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
 
         with self.assertRaisesRegex(NotImplementedError, "nunique is not defined for MultiIndex"):
             psmidx.nunique()
+
+
+class IndexesTests(IndexesTestsMixin, ComparisonTestBase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

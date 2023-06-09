@@ -27,7 +27,7 @@ from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.testing.pandasutils import ComparisonTestBase, compare_both
 
 
-class BasicIndexingTest(ComparisonTestBase):
+class BasicIndexingTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -1321,6 +1321,10 @@ class IndexingTest(ComparisonTestBase):
             NotImplementedError, "Duplicated row selection is not currently supported"
         ):
             psdf.iloc[[1, 1]]
+
+
+class BasicIndexingTests(BasicIndexingTestsMixin, ComparisonTestBase):
+    pass
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ import java.util.TimeZone
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.{SPARK_DOC_ROOT, SparkNoSuchElementException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
@@ -204,9 +205,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql("RESET spark.app.id")
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
-    val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    val str_match = "Cannot modify the value of a Spark config: spark.executor.cores"
-    assert(e1.getMessage.contains(str_match))
+    checkError(
+      exception = intercept[AnalysisException](sql("RESET spark.executor.cores")),
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      parameters = Map("key" -> "\"spark.executor.cores\"", "docroot" -> SPARK_DOC_ROOT)
+    )
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -489,5 +492,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |Non internal legacy SQL configs:
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
+  }
+
+  test("SPARK-43028: config not found error") {
+    checkError(
+      exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
+      errorClass = "SQL_CONF_NOT_FOUND",
+      parameters = Map("sqlConf" -> "\"some.conf\""))
   }
 }

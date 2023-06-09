@@ -103,11 +103,8 @@ class TaskInfo(
     // finishTime should be set larger than 0, otherwise "finished" below will return false.
     assert(time > 0)
     finishTime = time
-    if (state == TaskState.FAILED) {
-      failed = true
-    } else if (state == TaskState.KILLED) {
-      killed = true
-    }
+    failed = state == TaskState.FAILED
+    killed = state == TaskState.KILLED
   }
 
   private[spark] def launchSucceeded(): Unit = {

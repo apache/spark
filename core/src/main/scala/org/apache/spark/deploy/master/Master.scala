@@ -962,7 +962,7 @@ private[deploy] class Master(
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None, Some(worker.host)))
+        exec.id, ExecutorState.LOST, Some(s"worker lost: $msg"), None, Some(worker.host)))
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }

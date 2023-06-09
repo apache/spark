@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.lang.{Boolean => JBoolean, Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, Period}
 import java.util.HashSet
@@ -776,7 +777,7 @@ class ParquetFilters(
         Option(prefix).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
-              private val strToBinary = Binary.fromReusedByteArray(v.getBytes)
+              private val strToBinary = Binary.fromReusedByteArray(v.getBytes(UTF_8))
               private val size = strToBinary.length
 
               override def canDrop(statistics: Statistics[Binary]): Boolean = {

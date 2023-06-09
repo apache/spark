@@ -15,28 +15,4 @@
 # limitations under the License.
 #
 
-"""Currently Spark Connect is very experimental and the APIs to interact with
-Spark through this API are can be changed at any time without warning."""
-import sys
-
-from pyspark.sql.pandas.utils import (
-    require_minimum_pandas_version,
-    require_minimum_pyarrow_version,
-    require_minimum_grpc_version,
-)
-
-
-def check_dependencies(mod_name: str, file_name: str) -> None:
-    if mod_name == "__main__":
-        from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-        if not should_test_connect:
-            print(
-                f"Skipping {file_name} doctests: {connect_requirement_message}",
-                file=sys.stderr,
-            )
-            sys.exit(0)
-    else:
-        require_minimum_pandas_version()
-        require_minimum_pyarrow_version()
-        require_minimum_grpc_version()
+"""Spark Connect client"""

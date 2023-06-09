@@ -38,7 +38,7 @@ private[spark] object KubernetesVolumeUtils {
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
-        mountSubPath = properties.get(subPathKey).getOrElse(""),
+        mountSubPath = properties.getOrElse(subPathKey, ""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
     }.toSeq

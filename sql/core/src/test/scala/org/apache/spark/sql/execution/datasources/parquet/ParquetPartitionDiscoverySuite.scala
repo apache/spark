@@ -31,6 +31,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.localDateTimeToMicros
 import org.apache.spark.sql.execution.datasources._
@@ -82,16 +83,21 @@ abstract class ParquetPartitionDiscoverySuite
     check("1.5", DoubleType)
     check("hello", StringType)
     check("1990-02-24", DateType)
-    // The inferred timestamp type is controlled by `SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES`
-    Seq(false, true).foreach { inferTimestampNTZ =>
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
-        val timestampType = if (inferTimestampNTZ) {
-          TimestampNTZType
-        } else {
-          TimestampType
-        }
-        check("1990-02-24 12:00:30", timestampType)
-        check("1990-02-24 12:00:30", timestampType, ZoneOffset.UTC)
+    // The inferred timestamp type is controlled by `SQLConf.TIMESTAMP_TYPE`
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        val expectedTimestampType =
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+            TimestampNTZType
+          } else {
+            TimestampType
+          }
+        check("1990-02-24 12:00:30", expectedTimestampType)
+        check("1990-02-24 12:00:30", expectedTimestampType, ZoneOffset.UTC)
       }
     }
 
@@ -372,9 +378,14 @@ abstract class ParquetPartitionDiscoverySuite
       s"hdfs://host:9000/path2"),
       PartitionSpec.emptySpec)
 
-    // The inferred timestamp type is controlled by `SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES`
-    Seq(false, true).foreach { inferTimestampNTZ =>
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+    // The inferred timestamp type is controlled by `SQLConf.TIMESTAMP_TYPE`
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
         // The cases below check the resolution for type conflicts.
         val t1 = if (!inferTimestampNTZ) {
           Timestamp.valueOf("2014-01-01 00:00:00.0").getTime * 1000
@@ -396,7 +407,7 @@ abstract class ParquetPartitionDiscoverySuite
           s"hdfs://host:9000/path/a=2014-01-01 00%3A01%3A00.0/b=$defaultPartitionName"),
           PartitionSpec(
             StructType(Seq(
-              StructField("a", SQLConf.get.timestampTypeInSchemaInference),
+              StructField("a", SQLConf.get.timestampType),
               StructField("b", DecimalType(22, 0)))),
             Seq(
               Partition(
@@ -661,9 +672,14 @@ abstract class ParquetPartitionDiscoverySuite
   }
 
   test("Various partition value types") {
-    // The inferred timestamp type is controlled by `SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES`
-    Seq(false, true).foreach { inferTimestampNTZ =>
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+    // The inferred timestamp type is controlled by `SQLConf.TIMESTAMP_TYPE`
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
         val ts = if (!inferTimestampNTZ) {
           new Timestamp(0)
         } else {
@@ -696,7 +712,7 @@ abstract class ParquetPartitionDiscoverySuite
             DecimalType(10, 5),
             DecimalType.SYSTEM_DEFAULT,
             DateType,
-            SQLConf.get.timestampTypeInSchemaInference,
+            SQLConf.get.timestampType,
             StringType)
 
         val partitionColumns = partitionColumnTypes.zipWithIndex.map {
@@ -727,8 +743,13 @@ abstract class ParquetPartitionDiscoverySuite
   }
 
   test("Various inferred partition value types") {
-    Seq(false, true).foreach { inferTimestampNTZ =>
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
         val ts = if (!inferTimestampNTZ) {
           Timestamp.valueOf("1990-02-24 12:00:30")
         } else {
@@ -750,7 +771,7 @@ abstract class ParquetPartitionDiscoverySuite
             DoubleType,
             DecimalType(20, 0),
             DateType,
-            SQLConf.get.timestampTypeInSchemaInference,
+            SQLConf.get.timestampType,
             StringType)
 
         val partitionColumns = partitionColumnTypes.zipWithIndex.map {
@@ -1081,7 +1102,7 @@ abstract class ParquetPartitionDiscoverySuite
       val input = spark.read.parquet(path.getAbsolutePath).select("id",
         "date_month", "date_hour", "date_t_hour", "data")
 
-      assert(data.schema.sameType(input.schema))
+      assert(DataTypeUtils.sameType(data.schema, input.schema))
       checkAnswer(input, data)
     }
   }

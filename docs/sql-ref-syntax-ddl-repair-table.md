@@ -21,14 +21,14 @@ license: |
 
 ### Description
 
-`MSCK REPAIR TABLE` recovers all the partitions in the directory of a table and updates the Hive metastore. When creating a table using `PARTITIONED BY` clause, partitions are generated and registered in the Hive metastore. However, if the partitioned table is created from existing data, partitions are not registered automatically in the Hive metastore. User needs to run `MSCK REPAIR TABLE` to register the partitions. `MSCK REPAIR TABLE` on a non-existent table or a table without partitions throws an exception. Another way to recover partitions is to use `ALTER TABLE RECOVER PARTITIONS`.
+`REPAIR TABLE` recovers all the partitions in the directory of a table and updates the Hive metastore. When creating a table using `PARTITIONED BY` clause, partitions are generated and registered in the Hive metastore. However, if the partitioned table is created from existing data, partitions are not registered automatically in the Hive metastore. User needs to run `REPAIR TABLE` to register the partitions. `REPAIR TABLE` on a non-existent table or a table without partitions throws an exception. Another way to recover partitions is to use `ALTER TABLE RECOVER PARTITIONS`. This command can also be invoked using `MSCK REPAIR TABLE`, for Hive compatibility.
 
 If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
 
 ### Syntax
 
 ```sql
-MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
+[MSCK] REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
 ```
 
 ### Parameters
@@ -57,8 +57,8 @@ CREATE TABLE t1 (name STRING, age INT) USING parquet PARTITIONED BY (age)
 -- SELECT * FROM t1 does not return results
 SELECT * FROM t1;
 
--- run MSCK REPAIR TABLE to recovers all the partitions
-MSCK REPAIR TABLE t1;
+-- run REPAIR TABLE to recovers all the partitions
+REPAIR TABLE t1;
 
 -- SELECT * FROM t1 returns results
 SELECT * FROM t1;

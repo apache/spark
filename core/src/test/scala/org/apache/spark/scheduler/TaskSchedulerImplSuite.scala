@@ -109,7 +109,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetExcludelist
-          val tsmSpy = spy(tsm)
+          val tsmSpy = spy[TaskSetManager](tsm)
           val taskSetExcludelist = mock[TaskSetExcludelist]
           when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(taskSetExcludelist))
           stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
@@ -1648,6 +1648,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         // Since we only submit one stage attempt, the following call is sufficient to mark the
         // task as killed.
         taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
+        assert(reason == "Stage cancelled: test message")
       }
     })
 
@@ -1661,7 +1662,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
     assert(2 === tsm.runningTasks)
 
-    taskScheduler.cancelTasks(0, false)
+    taskScheduler.cancelTasks(0, false, "test message")
     assert(0 === tsm.runningTasks)
     assert(tsm.isZombie)
     assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)
@@ -1945,7 +1946,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
         val tsm = super.createTaskSetManager(taskSet, maxFailures)
         // we need to create a spied tsm so that we can see the copies running
-        val tsmSpy = spy(tsm)
+        val tsmSpy = spy[TaskSetManager](tsm)
         stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
         tsmSpy
       }

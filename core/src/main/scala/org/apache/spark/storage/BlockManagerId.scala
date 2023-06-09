@@ -74,7 +74,7 @@ class BlockManagerId private (
     out.writeInt(port_)
     out.writeBoolean(topologyInfo_.isDefined)
     // we only write topologyInfo if we have it
-    topologyInfo.foreach(out.writeUTF(_))
+    topologyInfo.foreach(out.writeUTF)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {

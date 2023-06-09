@@ -51,7 +51,6 @@ class MissingPandasLikeIndex:
     get_indexer_non_unique = _unsupported_function("get_indexer_non_unique")
     get_loc = _unsupported_function("get_loc")
     get_slice_bound = _unsupported_function("get_slice_bound")
-    get_value = _unsupported_function("get_value")
     groupby = _unsupported_function("groupby")
     is_ = _unsupported_function("is_")
     join = _unsupported_function("join")
@@ -67,7 +66,6 @@ class MissingPandasLikeIndex:
     is_mixed = _unsupported_function("is_mixed")
 
     # Deprecated functions
-    set_value = _unsupported_function("set_value", deprecated=True)
     to_native_types = _unsupported_function("to_native_types", deprecated=True)
 
     # Properties we won't support.

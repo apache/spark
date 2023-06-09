@@ -22,9 +22,11 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
@@ -40,6 +42,34 @@ abstract class LogicalPlan
    * Should be overridden if the plan does not propagate its children's output.
    */
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
+
+  /**
+   * Searches for a metadata attribute by its logical name.
+   *
+   * The search works in spite of conflicts with column names in the data schema.
+   */
+  def getMetadataAttributeByNameOpt(name: String): Option[AttributeReference] = {
+    // NOTE: An already-referenced column might appear in `output` instead of `metadataOutput`.
+    (metadataOutput ++ output).collectFirst {
+      case MetadataAttributeWithLogicalName(attr, logicalName)
+          if conf.resolver(name, logicalName) => attr
+    }
+  }
+
+  /**
+   * Returns the metadata attribute having the specified logical name.
+   *
+   * Throws [[AnalysisException]] if no such metadata attribute exists.
+   */
+  def getMetadataAttributeByName(name: String): AttributeReference = {
+    getMetadataAttributeByNameOpt(name).getOrElse {
+      val availableMetadataColumns = (metadataOutput ++ output).collect {
+        case MetadataAttributeWithLogicalName(_, logicalName) => logicalName
+      }
+      throw QueryCompilationErrors.unresolvedAttributeError(
+        "UNRESOLVED_COLUMN", name, availableMetadataColumns.distinct, origin)
+    }
+  }
 
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = _isStreaming
@@ -95,11 +125,11 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(children.flatMap(_.output))
 
   private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
 
-  private[this] lazy val outputAttributes = AttributeSeq(output)
+  private[this] lazy val outputAttributes = AttributeSeq.fromNormalOutput(output)
 
   private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
@@ -154,6 +184,18 @@ abstract class LogicalPlan
       case (a1, a2) => a1.semanticEquals(a2)
     }
   }
+}
+
+object LogicalPlan {
+  // A dedicated tag for Spark Connect.
+  // If an expression (only support UnresolvedAttribute for now) was attached by this tag,
+  // the analyzer will:
+  //    1, extract the plan id;
+  //    2, top-down traverse the query plan to find the node that was attached by the same tag.
+  //    and fails the whole analysis if can not find it;
+  //    3, resolve this expression with the matching node. If any error occurs, analyzer fallbacks
+  //    to the old code path.
+  private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
 }
 
 /**
@@ -301,7 +343,7 @@ object LogicalPlanIntegrity {
       Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
     } else {
       LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
-        if (!DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+        if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
           Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
             currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
             "plan:\n" + currentPlan.treeString)
@@ -317,5 +359,33 @@ object LogicalPlanIntegrity {
  * A logical plan node that can generate metadata columns
  */
 trait ExposesMetadataColumns extends LogicalPlan {
+  protected def metadataOutputWithOutConflicts(
+      metadataOutput: Seq[AttributeReference],
+      renameOnConflict: Boolean = true): Seq[AttributeReference] = {
+    // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
+    // metadata output into output. We should still return an available metadata output
+    // so that the rule `ResolveReferences` can resolve metadata column correctly.
+    val metadataColFromOutput = output.filter(_.isMetadataCol)
+    if (metadataColFromOutput.isEmpty) {
+      val resolve = conf.resolver
+      val outputNames = outputSet.map(_.name)
+
+      def isOutputColumn(colName: String): Boolean = outputNames.exists(resolve(colName, _))
+
+      @scala.annotation.tailrec
+      def makeUnique(name: String): String =
+        if (isOutputColumn(name)) makeUnique(s"_$name") else name
+
+      // If allowed to, resolve any name conflicts between metadata and output columns by renaming
+      // the conflicting metadata columns; otherwise, suppress them.
+      metadataOutput.collect {
+        case attr if !isOutputColumn(attr.name) => attr
+        case attr if renameOnConflict => attr.withName(makeUnique(attr.name))
+      }
+    } else {
+      metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
+    }
+  }
+
   def withMetadataColumns(): LogicalPlan
 }

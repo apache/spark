@@ -31,6 +31,15 @@ class MsckRepairTableParserSuite extends AnalysisTest {
         enableDropPartitions = false))
   }
 
+  test("repair a table without MSCK keyword") {
+    comparePlans(
+      parsePlan("REPAIR TABLE a.b.c"),
+      RepairTable(
+        UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE", None),
+        enableAddPartitions = true,
+        enableDropPartitions = false))
+  }
+
   test("add partitions") {
     comparePlans(
       parsePlan("msck repair table ns.tbl add partitions"),

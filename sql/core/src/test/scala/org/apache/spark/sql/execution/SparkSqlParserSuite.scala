@@ -119,7 +119,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "SET spark.sql.key value"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -129,7 +129,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "SET spark.sql.key   'value'"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
@@ -139,7 +139,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "SET    spark.sql.key \"value\" "
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "SET    spark.sql.key \"value\"",
@@ -149,7 +149,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "SET spark.sql.key value1 value2"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -159,7 +159,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "SET spark.   sql.key=value"
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
@@ -169,7 +169,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "SET spark   :sql:key=value"
     checkError(
       exception = parseException(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
@@ -179,7 +179,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "SET spark .  sql.key=value"
     checkError(
       exception = parseException(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
@@ -189,7 +189,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "SET spark.sql.   key=value"
     checkError(
       exception = parseException(sql8),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
@@ -199,7 +199,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql9 = "SET spark.sql   :key=value"
     checkError(
       exception = parseException(sql9),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql9,
@@ -209,7 +209,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql10 = "SET spark.sql .  key=value"
     checkError(
       exception = parseException(sql10),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql10,
@@ -219,7 +219,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql11 = "SET ="
     checkError(
       exception = parseException(sql11),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql11,
@@ -229,7 +229,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql12 = "SET =value"
     checkError(
       exception = parseException(sql12),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql12,
@@ -353,7 +353,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "SET a=1; SELECT 1"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -363,7 +363,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "SET a=1;2;;"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "SET a=1;2",

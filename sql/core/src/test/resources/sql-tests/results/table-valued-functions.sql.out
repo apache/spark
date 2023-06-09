@@ -534,3 +534,476 @@ select * from inline_outer(array_remove(array(struct(1, 'a')), struct(1, 'a')))
 struct<col1:int,col2:string>
 -- !query output
 NULL	NULL
+
+
+-- !query
+select * from posexplode(array())
+-- !query schema
+struct<pos:int,col:void>
+-- !query output
+
+
+
+-- !query
+select * from posexplode(array(1, 2))
+-- !query schema
+struct<pos:int,col:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+select * from posexplode(array(1, 2)) t(pos, x)
+-- !query schema
+struct<pos:int,x:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+select * from posexplode(map())
+-- !query schema
+struct<pos:int,key:void,value:void>
+-- !query output
+
+
+
+-- !query
+select * from posexplode(map('a', 1, 'b', 2))
+-- !query schema
+struct<pos:int,key:string,value:int>
+-- !query output
+0	a	1
+1	b	2
+
+
+-- !query
+select * from posexplode(map('a', 1, 'b', 2)) t(pos, k, v)
+-- !query schema
+struct<pos:int,k:string,v:int>
+-- !query output
+0	a	1
+1	b	2
+
+
+-- !query
+select * from posexplode(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 27,
+    "fragment" : "posexplode(1)"
+  } ]
+}
+
+
+-- !query
+select * from posexplode(1, 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`posexplode`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 30,
+    "fragment" : "posexplode(1, 2)"
+  } ]
+}
+
+
+-- !query
+select * from posexplode(explode(array(1)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expression" : "\"posexplode(explode(array(1)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 43,
+    "fragment" : "posexplode(explode(array(1)))"
+  } ]
+}
+
+
+-- !query
+select * from posexplode(array(1, 2)) t(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "messageParameters" : {
+    "aliasesNum" : "1",
+    "funcName" : "posexplode",
+    "outColsNum" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 42,
+    "fragment" : "posexplode(array(1, 2)) t(x)"
+  } ]
+}
+
+
+-- !query
+select * from posexplode_outer(array())
+-- !query schema
+struct<pos:int,col:void>
+-- !query output
+NULL	NULL
+
+
+-- !query
+select * from posexplode_outer(array(1, 2))
+-- !query schema
+struct<pos:int,col:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+select * from posexplode_outer(map())
+-- !query schema
+struct<pos:int,key:void,value:void>
+-- !query output
+NULL	NULL	NULL
+
+
+-- !query
+select * from posexplode_outer(map('a', 1, 'b', 2))
+-- !query schema
+struct<pos:int,key:string,value:int>
+-- !query output
+0	a	1
+1	b	2
+
+
+-- !query
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b')
+-- !query schema
+struct<c0:string,c1:string>
+-- !query output
+1	2
+
+
+-- !query
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'c')
+-- !query schema
+struct<c0:string,c1:string>
+-- !query output
+1	NULL
+
+
+-- !query
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'a')
+-- !query schema
+struct<c0:string,c1:string>
+-- !query output
+1	1
+
+
+-- !query
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x, y)
+-- !query schema
+struct<x:string,y:string>
+-- !query output
+1	2
+
+
+-- !query
+select * from json_tuple('{"a": bad, "b": string}', 'a', 'b')
+-- !query schema
+struct<c0:string,c1:string>
+-- !query output
+NULL	NULL
+
+
+-- !query
+select * from json_tuple()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "> 1",
+    "functionName" : "`json_tuple`"
+  }
+}
+
+
+-- !query
+select * from json_tuple('{"a": 1}')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "> 1",
+    "functionName" : "`json_tuple`"
+  }
+}
+
+
+-- !query
+select * from json_tuple('{"a": 1}', 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "funcName" : "`json_tuple`",
+    "sqlExpr" : "\"json_tuple({\"a\": 1}, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 39,
+    "fragment" : "json_tuple('{\"a\": 1}', 1)"
+  } ]
+}
+
+
+-- !query
+select * from json_tuple('{"a": 1}', null)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_STRING_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "funcName" : "`json_tuple`",
+    "sqlExpr" : "\"json_tuple({\"a\": 1}, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 42,
+    "fragment" : "json_tuple('{\"a\": 1}', null)"
+  } ]
+}
+
+
+-- !query
+select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "messageParameters" : {
+    "aliasesNum" : "1",
+    "funcName" : "json_tuple",
+    "outColsNum" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 62,
+    "fragment" : "json_tuple('{\"a\": 1, \"b\": 2}', 'a', 'b') AS t(x)"
+  } ]
+}
+
+
+-- !query
+select * from stack(1, 1, 2, 3)
+-- !query schema
+struct<col0:int,col1:int,col2:int>
+-- !query output
+1	2	3
+
+
+-- !query
+select * from stack(2, 1, 2, 3)
+-- !query schema
+struct<col0:int,col1:int>
+-- !query output
+1	2
+3	NULL
+
+
+-- !query
+select * from stack(3, 1, 2, 3) t(x)
+-- !query schema
+struct<x:int>
+-- !query output
+1
+2
+3
+
+
+-- !query
+select * from stack(4, 1, 2, 3) t(x)
+-- !query schema
+struct<x:int>
+-- !query output
+1
+2
+3
+NULL
+
+
+-- !query
+select * from stack(2, 1, 1.1, 'a', 2, 2.2, 'b') t(a, b, c)
+-- !query schema
+struct<a:int,b:decimal(2,1),c:string>
+-- !query output
+1	1.1	a
+2	2.2	b
+
+
+-- !query
+select * from stack(2, 1, 1.1, null, 2, null, 'b') t(a, b, c)
+-- !query schema
+struct<a:int,b:decimal(2,1),c:string>
+-- !query output
+1	1.1	NULL
+2	NULL	b
+
+
+-- !query
+select * from stack()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "> 1",
+    "functionName" : "`stack`"
+  }
+}
+
+
+-- !query
+select * from stack(2, 1, 2, 3) t(a, b, c)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "messageParameters" : {
+    "aliasesNum" : "3",
+    "funcName" : "stack",
+    "outColsNum" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 42,
+    "fragment" : "stack(2, 1, 2, 3) t(a, b, c)"
+  } ]
+}
+
+
+-- !query
+select * from stack(2, 1, '1.1', 'a', 2, 2.2, 'b')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "columnIndex" : "1",
+    "leftParamIndex" : "2",
+    "leftType" : "\"STRING\"",
+    "rightParamIndex" : "5",
+    "rightType" : "\"DECIMAL(2,1)\"",
+    "sqlExpr" : "\"stack(2, 1, 1.1, a, 2, 2.2, b)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 50,
+    "fragment" : "stack(2, 1, '1.1', 'a', 2, 2.2, 'b')"
+  } ]
+}
+
+
+-- !query
+select * from stack(2, explode(array(1, 2, 3)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expression" : "\"stack(2, explode(array(1, 2, 3)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 47,
+    "fragment" : "stack(2, explode(array(1, 2, 3)))"
+  } ]
+}

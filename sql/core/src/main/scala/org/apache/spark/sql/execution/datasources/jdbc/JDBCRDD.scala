@@ -68,7 +68,7 @@ object JDBCRDD extends Logging {
         val rs = statement.executeQuery()
         try {
           JdbcUtils.getSchema(rs, dialect, alwaysNullable = true,
-            isTimestampNTZ = options.inferTimestampNTZType)
+            isTimestampNTZ = options.preferTimestampNTZ)
         } finally {
           rs.close()
         }
@@ -179,54 +179,6 @@ private[jdbc] class JDBCRDD(
   override def getPartitions: Array[Partition] = partitions
 
   /**
-   * `columns`, but as a String suitable for injection into a SQL query.
-   */
-  private val columnList: String = if (columns.isEmpty) "1" else columns.mkString(",")
-
-  /**
-   * `filters`, but as a WHERE clause suitable for injection into a SQL query.
-   */
-  private val filterWhereClause: String = {
-    val dialect = JdbcDialects.get(url)
-    predicates.flatMap(dialect.compileExpression(_)).map(p => s"($p)").mkString(" AND ")
-  }
-
-  /**
-   * A WHERE clause representing both `filters`, if any, and the current partition.
-   */
-  private def getWhereClause(part: JDBCPartition): String = {
-    if (part.whereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
-    } else if (part.whereClause != null) {
-      "WHERE " + part.whereClause
-    } else if (filterWhereClause.length > 0) {
-      "WHERE " + filterWhereClause
-    } else {
-      ""
-    }
-  }
-
-  /**
-   * A GROUP BY clause representing pushed-down grouping columns.
-   */
-  private def getGroupByClause: String = {
-    if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
-      // The GROUP BY columns should already be quoted by the caller side.
-      s"GROUP BY ${groupByColumns.get.mkString(", ")}"
-    } else {
-      ""
-    }
-  }
-
-  private def getOrderByClause: String = {
-    if (sortOrders.nonEmpty) {
-      s" ORDER BY ${sortOrders.mkString(", ")}"
-    } else {
-      ""
-    }
-  }
-
-  /**
    * Runs the SQL query against the JDBC driver.
    *
    */
@@ -299,26 +251,30 @@ private[jdbc] class JDBCRDD(
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
 
-    val myWhereClause = getWhereClause(part)
+    var builder = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(columns)
+      .withPredicates(predicates, part)
+      .withSortOrders(sortOrders)
+      .withLimit(limit)
+      .withOffset(offset)
 
-    val myTableSampleClause: String = if (sample.nonEmpty) {
-      JdbcDialects.get(url).getTableSample(sample.get)
-    } else {
-      ""
+    groupByColumns.foreach { groupByKeys =>
+      builder = builder.withGroupByColumns(groupByKeys)
     }
 
-    val myLimitClause: String = dialect.getLimitClause(limit)
-    val myOffsetClause: String = dialect.getOffsetClause(offset)
+    sample.foreach { tableSampleInfo =>
+      builder = builder.withTableSample(tableSampleInfo)
+    }
 
-    val sqlText = options.prepareQuery +
-      s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
-      s" $myWhereClause $getGroupByClause $getOrderByClause $myLimitClause $myOffsetClause"
+    val sqlText = builder.build()
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
-    val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
+    val rowsIterator =
+      JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

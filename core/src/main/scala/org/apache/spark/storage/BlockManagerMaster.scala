@@ -108,6 +108,19 @@ class BlockManagerMaster(
     res
   }
 
+  def updateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long): Unit = {
+    driverEndpoint.askSync[Unit](UpdateRDDBlockTaskInfo(blockId, taskId))
+  }
+
+  def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    driverEndpoint.ask[Unit](UpdateRDDBlockVisibility(taskId, visible))
+  }
+
+  /** Check whether a block is visible */
+  def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    driverEndpoint.askSync[Boolean](GetRDDBlockVisibility(blockId))
+  }
+
   /** Get locations of the blockId from the driver */
   def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))
@@ -132,7 +145,7 @@ class BlockManagerMaster(
    * those blocks that are reported to block manager master.
    */
   def contains(blockId: BlockId): Boolean = {
-    !getLocations(blockId).isEmpty
+    getLocations(blockId).nonEmpty
   }
 
   /** Get ids of other nodes in the cluster from the driver */
@@ -246,7 +259,6 @@ class BlockManagerMaster(
     val response = driverEndpoint.
       askSync[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
     val (blockManagerIds, futures) = response.unzip
-    implicit val sameThread = ThreadUtils.sameThread
     val cbf =
       implicitly[
         CanBuildFrom[Iterable[Future[Option[BlockStatus]]],

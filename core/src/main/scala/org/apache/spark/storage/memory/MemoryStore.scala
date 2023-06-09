@@ -370,7 +370,7 @@ private[spark] class MemoryStore(
     val entry = entries.synchronized { entries.get(blockId) }
     entry match {
       case null => None
-      case e: DeserializedMemoryEntry[_] =>
+      case _: DeserializedMemoryEntry[_] =>
         throw new IllegalArgumentException("should only call getBytes on serialized blocks")
       case SerializedMemoryEntry(bytes, _, _) => Some(bytes)
     }

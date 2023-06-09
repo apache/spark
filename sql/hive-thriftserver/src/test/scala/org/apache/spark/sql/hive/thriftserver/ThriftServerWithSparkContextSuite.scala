@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.SQLException
+import java.sql.{ResultSet, SQLException}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.hive.service.cli.{HiveSQLException, OperationHandle}
+import org.apache.hive.service.cli.{GetInfoType, HiveSQLException, OperationHandle}
 
 import org.apache.spark.{ErrorMessageFormat, TaskKilled}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -35,20 +35,20 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
     val globalTempDB = spark.sharedState.globalTempViewManager.database
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       statement.execute("CACHE TABLE tempTbl AS SELECT 1")
     }
     // the cached data of local temporary view should be uncached
     assert(cacheManager.isEmpty)
     try {
-      withJdbcStatement { statement =>
+      withJdbcStatement() { statement =>
         statement.execute("CREATE GLOBAL TEMP VIEW globalTempTbl AS SELECT 1, 2")
         statement.execute(s"CACHE TABLE $globalTempDB.globalTempTbl")
       }
       // the cached data of global temporary view shouldn't be uncached
       assert(!cacheManager.isEmpty)
     } finally {
-      withJdbcStatement { statement =>
+      withJdbcStatement() { statement =>
         statement.execute(s"UNCACHE TABLE IF EXISTS $globalTempDB.globalTempTbl")
       }
       assert(cacheManager.isEmpty)
@@ -69,21 +69,21 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
       assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
       assert(!e.getMessage.contains(
-        "SparkException: Malformed records are detected in record parsing"))
+        "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
     }
 
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery(sql)
       }
       assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
       assert(e.getMessage.contains(
-        "SparkException: Malformed records are detected in record parsing"))
+        "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
     }
   }
 
   test("SPARK-33526: Add config to control if cancel invoke interrupt task on thriftserver") {
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val forceCancel = new AtomicBoolean(false)
       val listener = new SparkListener {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
@@ -205,6 +205,53 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           |  } ]
           |}""".stripMargin)
       // scalastyle:on line.size.limit
+    }
+  }
+
+  test("SPARK-43119: Get SQL Keywords") {
+    withCLIServiceClient() { client =>
+      val sessionHandle = client.openSession(user, "")
+      val infoValue = client.getInfo(sessionHandle, GetInfoType.CLI_ODBC_KEYWORDS)
+      // scalastyle:off line.size.limit
+      assert(infoValue.getStringValue == "ADD,AFTER,ALL,ALTER,ALWAYS,ANALYZE,AND,ANTI,ANY,ANY_VALUE,ARCHIVE,ARRAY,AS,ASC,AT,AUTHORIZATION,BETWEEN,BIGINT,BINARY,BOOLEAN,BOTH,BUCKET,BUCKETS,BY,BYTE,CACHE,CASCADE,CASE,CAST,CATALOG,CATALOGS,CHANGE,CHAR,CHARACTER,CHECK,CLEAR,CLUSTER,CLUSTERED,CODEGEN,COLLATE,COLLECTION,COLUMN,COLUMNS,COMMENT,COMMIT,COMPACT,COMPACTIONS,COMPUTE,CONCATENATE,CONSTRAINT,COST,CREATE,CROSS,CUBE,CURRENT,CURRENT_DATE,CURRENT_TIME,CURRENT_TIMESTAMP,CURRENT_USER,DATA,DATABASE,DATABASES,DATE,DATEADD,DATEDIFF,DATE_ADD,DATE_DIFF,DAY,DAYOFYEAR,DAYS,DBPROPERTIES,DEC,DECIMAL,DEFAULT,DEFINED,DELETE,DELIMITED,DESC,DESCRIBE,DFS,DIRECTORIES,DIRECTORY,DISTINCT,DISTRIBUTE,DIV,DOUBLE,DROP,ELSE,END,ESCAPE,ESCAPED,EXCEPT,EXCHANGE,EXCLUDE,EXISTS,EXPLAIN,EXPORT,EXTENDED,EXTERNAL,EXTRACT,FALSE,FETCH,FIELDS,FILEFORMAT,FILTER,FIRST,FLOAT,FOLLOWING,FOR,FOREIGN,FORMAT,FORMATTED,FROM,FULL,FUNCTION,FUNCTIONS,GENERATED,GLOBAL,GRANT,GROUP,GROUPING,HAVING,HOUR,HOURS,IDENTIFIER,IF,IGNORE,ILIKE,IMPORT,IN,INCLUDE,INDEX,INDEXES,INNER,INPATH,INPUTFORMAT,INSERT,INT,INTEGER,INTERSECT,INTERVAL,INTO,IS,ITEMS,JOIN,KEYS,LAST,LATERAL,LAZY,LEADING,LEFT,LIKE,LIMIT,LINES,LIST,LOAD,LOCAL,LOCATION,LOCK,LOCKS,LOGICAL,LONG,MACRO,MAP,MATCHED,MERGE,MICROSECOND,MICROSECONDS,MILLISECOND,MILLISECONDS,MINUS,MINUTE,MINUTES,MONTH,MONTHS,MSCK,NAME,NAMESPACE,NAMESPACES,NANOSECOND,NANOSECONDS,NATURAL,NO,NULL,NULLS,NUMERIC,OF,OFFSET,ON,ONLY,OPTION,OPTIONS,OR,ORDER,OUT,OUTER,OUTPUTFORMAT,OVER,OVERLAPS,OVERLAY,OVERWRITE,PARTITION,PARTITIONED,PARTITIONS,PERCENT,PERCENTILE_CONT,PERCENTILE_DISC,PIVOT,PLACING,POSITION,PRECEDING,PRIMARY,PRINCIPALS,PROPERTIES,PURGE,QUARTER,QUERY,RANGE,REAL,RECORDREADER,RECORDWRITER,RECOVER,REDUCE,REFERENCES,REFRESH,RENAME,REPAIR,REPEATABLE,REPLACE,RESET,RESPECT,RESTRICT,REVOKE,RIGHT,ROLE,ROLES,ROLLBACK,ROLLUP,ROW,ROWS,SCHEMA,SCHEMAS,SECOND,SECONDS,SELECT,SEMI,SEPARATED,SERDE,SERDEPROPERTIES,SESSION_USER,SET,SETS,SHORT,SHOW,SKEWED,SMALLINT,SOME,SORT,SORTED,SOURCE,START,STATISTICS,STORED,STRATIFY,STRING,STRUCT,SUBSTR,SUBSTRING,SYNC,SYSTEM_TIME,SYSTEM_VERSION,TABLE,TABLES,TABLESAMPLE,TARGET,TBLPROPERTIES,TERMINATED,THEN,TIME,TIMESTAMP,TIMESTAMPADD,TIMESTAMPDIFF,TIMESTAMP_LTZ,TIMESTAMP_NTZ,TINYINT,TO,TOUCH,TRAILING,TRANSACTION,TRANSACTIONS,TRANSFORM,TRIM,TRUE,TRUNCATE,TRY_CAST,TYPE,UNARCHIVE,UNBOUNDED,UNCACHE,UNION,UNIQUE,UNKNOWN,UNLOCK,UNPIVOT,UNSET,UPDATE,USE,USER,USING,VALUES,VARCHAR,VERSION,VIEW,VIEWS,VOID,WEEK,WEEKS,WHEN,WHERE,WINDOW,WITH,WITHIN,X,YEAR,YEARS,ZONE")
+      // scalastyle:on line.size.limit
+    }
+  }
+
+  test("Support column display size for char/varchar") {
+    withTable("t") {
+      sql("CREATE TABLE t (c char(10), v varchar(11)) using parquet")
+
+      withJdbcStatement() { stmt =>
+        val rs = stmt.executeQuery("SELECT * FROM t")
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnDisplaySize(1) === 10)
+        assert(metaData.getColumnDisplaySize(2) === 11)
+      }
+    }
+  }
+
+
+  test("SPARK-43572: ResultSet supports TYPE_SCROLL_INSENSITIVE") {
+    withJdbcStatement(ResultSet.TYPE_SCROLL_INSENSITIVE) { stmt =>
+      val rs = stmt.executeQuery("SELECT * FROM RANGE(5)")
+      (0 until 5).foreach { i =>
+        rs.next()
+        assert(rs.getInt(1) === i)
+      }
+      assert(!rs.next(), "the result set shall be exhausted")
+      // Moves the cursor to the front of `rs`
+      rs.beforeFirst()
+      (0 until 5).foreach { i =>
+        rs.next()
+        assert(rs.getInt(1) === i)
+      }
+
+      val rs1 = stmt.getConnection.getMetaData.getSchemas
+      rs1.next()
+      assert(rs1.getString(1) === "default")
+      assert(rs1.getType === ResultSet.TYPE_FORWARD_ONLY)
+      assertThrows[SQLException](rs1.beforeFirst())
     }
   }
 }

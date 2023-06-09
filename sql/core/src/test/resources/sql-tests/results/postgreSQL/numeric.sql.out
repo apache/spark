@@ -3580,12 +3580,13 @@ INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.423308199106402476
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "precision" : "39"
   }
 }
 
@@ -3831,12 +3832,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1168",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "sqlState" : "21S01",
   "messageParameters" : {
-    "insertedColumns" : "5",
-    "staticPartCols" : "0",
-    "tableName" : "`spark_catalog`.`default`.`num_result`",
-    "targetColumns" : "3"
+    "dataColumns" : "'id', 'id', 'val', 'val', '(val * val)'",
+    "reason" : "too many data columns",
+    "tableColumns" : "'id1', 'id2', 'result'",
+    "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }
 

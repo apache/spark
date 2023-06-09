@@ -29,15 +29,16 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -59,6 +60,7 @@ class AdaptiveQueryExecSuite
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
+    var hasMetricsEvent = false
     val listener = new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
@@ -67,6 +69,8 @@ class AdaptiveQueryExecSuite
               "AdaptiveSparkPlan isFinalPlan=true")) {
               finalPlanCnt += 1
             }
+          case _: SparkListenerSQLAdaptiveSQLMetricUpdates =>
+            hasMetricsEvent = true
           case _ => // ignore other events
         }
       }
@@ -91,6 +95,10 @@ class AdaptiveQueryExecSuite
     val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
     assert(finalPlanCnt == expectedFinalPlanCnt)
     spark.sparkContext.removeSparkListener(listener)
+
+    val expectedMetrics = findInMemoryTable(planAfter).nonEmpty ||
+      subqueriesAll(planAfter).nonEmpty
+    assert(hasMetricsEvent == expectedMetrics)
 
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
@@ -157,6 +165,13 @@ class AdaptiveQueryExecSuite
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
     collectWithSubqueries(plan) {
       case e: ReusedSubqueryExec => e
+    }
+  }
+
+  private def findInMemoryTable(plan: SparkPlan): Seq[InMemoryTableScanExec] = {
+    collect(plan) {
+      case c: InMemoryTableScanExec
+          if c.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => c
     }
   }
 
@@ -2698,6 +2713,132 @@ class AdaptiveQueryExecSuite
       val df2 = spark.range(1).selectExpr("id as c2")
       val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
       assert(df.rdd.getNumPartitions == 3)
+    }
+  }
+
+  test("SPARK-42778: QueryStageExec should respect supportsRowBased") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTempView("t") {
+        Seq(1).toDF("c1").createOrReplaceTempView("t")
+        spark.catalog.cacheTable("t")
+        val df = spark.table("t")
+        df.collect()
+        assert(collect(df.queryExecution.executedPlan) {
+          case c: ColumnarToRowExec => c
+        }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-42101: Apply AQE if contains nested AdaptiveSparkPlanExec") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(3).repartition().cache()
+      assert(df.sortWithinPartitions("id")
+        .queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+    }
+  }
+
+  test("SPARK-42101: Make AQE support InMemoryTableScanExec") {
+    withSQLConf(
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(10).selectExpr("cast(id as string) c1")
+      val df2 = spark.range(10).selectExpr("cast(id as string) c2")
+      val cached = df1.join(df2, $"c1" === $"c2").cache()
+
+      def checkShuffleAndSort(firstAccess: Boolean): Unit = {
+        val df = cached.groupBy("c1").agg(max($"c2"))
+        val initialExecutedPlan = df.queryExecution.executedPlan
+        assert(collect(initialExecutedPlan) {
+          case s: ShuffleExchangeLike => s
+        }.size == (if (firstAccess) 1 else 0))
+        assert(collect(initialExecutedPlan) {
+          case s: SortExec => s
+        }.size == (if (firstAccess) 2 else 0))
+        assert(collect(initialExecutedPlan) {
+          case i: InMemoryTableScanExec => i
+        }.head.isMaterialized != firstAccess)
+
+        df.collect()
+        val finalExecutedPlan = df.queryExecution.executedPlan
+        assert(collect(finalExecutedPlan) {
+          case s: ShuffleExchangeLike => s
+        }.isEmpty)
+        assert(collect(finalExecutedPlan) {
+          case s: SortExec => s
+        }.isEmpty)
+        assert(collect(initialExecutedPlan) {
+          case i: InMemoryTableScanExec => i
+        }.head.isMaterialized)
+      }
+
+      // first access cache
+      checkShuffleAndSort(firstAccess = true)
+
+      // access a materialized cache
+      checkShuffleAndSort(firstAccess = false)
+    }
+  }
+
+  test("SPARK-42101: Do not coalesce shuffle partition if other side is TableCacheQueryStage") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+      withTempView("v1", "v2") {
+        Seq(1, 2).toDF("c1").repartition(3, $"c1").cache().createOrReplaceTempView("v1")
+        Seq(1, 2).toDF("c2").createOrReplaceTempView("v2")
+
+        val df = spark.sql("SELECT * FROM v1 JOIN v2 ON v1.c1 = v2.c2")
+        df.collect()
+        val finalPlan = df.queryExecution.executedPlan
+        assert(collect(finalPlan) {
+          case q: ShuffleQueryStageExec => q
+        }.size == 1)
+        assert(collect(finalPlan) {
+          case r: AQEShuffleReadExec => r
+        }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-42101: Coalesce shuffle partition with union even if exists TableCacheQueryStage") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+      val cached = Seq(1).toDF("c").cache()
+      val df = Seq(2).toDF("c").repartition($"c").unionAll(cached)
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case r @ AQEShuffleReadExec(_: ShuffleQueryStageExec, _) => r
+      }.size == 1)
+      assert(collect(df.queryExecution.executedPlan) {
+        case c: TableCacheQueryStageExec => c
+      }.size == 1)
+    }
+  }
+
+  test("SPARK-43026: Apply AQE with non-exchange table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(0).cache()
+      df.collect()
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      assert(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        .executedPlan.isInstanceOf[LocalTableScanExec])
+    }
+  }
+
+  test("SPARK-43376: Improve reuse subquery with table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      withTable("t1", "t2") {
+        withCache("t1") {
+          Seq(1).toDF("c1").cache().createOrReplaceTempView("t1")
+          Seq(2).toDF("c2").createOrReplaceTempView("t2")
+
+          val (_, adaptive) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM t1 WHERE c1 < (SELECT c2 FROM t2)")
+          assert(findReusedSubquery(adaptive).size == 1)
+        }
+      }
     }
   }
 }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
+import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -479,8 +480,11 @@ case class Add(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Add`s with different `evalMode`
-    val reorderResult =
-      orderCommutative({ case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, evalMode))
+    val reorderResult = buildCanonicalizedPlan(
+      { case Add(l, r, _) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
+      Some(evalMode)
+    )
     if (resolved && reorderResult.resolved && reorderResult.dataType == dataType) {
       reorderResult
     } else {
@@ -632,7 +636,11 @@ case class Multiply(
 
   override lazy val canonicalized: Expression = {
     // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
-    orderCommutative({ case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, evalMode))
+    buildCanonicalizedPlan(
+      { case Multiply(l, r, _) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+      Some(evalMode)
+    )
   }
 }
 
@@ -813,11 +821,13 @@ case class Divide(
   }
 
   private lazy val div: (Any, Any) => Any = dataType match {
-    case d @ DecimalType.Fixed(precision, scale) => (l, r) => {
-      val value = d.fractional.asInstanceOf[Fractional[Any]].div(l, r)
+    case d @ DecimalType.Fixed(precision, scale) =>
+      val fractional = PhysicalDecimalType(precision, scale).fractional
+      (l, r) => {
+      val value = fractional.asInstanceOf[Fractional[Any]].div(l, r)
       checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
     }
-    case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
+    case ft: FractionalType => PhysicalFractionalType.fractional(ft).div
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
@@ -875,13 +885,13 @@ case class IntegralDivide(
   private lazy val div: (Any, Any) => Any = {
     val integral = left.dataType match {
       case i: IntegralType =>
-        i.integral.asInstanceOf[Integral[Any]]
-      case d: DecimalType =>
-        d.asIntegral.asInstanceOf[Integral[Any]]
+        PhysicalIntegralType.integral(i)
+      case DecimalType.Fixed(p, s) =>
+        PhysicalDecimalType(p, s).asIntegral.asInstanceOf[Integral[Any]]
       case _: YearMonthIntervalType =>
-        IntegerType.integral.asInstanceOf[Integral[Any]]
+        PhysicalIntegerType.integral.asInstanceOf[Integral[Any]]
       case _: DayTimeIntervalType =>
-        LongType.integral.asInstanceOf[Integral[Any]]
+        PhysicalLongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
       val res = super.dataType match {
@@ -967,11 +977,11 @@ case class Remainder(
 
     // catch-all cases
     case i: IntegralType =>
-      val integral = i.integral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalIntegralType.integral(i)
       (left, right) => integral.rem(left, right)
 
     case d @ DecimalType.Fixed(precision, scale) =>
-      val integral = d.asIntegral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalDecimalType(precision, scale).asIntegral.asInstanceOf[Integral[Any]]
       (left, right) =>
         checkDecimalOverflow(integral.rem(left, right).asInstanceOf[Decimal], precision, scale)
   }

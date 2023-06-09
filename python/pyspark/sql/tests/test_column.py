@@ -18,7 +18,7 @@
 
 from pyspark.sql import Column, Row
 from pyspark.sql.types import StructType, StructField, LongType
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -46,8 +46,13 @@ class ColumnTestsMixin:
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
 
-        self.assertRaisesRegex(
-            TypeError, "Invalid argument, not a string or column", lambda: _to_java_column(1)
+        with self.assertRaises(PySparkTypeError) as pe:
+            _to_java_column(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "col", "arg_type": "int"},
         )
 
         class A:
@@ -56,8 +61,13 @@ class ColumnTestsMixin:
         self.assertRaises(TypeError, lambda: _to_java_column(A()))
         self.assertRaises(TypeError, lambda: _to_java_column([]))
 
-        self.assertRaisesRegex(
-            TypeError, "Invalid argument, not a string or column", lambda: udf(lambda x: x)(None)
+        with self.assertRaises(PySparkTypeError) as pe:
+            udf(lambda x: x)(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "col", "arg_type": "NoneType"},
         )
         self.assertRaises(TypeError, lambda: to_json(1))
 
@@ -160,11 +170,22 @@ class ColumnTestsMixin:
         result = df.withColumn("a", df["a"].withField("b", lit(3))).collect()[0].asDict()
         self.assertEqual(3, result["a"]["b"])
 
-        self.assertRaisesRegex(
-            TypeError, "col should be a Column", lambda: df["a"].withField("b", 3)
+        with self.assertRaises(PySparkTypeError) as pe:
+            df["a"].withField("b", 3)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN",
+            message_parameters={"arg_name": "col", "arg_type": "int"},
         )
-        self.assertRaisesRegex(
-            TypeError, "fieldName should be a string", lambda: df["a"].withField(col("b"), lit(3))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df["a"].withField(col("b"), lit(3))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "fieldName", "arg_type": "Column"},
         )
 
     def test_drop_fields(self):

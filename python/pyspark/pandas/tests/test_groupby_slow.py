@@ -26,7 +26,12 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class GroupBySlowTest(PandasOnSparkTestCase, TestUtils):
+class GroupBySlowTestsMixin:
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43445): Enable GroupBySlowTests.test_split_apply_combine_on_series "
+        "for pandas 2.0.0.",
+    )
     def test_split_apply_combine_on_series(self):
         pdf = pd.DataFrame(
             {
@@ -858,6 +863,10 @@ class GroupBySlowTest(PandasOnSparkTestCase, TestUtils):
                 for act, exp in zip(actual, expect):
                     self.assertTrue(sorted(act) == sorted(exp))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43444): Enable GroupBySlowTests.test_value_counts for pandas 2.0.0.",
+    )
     def test_value_counts(self):
         pdf = pd.DataFrame(
             {"A": [np.nan, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
@@ -1046,6 +1055,10 @@ class GroupBySlowTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
             pdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
         )
+
+
+class GroupBySlowTests(GroupBySlowTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

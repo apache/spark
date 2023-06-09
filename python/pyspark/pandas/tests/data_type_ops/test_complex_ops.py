@@ -24,7 +24,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class ComplexOpsTest(OpsTestBase):
+class ComplexOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([[1, 2, 3]])
@@ -349,6 +349,10 @@ class ComplexOpsTest(OpsTestBase):
         self.assert_eq(
             pdf["this_struct"] >= pdf["this_struct"], psdf["this_struct"] >= psdf["this_struct"]
         )
+
+
+class ComplexOpsTests(ComplexOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

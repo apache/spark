@@ -440,6 +440,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-42384: Mask with null input") {
+    val NULL_LITERAL = Literal(null, StringType)
+    checkEvaluation(
+      new Mask(NULL_LITERAL, Literal('Q'), Literal('q'), Literal('d')), null)
+  }
+
   test("string for ascii") {
     val a = $"a".long.at(0)
     checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))
@@ -462,7 +468,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal.create(null, StringType))), null, create_row("abdef"))
-    checkEvaluation(Base64(UnBase64(a)), "AQIDBA==", create_row("AQIDBA=="))
+
+    // failOnError
+    checkEvaluation(Base64(UnBase64(a, true)), "AQIDBA==", create_row("AQIDBA=="))
 
     checkEvaluation(Base64(b), "AQIDBA==", create_row(bytes))
     checkEvaluation(Base64(b), "", create_row(Array.empty[Byte]))
@@ -510,6 +518,95 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("Levenshtein distance threshold") {
+    checkEvaluation(Levenshtein(Literal("kitten"), Literal("sitting"), Some(Literal(2))), -1)
+
+    checkEvaluation(Levenshtein(Literal(""), Literal(""), Some(Literal(0))), 0)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(8))), 7)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(6))), -1)
+
+    checkEvaluation(Levenshtein(Literal("elephant"), Literal("hippo"), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("elephant"), Literal("hippo"), Some(Literal(6))), -1)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("elephant"), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("elephant"), Some(Literal(6))), -1)
+
+    // empty strings
+    checkEvaluation(Levenshtein(Literal(""), Literal(""), Some(Literal(0))), 0)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(8))), 7)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal(""), Some(Literal(6))), -1)
+
+    // unequal strings, zero threshold
+    checkEvaluation(Levenshtein(Literal("b"), Literal("a"), Some(Literal(0))), -1)
+    checkEvaluation(Levenshtein(Literal("a"), Literal("b"), Some(Literal(0))), -1)
+
+    // equal strings
+    checkEvaluation(Levenshtein(Literal("aa"), Literal("aa"), Some(Literal(0))), 0)
+    checkEvaluation(Levenshtein(Literal("aa"), Literal("aa"), Some(Literal(2))), 0)
+
+    // same length
+    checkEvaluation(Levenshtein(Literal("aaa"), Literal("bbb"), Some(Literal(2))), -1)
+    checkEvaluation(Levenshtein(Literal("aaa"), Literal("bbb"), Some(Literal(3))), 3)
+
+    // big stripe
+    checkEvaluation(Levenshtein(Literal("aaaaaa"), Literal("b"), Some(Literal(10))), 6)
+
+    // distance less than threshold
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal("b"), Some(Literal(8))), 7)
+    checkEvaluation(Levenshtein(Literal("a"), Literal("bbb"), Some(Literal(4))), 3)
+
+    // distance equal to threshold
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal("b"), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("a"), Literal("bbb"), Some(Literal(3))), 3)
+
+    // distance greater than threshold
+    checkEvaluation(Levenshtein(Literal("a"), Literal("bbb"), Some(Literal(2))), -1)
+    checkEvaluation(Levenshtein(Literal("bbb"), Literal("a"), Some(Literal(2))), -1)
+    checkEvaluation(Levenshtein(Literal("aaapppp"), Literal("b"), Some(Literal(6))), -1)
+
+    // stripe runs off array, strings not similar
+    checkEvaluation(Levenshtein(Literal("a"), Literal("bbb"), Some(Literal(1))), -1)
+    checkEvaluation(Levenshtein(Literal("bbb"), Literal("a"), Some(Literal(1))), -1)
+
+    // stripe runs off array, strings are similar
+    checkEvaluation(Levenshtein(Literal("12345"), Literal("1234567"), Some(Literal(1))), -1)
+    checkEvaluation(Levenshtein(Literal("1234567"), Literal("12345"), Some(Literal(1))), -1)
+
+    // old getLevenshteinDistance test cases
+    checkEvaluation(Levenshtein(Literal("frog"), Literal("fog"), Some(Literal(1))), 1)
+    checkEvaluation(Levenshtein(Literal("fly"), Literal("ant"), Some(Literal(3))), 3)
+    checkEvaluation(Levenshtein(Literal("elephant"), Literal("hippo"), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("elephant"), Literal("hippo"), Some(Literal(6))), -1)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("elephant"), Some(Literal(7))), 7)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("elephant"), Some(Literal(6))), -1)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("zzzzzzzz"), Some(Literal(8))), 8)
+    checkEvaluation(Levenshtein(Literal("zzzzzzzz"), Literal("hippo"), Some(Literal(8))), 8)
+    checkEvaluation(Levenshtein(Literal("hello"), Literal("hallo"), Some(Literal(1))), 1)
+
+    checkEvaluation(Levenshtein(Literal("frog"), Literal("fog"),
+      Some(Literal(Integer.MAX_VALUE))), 1)
+    checkEvaluation(Levenshtein(Literal("fly"), Literal("ant"),
+      Some(Literal(Integer.MAX_VALUE))), 3)
+    checkEvaluation(Levenshtein(Literal("elephant"), Literal("hippo"),
+      Some(Literal(Integer.MAX_VALUE))), 7)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("elephant"),
+      Some(Literal(Integer.MAX_VALUE))), 7)
+    checkEvaluation(Levenshtein(Literal("hippo"), Literal("zzzzzzzz"),
+      Some(Literal(Integer.MAX_VALUE))), 8)
+    checkEvaluation(Levenshtein(Literal("zzzzzzzz"), Literal("hippo"),
+      Some(Literal(Integer.MAX_VALUE))), 8)
+    checkEvaluation(Levenshtein(Literal("hello"), Literal("hallo"),
+      Some(Literal(Integer.MAX_VALUE))), 1)
+    checkEvaluation(Levenshtein(Literal("abc"), Literal("acb"),
+      Some(Literal(1))), -1)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkEvaluation(Levenshtein(Literal("千世"), Literal("fog"), Some(Literal(3))), 3)
+    checkEvaluation(Levenshtein(Literal("世界千世"), Literal("大a界b"), Some(Literal(4))), 4)
+    // scalastyle:on
+  }
 
   test("Levenshtein distance") {
     checkEvaluation(Levenshtein(Literal.create(null, StringType), Literal("")), null)
@@ -1826,16 +1923,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val msg = intercept[IllegalArgumentException] {
-        evaluateWithoutCodegen(
-          ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
-      }.getMessage
-      assert(msg.contains("Find an invalid url string"))
-    }
+    val url = "https://a.b.c/index.php?params1=a|b&params2=x"
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(
-        ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
+        ParseUrl(Seq(url, "HOST")), null)
     }
   }
 

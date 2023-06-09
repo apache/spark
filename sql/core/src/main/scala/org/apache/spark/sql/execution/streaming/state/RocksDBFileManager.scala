@@ -33,11 +33,13 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.util.Utils
 
@@ -123,6 +125,7 @@ class RocksDBFileManager(
     dfsRootDir: String,
     localTempDir: File,
     hadoopConf: Configuration,
+    codecName: String = "zstd",
     loggingId: String = "")
   extends Logging {
 
@@ -133,6 +136,27 @@ class RocksDBFileManager(
   private val fs = new Path(dfsRootDir).getFileSystem(hadoopConf)
   private val onlyZipFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
+  }
+  private val onlyChangelogFiles = new PathFilter {
+    override def accept(path: Path): Boolean = path.toString.endsWith(".changelog")
+  }
+
+  private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+
+  private def codec = CompressionCodec.createCodec(sparkConf, codecName)
+
+  def getChangeLogWriter(version: Long): StateStoreChangelogWriter = {
+    val rootDir = new Path(dfsRootDir)
+    val changelogFile = dfsChangelogFile(version)
+    if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+    val changelogWriter = new StateStoreChangelogWriter(fm, changelogFile, codec)
+    changelogWriter
+  }
+
+  // Get the changelog file at version
+  def getChangelogReader(version: Long): StateStoreChangelogReader = {
+    val changelogFile = dfsChangelogFile(version)
+    new StateStoreChangelogReader(fm, changelogFile, codec)
   }
 
   /**
@@ -205,16 +229,86 @@ class RocksDBFileManager(
     metadata
   }
 
+  // Get latest snapshot version <= version
+  def getLatestSnapshotVersion(version: Long): Long = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      // If the latest version snapshot exists, we avoid listing.
+      if (fm.exists(dfsBatchZipFile(version))) {
+        return version
+      }
+      fm.list(path, onlyZipFiles)
+        .map(_.getPath.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+        .filter(_ <= version)
+        .foldLeft(0L)(math.max)
+    } else {
+      0
+    }
+  }
+
+
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
   def getLatestVersion(): Long = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
-      fm.list(path, onlyZipFiles)
-        .map(_.getPath.getName.stripSuffix(".zip"))
+      val files = fm.list(path).map(_.getPath)
+      val changelogFileVersions = files
+        .filter(onlyChangelogFiles.accept(_))
+        .map(_.getName.stripSuffix(".changelog"))
         .map(_.toLong)
-        .foldLeft(0L)(math.max)
+      val snapshotFileVersions = files
+        .filter(onlyZipFiles.accept(_))
+        .map(_.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+      val versions = changelogFileVersions ++ snapshotFileVersions
+      versions.foldLeft(0L)(math.max)
     } else {
       0
+    }
+  }
+
+  /**
+   * Find orphan files which are not tracked by zip files.
+   * Both sst files and log files can be orphan files.
+   * They are uploaded separately before the zip file of that version is uploaded.
+   * When the zip file of a version get overwritten, the referenced sst and log files become orphan.
+   * Be careful here since sst and log files of the ongoing version
+   * also appear to be orphan before their zip file is uploaded.
+   *
+   * @param trackedFiles files tracked by metadata in versioned zip file
+   * @param allFiles all sst or log files in the directory.
+   * @return filenames of orphan files
+   */
+  def findOrphanFiles(trackedFiles: Seq[String], allFiles: Seq[FileStatus]): Seq[String] = {
+    val fileModificationTimes = allFiles.map(file =>
+      file.getPath.getName -> file.getModificationTime).toMap
+    if (trackedFiles.nonEmpty && allFiles.size > trackedFiles.size) {
+      // Some tracked files may not be in the directory when listing.
+      val oldestTrackedFileModificationTime = trackedFiles.flatMap(fileModificationTimes.get(_)).min
+      // If this immutable file is older than any tracked file,
+      // then it can't belong to the ongoing version and it should be safe to clean it up.
+      val orphanFiles = fileModificationTimes
+        .filter(_._2 < oldestTrackedFileModificationTime).keys.toSeq
+      if (orphanFiles.nonEmpty) {
+        logInfo(s"Found ${orphanFiles.size} orphan files: ${orphanFiles.take(20).mkString(", ")}" +
+          "... (display at most 20 filenames) that should be deleted.")
+      }
+      orphanFiles
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def deleteChangelogFiles(versionsToDelete: Array[Long]): Unit = {
+    versionsToDelete.foreach { version =>
+      try {
+        fm.delete(dfsChangelogFile(version))
+        logInfo(s"Deleted changelog file $version")
+      } catch {
+        case e: Exception =>
+          logWarning(s"Error deleting changelog file for version $version", e)
+      }
     }
   }
 
@@ -231,9 +325,14 @@ class RocksDBFileManager(
    * - Find the min version that needs to be retained based on the given `numVersionsToRetain`.
    * - Accordingly decide which versions should be deleted.
    * - Resolve all SSTs files of all the existing versions, if not already resolved.
-   * - Find what was the latest version in which each SST file was used.
-   * - Delete the files that were last used in the to-be-deleted versions as we will not
+   * - Find the files that were last used in the to-be-deleted versions as we will not
    *   need those files any more.
+   * - Find the orphan sst and log files whose zip files are not uploaded successfully
+   *   or have been overwritten. To avoid deleting files of ongoing tasks, only delete orphan files
+   *   that are older than all tracked files when there are at least 2 versions.
+   * - Delete sst and log files in to-be-deleted versions.
+   * - Delete orphan files.
+   * - Delete changelog files of to-be-deleted versions.
    *
    * Note that it only deletes files that it knows are safe to delete.
    * It may not delete the following files.
@@ -243,60 +342,83 @@ class RocksDBFileManager(
    */
   def deleteOldVersions(numVersionsToRetain: Int): Unit = {
     val path = new Path(dfsRootDir)
-
+    val allFiles = fm.list(path).map(_.getPath)
+    val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file))
+    val changelogFiles = allFiles.filter(file => onlyChangelogFiles.accept(file))
     // All versions present in DFS, sorted
-    val sortedVersions = fm.list(path, onlyZipFiles)
-      .map(_.getPath.getName.stripSuffix(".zip"))
+    val sortedSnapshotVersions = snapshotFiles
+      .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
 
     // Return if no versions generated yet
-    if (sortedVersions.isEmpty) return
+    if (sortedSnapshotVersions.isEmpty) return
 
     // Find the versions to delete
-    val maxVersionPresent = sortedVersions.last
-    val minVersionPresent = sortedVersions.head
-    val minVersionToRetain =
-      math.max(minVersionPresent, maxVersionPresent - numVersionsToRetain + 1)
-    val versionsToDelete = sortedVersions.takeWhile(_ < minVersionToRetain).toSet[Long]
+    val maxSnapshotVersionPresent = sortedSnapshotVersions.last
 
-    // Return if no version to delete
-    if (versionsToDelete.isEmpty) return
+    // In order to reconstruct numVersionsToRetain version, retain the latest snapshot
+    // that satisfies (version <= maxSnapshotVersionPresent - numVersionsToRetain + 1).
+    // If none of the snapshots satisfy the condition, minVersionToRetain will be 0 and
+    // no version gets deleted.
+    val minVersionToRetain = sortedSnapshotVersions
+      .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
+      .foldLeft(0L)(math.max)
 
-    logInfo(
-      s"Versions present: (min $minVersionPresent, max $maxVersionPresent), " +
-        s"cleaning up all versions older than $minVersionToRetain to retain last " +
-        s"$numVersionsToRetain versions")
+    // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
+    // We only delete orphan files when there are at least 2 versions,
+    // which avoid deleting files for running tasks.
+    val snapshotVersionsToDelete = sortedSnapshotVersions.filter(_ < minVersionToRetain)
+    if (snapshotVersionsToDelete.isEmpty) return
+
 
     // Resolve RocksDB files for all the versions and find the max version each file is used
-    val fileToMaxUsedVersion = new mutable.HashMap[RocksDBImmutableFile, Long]
-    sortedVersions.foreach { version =>
+    val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
+    sortedSnapshotVersions.foreach { version =>
       val files = Option(versionToRocksDBFiles.get(version)).getOrElse {
         val newResolvedFiles = getImmutableFilesFromVersionZip(version)
         versionToRocksDBFiles.put(version, newResolvedFiles)
         newResolvedFiles
       }
-      files.foreach(f => fileToMaxUsedVersion(f) = version)
+      files.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
+        math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
     }
 
     // Best effort attempt to delete SST files that were last used in to-be-deleted versions
-    val filesToDelete = fileToMaxUsedVersion.filter { case (_, v) => versionsToDelete.contains(v) }
+    val filesToDelete = fileToMaxUsedVersion.filter {
+      case (_, v) => snapshotVersionsToDelete.contains(v)
+    }
+
+    val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
+    val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
+    val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
+    val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
+    filesToDelete ++= findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
+      .map(_ -> -1L)
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
     var failedToDelete = 0
-    filesToDelete.foreach { case (file, maxUsedVersion) =>
+    filesToDelete.foreach { case (dfsFileName, maxUsedVersion) =>
       try {
-        val dfsFile = dfsFilePath(file.dfsFileName)
+        val dfsFile = dfsFilePath(dfsFileName)
         fm.delete(dfsFile)
-        logDebug(s"Deleted file $file that was last used in version $maxUsedVersion")
+        if (maxUsedVersion == -1) {
+          logDebug(s"Deleted orphan file $dfsFileName")
+        } else {
+          logDebug(s"Deleted file $dfsFileName that was last used in version $maxUsedVersion")
+        }
       } catch {
         case e: Exception =>
           failedToDelete += 1
-          logWarning(s"Error deleting file $file, last used in version $maxUsedVersion", e)
+          if (maxUsedVersion == -1) {
+            logWarning(s"Error deleting orphan file $dfsFileName", e)
+          } else {
+            logWarning(s"Error deleting file $dfsFileName, last used in version $maxUsedVersion", e)
+          }
       }
     }
 
     // Delete the version files and forget about them
-    versionsToDelete.foreach { version =>
+    snapshotVersionsToDelete.foreach { version =>
       val versionFile = dfsBatchZipFile(version)
       try {
         fm.delete(versionFile)
@@ -309,6 +431,11 @@ class RocksDBFileManager(
     }
     logInfo(s"Deleted ${filesToDelete.size - failedToDelete} files (failed to delete" +
       s"$failedToDelete files) not used in versions >= $minVersionToRetain")
+
+    val changelogVersionsToDelete = changelogFiles
+      .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
+      .filter(_ < minVersionToRetain)
+    deleteChangelogFiles(changelogVersionsToDelete)
   }
 
   /** Save immutable files to DFS directory */
@@ -318,7 +445,8 @@ class RocksDBFileManager(
     // Get the immutable files used in previous versions, as some of those uploaded files can be
     // reused for this version
     logInfo(s"Saving RocksDB files to DFS for $version")
-    val prevFilesToSizes = versionToRocksDBFiles.values.asScala.flatten.map { f =>
+    val prevFilesToSizes = versionToRocksDBFiles.asScala.filterKeys(_ < version)
+      .values.flatten.map { f =>
       f.localFileName -> f
     }.toMap
 
@@ -480,6 +608,9 @@ class RocksDBFileManager(
   }
 
   private def dfsBatchZipFile(version: Long): Path = new Path(s"$dfsRootDir/$version.zip")
+  // We use changelog suffix intentionally so that we can tell the difference from changelog file of
+  // HDFSBackedStateStore which is named version.delta.
+  private def dfsChangelogFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
 

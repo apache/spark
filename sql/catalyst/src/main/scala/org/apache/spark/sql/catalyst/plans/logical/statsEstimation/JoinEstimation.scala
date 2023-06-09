@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
@@ -56,10 +56,13 @@ case class JoinEstimation(join: Join) extends Logging {
     case _ if !rowCountsExist(join.left, join.right) =>
       None
 
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _, _, _) =>
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val (numInnerJoinedRows, keyStatsAfterJoin) = computeCardinalityAndStats(joinKeyPairs)
+      val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys)))
+      val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys)))
+      val (numInnerJoinedRows, keyStatsAfterJoin) =
+        computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
       // 2. Estimate the number of output rows
       val leftRows = leftStats.rowCount.get
@@ -175,10 +178,17 @@ case class JoinEstimation(join: Join) extends Logging {
    * @return join cardinality, and column stats for join keys after the join
    */
   // scalastyle:on
-  private def computeCardinalityAndStats(keyPairs: Seq[(AttributeReference, AttributeReference)])
-    : (BigInt, AttributeMap[ColumnStat]) = {
+  private def computeCardinalityAndStats(
+      keyPairs: Seq[(AttributeReference, AttributeReference)],
+      leftSideUniqueness: Boolean,
+      rightSideUniqueness: Boolean): (BigInt, AttributeMap[ColumnStat]) = {
     // If there's no column stats available for join keys, estimate as cartesian product.
-    var joinCard: BigInt = leftStats.rowCount.get * rightStats.rowCount.get
+    var joinCard: BigInt = (leftSideUniqueness, rightSideUniqueness) match {
+      case (true, true) => leftStats.rowCount.get.min(rightStats.rowCount.get)
+      case (true, false) => rightStats.rowCount.get
+      case (false, true) => leftStats.rowCount.get
+      case _ => leftStats.rowCount.get * rightStats.rowCount.get
+    }
     val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
     var i = 0
     while(i < keyPairs.length && joinCard != 0) {

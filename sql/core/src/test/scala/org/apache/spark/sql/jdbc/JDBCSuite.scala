@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, SQLException, Timestamp}
+import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
@@ -28,13 +28,13 @@ import scala.util.Random
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkSQLException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -315,8 +315,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // the plan only has PhysicalRDD to scan JDBCRelation.
     assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
     val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    val child = node.child match {
+      case ProjectExec(_, c) => c
+      case o => o
+    }
+    assert(child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
     df
   }
 
@@ -924,7 +928,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
-      Some(ArrayType(StringType)))
+      Some(ArrayType(CharType(64))))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -959,6 +963,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(TimestampType))
   }
 
+  test("SPARK-42469: OracleDialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    assert(
+      OracleDialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT tab.* FROM (SELECT a,b FROM test    ) tab WHERE rownum <= 123")
+  }
+
   test("MsSqlServerDialect jdbc type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
@@ -981,7 +998,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
+  test("SPARK-28152: MsSqlServerDialect catalyst type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
 
@@ -1000,6 +1017,32 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-42469: MsSqlServerDialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    assert(
+      MsSqlServerDialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT TOP (123) a,b FROM test")
+  }
+
+  test("SPARK-42534: DB2Dialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
+    assert(
+      DB2Dialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
   }
 
   test("table exists query by jdbc dialect") {
@@ -1228,7 +1271,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
-      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+      map(_.databaseTypeDefinition).get == "CLOB")
   }
 
   test("SPARK-16625: General data types to be mapped to Oracle") {
@@ -1246,7 +1289,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, DoubleType) == "NUMBER(19, 4)")
     assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
     assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
-    assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
+    assert(getJdbcType(oracleDialect, StringType) == "CLOB")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
@@ -1285,7 +1328,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       df.schema,
       df.sqlContext.conf.caseSensitiveAnalysis,
       "jdbc:mysql://localhost:3306/temp")
-    assert(schema.contains("`order` TEXT"))
+    assert(schema.contains("`order` LONGTEXT"))
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
@@ -1334,20 +1377,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("jdbc API support custom schema") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    val customSchema = "NAME STRING, THEID INT"
+    val customSchema = "NAME VARCHAR(32), THEID INT"
     val props = new Properties()
     props.put("customSchema", customSchema)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
     val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
       f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-    assert(df.schema === expectedSchema)
+    assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     assert(df.count() === 3)
   }
 
   test("jdbc API custom schema DDL-like strings.") {
     withTempView("people_view") {
-      val customSchema = "NAME STRING, THEID INT"
+      val customSchema = "NAME VARCHAR(32), THEID INT"
       sql(
         s"""
            |CREATE TEMPORARY VIEW people_view
@@ -1359,7 +1402,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       assert(df.schema.length === 2)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
         .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-      assert(df.schema === expectedSchema)
+
+      assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
       assert(df.count() === 3)
     }
   }
@@ -1408,14 +1452,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("unsupported types") {
-    var e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
-    }.getMessage
-    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
-    e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
-    }.getMessage
-    assert(e.contains("Unsupported type ARRAY"))
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters =
+        Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "TIMESTAMP_WITH_TIMEZONE"))
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters = Map("typeName" -> "INTEGER ARRAY", "jdbcType" -> "ARRAY"))
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
@@ -1499,9 +1548,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
+    var schema = StructType(Seq(StructField("NAME", VarcharType(32), true, defaultMetadata),
       StructField("THEID", IntegerType, true, defaultMetadata)))
-
+    schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
       .option("DbTaBle", "TEST.PEOPLE")
@@ -1940,22 +1989,26 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName)
 
-    Seq(true, false).foreach { inferTimestampNTZ =>
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
       val tsType = if (inferTimestampNTZ) {
         TimestampNTZType
       } else {
         TimestampType
       }
-      val res = readDf.option("inferTimestampNTZType", inferTimestampNTZ).load()
+      val res = readDf.option("preferTimestampNTZ", inferTimestampNTZ).load()
       checkAnswer(res, Seq(Row(null)))
       assert(res.schema.fields.head.dataType == tsType)
-      withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> inferTimestampNTZ.toString) {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
         val res2 = readDf.load()
         checkAnswer(res2, Seq(Row(null)))
         assert(res2.schema.fields.head.dataType == tsType)
       }
     }
-
   }
 
   test("SPARK-39339: TimestampNTZType with different local time zones") {
@@ -1980,13 +2033,14 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
           DateTimeTestUtils.withDefaultTimeZone(zoneId) {
             // Infer TimestmapNTZ column with data source option
             val res = spark.read.format("jdbc")
-              .option("inferTimestampNTZType", "true")
+              .option("preferTimestampNTZ", "true")
               .option("url", urlWithUserAndPass)
               .option("dbtable", tableName)
               .load()
             checkAnswer(res, df)
 
-            withSQLConf(SQLConf.INFER_TIMESTAMP_NTZ_IN_DATA_SOURCES.key -> "true") {
+            withSQLConf(
+              SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
               val res2 = spark.read.format("jdbc")
                 .option("url", urlWithUserAndPass)
                 .option("dbtable", tableName)

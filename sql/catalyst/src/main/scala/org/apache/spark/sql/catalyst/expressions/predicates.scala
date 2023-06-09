@@ -367,12 +367,12 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   final override val nodePatterns: Seq[TreePattern] = Seq(IN_SUBQUERY)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (values.length != query.childOutputs.length) {
+    if (values.length != query.numCols) {
       DataTypeMismatch(
         errorSubClass = "IN_SUBQUERY_LENGTH_MISMATCH",
         messageParameters = Map(
           "leftLength" -> values.length.toString,
-          "rightLength" -> query.childOutputs.length.toString,
+          "rightLength" -> query.numCols.toString,
           "leftColumns" -> values.map(toSQLExpr(_)).mkString(", "),
           "rightColumns" -> query.childOutputs.map(toSQLExpr(_)).mkString(", ")
         )
@@ -399,7 +399,15 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   }
 
   override def children: Seq[Expression] = values :+ query
-  override def nullable: Boolean = children.exists(_.nullable)
+  override def nullable: Boolean = {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_IN_SUBQUERY_NULLABILITY)) {
+      values.exists(_.nullable) || query.childOutputs.exists(_.nullable)
+    } else {
+      // Legacy (incorrect) behavior checked only the nullability of the left-hand side
+      // (see SPARK-43413).
+      values.exists(_.nullable)
+    }
+  }
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 
@@ -805,7 +813,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
+    buildCanonicalizedPlan(
+      { case And(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => And(l, r)}
+    )
   }
 }
 
@@ -899,7 +910,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
+    buildCanonicalizedPlan(
+      { case Or(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Or(l, r)}
+    )
   }
 }
 

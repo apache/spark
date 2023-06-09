@@ -33,6 +33,7 @@ import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -960,6 +961,19 @@ class DatasetSuite extends QueryTest
     observe(spark.range(1, 10, 1, 11), Map("percentile_approx_val" -> 5))
   }
 
+  test("observation on datasets when a DataSet trigger foreach action") {
+    def f(): Unit = {}
+
+    val namedObservation = Observation("named")
+    val observed_df = spark.range(100).observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.foreach(r => f)
+    val expected = Map("percentile_approx_val" -> 49)
+
+    assert(namedObservation.get === expected)
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
@@ -1417,7 +1431,7 @@ class DatasetSuite extends QueryTest
       """+---+----+---+
         ||  b|   a|  c|
         |+---+----+---+
-        ||  0|null|  1|
+        ||  0|NULL|  1|
         ||  0|    |  1|
         ||  0|ab c|  1|
         ||  0|1098|  1|
@@ -1718,7 +1732,7 @@ class DatasetSuite extends QueryTest
         val agg = cp.groupBy($"id" % 2).agg(count($"id"))
 
         agg.queryExecution.executedPlan.collectFirst {
-          case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
+          case ShuffleExchangeExec(_, _: RDDScanExec, _, _) =>
           case BroadcastExchangeExec(_, _: RDDScanExec) =>
         }.foreach { _ =>
           fail(
@@ -2414,6 +2428,69 @@ class DatasetSuite extends QueryTest
         override def accept(path: Path): Boolean = path.getName.endsWith("parquet")
       })
       assert(parquetFiles.size === 10)
+    }
+  }
+
+  test("SPARK-37829: DataFrame outer join") {
+    // Same as "SPARK-15441: Dataset outer join" but using DataFrames instead of Datasets
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDF().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDF().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+
+    val leftFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val rightFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val expectedSchema = StructType(
+      Seq(
+        StructField(
+          "_1",
+          leftFieldSchema,
+          nullable = false
+        ),
+        // This is a left join, so the right output is nullable:
+        StructField(
+          "_2",
+          rightFieldSchema
+        )
+      )
+    )
+    assert(joined.schema === expectedSchema)
+
+    val result = joined.collect().toSet
+    val expected = Set(
+      new GenericRowWithSchema(Array("a", 1), leftFieldSchema) ->
+        null,
+      new GenericRowWithSchema(Array("b", 2), leftFieldSchema) ->
+        new GenericRowWithSchema(Array("x", 2), rightFieldSchema)
+    )
+    assert(result == expected)
+  }
+
+  test("SPARK-43124: Show does not trigger job execution on CommandResults") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      withTable("t1") {
+        sql("create table t1(c int) using parquet")
+
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        withListener(spark.sparkContext, listener) { _ =>
+          sql("show tables").show()
+        }
+        assert(jobCounter === 0)
+      }
     }
   }
 }

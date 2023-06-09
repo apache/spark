@@ -222,8 +222,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
     checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
     checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
-    checkAnswer(
-      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
   }
 
   test("SPARK-33428 conv function should trim input string") {
@@ -235,24 +233,30 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-33428 conv function shouldn't raise error if input string is too big") {
-    val df = Seq((
-      "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)), Row("18446744073709551615"))
-    checkAnswer(df.select(conv($"num", 16, -10)), Row("-1"))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq((
+        "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)), Row("18446744073709551615"))
+      checkAnswer(df.select(conv($"num", 16, -10)), Row("-1"))
+    }
   }
 
   test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
-    val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
-    val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
-    checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
-    checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
+      val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
+      checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
+      checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
+    }
   }
 
   test("SPARK-36229 conv should return result equal to -1 in base of toBase") {
-    val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)),
-      Seq(Row("18446744073709551615"), Row("12297829339523361440")))
-    checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)),
+        Seq(Row("18446744073709551615"), Row("12297829339523361440")))
+      checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    }
   }
 
   test("floor") {
@@ -424,6 +428,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT sign(10), signum(-11)"),
       Row(1, -1))
+
+    checkAnswer(
+      Seq((1, 2)).toDF().select(signum(lit(10)), signum(lit(-11))),
+      Row(1, -1))
   }
 
   test("pow / power") {
@@ -432,6 +440,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT pow(1, 2), power(2, 1)"),
       Seq((1, 2)).toDF().select(pow(lit(1), lit(2)), pow(lit(2), lit(1)))
+    )
+
+    checkAnswer(
+      sql("SELECT pow(1, 2), power(2, 1)"),
+      Seq((1, 2)).toDF().select(power(lit(1), lit(2)), power(lit(2), lit(1)))
     )
   }
 
@@ -591,12 +604,19 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT negative(1), negative(0), negative(-1)"),
       Row(-1, 0, 1))
+
+    checkAnswer(
+      Seq((1, 2)).toDF().select(negative(lit(1)), negative(lit(0)), negative(lit(-1))),
+      Row(-1, 0, 1))
   }
 
   test("positive") {
     val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
+
+    checkAnswer(df.select(positive(col("a"))), Row(1))
+    checkAnswer(df.select(positive(col("b"))), Row(-1))
   }
 
   test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
@@ -612,6 +632,19 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach { case ((value, start, end, num), expected) =>
       val df = Seq((value, start, end, num)).toDF("v", "s", "e", "n")
       checkAnswer(df.selectExpr("width_bucket(v, s, e, n)"), Row(expected))
+      checkAnswer(df.select(width_bucket(col("v"), col("s"), col("e"), col("n"))), Row(expected))
     }
+  }
+
+  test("width_bucket with numbers") {
+    val df1 = Seq(
+      (5.3, 0.2, 10.6, 5), (-2.1, 1.3, 3.4, 3),
+      (8.1, 0.0, 5.7, 4), (-0.9, 5.2, 0.5, 2)
+    ).toDF("v", "min", "max", "n")
+
+    checkAnswer(
+      df1.selectExpr("width_bucket(v, min, max, n)"),
+      df1.select(width_bucket(col("v"), col("min"), col("max"), col("n")))
+    )
   }
 }

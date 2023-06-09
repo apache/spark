@@ -14,14 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
+import warnings
 import pandas as pd
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import StructType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.catalog import (
@@ -36,6 +38,7 @@ from pyspark.sql.connect import plan
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.connect._typing import DataTypeOrString, UserDefinedFunctionLike
 
 
 class Catalog:
@@ -59,8 +62,8 @@ class Catalog:
 
     setCurrentCatalog.__doc__ = PySparkCatalog.setCurrentCatalog.__doc__
 
-    def listCatalogs(self) -> List[CatalogMetadata]:
-        pdf = self._execute_and_fetch(plan.ListCatalogs())
+    def listCatalogs(self, pattern: Optional[str] = None) -> List[CatalogMetadata]:
+        pdf = self._execute_and_fetch(plan.ListCatalogs(pattern=pattern))
         return [
             CatalogMetadata(name=row.iloc[0], description=row.iloc[1]) for _, row in pdf.iterrows()
         ]
@@ -79,8 +82,8 @@ class Catalog:
 
     setCurrentDatabase.__doc__ = PySparkCatalog.setCurrentDatabase.__doc__
 
-    def listDatabases(self) -> List[Database]:
-        pdf = self._execute_and_fetch(plan.ListDatabases())
+    def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
+        pdf = self._execute_and_fetch(plan.ListDatabases(pattern=pattern))
         return [
             Database(
                 name=row.iloc[0],
@@ -113,8 +116,10 @@ class Catalog:
 
     databaseExists.__doc__ = PySparkCatalog.databaseExists.__doc__
 
-    def listTables(self, dbName: Optional[str] = None) -> List[Table]:
-        pdf = self._execute_and_fetch(plan.ListTables(db_name=dbName))
+    def listTables(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Table]:
+        pdf = self._execute_and_fetch(plan.ListTables(db_name=dbName, pattern=pattern))
         return [
             Table(
                 name=row.iloc[0],
@@ -146,8 +151,10 @@ class Catalog:
 
     getTable.__doc__ = PySparkCatalog.getTable.__doc__
 
-    def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
-        pdf = self._execute_and_fetch(plan.ListFunctions(db_name=dbName))
+    def listFunctions(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Function]:
+        pdf = self._execute_and_fetch(plan.ListFunctions(db_name=dbName, pattern=pattern))
         return [
             Function(
                 name=row.iloc[0],
@@ -276,8 +283,8 @@ class Catalog:
 
     isCached.__doc__ = PySparkCatalog.isCached.__doc__
 
-    def cacheTable(self, tableName: str) -> None:
-        self._execute_and_fetch(plan.CacheTable(table_name=tableName))
+    def cacheTable(self, tableName: str, storageLevel: Optional[StorageLevel] = None) -> None:
+        self._execute_and_fetch(plan.CacheTable(table_name=tableName, storage_level=storageLevel))
 
     cacheTable.__doc__ = PySparkCatalog.cacheTable.__doc__
 
@@ -306,8 +313,13 @@ class Catalog:
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
 
-    def registerFunction(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("registerFunction() is not implemented.")
+    def registerFunction(
+        self, name: str, f: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
+    ) -> "UserDefinedFunctionLike":
+        warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
+        return self._sparkSession.udf.register(name, f, returnType)
+
+    registerFunction.__doc__ = PySparkCatalog.registerFunction.__doc__
 
 
 Catalog.__doc__ = PySparkCatalog.__doc__
@@ -323,9 +335,6 @@ def _test() -> None:
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
     )
-
-    # TODO(SPARK-41818): java.lang.ClassNotFoundException) .DefaultSource
-    del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.catalog,

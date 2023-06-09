@@ -248,6 +248,15 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [`Estimator` Python docs](api/python/reference/api/pyspark.ml.Estimator.html),
+the [`Transformer` Python docs](api/python/reference/api/pyspark.ml.Transformer.html) and
+the [`Params` Python docs](api/python/reference/api/pyspark.ml.param.Params.html) for more details on the API.
+
+{% include_example python/ml/estimator_transformer_param_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [`Estimator` Scala docs](api/scala/org/apache/spark/ml/Estimator.html),
@@ -266,15 +275,6 @@ the [`Params` Java docs](api/java/org/apache/spark/ml/param/Params.html) for det
 {% include_example java/org/apache/spark/examples/ml/JavaEstimatorTransformerParamExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [`Estimator` Python docs](api/python/reference/api/pyspark.ml.Estimator.html),
-the [`Transformer` Python docs](api/python/reference/api/pyspark.ml.Transformer.html) and
-the [`Params` Python docs](api/python/reference/api/pyspark.ml.param.Params.html) for more details on the API.
-
-{% include_example python/ml/estimator_transformer_param_example.py %}
-</div>
-
 </div>
 
 ## Example: Pipeline
@@ -282,6 +282,13 @@ the [`Params` Python docs](api/python/reference/api/pyspark.ml.param.Params.html
 This example follows the simple text document `Pipeline` illustrated in the figures above.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [`Pipeline` Python docs](api/python/reference/api/pyspark.ml.Pipeline.html) for more details on the API.
+
+{% include_example python/ml/pipeline_example.py %}
+</div>
 
 <div data-lang="scala" markdown="1">
 
@@ -296,13 +303,6 @@ Refer to the [`Pipeline` Scala docs](api/scala/org/apache/spark/ml/Pipeline.html
 Refer to the [`Pipeline` Java docs](api/java/org/apache/spark/ml/Pipeline.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaPipelineExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [`Pipeline` Python docs](api/python/reference/api/pyspark.ml.Pipeline.html) for more details on the API.
-
-{% include_example python/ml/pipeline_example.py %}
 </div>
 
 </div>

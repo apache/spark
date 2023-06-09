@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.TimestampNTZType
 
 /**
  * Options for the JDBC data source.
@@ -191,19 +192,19 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down aggregate into JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "false").toBoolean
+  val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "true").toBoolean
 
   // An option to allow/disallow pushing down LIMIT into V2 JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
+  val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "true").toBoolean
 
   // An option to allow/disallow pushing down OFFSET into V2 JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
+  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "true").toBoolean
 
   // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean
+  val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "true").toBoolean
 
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
   // by --files option of spark-submit or manually
@@ -233,11 +234,11 @@ class JDBCOptions(
   val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
 
   // Infers timestamp values as TimestampNTZ type when reading data.
-  val inferTimestampNTZType =
+  val preferTimestampNTZ =
     parameters
-      .get(JDBC_INFER_TIMESTAMP_NTZ)
+      .get(JDBC_PREFER_TIMESTAMP_NTZ)
       .map(_.toBoolean)
-      .getOrElse(SQLConf.get.inferTimestampNTZInDataSources)
+      .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 }
 
 class JdbcOptionsInWrite(
@@ -300,5 +301,5 @@ object JDBCOptions {
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
-  val JDBC_INFER_TIMESTAMP_NTZ = newOption("inferTimestampNTZType")
+  val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
 }

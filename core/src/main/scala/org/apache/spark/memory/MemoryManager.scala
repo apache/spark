@@ -17,10 +17,7 @@
 
 package org.apache.spark.memory
 
-import java.lang.management.{ManagementFactory, PlatformManagedObject}
 import javax.annotation.concurrent.GuardedBy
-
-import scala.util.Try
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -263,7 +260,7 @@ private[spark] abstract class MemoryManager(
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val chosenPageSize = math.min(maxPageSize, math.max(minPageSize, size))
-    if (isG1GC && tungstenMemoryMode == MemoryMode.ON_HEAP) {
+    if (Utils.isG1GC && tungstenMemoryMode == MemoryMode.ON_HEAP) {
       chosenPageSize - Platform.LONG_ARRAY_OFFSET
     } else {
       chosenPageSize
@@ -280,23 +277,5 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.ON_HEAP => MemoryAllocator.HEAP
       case MemoryMode.OFF_HEAP => MemoryAllocator.UNSAFE
     }
-  }
-
-  /**
-   * Return whether we are using G1GC or not
-   */
-  private lazy val isG1GC: Boolean = {
-    Try {
-      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-        .asInstanceOf[Class[_ <: PlatformManagedObject]]
-      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
-      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
-      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
-      val valueMethod = vmOptionClazz.getMethod("getValue")
-
-      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
-      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
-      "true".equals(useG1GC)
-    }.getOrElse(false)
   }
 }

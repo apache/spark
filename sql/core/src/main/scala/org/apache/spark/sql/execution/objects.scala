@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.python.BatchIterator
@@ -58,13 +59,8 @@ trait ObjectProducerExec extends SparkPlan {
 /**
  * Physical version of `ObjectConsumer`.
  */
-trait ObjectConsumerExec extends UnaryExecNode {
+trait ObjectConsumerExec extends UnaryExecNode with ReferenceAllColumns[SparkPlan] {
   assert(child.output.length == 1)
-
-  // This operator always need all columns of its child, even it doesn't reference to.
-  @transient
-  override lazy val references: AttributeSet = child.outputSet
-
   def inputObjectType: DataType = child.output.head.dataType
 }
 

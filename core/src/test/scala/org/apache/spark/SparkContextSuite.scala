@@ -626,6 +626,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("SPARK-43782: conf to override log level") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set(SPARK_LOG_LEVEL, "ERROR"))
+    assert(LogManager.getRootLogger().getLevel === Level.ERROR)
+    sc.stop()
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set(SPARK_LOG_LEVEL, "TRACE"))
+    assert(LogManager.getRootLogger().getLevel === Level.TRACE)
+    sc.stop()
+  }
+
   test("register and deregister Spark listener from SparkContext") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     val sparkListener1 = new SparkListener { }
@@ -1397,6 +1409,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
       assert(e.getMessage.contains("Remote RPC client disassociated"))
     }
+    sc.stop()
+  }
+
+  test("SPARK-42689: ShuffleDataIO initialized after application id has been configured") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    // TestShuffleDataIO will validate if application id has been configured in its constructor
+    conf.set(SHUFFLE_IO_PLUGIN_CLASS.key, classOf[TestShuffleDataIOWithMockedComponents].getName)
+    sc = new SparkContext(conf)
     sc.stop()
   }
 }

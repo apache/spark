@@ -1,0 +1,2 @@
+Project [array_union(e#0, array(1, 2, 3)) AS array_union(e, array(1, 2, 3))#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

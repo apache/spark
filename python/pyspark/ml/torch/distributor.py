@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import json
 from contextlib import contextmanager
 import collections
 import logging
@@ -28,32 +28,58 @@ import sys
 import tempfile
 import textwrap
 import time
-from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
+from typing import (
+    Union,
+    Callable,
+    List,
+    Dict,
+    Optional,
+    Any,
+    Tuple,
+    Generator,
+    Iterator,
+)
 
 from pyspark import cloudpickle
-from pyspark.sql import SparkSession
+from pyspark.resource.information import ResourceInformation
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.taskcontext import BarrierTaskContext
 from pyspark.ml.torch.log_communication import (  # type: ignore
-    get_driver_host,
     LogStreamingClient,
     LogStreamingServer,
 )
-from pyspark.context import SparkContext
-from pyspark.taskcontext import BarrierTaskContext
 
 
-# TODO(SPARK-41589): will move the functions and tests to an external file
-#       once we are in agreement about which functions should be in utils.py
-def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
-    """Get the conf "key" from the given spark context,
+def _get_active_session(is_remote: bool) -> SparkSession:
+    if not is_remote:
+        spark = SparkSession.getActiveSession()
+    else:
+        import pyspark.sql.connect.session
+
+        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
+
+    if spark is None:
+        raise RuntimeError("An active SparkSession is required for the distributor.")
+    return spark
+
+
+def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
+    resources: Dict[str, ResourceInformation] = {}
+    try:
+        resources = session.sparkContext.resources
+    except Exception:
+        resources = session._client._resources()  # type: ignore[attr-defined]
+    return resources
+
+
+def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
+    """Get the conf "key" from the given spark session,
     or return the default value if the conf is not set.
-    This expects the conf value to be a boolean or string;
-    if the value is a string, this checks for all capitalization
-    patterns of "true" and "false" to match Scala.
 
     Parameters
     ----------
-    sc : :class:`SparkContext`
-        The :class:`SparkContext` for the distributor.
+    spark : :class:`SparkSession`
+        The :class:`SparkSession` for the distributor.
     key : str
         string for conf name
     default_value : str
@@ -61,28 +87,24 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
 
     Returns
     -------
-    bool
-        Returns the boolean value that corresponds to the conf
-
-    Raises
-    ------
-    ValueError
-        Thrown when the conf value is not a valid boolean
+    str
+        Returns the string value that corresponds to the conf
     """
-    val = sc.getConf().get(key, default_value)
-    lowercase_val = val.lower()
-    if lowercase_val == "true":
-        return True
-    if lowercase_val == "false":
-        return False
-    raise ValueError(
-        f"The conf value for '{key}' was expected to be a boolean "
-        f"value but found value of type {type(val)} "
-        f"with value: {val}"
-    )
+    value = spark.conf.get(key, default_value)
+    assert value is not None
+    return value
 
 
-def get_logger(name: str) -> logging.Logger:
+# TODO(SPARK-41589): will move the functions and tests to an external file
+#       once we are in agreement about which functions should be in utils.py
+def _get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
+    value = _get_conf(spark=spark, key=key, default_value=default_value)
+    value = value.lower()
+    assert value in ["true", "false"]
+    return value == "true"
+
+
+def _get_logger(name: str) -> logging.Logger:
     """
     Gets a logger by name, or creates and configures it for the first time.
     """
@@ -95,13 +117,13 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str]:
+def _get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
     ----------
-    context : :class:`SparkContext` or :class:`BarrierTaskContext`
-        The :class:`SparkContext` or :class:`BarrierTaskContext` that has GPUs available.
+    context : :class:`SparkSession` or :class:`BarrierTaskContext`
+        The :class:`SparkSession` or :class:`BarrierTaskContext` that has GPUs available.
 
     Returns
     -------
@@ -115,10 +137,11 @@ def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str
     """
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
-    if isinstance(context, SparkContext):
-        addresses = context.resources["gpu"].addresses
-    else:
+    if isinstance(context, BarrierTaskContext):
         addresses = context.resources()["gpu"].addresses
+    else:
+        addresses = _get_resources(context)["gpu"].addresses
+
     if any(not pattern.match(address) for address in addresses):
         raise ValueError(
             f"Found GPU addresses {addresses} which "
@@ -134,6 +157,10 @@ def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str
     return addresses
 
 
+SPARK_PARTITION_ARROW_DATA_FILE = "SPARK_PARTITION_ARROW_DATA_FILE"
+SPARK_DATAFRAME_SCHEMA_FILE = "SPARK_DATAFRAME_SCHEMA_FILE"
+
+
 class Distributor:
     """
     The parent class for TorchDistributor. This class shouldn't be instantiated directly.
@@ -145,20 +172,34 @@ class Distributor:
         local_mode: bool = True,
         use_gpu: bool = True,
     ):
-        self.logger = get_logger(self.__class__.__name__)
+        from pyspark.sql.utils import is_remote
+
+        self.is_remote = is_remote()
+        self.spark = _get_active_session(self.is_remote)
+
+        # indicate whether the server side is local mode
+        self.is_spark_local_master = False
+        # Refer to 'org.apache.spark.util.Utils#isLocalMaster'
+        master = _get_conf(self.spark, "spark.master", "")
+        if master == "local" or master.startswith("local["):
+            self.is_spark_local_master = True
+
+        self.logger = _get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
-        self.spark = SparkSession.getActiveSession()
-        if not self.spark:
-            raise RuntimeError("An active SparkSession is required for the distributor.")
-        self.sc = self.spark.sparkContext
         self.num_tasks = self._get_num_tasks()
         self.ssl_conf = None
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "sc", "ssl_conf", "logger"]:
+        for unneeded_param in [
+            "spark",
+            "ssl_conf",
+            "logger",
+            "is_remote",
+            "is_spark_local_master",
+        ]:
             del input_params[unneeded_param]
         return input_params
 
@@ -176,20 +217,19 @@ class Distributor:
         RuntimeError
             Raised when the SparkConf was misconfigured.
         """
-
         if self.use_gpu:
             if not self.local_mode:
                 key = "spark.task.resource.gpu.amount"
-                task_gpu_amount = int(self.sc.getConf().get(key, "0"))
+                task_gpu_amount = int(_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
-                if "gpu" not in self.sc.resources:
+                if "gpu" not in _get_resources(self.spark):
                     raise RuntimeError("GPUs were unable to be found on the driver.")
-                num_available_gpus = int(self.sc.getConf().get(key, "0"))
+                num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
@@ -215,12 +255,12 @@ class Distributor:
             Thrown when the user requires ssl encryption or when the user initializes
             the Distributor parent class.
         """
-        if not "ssl_conf":
+        if not hasattr(self, "ssl_conf"):
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
             )
-        is_ssl_enabled = get_conf_boolean(self.sc, "spark.ssl.enabled", "false")
-        ignore_ssl = get_conf_boolean(self.sc, self.ssl_conf, "false")  # type: ignore
+        is_ssl_enabled = _get_conf_boolean(self.spark, "spark.ssl.enabled", "false")
+        ignore_ssl = _get_conf_boolean(self.spark, self.ssl_conf, "false")  # type: ignore
         if is_ssl_enabled:
             name = self.__class__.__name__
             if ignore_ssl:
@@ -263,9 +303,26 @@ class TorchDistributor(Distributor):
 
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    num_processes : int, optional
+        An integer that determines how many different concurrent
+        tasks are allowed. We expect spark.task.gpus = 1 for GPU-enabled training. Default
+        should be 1; we don't want to invoke multiple cores/gpus without explicit mention.
+    local_mode : bool, optional
+        A boolean that determines whether we are using the driver
+        node for training. Default should be false; we don't want to invoke executors without
+        explicit mention.
+    use_gpu : bool, optional
+        A boolean that indicates whether or not we are doing training
+        on the GPU. Note that there are differences in how GPU-enabled code looks like and
+        how CPU-specific code looks like.
+
     Examples
     --------
-
     Run PyTorch Training locally on GPU (using a PyTorch native function)
 
     >>> def train(learning_rate):
@@ -294,7 +351,7 @@ class TorchDistributor(Distributor):
     >>> def train():
     ...     from pytorch_lightning import Trainer
     ...     # ...
-    ...     # required to set devices = 1 and num_nodes == num_processes for multi node
+    ...     # required to set devices = 1 and num_nodes = num_processes for multi node
     ...     # required to set devices = num_processes and num_nodes = 1 for single node multi GPU
     ...     trainer = Trainer(accelerator="gpu", devices=1, num_nodes=num_proc, strategy="ddp")
     ...     trainer.fit()
@@ -307,9 +364,9 @@ class TorchDistributor(Distributor):
     >>> trainer = distributor.run(train)
     """
 
-    PICKLED_FUNC_FILE = "func.pickle"
-    TRAIN_FILE = "train.py"
-    PICKLED_OUTPUT_FILE = "output.pickle"
+    _PICKLED_FUNC_FILE = "func.pickle"
+    _TRAIN_FILE = "train.py"
+    _PICKLED_OUTPUT_FILE = "output.pickle"
 
     def __init__(
         self,
@@ -357,7 +414,10 @@ class TorchDistributor(Distributor):
             torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
         else:
-            master_addr, master_port = os.environ["MASTER_ADDR"], os.environ["MASTER_PORT"]
+            master_addr, master_port = (
+                os.environ["MASTER_ADDR"],
+                os.environ["MASTER_PORT"],
+            )
             node_rank = os.environ["RANK"]
             torchrun_args = [
                 f"--nnodes={num_processes}",
@@ -402,7 +462,22 @@ class TorchDistributor(Distributor):
                 decoded = line.decode()
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    sys.stdout.write(decoded)
+                    if (
+                        log_streaming_client
+                        and not log_streaming_client.failed
+                        and (
+                            log_streaming_client.sock.getsockname()[0]
+                            == log_streaming_client.sock.getpeername()[0]
+                        )
+                    ):
+                        # If log_streaming_client and log_stream_server are in the same
+                        # node (typical case is spark local mode),
+                        # server side will redirect the log to STDOUT,
+                        # to avoid STDOUT outputs duplication, skip redirecting
+                        # logs to STDOUT in client side.
+                        pass
+                    else:
+                        sys.stdout.write(decoded)
                 if log_streaming_client:
                     log_streaming_client.send(decoded.rstrip())
             task.wait()
@@ -431,19 +506,23 @@ class TorchDistributor(Distributor):
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
         *args: Any,
+        **kwargs: Any,
     ) -> Optional[Any]:
         CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
         cuda_state_was_set = CUDA_VISIBLE_DEVICES in os.environ
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
-            if self.use_gpu:
-                gpus_owned = get_gpus_owned(self.sc)
+            # Only replace the GPUs with 'SparkContext.resources' in legacy mode.
+            # In connect mode, this replacement is skipped since only GPUs on the client side
+            # can be used.
+            if self.use_gpu and not self.is_remote:
+                gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
             self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = framework_wrapper_fn(self.input_params, train_object, *args)
+            output = framework_wrapper_fn(self.input_params, train_object, *args, **kwargs)
             self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
@@ -459,7 +538,9 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Optional[Callable],
         train_object: Union[Callable, str],
+        input_dataframe: Optional["DataFrame"],
         *args: Any,
+        **kwargs: Any,
     ) -> Callable:
         """Creates a spark task function that is used inside `mapPartitions`.
 
@@ -481,10 +562,21 @@ class TorchDistributor(Distributor):
         input_params = self.input_params
         driver_address = self.driver_address
         log_streaming_server_port = self.log_streaming_server_port
+        is_spark_local_master = self.is_spark_local_master
+        driver_owned_gpus: List[str] = []
+        if is_spark_local_master and use_gpu:
+            driver_owned_gpus = _get_gpus_owned(self.spark)
+
+        if input_dataframe is not None:
+            schema_json = input_dataframe.schema.jsonValue()
+        else:
+            schema_json = None
 
         # Spark task program
-        def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
+        def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
+            import pandas as pd
+            import pyarrow
             from pyspark import BarrierTaskContext
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
@@ -514,12 +606,29 @@ class TorchDistributor(Distributor):
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
 
-            def set_gpus(context: "BarrierTaskContext") -> None:
-                if CUDA_VISIBLE_DEVICES in os.environ:
-                    return
+                if context.partitionId() >= num_processes:
+                    raise ValueError(
+                        "TorchDistributor._train_on_dataframe requires setting num_processes "
+                        "equal to input spark dataframe partition number."
+                    )
 
-                gpus_owned = get_gpus_owned(context)
-                os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
+            if is_spark_local_master:
+                # distributed training on a local mode spark cluster
+                def set_gpus(context: "BarrierTaskContext") -> None:
+                    if CUDA_VISIBLE_DEVICES in os.environ:
+                        return
+
+                    gpu_owned = driver_owned_gpus[context.partitionId()]
+                    os.environ[CUDA_VISIBLE_DEVICES] = gpu_owned
+
+            else:
+
+                def set_gpus(context: "BarrierTaskContext") -> None:
+                    if CUDA_VISIBLE_DEVICES in os.environ:
+                        return
+
+                    gpus_owned = _get_gpus_owned(context)
+                    os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
 
             context = BarrierTaskContext.get()
 
@@ -532,7 +641,8 @@ class TorchDistributor(Distributor):
             log_streaming_client = LogStreamingClient(driver_address, log_streaming_server_port)
             input_params["log_streaming_client"] = log_streaming_client
             try:
-                output = framework_wrapper_fn(input_params, train_object, *args)
+                with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
+                    output = framework_wrapper_fn(input_params, train_object, *args, **kwargs)
             finally:
                 try:
                     LogStreamingClient._destroy()
@@ -540,7 +650,21 @@ class TorchDistributor(Distributor):
                     pass
 
             if context.partitionId() == 0:
-                yield output
+                output_bytes = cloudpickle.dumps(output)
+                output_size = len(output_bytes)
+
+                # In Spark Connect, DataFrame.collect stacks rows to size
+                # 'spark.connect.grpc.arrow.maxBatchSize' (default 4MiB),
+                # here use 4KiB for each chunk, which mean each arrow batch
+                # may contain about 1000 chunks.
+                chunks = []
+                chunk_size = 4096
+                index = 0
+                while index < output_size:
+                    chunks.append(output_bytes[index : index + chunk_size])
+                    index += chunk_size
+
+                yield pyarrow.RecordBatch.from_pandas(pd.DataFrame(data={"chunk": chunks}))
 
         return wrapped_train_fn
 
@@ -548,42 +672,52 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
+        spark_dataframe: Optional["DataFrame"],
         *args: Any,
+        **kwargs: Any,
     ) -> Optional[Any]:
         if not framework_wrapper_fn:
             raise RuntimeError("Unknown combination of parameters")
 
         log_streaming_server = LogStreamingServer()
-        self.driver_address = get_driver_host(self.sc)
+        self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
+        assert self.driver_address != ""
         log_streaming_server.start(spark_host_address=self.driver_address)
         time.sleep(1)  # wait for the server to start
         self.log_streaming_server_port = log_streaming_server.port
 
-        spark_task_function = self._get_spark_task_function(
-            framework_wrapper_fn, train_object, *args
-        )
-        self._check_encryption()
-        self.logger.info(
-            f"Started distributed training with {self.num_processes} executor proceses"
-        )
         try:
-            result = (
-                self.sc.parallelize(range(self.num_tasks), self.num_tasks)
-                .barrier()
-                .mapPartitions(spark_task_function)
-                .collect()[0]
+            spark_task_function = self._get_spark_task_function(
+                framework_wrapper_fn, train_object, spark_dataframe, *args, **kwargs
             )
+            self._check_encryption()
+            self.logger.info(
+                f"Started distributed training with {self.num_processes} executor processes"
+            )
+            if spark_dataframe is not None:
+                input_df = spark_dataframe
+            else:
+                input_df = self.spark.range(
+                    start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks
+                )
+            rows = input_df.mapInArrow(
+                func=spark_task_function, schema="chunk binary", barrier=True
+            ).collect()
+            output_bytes = b"".join([row.chunk for row in rows])
+            result = cloudpickle.loads(output_bytes)
         finally:
             log_streaming_server.shutdown()
         self.logger.info(
-            f"Finished distributed training with {self.num_processes} executor proceses"
+            f"Finished distributed training with {self.num_processes} executor processes"
         )
         return result
 
     @staticmethod
     def _run_training_on_pytorch_file(
-        input_params: Dict[str, Any], train_path: str, *args: Any
+        input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs: Any
     ) -> None:
+        if kwargs:
+            raise ValueError("Running pytorch file does not support key-word type arguments.")
         log_streaming_client = input_params.get("log_streaming_client", None)
         training_command = TorchDistributor._create_torchrun_command(
             input_params, train_path, *args
@@ -594,10 +728,14 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     @contextmanager
-    def _setup_files(train_fn: Callable, *args: Any) -> Generator[Tuple[str, str], None, None]:
+    def _setup_files(
+        train_fn: Callable, *args: Any, **kwargs: Any
+    ) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
-        pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
-        output_file_path = os.path.join(save_dir, TorchDistributor.PICKLED_OUTPUT_FILE)
+        pickle_file_path = TorchDistributor._save_pickled_function(
+            save_dir, train_fn, *args, **kwargs
+        )
+        output_file_path = os.path.join(save_dir, TorchDistributor._PICKLED_OUTPUT_FILE)
         train_file_path = TorchDistributor._create_torchrun_train_file(
             save_dir, pickle_file_path, output_file_path
         )
@@ -607,29 +745,88 @@ class TorchDistributor(Distributor):
             TorchDistributor._cleanup_files(save_dir)
 
     @staticmethod
+    @contextmanager
+    def _setup_spark_partition_data(
+        partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
+    ) -> Iterator[Any]:
+        from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+        from pyspark.files import SparkFiles
+        import json
+
+        if input_schema_json is None:
+            yield
+            return
+
+        # We need to temporarily write partition data into a temp dir,
+        # partition data might be huge, so we need to write it under
+        # configured `SPARK_LOCAL_DIRS`.
+        save_dir = TorchDistributor._create_save_dir(root_dir=SparkFiles.getRootDirectory())
+
+        try:
+            serializer = ArrowStreamSerializer()
+            arrow_file_path = os.path.join(save_dir, "data.arrow")
+            with open(arrow_file_path, "wb") as f:
+                serializer.dump_stream(partition_data_iterator, f)
+                if f.tell() == 0:
+                    # Nothing is written to file, this partition is empty
+                    raise ValueError(
+                        "Empty Spark partition is not allowed in "
+                        "TorchDistributor.train_on_dataframe."
+                    )
+
+            schema_file_path = os.path.join(save_dir, "schema.json")
+            schema_json_string = json.dumps(input_schema_json)
+
+            with open(schema_file_path, "w") as f:  # type:ignore
+                f.write(schema_json_string)  # type:ignore
+
+            os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
+            os.environ[SPARK_DATAFRAME_SCHEMA_FILE] = schema_file_path
+            yield
+        finally:
+            os.environ.pop(SPARK_PARTITION_ARROW_DATA_FILE)
+            os.environ.pop(SPARK_DATAFRAME_SCHEMA_FILE)
+            TorchDistributor._cleanup_files(save_dir)
+
+    @staticmethod
     def _run_training_on_pytorch_function(
-        input_params: Dict[str, Any], train_fn: Callable, *args: Any
+        input_params: Dict[str, Any], train_fn: Callable, *args: Any, **kwargs: Any
     ) -> Any:
-        with TorchDistributor._setup_files(train_fn, *args) as (train_file_path, output_file_path):
-            args = []  # type: ignore
-            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
-            output = TorchDistributor._get_pickled_output(output_file_path)
+        with TorchDistributor._setup_files(train_fn, *args, **kwargs) as (
+            train_file_path,
+            output_file_path,
+        ):
+            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path)
+            if not os.path.exists(output_file_path):
+                raise RuntimeError(
+                    "TorchDistributor failed during training."
+                    "View stdout logs for detailed error message."
+                )
+            try:
+                output = TorchDistributor._get_pickled_output(output_file_path)
+            except Exception as e:
+                raise RuntimeError(
+                    "TorchDistributor failed due to a pickling error. "
+                    "View stdout logs for detailed error message."
+                ) from e
         return output
 
     @staticmethod
-    def _create_save_dir() -> str:
+    def _create_save_dir(root_dir: Optional[str] = None) -> str:
         # TODO: need to do this in a safe way to avoid issues during concurrent runs
-        return tempfile.mkdtemp()
+        return tempfile.mkdtemp(dir=root_dir)
 
     @staticmethod
     def _cleanup_files(save_dir: str) -> None:
         shutil.rmtree(save_dir, ignore_errors=True)
 
     @staticmethod
-    def _save_pickled_function(save_dir: str, train_fn: Union[str, Callable], *args: Any) -> str:
-        saved_pickle_path = os.path.join(save_dir, TorchDistributor.PICKLED_FUNC_FILE)
+    def _save_pickled_function(
+        save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs: Any
+    ) -> str:
+        saved_pickle_path = os.path.join(save_dir, TorchDistributor._PICKLED_FUNC_FILE)
         with open(saved_pickle_path, "wb") as f:
-            cloudpickle.dump((train_fn, args), f)
+            cloudpickle.dump((train_fn, args, kwargs), f)
         return saved_pickle_path
 
     @staticmethod
@@ -638,18 +835,18 @@ class TorchDistributor(Distributor):
     ) -> str:
         code = textwrap.dedent(
             f"""
-                    import cloudpickle
+                    from pyspark import cloudpickle
                     import os
 
                     if __name__ == "__main__":
                         with open("{pickle_file_path}", "rb") as f:
-                            train_fn, args = cloudpickle.load(f)
-                        output = train_fn(*args)
+                            train_fn, args, kwargs = cloudpickle.load(f)
+                        output = train_fn(*args, **kwargs)
                         with open("{output_file_path}", "wb") as f:
                             cloudpickle.dump(output, f)
                     """
         )
-        saved_file_path = os.path.join(save_dir_path, TorchDistributor.TRAIN_FILE)
+        saved_file_path = os.path.join(save_dir_path, TorchDistributor._TRAIN_FILE)
         with open(saved_file_path, "w") as f:
             f.write(code)
         return saved_file_path
@@ -660,21 +857,44 @@ class TorchDistributor(Distributor):
             output = cloudpickle.load(f)
         return output
 
-    def run(self, train_object: Union[Callable, str], *args: Any) -> Optional[Any]:
+    def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         """Runs distributed training.
 
         Parameters
         ----------
         train_object : callable object or str
-            Either a PyTorch/PyTorch Lightning training function or the path to a python file
+            Either a PyTorch function, PyTorch Lightning function, or the path to a python file
             that launches distributed training.
         args :
-            The arguments for train_object
+            If train_object is a python function and not a path to a python file, args need
+            to be the input parameters to that function. It would look like
+
+            >>> model = distributor.run(train, 1e-3, 64)
+
+            where train is a function and 1e-3 and 64 are regular numeric inputs to the function.
+
+            If train_object is a python file, then args would be the command-line arguments for
+            that python file which are all in the form of strings. An example would be
+
+            >>> distributor.run("/path/to/train.py", "--learning-rate=1e-3", "--batch-size=64")
+
+            where since the input is a path, all of the parameters are strings that can be
+            handled by argparse in that python file.
+        kwargs :
+            If train_object is a python function and not a path to a python file, kwargs need
+            to be the key-word input parameters to that function. It would look like
+
+            >>> model = distributor.run(train, tol=1e-3, max_iter=64)
+
+            where train is a function of 2 arguments `tol` and `max_iter`.
+
+            If train_object is a python file, then you should not set kwargs arguments.
 
         Returns
         -------
-            Returns the output of train_object called with args if train_object is a
-            Callable with an expected output.
+            Returns the output of train_object called with args inside spark rank 0 task if the
+            train_object is a Callable with an expected output. Returns None if train_object is
+            a file.
         """
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
@@ -683,7 +903,106 @@ class TorchDistributor(Distributor):
                 TorchDistributor._run_training_on_pytorch_function  # type: ignore
             )
         if self.local_mode:
-            output = self._run_local_training(framework_wrapper_fn, train_object, *args)
+            output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
         else:
-            output = self._run_distributed_training(framework_wrapper_fn, train_object, *args)
+            output = self._run_distributed_training(
+                framework_wrapper_fn, train_object, None, *args, **kwargs
+            )
         return output
+
+    def _train_on_dataframe(
+        self,
+        train_function: Callable,
+        spark_dataframe: "DataFrame",
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Runs distributed training using provided Spark DataFrame as input data.
+        You should ensure the input Spark DataFrame have evenly distributed partitions,
+        and this method starts a barrier Spark job that each Spark task in the job
+        process one partition of the input Spark DataFrame.
+
+        Parameters
+        ----------
+        train_function :
+            Either a PyTorch function, PyTorch Lightning function that launches distributed
+            training. Note that inside the function, you can call
+            `pyspark.ml.torch.distributor.get_spark_partition_data_loader` API to get a torch
+            data loader, the data loader loads data from the corresponding partition of the
+            input Spark DataFrame.
+        spark_dataframe :
+            An input Spark DataFrame that can be used in PyTorch `train_function` function.
+            See `train_function` argument doc for details.
+        args :
+            `args` need to be the input parameters to `train_function` function. It would look like
+
+            >>> model = distributor.run(train, 1e-3, 64)
+
+            where train is a function and 1e-3 and 64 are regular numeric inputs to the function.
+        kwargs :
+            `kwargs` need to be the key-word input parameters to `train_function` function.
+            It would look like
+
+            >>> model = distributor.run(train, tol=1e-3, max_iter=64)
+
+            where train is a function of 2 arguments `tol` and `max_iter`.
+
+        Returns
+        -------
+            Returns the output of `train_function` called with args inside Spark rank 0 task.
+        """
+
+        if self.local_mode:
+            raise ValueError(
+                "TorchDistributor.train_on_dataframe requires setting "
+                "TorchDistributor.local_mode to False."
+            )
+
+        return self._run_distributed_training(
+            TorchDistributor._run_training_on_pytorch_function,
+            train_function,
+            spark_dataframe,
+            *args,
+            **kwargs,
+        )
+
+
+def _get_spark_partition_data_loader(
+    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: Optional[int] = 2
+) -> Any:
+    """
+    This function must be called inside the `train_function` where `train_function`
+    is the input argument of `TorchDistributor.train_on_dataframe`.
+    The function returns a pytorch data loader that loads data from
+    the corresponding spark partition data.
+
+    Parameters
+    ----------
+    num_samples :
+        Number of samples to generate per epoch. If `num_samples` is less than the number of
+        rows in the spark partition, it generate the first `num_samples` rows of
+        the spark partition, if `num_samples` is greater than the number of
+        rows in the spark partition, then after the iterator loaded all rows from the partition,
+        it wraps round back to the first row.
+    batch_size:
+        How many samples per batch to load.
+    num_workers:
+        How many subprocesses to use for data loading.
+        0 means that the data will be loaded in the main process.
+    prefetch_factor:
+        Number of batches loaded in advance by each worker
+    """
+    from pyspark.sql.types import StructType
+    from pyspark.ml.torch.data import _SparkPartitionTorchDataset
+    from torch.utils.data import DataLoader
+
+    arrow_file = os.environ[SPARK_PARTITION_ARROW_DATA_FILE]
+    schema_file = os.environ[SPARK_DATAFRAME_SCHEMA_FILE]
+
+    with open(schema_file, "r") as fp:
+        schema = StructType.fromJson(json.load(fp))
+
+    dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
+
+    return DataLoader(dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor)

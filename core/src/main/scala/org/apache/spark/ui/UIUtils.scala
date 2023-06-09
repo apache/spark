@@ -141,7 +141,7 @@ private[spark] object UIUtils extends Logging {
    *
    * @param batchTime the batch time to be formatted
    * @param batchInterval the batch interval
-   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value will be
    *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
    * @param timezone only for test
    */
@@ -254,19 +254,17 @@ private[spark] object UIUtils extends Logging {
   }
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
-    <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.25.min.css")} type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.25.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.2.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.25.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.2.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.25.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.2.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }

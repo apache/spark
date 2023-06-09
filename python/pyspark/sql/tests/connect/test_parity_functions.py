@@ -17,11 +17,16 @@
 
 import unittest
 
+from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark.sql.connect.column import Column
 from pyspark.sql.tests.test_functions import FunctionsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
+    def test_assert_true(self):
+        self.check_assert_true(SparkConnectException)
+
     @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_basic_functions(self):
         super().test_basic_functions()
@@ -34,25 +39,11 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
-    # TODO(SPARK-41901): Parity in String representation of Column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_inverse_trig_functions(self):
-        super().test_inverse_trig_functions()
+    def test_raise_error(self):
+        self.check_raise_error(SparkConnectException)
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lit_list(self):
-        super().test_lit_list()
-
-    # TODO(SPARK-41283): Different column names of `lit(np.int8(1))`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lit_np_scalar(self):
-        super().test_lit_np_scalar()
-
-    # Comparing column type of connect and pyspark
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sorting_functions_with_column(self):
-        super().test_sorting_functions_with_column()
+        self.check_sorting_functions_with_column(Column)
 
 
 if __name__ == "__main__":

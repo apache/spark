@@ -1,0 +1,3 @@
+ca
+csvname STRING,age INTE
+path=../common/src/test/resources/query-tests/test-data/people.csv

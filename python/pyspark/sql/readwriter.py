@@ -24,6 +24,7 @@ from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
@@ -62,7 +63,7 @@ class DataFrameReader(OptionUtils):
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, spark: "SparkSession"):
@@ -80,7 +81,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -122,7 +123,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -153,7 +154,13 @@ class DataFrameReader(OptionUtils):
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
-            raise TypeError("schema should be StructType or string")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
         return self
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
@@ -163,7 +170,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -174,8 +181,6 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> from pyspark.sql import SparkSession
-        >>> spark = SparkSession.builder.master("local").getOrCreate()
         >>> spark.read.option("key", "value")
         <...readwriter.DataFrameReader object ...>
 
@@ -193,7 +198,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -206,7 +211,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -235,7 +240,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         for k in options:
@@ -254,7 +259,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -290,7 +295,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         if format is not None:
@@ -348,7 +353,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -434,7 +439,13 @@ class DataFrameReader(OptionUtils):
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
 
     def table(self, tableName: str) -> "DataFrame":
         """Returns the specified table as a :class:`DataFrame`.
@@ -442,7 +453,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -479,7 +490,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -553,7 +564,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.6.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -649,7 +660,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -684,7 +695,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         self._set_opts(
@@ -749,7 +760,13 @@ class DataFrameReader(OptionUtils):
             )
             return self._df(self._jreader.csv(jdataset))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
 
     def orc(
         self,
@@ -765,7 +782,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -864,6 +881,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         table : str
@@ -935,7 +955,7 @@ class DataFrameWriter(OptionUtils):
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: "DataFrame"):
@@ -961,7 +981,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -1015,7 +1035,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1054,7 +1074,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1095,7 +1115,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1151,7 +1171,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1212,7 +1232,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1251,16 +1271,42 @@ class DataFrameWriter(OptionUtils):
         >>> _ = spark.sql("DROP TABLE bucketed_table")
         """
         if not isinstance(numBuckets, int):
-            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+            raise PySparkTypeError(
+                error_class="NOT_INT",
+                message_parameters={
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
+                },
+            )
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._jwrite = self._jwrite.bucketBy(
             numBuckets, col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
@@ -1283,7 +1329,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1317,12 +1363,32 @@ class DataFrameWriter(OptionUtils):
         """
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._jwrite = self._jwrite.sortBy(
             col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
@@ -1346,7 +1412,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1405,7 +1471,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1469,7 +1535,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -1537,7 +1603,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1603,7 +1669,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1663,7 +1729,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.6.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1733,7 +1799,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1773,7 +1839,7 @@ class DataFrameWriter(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         self.mode(mode)
@@ -1809,7 +1875,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1871,6 +1937,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         table : str
@@ -1923,7 +1992,7 @@ class DataFrameWriterV2:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: "DataFrame", table: str):
