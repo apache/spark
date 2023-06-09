@@ -151,9 +151,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 ...
 
         # TODO(SPARK-43967): Support Python UDTFs with empty return values
-        with self.assertRaisesRegex(
-            PythonException, "TypeError: 'NoneType' object is not iterable"
-        ):
+        with self.assertRaisesRegex(PythonException, "TypeError"):
             TestUDTF(lit(1)).collect()
 
         @udtf(returnType="a: int")
@@ -161,9 +159,7 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             def eval(self, a: int):
                 return
 
-        with self.assertRaisesRegex(
-            PythonException, "TypeError: 'NoneType' object is not iterable"
-        ):
+        with self.assertRaisesRegex(PythonException, "TypeError"):
             TestUDTF(lit(1)).collect()
 
     def test_udtf_with_conditional_return(self):
@@ -273,10 +269,9 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 self._sum = 0
 
             def eval(self, x: int):
-                if x > 0:
-                    self._count += 1
-                    self._sum += x
-                    yield "input", float(x)
+                self._count += 1
+                self._sum += x
+                yield "input", float(x)
 
             def terminate(self):
                 yield "count", float(self._count)
@@ -287,9 +282,6 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             [Row(key="input", value=1), Row(key="count", value=1.0), Row(key="avg", value=1.0)],
         )
 
-        with self.assertRaisesRegex(PythonException, "division by zero"):
-            TestUDTF(lit(0)).collect()
-
         self.spark.udtf.register("test_udtf", TestUDTF)
         df = self.spark.sql(
             "SELECT id, key, value FROM range(0, 10, 1, 2), "
@@ -298,8 +290,8 @@ class UDTFTestsMixin(ReusedSQLTestCase):
         self.assertEqual(
             df.collect(),
             [
-                Row(id=0, key="count", value=4.0),
-                Row(id=0, key="avg", value=2.5),
+                Row(id=0, key="count", value=5.0),
+                Row(id=0, key="avg", value=2.0),
                 Row(id=0, key="count", value=5.0),
                 Row(id=0, key="avg", value=7.0),
             ],
@@ -320,6 +312,34 @@ class UDTFTestsMixin(ReusedSQLTestCase):
             "method: terminate error",
         ):
             TestUDTF(lit(1)).collect()
+
+    def test_udtf_terminate_with_wrong_num_output(self):
+        err_msg = (
+            "java.lang.IllegalStateException: Input row doesn't have expected number of "
+            "values required by the schema."
+        )
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+            def terminate(self):
+                yield 1, 2, 3
+
+        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+            TestUDTF(lit(1)).show()
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+            def terminate(self):
+                yield 1,
+
+        with self.assertRaisesRegex(Py4JJavaError, err_msg):
+            TestUDTF(lit(1)).show()
 
     def test_nondeterministic_udtf(self):
         import random

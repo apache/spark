@@ -51,4 +51,5 @@ See also :class:`SparkSession`.
     SparkSession.streams
     SparkSession.table
     SparkSession.udf
+    SparkSession.udtf
     SparkSession.version

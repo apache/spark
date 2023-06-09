@@ -367,6 +367,7 @@ UDF
     call_udf
     pandas_udf
     udf
+    udtf
     unwrap_udt
 
 Misc Functions
