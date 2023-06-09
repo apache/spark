@@ -259,12 +259,25 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     assert(funcNames1.contains("my_func1"))
     assert(funcNames1.contains("my_func2"))
     assert(funcNames1.contains("my_temp_func"))
+    val funcNamesWithPattern1 =
+      spark.catalog.listFunctions("default", "my_func*").collect().map(_.name).toSet
+    assert(funcNamesWithPattern1.contains("my_func1"))
+    assert(funcNamesWithPattern1.contains("my_func2"))
+    assert(!funcNamesWithPattern1.contains("my_temp_func"))
     dropFunction("my_func1")
     dropTempFunction("my_temp_func")
     val funcNames2 = spark.catalog.listFunctions().collect().map(_.name).toSet
     assert(!funcNames2.contains("my_func1"))
     assert(funcNames2.contains("my_func2"))
     assert(!funcNames2.contains("my_temp_func"))
+    val funcNamesWithPattern2 =
+      spark.catalog.listFunctions("default", "my_func*").collect().map(_.name).toSet
+    assert(!funcNamesWithPattern2.contains("my_func1"))
+    assert(funcNamesWithPattern2.contains("my_func2"))
+    assert(!funcNamesWithPattern2.contains("my_temp_func"))
+    val funcNamesWithPattern3 =
+      spark.catalog.listFunctions("default", "*not_existing_func*").collect().map(_.name).toSet
+    assert(funcNamesWithPattern3.isEmpty)
   }
 
   test("SPARK-39828: Catalog.listFunctions() should respect currentCatalog") {

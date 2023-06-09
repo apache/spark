@@ -1618,6 +1618,18 @@ class SparkSubmitSuite
       conf.get(k) should be (v)
     }
   }
+
+  test("SPARK-43540: Add working directory into classpath on the driver in K8S cluster mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "/home/thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
+    assert(classpath.contains("."))
+  }
 }
 
 object JarCreationTest extends Logging {

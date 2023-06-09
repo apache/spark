@@ -355,8 +355,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == SOURCE_NAME_FOREACH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = ForeachWriterTable[Any](foreachWriter,
-        ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]])
+      val sink = ForeachWriterTable[Any](foreachWriter, foreachWriterEncoder)
       startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
@@ -451,12 +450,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     foreachImplementation(writer.asInstanceOf[ForeachWriter[Any]])
   }
 
-  private[sql] def foreachImplementation(writer: ForeachWriter[Any]): DataStreamWriter[T] = {
+  private[sql] def foreachImplementation(writer: ForeachWriter[Any],
+      encoder: ExpressionEncoder[Any] = null): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
       throw new IllegalArgumentException("foreach writer cannot be null")
+    }
+    if (encoder != null) {
+      this.foreachWriterEncoder = encoder
     }
     this
   }
@@ -539,6 +542,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
   private var foreachWriter: ForeachWriter[Any] = null
+
+  private var foreachWriterEncoder: ExpressionEncoder[Any] =
+    ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]]
 
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 

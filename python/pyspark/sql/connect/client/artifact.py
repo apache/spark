@@ -18,7 +18,9 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import hashlib
 import importlib
+import io
 import sys
 import os
 import zlib
@@ -40,6 +42,8 @@ JAR_PREFIX: str = "jars"
 PYFILE_PREFIX: str = "pyfiles"
 ARCHIVE_PREFIX: str = "archives"
 FILE_PREFIX: str = "files"
+FORWARD_TO_FS_PREFIX: str = "forward_to_fs"
+CACHE_PREFIX: str = "cache"
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -77,11 +81,26 @@ class LocalFile(LocalData):
         return open(self.path, "rb")
 
 
-class Artifact:
+class InMemory(LocalData):
     """
     Payload stored in memory.
     """
 
+    def __init__(self, blob: bytes):
+        self.blob = blob
+        self._size: int
+        self._stream: int
+
+    @cached_property
+    def size(self) -> int:
+        return len(self.blob)
+
+    @cached_property
+    def stream(self) -> BinaryIO:
+        return io.BytesIO(self.blob)
+
+
+class Artifact:
     def __init__(self, path: str, storage: LocalData):
         assert not Path(path).is_absolute(), f"Bad path: {path}"
         self.path = path
@@ -110,6 +129,10 @@ def new_archive_artifact(file_name: str, storage: LocalData) -> Artifact:
 
 def new_file_artifact(file_name: str, storage: LocalData) -> Artifact:
     return _new_artifact(FILE_PREFIX, "", file_name, storage)
+
+
+def new_cache_artifact(id: str, storage: LocalData) -> Artifact:
+    return _new_artifact(CACHE_PREFIX, "", id, storage)
 
 
 def _new_artifact(
@@ -196,6 +219,19 @@ class ArtifactManager:
             return [artifact]
         raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
 
+    def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
+        abs_path: Path = Path(local_path).absolute()
+        # TODO: Support directory path.
+        assert abs_path.is_file(), "local path must be a file path."
+        storage = LocalFile(str(abs_path))
+
+        assert Path(dest_path).is_absolute(), "destination FS path must be an absolute path."
+
+        # The `dest_path` is an absolute path, to add the FORWARD_TO_FS_PREFIX,
+        # we cannot use `os.path.join`
+        artifact_path = FORWARD_TO_FS_PREFIX + dest_path
+        return [Artifact(artifact_path, storage)]
+
     def _create_requests(
         self, *path: str, pyfile: bool, archive: bool, file: bool
     ) -> Iterator[proto.AddArtifactsRequest]:
@@ -212,6 +248,14 @@ class ArtifactManager:
         """Separated for the testing purpose."""
         return self._stub.AddArtifacts(requests)
 
+    def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]) -> None:
+        response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
+        summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
+
+        for summary in response.artifacts:
+            summaries.append(summary)
+            # TODO(SPARK-42658): Handle responses containing CRC failures.
+
     def add_artifacts(self, *path: str, pyfile: bool, archive: bool, file: bool) -> None:
         """
         Add a single artifact to the session.
@@ -220,12 +264,13 @@ class ArtifactManager:
         requests: Iterator[proto.AddArtifactsRequest] = self._create_requests(
             *path, pyfile=pyfile, archive=archive, file=file
         )
-        response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
-        summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
+        self._request_add_artifacts(requests)
 
-        for summary in response.artifacts:
-            summaries.append(summary)
-            # TODO(SPARK-42658): Handle responses containing CRC failures.
+    def _add_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> None:
+        requests: Iterator[proto.AddArtifactsRequest] = self._add_artifacts(
+            self._parse_forward_to_fs_artifacts(local_path, dest_path)
+        )
+        self._request_add_artifacts(requests)
 
     def _add_artifacts(self, artifacts: Iterable[Artifact]) -> Iterator[proto.AddArtifactsRequest]:
         """
@@ -328,3 +373,31 @@ class ArtifactManager:
                         data=chunk, crc=zlib.crc32(chunk)
                     ),
                 )
+
+    def is_cached_artifact(self, hash: str) -> bool:
+        """
+        Ask the server either any artifact with `hash` has been cached at the server side or not.
+        """
+        artifactName = CACHE_PREFIX + "/" + hash
+        request = proto.ArtifactStatusesRequest(
+            user_context=self._user_context, session_id=self._session_id, names=[artifactName]
+        )
+        resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(request)
+        status = resp.statuses.get(artifactName)
+        return status.exists if status is not None else False
+
+    def cache_artifact(self, blob: bytes) -> str:
+        """
+        Cache the give blob at the session.
+        """
+        hash = hashlib.sha256(blob).hexdigest()
+        if not self.is_cached_artifact(hash):
+            requests = self._add_artifacts([new_cache_artifact(hash, InMemory(blob))])
+            response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
+            summaries: List[proto.AddArtifactsResponse.ArtifactSummary] = []
+
+            for summary in response.artifacts:
+                summaries.append(summary)
+                # TODO(SPARK-42658): Handle responses containing CRC failures.
+
+        return hash

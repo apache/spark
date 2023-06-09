@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import hashlib
 import shutil
 import tempfile
 import unittest
@@ -33,9 +34,7 @@ class ArtifactTests(ReusedConnectTestCase):
     def setUpClass(cls):
         super(ArtifactTests, cls).setUpClass()
         cls.artifact_manager: ArtifactManager = cls.spark._client._artifact_manager
-        cls.base_resource_dir = os.path.join(
-            SPARK_HOME, "connector", "connect", "common", "src", "test", "resources"
-        )
+        cls.base_resource_dir = os.path.join(SPARK_HOME, "data")
         cls.artifact_file_path = os.path.join(
             cls.base_resource_dir,
             "artifact-tests",
@@ -44,6 +43,12 @@ class ArtifactTests(ReusedConnectTestCase):
             cls.artifact_file_path,
             "crc",
         )
+
+    @classmethod
+    def conf(cls):
+        conf = super().conf()
+        conf.set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+        return conf
 
     def test_basic_requests(self):
         file_name = "smallJar"
@@ -293,6 +298,30 @@ class ArtifactTests(ReusedConnectTestCase):
 
             self.spark.addArtifacts(file_path, file=True)
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "Hello world!!")
+
+    def test_copy_from_local_to_fs(self):
+        with tempfile.TemporaryDirectory() as d:
+            with tempfile.TemporaryDirectory() as d2:
+                file_path = os.path.join(d, "file1")
+                dest_path = os.path.join(d2, "file1_dest")
+                file_content = "test_copy_from_local_to_FS"
+
+                with open(file_path, "w") as f:
+                    f.write(file_content)
+
+                self.spark.copyFromLocalToFs(file_path, dest_path)
+
+                with open(dest_path, "r") as f:
+                    self.assertEqual(f.read(), file_content)
+
+    def test_cache_artifact(self):
+        s = "Hello, World!"
+        blob = bytearray(s, "utf-8")
+        expected_hash = hashlib.sha256(blob).hexdigest()
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), False)
+        actualHash = self.artifact_manager.cache_artifact(blob)
+        self.assertEqual(actualHash, expected_hash)
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
 
 if __name__ == "__main__":

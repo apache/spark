@@ -108,6 +108,16 @@ abstract class Catalog {
   def listFunctions(dbName: String): Dataset[Function]
 
   /**
+   * Returns a list of functions registered in the specified database (namespace)
+   * which name match the specify pattern (the name can be qualified with catalog).
+   * This includes all built-in and temporary functions.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listFunctions(dbName: String, pattern: String): Dataset[Function]
+
+  /**
    * Returns a list of columns for the given table/view or temporary view.
    *
    * @param tableName is either a qualified or unqualified name that designates a table/view. It
