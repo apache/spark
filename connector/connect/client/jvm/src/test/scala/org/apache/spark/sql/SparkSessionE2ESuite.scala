@@ -26,9 +26,9 @@ import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Warning(SPARK-43648): Please don't import classes that only exist in
+ * NOTE: Do not import classes that only exist in
  * `spark-connect-client-jvm.jar` into the this class, whether explicit or implicit, as it will
- * trigger udf deserialization error during Maven testing.
+ * trigger a UDF deserialization error during Maven build/test.
  */
 class SparkSessionE2ESuite extends RemoteSparkSession {
 
