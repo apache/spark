@@ -34,7 +34,18 @@ trait UpsertTests {
   test(s"Upsert existing table") { doTestUpsert(true) }
   test(s"Upsert non-existing table") { doTestUpsert(false) }
 
-  def doTestUpsert(tableExists: Boolean): Unit = {
+  Seq(
+    Seq("ts", "id", "v1", "v2"),
+    Seq("ts", "v1", "id", "v2"),
+    Seq("ts", "v1", "v2", "id"),
+    Seq("v2", "v1", "ts", "id"),
+  ).foreach { columns =>
+    test(s"Upsert with varying column order - ${columns.mkString(",")}") {
+      doTestUpsert(tableExists = true, Some(columns))
+    }
+  }
+
+  def doTestUpsert(tableExists: Boolean, project: Option[Seq[String]] = None): Unit = {
     val df = Seq(
       (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568), // row unchanged
       (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678), // updates v1
@@ -48,7 +59,8 @@ trait UpsertTests {
       "upsert" -> "true",
       "upsertKeyColumns" -> "id, ts"
     )
-    df.write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, table, new Properties)
+    project.map(df.select(_: _*)).getOrElse(df)
+      .write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, table, new Properties)
 
     val actual = spark.read.jdbc(jdbcUrl, table, new Properties).collect.toSet
     val existing = if (tableExists) {
