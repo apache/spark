@@ -358,8 +358,7 @@ class SparkSession:
                 arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
 
             timezone, safecheck = self._client.get_configs(
-                "spark.sql.session.timeZone",
-                "spark.sql.execution.pandas.convertToArrowArraySafely"
+                "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
             ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")

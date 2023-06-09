@@ -377,10 +377,7 @@ class LocalRelation(LogicalPlan):
 class CachedLocalRelation(LogicalPlan):
     """Creates a CachedLocalRelation plan object based on a hash of a LocalRelation."""
 
-    def __init__(
-        self,
-        hash: str
-    ) -> None:
+    def __init__(self, hash: str) -> None:
         super().__init__(None)
 
         self._hash = hash
