@@ -40,7 +40,7 @@ class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession
     checkOption("1 + 2", "3")
     checkOption("'a' || 'b'", "ab")
     checkOption("true or false", "true")
-    checkOption("null", "null")
+    checkOption("null", null)
     checkOption("cast('11 23:4:0' as interval day to second)",
       "INTERVAL '11 23:04:00' DAY TO SECOND")
     checkOption("date_diff(current_date(), current_date())", "0")
