@@ -59,7 +59,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
             val dt = value.dataType
             value match {
               case Literal(null, _) =>
-                "null"
+                null
               case _
                 if dt.isInstanceOf[ArrayType] ||
                   dt.isInstanceOf[StructType] ||
