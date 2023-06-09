@@ -2159,7 +2159,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
-def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"]) -> Column:
+def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     if format is not None:
         return _invoke_function_over_columns("to_binary", col, format)
     else:
