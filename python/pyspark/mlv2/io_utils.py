@@ -60,7 +60,8 @@ def _get_metadata_to_save(
         "type": "spark_connect",
     }
     if extra_metadata is not None:
-        metadata.update(extra_metadata)
+        assert isinstance(extra_metadata, dict)
+        metadata["extra"] = extra_metadata
 
     return metadata
 
@@ -81,18 +82,24 @@ class ParamsReadWrite:
     for supporting saving and loading.
     """
 
-    def _get_metadata(self) -> Any:
+    def _get_extra_metadata(self) -> Any:
         """
-        Returns metadata of the object as a JSON object.
+        Returns exta metadata of the instance
         """
-        return _get_metadata_to_save(self)
+        return None
+
+    def _load_extra_metadata(self, metadata):
+        """
+        Load extra metadata attribute from metadata json object.
+        """
+        pass
 
     # TODO: support saving to cloud storage file system.
     def saveToLocal(self, path, *, overwrite=False):
         """
         Save model to provided local path.
         """
-        metadata = self._get_metadata()
+        metadata = _get_metadata_to_save(self, extra_metadata=self._get_extra_metadata())
 
         if os.path.exists(path):
             if overwrite:
@@ -133,6 +140,7 @@ class ParamsReadWrite:
             paramValue = metadata["defaultParamMap"][paramName]
             instance._setDefault(**{paramName: paramValue})
 
+        instance._load_extra_metadata(metadata["extra"])
         return instance
 
 

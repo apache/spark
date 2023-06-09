@@ -21,9 +21,11 @@ from pyspark.ml.param.shared import HasProbabilityCol
 
 from typing import Any, Union, List, Tuple, Callable
 import numpy as np
+import os
 import pandas as pd
 import math
 
+from pyspark import cloudpickle
 from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -304,3 +306,29 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
                 return pd.Series(data=list(predictions), index=input_series.index.copy())
 
         return transform_fn
+
+    def _save_core_model(self, path):
+        core_model_path = os.path.join(path, self.__class__.__name__ + ".torch.pkl")
+        with open(core_model_path, "wb") as fp:
+            # Note: the model rely on class `pyspark.mlv2.classification._LinearNet`,
+            # to allow loading model without pyspark package,
+            # we use `cloudpickle` to dump it.
+            cloudpickle.dump(self.torch_model, fp)
+
+    def _load_core_model(self, path):
+        core_model_path = os.path.join(path, self.__class__.__name__ + ".torch.pkl")
+        with open(core_model_path, "rb") as fp:
+            self.torch_model = cloudpickle.load(fp)
+
+    def _get_extra_metadata(self) -> Any:
+        return {
+            "num_features": self.num_features,
+            "num_classes": self.num_classes,
+        }
+
+    def _load_extra_metadata(self, extra_metadata):
+        """
+        Load extra metadata attribute from extra metadata json object.
+        """
+        self.num_features = extra_metadata["num_features"]
+        self.num_classes = extra_metadata["num_classes"]
