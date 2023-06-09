@@ -22,18 +22,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityComputeTests(SeriesComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_at_time(self):
-        super().test_at_time()
-
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_between_time(self):
-        super().test_between_time()
-
     @unittest.skip("TODO(SPARK-43663): Enable SeriesParityTests.test_compare.")
     def test_compare(self):
         super().test_compare()
