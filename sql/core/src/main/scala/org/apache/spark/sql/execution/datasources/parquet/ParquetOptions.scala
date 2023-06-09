@@ -94,8 +94,9 @@ object ParquetOptions extends DataSourceOptions {
     "snappy" -> CompressionCodecName.SNAPPY,
     "gzip" -> CompressionCodecName.GZIP,
     "lzo" -> CompressionCodecName.LZO,
-    "lz4" -> CompressionCodecName.LZ4,
     "brotli" -> CompressionCodecName.BROTLI,
+    "lz4" -> CompressionCodecName.LZ4,
+    "lz4raw" -> CompressionCodecName.LZ4_RAW,
     "zstd" -> CompressionCodecName.ZSTD)
 
   def getParquetCompressionCodecName(name: String): String = {

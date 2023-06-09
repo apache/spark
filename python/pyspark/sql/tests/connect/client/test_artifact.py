@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import hashlib
 import shutil
 import tempfile
 import unittest
@@ -33,9 +34,7 @@ class ArtifactTests(ReusedConnectTestCase):
     def setUpClass(cls):
         super(ArtifactTests, cls).setUpClass()
         cls.artifact_manager: ArtifactManager = cls.spark._client._artifact_manager
-        cls.base_resource_dir = os.path.join(
-            SPARK_HOME, "connector", "connect", "common", "src", "test", "resources"
-        )
+        cls.base_resource_dir = os.path.join(SPARK_HOME, "data")
         cls.artifact_file_path = os.path.join(
             cls.base_resource_dir,
             "artifact-tests",
@@ -45,11 +44,19 @@ class ArtifactTests(ReusedConnectTestCase):
             "crc",
         )
 
+    @classmethod
+    def conf(cls):
+        conf = super().conf()
+        conf.set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+        return conf
+
     def test_basic_requests(self):
         file_name = "smallJar"
         small_jar_path = os.path.join(self.artifact_file_path, f"{file_name}.jar")
         response = self.artifact_manager._retrieve_responses(
-            self.artifact_manager._create_requests(small_jar_path, pyfile=False, archive=False)
+            self.artifact_manager._create_requests(
+                small_jar_path, pyfile=False, archive=False, file=False
+            )
         )
         self.assertTrue(response.artifacts[0].name.endswith(f"{file_name}.jar"))
 
@@ -59,7 +66,9 @@ class ArtifactTests(ReusedConnectTestCase):
         small_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
         requests = list(
-            self.artifact_manager._create_requests(small_jar_path, pyfile=False, archive=False)
+            self.artifact_manager._create_requests(
+                small_jar_path, pyfile=False, archive=False, file=False
+            )
         )
         self.assertEqual(len(requests), 1)
 
@@ -83,7 +92,9 @@ class ArtifactTests(ReusedConnectTestCase):
         large_jar_crc_path = os.path.join(self.artifact_crc_path, f"{file_name}.txt")
 
         requests = list(
-            self.artifact_manager._create_requests(large_jar_path, pyfile=False, archive=False)
+            self.artifact_manager._create_requests(
+                large_jar_path, pyfile=False, archive=False, file=False
+            )
         )
         # Expected chunks = roundUp( file_size / chunk_size) = 12
         # File size of `junitLargeJar.jar` is 384581 bytes.
@@ -117,7 +128,7 @@ class ArtifactTests(ReusedConnectTestCase):
 
         requests = list(
             self.artifact_manager._create_requests(
-                small_jar_path, small_jar_path, pyfile=False, archive=False
+                small_jar_path, small_jar_path, pyfile=False, archive=False, file=False
             )
         )
         # Single request containing 2 artifacts.
@@ -160,6 +171,7 @@ class ArtifactTests(ReusedConnectTestCase):
                 small_jar_path,
                 pyfile=False,
                 archive=False,
+                file=False,
             )
         )
         # There are a total of 14 requests.
@@ -270,6 +282,46 @@ class ArtifactTests(ReusedConnectTestCase):
 
             self.spark.addArtifacts(f"{archive_path}.zip#my_files", archive=True)
             self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "hello world!")
+
+    def test_add_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            file_path = os.path.join(d, "my_file.txt")
+            with open(file_path, "w") as f:
+                f.write("Hello world!!")
+
+            @udf("string")
+            def func(x):
+                with open(
+                    os.path.join(SparkFiles.getRootDirectory(), "my_file.txt"), "r"
+                ) as my_file:
+                    return my_file.read().strip()
+
+            self.spark.addArtifacts(file_path, file=True)
+            self.assertEqual(self.spark.range(1).select(func("id")).first()[0], "Hello world!!")
+
+    def test_copy_from_local_to_fs(self):
+        with tempfile.TemporaryDirectory() as d:
+            with tempfile.TemporaryDirectory() as d2:
+                file_path = os.path.join(d, "file1")
+                dest_path = os.path.join(d2, "file1_dest")
+                file_content = "test_copy_from_local_to_FS"
+
+                with open(file_path, "w") as f:
+                    f.write(file_content)
+
+                self.spark.copyFromLocalToFs(file_path, dest_path)
+
+                with open(dest_path, "r") as f:
+                    self.assertEqual(f.read(), file_content)
+
+    def test_cache_artifact(self):
+        s = "Hello, World!"
+        blob = bytearray(s, "utf-8")
+        expected_hash = hashlib.sha256(blob).hexdigest()
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), False)
+        actualHash = self.artifact_manager.cache_artifact(blob)
+        self.assertEqual(actualHash, expected_hash)
+        self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
 
 if __name__ == "__main__":
