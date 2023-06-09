@@ -6407,13 +6407,13 @@ def to_timestamp_ltz(
     >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
-    [Row(r=datetime.datetime(2016, 12, 31, 8, 0))]
+    [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
     >>> spark.conf.unset("spark.sql.session.timeZone")
 
     >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
     >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
-    [Row(r=datetime.datetime(2016, 12, 31, 8, 0))]
+    [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if format is not None:
