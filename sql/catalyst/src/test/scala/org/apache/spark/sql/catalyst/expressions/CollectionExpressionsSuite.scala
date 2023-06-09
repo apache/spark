@@ -25,7 +25,6 @@ import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -784,50 +783,38 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
       errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "count" -> (BigInt(Int.MaxValue) - BigInt{Int.MinValue} + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()
-      )
-    )
+        "count" -> (BigInt(Int.MaxValue) - BigInt { Int.MinValue } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)),
       errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
         "count" -> (BigInt(Long.MaxValue) + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()
-      )
-    )
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)),
       errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
         "count" -> ((0 - BigInt(Long.MinValue)) + 1).toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()
-      )
-    )
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)),
       errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) - BigInt{Long.MinValue} + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()
-      )
-    )
+        "count" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)),
       errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) - BigInt{Long.MinValue} + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()
-      )
-    )
+        "count" -> (BigInt(Long.MaxValue) - BigInt { Long.MinValue } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
     checkErrorInExpression[SparkRuntimeException](
       new Sequence(Literal(Long.MaxValue), Literal(-1L), Literal(-1L)),
       errorClass = "_LEGACY_ERROR_TEMP_2161",
       parameters = Map(
-        "count" -> (BigInt(Long.MaxValue) - BigInt{-1L} + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()
-      )
-    )
+        "count" -> (BigInt(Long.MaxValue) - BigInt { -1L } + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
 
     // test sequence with one element (zero step or equal start and stop)
 
