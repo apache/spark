@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicLong
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.DeveloperApi
@@ -62,6 +64,22 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
   private def fn(name: String): Column = Column.fn(name, this)
   private def fn(name: String, other: Column): Column = Column.fn(name, this, other)
   private def fn(name: String, other: Any): Column = Column.fn(name, this, lit(other))
+
+  private[sql] def withUniqueId(name: String): (Column, Column) = {
+    val attributeId = Column.attributeIdGenerator.getAndIncrement()
+    val alias = Column { builder =>
+      builder
+        .getAliasBuilder.addName(name)
+        .setExpr(expr)
+        .setAttributeId(attributeId)
+    }
+    val reference = Column { builder =>
+      builder.getUnresolvedAttributeBuilder
+        .setUnparsedIdentifier(name)
+        .setAttributeId(attributeId)
+    }
+    (alias, reference)
+  }
 
   override def toString: String = expr.toString
 
@@ -1288,6 +1306,7 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
 }
 
 private[sql] object Column {
+  private val attributeIdGenerator = new AtomicLong()
 
   def apply(name: String): Column = new Column(name)
 

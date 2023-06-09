@@ -221,6 +221,9 @@ message Expression {
 
     // (Optional) The id of corresponding connect plan.
     optional int64 plan_id = 2;
+
+    // (Optional) The ID of the produced attribute that this attribute should be bound to.
+    optional int64 attribute_id = 3;
   }
 
   // An unresolved function is not explicitly bound to one explicit function, but the function
@@ -304,6 +307,9 @@ message Expression {
 
     // (Optional) Alias metadata expressed as a JSON map.
     optional string metadata = 3;
+
+    // (Optional) ID of the attribute produced by this alias.
+    optional int64 attribute_id = 4;
   }
 
   message LambdaFunction {

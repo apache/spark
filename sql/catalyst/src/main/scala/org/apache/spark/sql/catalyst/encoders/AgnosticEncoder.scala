@@ -39,6 +39,8 @@ import org.apache.spark.util.Utils
  */
 trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
+  def isSimple: Boolean
+  def isComplex: Boolean = !isSimple
   def nullable: Boolean = !isPrimitive
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
@@ -49,6 +51,7 @@ object AgnosticEncoders {
   case class OptionEncoder[E](elementEncoder: AgnosticEncoder[E])
     extends AgnosticEncoder[Option[E]] {
     override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = true
     override def dataType: DataType = elementEncoder.dataType
     override val clsTag: ClassTag[Option[E]] = ClassTag(classOf[Option[E]])
   }
@@ -56,6 +59,7 @@ object AgnosticEncoders {
   case class ArrayEncoder[E](element: AgnosticEncoder[E], containsNull: Boolean)
     extends AgnosticEncoder[Array[E]] {
     override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = true
     override def dataType: DataType = ArrayType(element.dataType, containsNull)
     override val clsTag: ClassTag[Array[E]] = element.clsTag.wrap
   }
@@ -73,6 +77,7 @@ object AgnosticEncoders {
       override val lenientSerialization: Boolean)
     extends AgnosticEncoder[C] {
     override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = true
     override val dataType: DataType = ArrayType(element.dataType, containsNull)
   }
 
@@ -83,6 +88,7 @@ object AgnosticEncoders {
       valueContainsNull: Boolean)
     extends AgnosticEncoder[C] {
     override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = true
     override val dataType: DataType = MapType(
       keyEncoder.dataType,
       valueEncoder.dataType,
@@ -99,15 +105,19 @@ object AgnosticEncoders {
     def structField: StructField = StructField(name, enc.dataType, nullable, metadata)
   }
 
+  trait ComplexEncoder[T] extends AgnosticEncoder[T] {
+    def fields: Seq[EncoderField]
+    override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = false
+    override val schema: StructType = StructType(fields.map(_.structField))
+    override def dataType: DataType = schema
+  }
+
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
       fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] {
-    override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
-    override def dataType: DataType = schema
-  }
+    extends ComplexEncoder[K]
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
@@ -121,28 +131,20 @@ object AgnosticEncoders {
     }
   }
 
-  abstract class BaseRowEncoder extends AgnosticEncoder[Row] {
-    override def isPrimitive: Boolean = false
-    override def dataType: DataType = schema
+  abstract class BaseRowEncoder extends ComplexEncoder[Row] {
     override def clsTag: ClassTag[Row] = classTag[Row]
   }
 
-  case class RowEncoder(fields: Seq[EncoderField]) extends BaseRowEncoder {
-    override val schema: StructType = StructType(fields.map(_.structField))
-  }
+  case class RowEncoder(fields: Seq[EncoderField]) extends BaseRowEncoder
 
   object UnboundRowEncoder extends BaseRowEncoder {
-    override val schema: StructType = new StructType()
+    override def fields: Seq[EncoderField] = Nil
   }
 
   case class JavaBeanEncoder[K](
       override val clsTag: ClassTag[K],
       fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] {
-    override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
-    override def dataType: DataType = schema
-  }
+    extends ComplexEncoder[K]
 
   // This will only work for encoding from/to Sparks' InternalRow format.
   // It is here for compatibility.
@@ -151,6 +153,7 @@ object AgnosticEncoders {
       udtClass: Class[_ <: UserDefinedType[_]])
     extends AgnosticEncoder[E] {
     override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = !udt.sqlType.isInstanceOf[StructType]
     override def dataType: DataType = udt
     override def clsTag: ClassTag[E] = ClassTag(udt.userClass)
   }
@@ -158,6 +161,7 @@ object AgnosticEncoders {
   // Enums are special leafs because we need to capture the class.
   protected abstract class EnumEncoder[E] extends AgnosticEncoder[E] {
     override def isPrimitive: Boolean = false
+    override def isSimple: Boolean = true
     override def dataType: DataType = StringType
   }
   case class ScalaEnumEncoder[T, E](
@@ -170,6 +174,7 @@ object AgnosticEncoders {
     extends AgnosticEncoder[E] {
     override val clsTag: ClassTag[E] = classTag[E]
     override val isPrimitive: Boolean = clsTag.runtimeClass.isPrimitive
+    override def isSimple: Boolean = true
   }
 
   // Primitive encoders

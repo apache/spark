@@ -79,6 +79,14 @@ object functions {
   def col(colName: String): Column = Column(colName)
 
   /**
+   * Returns a [[Column]] from the output of the previous operator by its ordinal.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  private[sql] def ordinal(o: Int): Column = Column.fn("ordinal", lit(o))
+
+  /**
    * Returns a [[Column]] based on the given column name. Alias of [[col]].
    *
    * @group normal_funcs

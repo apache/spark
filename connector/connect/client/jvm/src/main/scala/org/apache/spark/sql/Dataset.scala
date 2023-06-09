@@ -830,6 +830,66 @@ class Dataset[T] private[sql] (
     builder.setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS)
   }
 
+  /**
+   * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to
+   * true.
+   *
+   * This is similar to the relation `join` function with one important difference in the
+   * result schema. Since `joinWith` preserves objects present on either side of the join, the
+   * result schema is similarly nested into a tuple under the column names `_1` and `_2`.
+   *
+   * This type of join can be useful both for preserving type-safety with the original object
+   * types as well as working with relational data where either side of the join has column
+   * names in common.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `fullouter`,`full_outer`, `left`,
+   *                 `leftouter`, `left_outer`, `right`, `rightouter`, `right_outer`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+    val jt = toJoinType(joinType)
+    if (jt == proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI ||
+        jt == proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI) {
+      throw new RuntimeException()
+    }
+
+    val all = col("*")
+    def wrap(e: AgnosticEncoder[_]): Column = {
+      if (e.isComplex) {
+        struct(all)
+      } else {
+        functions.ordinal(1)
+      }
+    }
+
+    val (leftStruct, leftReference) = wrap(encoder).withUniqueId("_1")
+    val (rightStruct, rightReference) = wrap(other.encoder).withUniqueId("_2")
+    val e = ProductEncoder.tuple(encoder :: other.encoder :: Nil).asInstanceOf[Encoder[(T, U)]]
+    select(all, leftStruct)
+      .join(other.select(all, rightStruct), condition, joinType)
+      .select(leftReference, rightReference)
+      .as(e)
+  }
+
+  /**
+   * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair
+   * where `condition` evaluates to true.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   *
+   * @group typedrel
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, condition, "inner")
+  }
+
   private def buildSort(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
     sparkSession.newDataset(encoder) { builder =>
       builder.getSortBuilder
@@ -2047,9 +2107,12 @@ class Dataset[T] private[sql] (
   }
 
   private def withColumns(names: Seq[String], values: Seq[Column]): DataFrame = {
-    val aliases = values.zip(names).map { case (value, name) =>
+    withColumns(values.zip(names).map { case (value, name) =>
       value.name(name).expr.getAlias
-    }
+    })
+  }
+
+  private def withColumns(aliases: Seq[proto.Expression.Alias]): DataFrame = {
     sparkSession.newDataFrame { builder =>
       builder.getWithColumnsBuilder
         .setInput(plan.getRoot)
