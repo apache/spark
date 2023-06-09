@@ -171,8 +171,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("parameters not allowed in view body - nested WITH and EXIST") {
     val sqlText =
-      """
-        |CREATE VIEW v AS
+      """CREATE VIEW v AS
         |SELECT a as a
         |FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END AS a)
         |SELECT a FROM cte)""".stripMargin
