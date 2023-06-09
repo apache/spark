@@ -362,6 +362,10 @@ class LocalRelation(LogicalPlan):
         if self._schema is not None:
             plan.local_relation.schema = self._schema
         return plan
+    
+    def serialize(self, session: "SparkConnectClient") -> bytes:
+        p = self.plan(session)
+        return bytes(p.local_relation.SerializeToString())
 
     def print(self, indent: int = 0) -> str:
         return f"{' ' * indent}<LocalRelation>\n"

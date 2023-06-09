@@ -474,7 +474,7 @@ class SparkSession:
         if cacheThreshold[0] is None or _table.nbytes < int(cacheThreshold[0]):
             plan = localRelation
         else:
-            plan = CachedLocalRelation(hash=self.cacheLocalRelation(localRelation))
+            plan = CachedLocalRelation(hash=self._cacheLocalRelation(localRelation))
 
         df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
@@ -649,6 +649,14 @@ class SparkSession:
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifact = addArtifacts
+
+    def _cacheLocalRelation(self, localRelation: LocalRelation) -> str:
+        """
+        Cache the local relation at the server side if it has not been cached yet.
+        """
+        serialized = localRelation.serialize(self._client)
+        return self._client.cache_artifact(serialized)
+
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
