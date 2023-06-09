@@ -113,6 +113,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       Row(15))
   }
 
+  test("parameter in identifier clause") {
+    val sqlText =
+      "SELECT IDENTIFIER('T.' || :p1 || '1') FROM VALUES(1) T(c1)"
+    val args = Map("p1" -> "c")
+    checkAnswer(
+      spark.sql(sqlText, args),
+      Row(1))
+  }
+
   test("parameters in INSERT") {
     withTable("t") {
       sql("CREATE TABLE t (col INT) USING json")

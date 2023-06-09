@@ -15,10 +15,9 @@
 # limitations under the License.
 #
 
-from collections.abc import Callable
 import numpy as np
 import pandas as pd
-from typing import Any, Union
+from typing import Any, Union, List, Tuple, Callable
 
 from pyspark.sql import DataFrame
 from pyspark.mlv2.base import Estimator, Model
@@ -57,17 +56,17 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
         super().__init__()
         self.max_abs_values = max_abs_values
 
-    def _input_column_name(self) -> str:
-        return self.getInputCol()
+    def _input_columns(self) -> List[str]:
+        return [self.getInputCol()]
 
-    def _output_columns(self) -> list[tuple[str, str]]:
+    def _output_columns(self) -> List[Tuple[str, str]]:
         return [(self.getOutputCol(), "array<double>")]
 
-    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
+    def _get_transform_fn(self) -> Callable[..., Any]:
         max_abs_values = self.max_abs_values
         max_abs_values_zero_cond = max_abs_values == 0.0
 
-        def transform_fn(series: "pd.Series") -> Any:
+        def transform_fn(series: Any) -> Any:
             def map_value(x: "np.ndarray") -> "np.ndarray":
                 return np.where(max_abs_values_zero_cond, 0.0, x / max_abs_values)
 
@@ -105,17 +104,17 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol):
         self.mean_values = mean_values
         self.std_values = std_values
 
-    def _input_column_name(self) -> str:
-        return self.getInputCol()
+    def _input_columns(self) -> List[str]:
+        return [self.getInputCol()]
 
-    def _output_columns(self) -> list[tuple[str, str]]:
+    def _output_columns(self) -> List[Tuple[str, str]]:
         return [(self.getOutputCol(), "array<double>")]
 
-    def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
+    def _get_transform_fn(self) -> Callable[..., Any]:
         mean_values = self.mean_values
         std_values = self.std_values
 
-        def transform_fn(series: "pd.Series") -> Any:
+        def transform_fn(series: Any) -> Any:
             def map_value(x: "np.ndarray") -> "np.ndarray":
                 return (x - mean_values) / std_values
 

@@ -58,10 +58,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, _*
+    commonUtils, sqlApi, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils"
+    "tags", "sketch", "kvstore", "common-utils", "sql-api"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
@@ -89,7 +89,7 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.22.3"
+  val protoVersion = "3.23.2"
   // GRPC version used for Spark Connect.
   val gprcVersion = "1.47.0"
 }
@@ -256,8 +256,7 @@ object SparkBuild extends PomBuild {
           // see `scalac -Wconf:help` for details
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
-          // "-Wunused:imports",
+          "-Wunused:imports",
           "-Wconf:cat=lint-multiarg-infix:wv",
           "-Wconf:cat=other-nullary-override:wv",
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
@@ -283,7 +282,11 @@ object SparkBuild extends PomBuild {
           // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
           "-Wconf:cat=unchecked&msg=outer reference:s",
           "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s",
+          // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
+          // from the corresponding files when Scala 2.12 is no longer supported.
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
         )
       }
     }
@@ -405,7 +408,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
-      commonUtils
+      commonUtils, sqlApi
     ).contains(x)
   }
 
@@ -928,8 +931,13 @@ object SparkProtobuf {
 
     (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
+    (Test / PB.protocOptions) += "--include_imports",
+
     (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources"
+      PB.gens.java -> target.value / "generated-test-sources",
+      PB.gens.descriptorSet -> target.value / "generated-test-sources/descriptor-set-sbt.desc",
+      // The above creates single descriptor file with all the proto files. This is different from
+      // Maven, which create one descriptor file for each proto file.
     ),
 
     (assembly / test) := { },

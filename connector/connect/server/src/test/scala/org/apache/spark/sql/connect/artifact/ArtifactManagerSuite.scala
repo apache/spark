@@ -33,7 +33,9 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
 
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
-    conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+    conf
+      .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+      .set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
   }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
@@ -48,7 +50,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallJar.jar")
     val remotePath = Paths.get("jars/smallJar.jar")
-    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val jarList = spark.sparkContext.listJars()
     assert(jarList.exists(_.contains(remotePath.toString)))
@@ -60,7 +62,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("smallClassFile.class")
     val remotePath = Paths.get("classes/smallClassFile.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("smallClassFile.class").toFile
@@ -73,7 +75,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("Hello.class").toFile
@@ -96,7 +98,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("Hello.class").toFile
@@ -123,7 +125,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val blockManager = spark.sparkContext.env.blockManager
       val blockId = CacheId(session.userId, session.sessionId, "abc")
       try {
-        artifactManager.addArtifact(session, remotePath, stagingPath)
+        artifactManager.addArtifact(session, remotePath, stagingPath, None)
         val bytes = blockManager.getLocalBytes(blockId)
         assert(bytes.isDefined)
         val readback = new String(bytes.get.toByteBuffer().array(), StandardCharsets.UTF_8)
@@ -141,8 +143,22 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val session = sessionHolder()
       val remotePath = Paths.get("pyfiles/abc.zip")
-      artifactManager.addArtifact(session, remotePath, stagingPath)
+      artifactManager.addArtifact(session, remotePath, stagingPath, None)
       assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
     }
+  }
+
+  test("SPARK-43790: Forward artifact file to cloud storage path") {
+    val copyDir = Utils.createTempDir().toPath
+    val destFSDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val stagingPath = copyDir.resolve("smallClassFile.class")
+    val remotePath = Paths.get("forward_to_fs", destFSDir.toString, "smallClassFileCopied.class")
+    assert(stagingPath.toFile.exists())
+    artifactManager.uploadArtifactToFs(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
+
+    val copiedClassFile = Paths.get(destFSDir.toString, "smallClassFileCopied.class").toFile
+    assert(copiedClassFile.exists())
   }
 }

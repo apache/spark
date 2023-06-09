@@ -19,8 +19,6 @@
 import unittest
 import numpy as np
 
-from pyspark.ml.functions import vector_to_array
-from pyspark.ml.linalg import Vectors
 from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
 from pyspark.sql import SparkSession
 
@@ -29,8 +27,8 @@ class FeatureTestsMixin:
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense([2.0, 3.5, 1.5]),),
-                (Vectors.dense([-3.0, -0.5, -2.5]),),
+                ([2.0, 3.5, 1.5],),
+                ([-3.0, -0.5, -2.5],),
             ],
             schema=["features"],
         )
@@ -38,23 +36,26 @@ class FeatureTestsMixin:
         scaler = MaxAbsScaler(inputCol="features", outputCol="scaled_features")
         model = scaler.fit(df1)
         result = model.transform(df1).toPandas()
+        assert list(result.columns) == ["features", "scaled_features"]
 
         expected_result = [[2.0 / 3, 1.0, 0.6], [-1.0, -1.0 / 7, -1.0]]
 
         np.testing.assert_allclose(list(result.scaled_features), expected_result)
 
-        local_df1 = df1.withColumn("features", vector_to_array("features")).toPandas()
+        local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
+        assert id(local_transform_result) == id(local_df1)
+        assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
-                (Vectors.dense([2.0, 3.5, 1.5]),),
-                (Vectors.dense([-3.0, -0.5, -2.5]),),
-                (Vectors.dense([1.0, -1.5, 0.5]),),
+                ([2.0, 3.5, 1.5],),
+                ([-3.0, -0.5, -2.5],),
+                ([1.0, -1.5, 0.5],),
             ],
             schema=["features"],
         )
@@ -62,6 +63,7 @@ class FeatureTestsMixin:
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
         model = scaler.fit(df1)
         result = model.transform(df1).toPandas()
+        assert list(result.columns) == ["features", "scaled_features"]
 
         expected_result = [
             [0.7559289460184544, 1.1338934190276817, 0.8006407690254358],
@@ -71,9 +73,11 @@ class FeatureTestsMixin:
 
         np.testing.assert_allclose(list(result.scaled_features), expected_result)
 
-        local_df1 = df1.withColumn("features", vector_to_array("features")).toPandas()
+        local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
+        assert id(local_transform_result) == id(local_df1)
+        assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 

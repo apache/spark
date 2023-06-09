@@ -95,7 +95,7 @@ object CheckConnectJvmClientCompatibility {
     } catch {
       case e: Throwable =>
         println(e.getMessage)
-        resultWriter.write(s"ERROR: ${e.getMessage}")
+        resultWriter.write(s"ERROR: ${e.getMessage}\n")
     } finally {
       if (resultWriter != null) {
         resultWriter.close()
@@ -199,7 +199,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.levenshtein"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
@@ -240,9 +239,6 @@ object CheckConnectJvmClientCompatibility {
       // TypedColumn
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
       // DataStreamWriter
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.DataStreamWriter.foreach" // TODO(SPARK-43133)
-      ),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
       ),

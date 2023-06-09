@@ -17,7 +17,7 @@
 
 import torch
 import numpy as np
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 from pyspark.sql.types import StructType
 
 
@@ -26,27 +26,48 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
         self.arrow_file_path = arrow_file_path
         self.num_samples = num_samples
         self.field_types = [field.dataType.simpleString() for field in schema]
+        self.field_converters = [
+            _SparkPartitionTorchDataset._get_field_converter(field_type)
+            for field_type in self.field_types
+        ]
 
     @staticmethod
-    def _extract_field_value(value: Any, field_type: str) -> Any:
-        # TODO: avoid checking field type for every row.
+    def _get_field_converter(field_type: str) -> Callable[[Any], Any]:
         if field_type == "vector":
-            if value["type"] == 1:
-                # dense vector
-                return value["values"]
-            if value["type"] == 0:
-                # sparse vector
-                size = int(value["size"])
-                sparse_array = np.zeros(size, dtype=np.float64)
-                sparse_array[value["indices"]] = value["values"]
-                return sparse_array
-        if field_type in ["float", "double", "int", "bigint", "smallint"]:
-            return value
 
-        raise ValueError(
-            "SparkPartitionTorchDataset does not support loading data from field of "
-            f"type {field_type}."
-        )
+            def converter(value: Any) -> Any:
+                if value["type"] == 1:
+                    # dense vector
+                    return value["values"]
+                if value["type"] == 0:
+                    # sparse vector
+                    size = int(value["size"])
+                    sparse_array = np.zeros(size, dtype=np.float64)
+                    sparse_array[value["indices"]] = value["values"]
+                    return sparse_array
+
+        elif field_type in [
+            "float",
+            "double",
+            "int",
+            "bigint",
+            "smallint",
+            "array<float>",
+            "array<double>",
+            "array<int>",
+            "array<bigint>",
+            "array<smallint>",
+        ]:
+
+            def converter(value: Any) -> Any:
+                return value
+
+        else:
+            raise ValueError(
+                "SparkPartitionTorchDataset does not support loading data from field of "
+                f"type {field_type}."
+            )
+        return converter
 
     def __iter__(self) -> Iterator[Any]:
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -71,8 +92,8 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     batch_pdf = batch.to_pandas()
                     for row in batch_pdf.itertuples(index=False):
                         yield [
-                            _SparkPartitionTorchDataset._extract_field_value(value, field_type)
-                            for value, field_type in zip(row, self.field_types)
+                            field_converter(value)
+                            for value, field_converter in zip(row, self.field_converters)
                         ]
                         count += 1
                         if count == self.num_samples:

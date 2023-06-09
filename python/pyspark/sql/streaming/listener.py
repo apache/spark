@@ -331,6 +331,8 @@ class StreamingQueryProgress:
         self._name: Optional[str] = jprogress.name()
         self._timestamp: str = jprogress.timestamp()
         self._batchId: int = jprogress.batchId()
+        self._inputRowsPerSecond: float = jprogress.inputRowsPerSecond()
+        self._processedRowsPerSecond: float = jprogress.processedRowsPerSecond()
         self._batchDuration: int = jprogress.batchDuration()
         self._durationMs: Dict[str, int] = dict(jprogress.durationMs())
         self._eventTime: Dict[str, str] = dict(jprogress.eventTime())
@@ -453,18 +455,18 @@ class StreamingQueryProgress:
         return self._jprogress.numInputRows()
 
     @property
-    def inputRowsPerSecond(self) -> str:
+    def inputRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate of data arriving.
         """
-        return self._jprogress.inputRowsPerSecond()
+        return self._inputRowsPerSecond
 
     @property
-    def processedRowsPerSecond(self) -> str:
+    def processedRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate at which Spark is processing data..
         """
-        return self._jprogress.processedRowsPerSecond()
+        return self._processedRowsPerSecond
 
     @property
     def json(self) -> str:

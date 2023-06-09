@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
+import org.apache.spark.sql.connect.client.util.IntegrationTestUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
@@ -985,6 +986,10 @@ class PlanGenerationTestSuite
     fn.min_by(fn.col("a"), fn.col("b"))
   }
 
+  functionTest("percentile") {
+    fn.percentile(fn.col("a"), fn.lit(0.3))
+  }
+
   functionTest("percentile_approx") {
     fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
   }
@@ -999,6 +1004,10 @@ class PlanGenerationTestSuite
 
   functionTest("stddev") {
     fn.stddev("a")
+  }
+
+  functionTest("std") {
+    fn.std(fn.col("a"))
   }
 
   functionTest("stddev_samp") {
@@ -1027,6 +1036,42 @@ class PlanGenerationTestSuite
 
   functionTest("var_pop") {
     fn.var_pop("a")
+  }
+
+  functionTest("regr_avgx") {
+    fn.regr_avgx(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_avgy") {
+    fn.regr_avgy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_count") {
+    fn.regr_count(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_intercept") {
+    fn.regr_intercept(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_r2") {
+    fn.regr_r2(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_slope") {
+    fn.regr_slope(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_sxx") {
+    fn.regr_sxx(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_sxy") {
+    fn.regr_sxy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_syy") {
+    fn.regr_syy(fn.col("a"), fn.col("b"))
   }
 
   functionTest("array") {
@@ -1141,6 +1186,14 @@ class PlanGenerationTestSuite
     fn.ceil(fn.col("b"), lit(2))
   }
 
+  functionTest("ceiling") {
+    fn.ceiling(fn.col("b"))
+  }
+
+  functionTest("ceiling scale") {
+    fn.ceiling(fn.col("b"), lit(2))
+  }
+
   functionTest("conv") {
     fn.conv(fn.col("b"), 10, 16)
   }
@@ -1159,6 +1212,10 @@ class PlanGenerationTestSuite
 
   functionTest("csc") {
     fn.csc(fn.col("b"))
+  }
+
+  functionTest("e") {
+    fn.e()
   }
 
   functionTest("exp") {
@@ -1205,6 +1262,10 @@ class PlanGenerationTestSuite
     fn.log("b")
   }
 
+  functionTest("ln") {
+    fn.ln(fn.col("b"))
+  }
+
   functionTest("log with base") {
     fn.log(2, "b")
   }
@@ -1221,8 +1282,24 @@ class PlanGenerationTestSuite
     fn.log2("a")
   }
 
+  functionTest("negative") {
+    fn.negative(fn.col("a"))
+  }
+
+  functionTest("pi") {
+    fn.pi()
+  }
+
+  functionTest("positive") {
+    fn.positive(fn.col("a"))
+  }
+
   functionTest("pow") {
     fn.pow("a", "b")
+  }
+
+  functionTest("power") {
+    fn.power(fn.col("a"), fn.col("b"))
   }
 
   functionTest("pmod") {
@@ -1259,6 +1336,10 @@ class PlanGenerationTestSuite
 
   functionTest("signum") {
     fn.signum("b")
+  }
+
+  functionTest("sign") {
+    fn.sign(fn.col("b"))
   }
 
   functionTest("sin") {
@@ -1359,6 +1440,10 @@ class PlanGenerationTestSuite
 
   functionTest("levenshtein") {
     fn.levenshtein(fn.col("g"), lit("bob"))
+  }
+
+  functionTest("levenshtein with threshold") {
+    fn.levenshtein(fn.col("g"), lit("bob"), 2)
   }
 
   functionTest("locate") {
@@ -1648,6 +1733,58 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("to_date with format") {
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
+  temporalFunctionTest("xpath") {
+    fn.xpath(fn.col("s"), lit("a/b/text()"))
+  }
+
+  temporalFunctionTest("xpath_boolean") {
+    fn.xpath_boolean(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_double") {
+    fn.xpath_double(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_number") {
+    fn.xpath_number(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_float") {
+    fn.xpath_float(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_int") {
+    fn.xpath_int(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_long") {
+    fn.xpath_long(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_short") {
+    fn.xpath_short(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_string") {
+    fn.xpath_string(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("unix_date") {
+    fn.unix_date(fn.to_date(fn.col("s"), "yyyy-MM-dd"))
+  }
+
+  temporalFunctionTest("unix_seconds") {
+    fn.unix_seconds(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
+  }
+
+  temporalFunctionTest("unix_millis") {
+    fn.unix_millis(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
+  }
+
+  temporalFunctionTest("unix_micros") {
+    fn.unix_micros(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
   }
 
   temporalFunctionTest("trunc") {
@@ -2035,6 +2172,10 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
+  test("width_bucket") {
+    simple.select(fn.width_bucket(fn.col("b"), fn.col("b"), fn.col("b"), fn.col("a")))
+  }
+
   test("test broadcast") {
     left.join(fn.broadcast(right), "id")
   }
@@ -2251,10 +2392,8 @@ class PlanGenerationTestSuite
   //  1. cd connector/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = java.nio.file.Paths
-    .get("../", "common", "src", "test", "resources", "protobuf-tests")
-    .resolve("common.desc")
-    .toString
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
+    "connect/common/src/test/resources/protobuf-tests/common.desc"
 
   test("from_protobuf messageClassName") {
     binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))

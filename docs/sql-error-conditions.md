@@ -59,12 +59,6 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 
 Cannot cast `<sourceType>` to `<targetType>`.
 
-### CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR
-
-SQLSTATE: none assigned
-
-Error constructing FileDescriptor for `<descFilePath>`.
-
 ### CANNOT_CONVERT_PROTOBUF_FIELD_TYPE_TO_SQL_TYPE
 
 SQLSTATE: none assigned

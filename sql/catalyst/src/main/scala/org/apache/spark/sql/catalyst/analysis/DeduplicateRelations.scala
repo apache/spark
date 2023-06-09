@@ -308,8 +308,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   }
 
   private def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+    // SPARK-43030: It's important to avoid creating new aliases for duplicate aliases
+    // in the original project list, to avoid assertion failures when rewriting attributes
+    // in transformUpWithNewOutput.
+    val oldAliasToNewAlias = AttributeMap(expressions.collect {
+      case a: Alias => (a.toAttribute, Alias(a.child, a.name)())
+    })
     expressions.map {
-      case a: Alias => Alias(a.child, a.name)()
+      case a: Alias => oldAliasToNewAlias(a.toAttribute)
       case other => other
     }
   }

@@ -413,6 +413,15 @@ of the most common options to set are:
   <td>2.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.log.level</code></td>
+  <td>(none)</td>
+  <td>
+    When set, overrides any user-defined log settings as if calling
+    <code>SparkContext.setLogLevel()</code> at Spark startup. Valid log levels include: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN".
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>

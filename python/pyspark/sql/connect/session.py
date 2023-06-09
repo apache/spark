@@ -45,6 +45,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64tz_dtype,
     is_timedelta64_dtype,
 )
+import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
@@ -331,8 +332,12 @@ class SparkSession:
 
             # Determine arrow types to coerce data when creating batches
             arrow_schema: Optional[pa.Schema] = None
+            spark_types: List[Optional[DataType]]
+            arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
-                arrow_schema = to_arrow_schema(cast(StructType, _deduplicate_field_names(schema)))
+                deduped_schema = cast(StructType, _deduplicate_field_names(schema))
+                spark_types = [field.dataType for field in deduped_schema.fields]
+                arrow_schema = to_arrow_schema(deduped_schema)
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
@@ -342,14 +347,15 @@ class SparkSession:
                 )
             else:
                 # Any timestamps must be coerced to be compatible with Spark
-                arrow_types = [
-                    to_arrow_type(TimestampType())
+                spark_types = [
+                    TimestampType()
                     if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
-                    else to_arrow_type(DayTimeIntervalType())
+                    else DayTimeIntervalType()
                     if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
                 ]
+                arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
 
             timezone, safecheck = self._client.get_configs(
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
@@ -358,7 +364,14 @@ class SparkSession:
             ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
 
             _table = pa.Table.from_batches(
-                [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
+                [
+                    ser._create_batch(
+                        [
+                            (c, at, st)
+                            for (_, c), at, st in zip(data.items(), arrow_types, spark_types)
+                        ]
+                    )
+                ]
             )
 
             if isinstance(schema, StructType):
@@ -601,7 +614,9 @@ class SparkSession:
         """
         return self._client
 
-    def addArtifacts(self, *path: str, pyfile: bool = False) -> None:
+    def addArtifacts(
+        self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
+    ) -> None:
         """
         Add artifact(s) to the client session. Currently only local files are supported.
 
@@ -613,10 +628,48 @@ class SparkSession:
             Artifact's URIs to add.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
+            The pyfiles are directly inserted into the path when executing Python functions
+            in executors.
+        archive : bool
+            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
+            The archives are unpacked on the executor side automatically.
+        file : bool
+            Add a file to be downloaded with this Spark job on every node.
+            The ``path`` passed can only be a local file for now.
         """
-        self._client.add_artifacts(*path, pyfile=pyfile)
+        if sum([file, pyfile, archive]) > 1:
+            raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
+        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifact = addArtifacts
+
+    def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
+        """
+        Copy file from local to cloud storage file system.
+        If the file already exits in destination path, old file is overwritten.
+
+        Parameters
+        ----------
+        local_path: str
+            Path to a local file. Directories are not supported.
+            The path can be either an absolute path or a relative path.
+
+        dest_path: str
+            The cloud storage path to the destination the file will
+            be copied to.
+            The path must be an an absolute path.
+
+        Notes
+        -----
+        This API is a developer API.
+        """
+        if urllib.parse.urlparse(dest_path).scheme:
+            raise ValueError(
+                "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
+                "without scheme, and spark driver uses the default scheme to "
+                "determine the destination file system."
+            )
+        self._client.copy_from_local_to_fs(local_path, dest_path)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

@@ -588,7 +588,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_sketch_agg(columnName: String, lgConfigK: Int): Column =
-    Column.fn("hll_sketch_agg", Column(columnName), lit(lgConfigK))
+    hll_sketch_agg(Column(columnName), lgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
@@ -607,8 +607,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def hll_sketch_agg(columnName: String): Column =
-    Column.fn("hll_sketch_agg", Column(columnName))
+  def hll_sketch_agg(columnName: String): Column = hll_sketch_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -632,7 +631,7 @@ object functions {
    * @since 3.5.0
    */
   def hll_union_agg(columnName: String, allowDifferentLgConfigK: Boolean): Column =
-    Column.fn("hll_union_agg", Column(columnName), lit(allowDifferentLgConfigK))
+    hll_union_agg(Column(columnName), allowDifferentLgConfigK)
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches
@@ -653,8 +652,7 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def hll_union_agg(columnName: String): Column =
-    Column.fn("hll_union_agg", Column(columnName))
+  def hll_union_agg(columnName: String): Column = hll_union_agg(Column(columnName))
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
@@ -815,6 +813,25 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = Column.fn("percentile", e, percentage)
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column, frequency: Column): Column =
+    Column.fn("percentile", e, percentage, frequency)
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
    * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
    * more than `percentage` of `col` values is less than the value or equal to that value.
@@ -855,6 +872,14 @@ object functions {
    * @since 3.4.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -993,6 +1018,88 @@ object functions {
    * @since 3.4.0
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = Column.fn("regr_avgx", y, x)
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = Column.fn("regr_avgy", y, x)
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs in a group, where `y` is the
+   * dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = Column.fn("regr_count", y, x)
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line for
+   * non-null pairs in a group, where `y` is the dependent variable and `x` is the independent
+   * variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column = Column.fn("regr_intercept", y, x)
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = Column.fn("regr_r2", y, x)
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs in a
+   * group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column = Column.fn("regr_slope", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = Column.fn("regr_sxx", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = Column.fn("regr_sxy", y, x)
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group,
+   * where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1190,8 +1297,7 @@ object functions {
    * @group window_funcs
    * @since 3.4.0
    */
-  def nth_value(e: Column, offset: Int): Column =
-    Column.fn("nth_value", e, lit(offset))
+  def nth_value(e: Column, offset: Int): Column = nth_value(e, offset, false)
 
   /**
    * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
@@ -1881,6 +1987,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -1954,6 +2076,14 @@ object functions {
    * @since 3.4.0
    */
   def csc(e: Column): Column = Column.fn("csc", e)
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = Column.fn("e")
 
   /**
    * Computes the exponential of the given value.
@@ -2147,6 +2277,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 3.4.0
    */
   def log(e: Column): Column = Column.fn("log", e)
@@ -2224,6 +2362,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = Column.fn("negative", e)
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = Column.fn("pi")
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = Column.fn("positive", e)
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2286,6 +2448,14 @@ object functions {
    * @since 3.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2415,6 +2585,14 @@ object functions {
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2604,6 +2782,27 @@ object functions {
    */
   def radians(columnName: String): Column = radians(Column(columnName))
 
+  /**
+   * Returns the bucket number into which the value of this expression would fall after being
+   * evaluated. Note that input arguments must follow conditions listed below; otherwise, the
+   * method will return null.
+   *
+   * @param v
+   *   value to compute a bucket number in the histogram
+   * @param min
+   *   minimum value of the histogram
+   * @param max
+   *   maximum value of the histogram
+   * @param numBucket
+   *   the number of buckets
+   * @return
+   *   the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column =
+    Column.fn("width_bucket", v, min, max, numBucket)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2715,7 +2914,27 @@ object functions {
    * @since 3.5.0
    */
   def hll_sketch_estimate(columnName: String): Column =
-    Column.fn("hll_sketch_estimate", Column(columnName))
+    hll_sketch_estimate(Column(columnName))
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
+   * Union object. Throws an exception if sketches have different lgConfigK values.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def hll_union(c1: Column, c2: Column): Column =
+    Column.fn("hll_union", c1, c2)
+
+  /**
+   * Merges two binary representations of Datasketches HllSketch objects, using a Dataskethes
+   * Union object. Throws an exception if sketches have different lgConfigK values.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def hll_union(columnName1: String, columnName2: String): Column =
+    hll_union(Column(columnName1), Column(columnName2))
 
   /**
    * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
@@ -2740,27 +2959,7 @@ object functions {
       columnName1: String,
       columnName2: String,
       allowDifferentLgConfigK: Boolean): Column =
-    Column.fn("hll_union", Column(columnName1), Column(columnName2), lit(allowDifferentLgConfigK))
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Datasketches
-   * Union object. Throws an exception if sketches have different lgConfigK values.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(c1: Column, c2: Column): Column =
-    Column.fn("hll_union", c1, c2)
-
-  /**
-   * Merges two binary representations of Datasketches HllSketch objects, using a Dataskethes
-   * Union object. Throws an exception if sketches have different lgConfigK values.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def hll_union(columnName1: String, columnName2: String): Column =
-    Column.fn("hll_union", Column(columnName1), Column(columnName2))
+    hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -2888,6 +3087,17 @@ object functions {
    * @since 3.4.0
    */
   def lower(e: Column): Column = Column.fn("lower", e)
+
+  /**
+   * Computes the Levenshtein distance of the two given string columns if it's less than or equal
+   * to a given threshold.
+   * @return
+   *   result distance, or -1
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def levenshtein(l: Column, r: Column, threshold: Int): Column =
+    Column.fn("levenshtein", l, r, lit(threshold))
 
   /**
    * Computes the Levenshtein distance of the two given string columns.
@@ -3697,6 +3907,40 @@ object functions {
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
 
   /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = Column.fn("unix_date", e)
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
+   * precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = Column.fn("unix_millis", e)
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
+   * precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = Column.fn("unix_seconds", e)
+
+  /**
    * Returns date truncated to the unit specified by the format.
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
@@ -4239,6 +4483,93 @@ object functions {
    */
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
+
+  /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(xml: Column, path: Column): Column =
+    Column.fn("xpath", xml, path)
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(xml: Column, path: Column): Column =
+    Column.fn("xpath_boolean", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(xml: Column, path: Column): Column =
+    Column.fn("xpath_double", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(xml: Column, path: Column): Column =
+    Column.fn("xpath_number", xml, path)
+
+  /**
+   * Returns a float value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(xml: Column, path: Column): Column =
+    Column.fn("xpath_float", xml, path)
+
+  /**
+   * Returns an integer value, or the value zero if no match is found, or a match is found but the
+   * value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(xml: Column, path: Column): Column =
+    Column.fn("xpath_int", xml, path)
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found, or a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(xml: Column, path: Column): Column =
+    Column.fn("xpath_long", xml, path)
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found, or a match is found
+   * but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(xml: Column, path: Column): Column =
+    Column.fn("xpath_short", xml, path)
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(xml: Column, path: Column): Column =
+    Column.fn("xpath_string", xml, path)
 
   private def newLambdaVariable(name: String): proto.Expression.UnresolvedNamedLambdaVariable = {
     proto.Expression.UnresolvedNamedLambdaVariable

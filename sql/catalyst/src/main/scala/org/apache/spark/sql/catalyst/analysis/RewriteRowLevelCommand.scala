@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExprId, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.ORIGINAL_ROW_ID_VALUE_PREFIX
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
@@ -89,6 +89,33 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     }
 
     rowIdAttrs
+  }
+
+  protected def deltaDeleteOutput(
+      rowAttrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute],
+      metadataAttrs: Seq[Attribute]): Seq[Expression] = {
+    val rowValues = buildDeltaDeleteRowValues(rowAttrs, rowIdAttrs)
+    Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataAttrs
+  }
+
+  private def buildDeltaDeleteRowValues(
+      rowAttrs: Seq[Attribute],
+      rowIdAttrs: Seq[Attribute]): Seq[Expression] = {
+
+    // nullify all row attrs that don't belong to row ID
+    val rowIdAttSet = AttributeSet(rowIdAttrs)
+    rowAttrs.map {
+      case attr if rowIdAttSet.contains(attr) => attr
+      case attr => Literal(null, attr.dataType)
+    }
+  }
+
+  protected def deltaInsertOutput(
+      rowValues: Seq[Expression],
+      metadataAttrs: Seq[Attribute]): Seq[Expression] = {
+    val metadataValues = metadataAttrs.map(attr => Literal(null, attr.dataType))
+    Seq(Literal(INSERT_OPERATION)) ++ rowValues ++ metadataValues
   }
 
   protected def buildWriteDeltaProjections(
