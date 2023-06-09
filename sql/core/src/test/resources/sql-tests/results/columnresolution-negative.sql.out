@@ -349,8 +349,8 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
   "messageParameters" : {
-    "columns" : "i1",
-    "targetString" : "t1.x.y"
+    "columns" : "`i1`",
+    "targetString" : "`t1`.`x`.`y`"
   },
   "queryContext" : [ {
     "objectType" : "",

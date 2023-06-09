@@ -94,7 +94,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER VIEW table_name DROP PARTITION (p=1)"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER VIEW ... DROP PARTITION"),
       context = ExpectedContext(
         fragment = sql,

@@ -6,7 +6,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
   "messageParameters" : {
-    "name" : "dummy"
+    "name" : "`dummy`"
   },
   "queryContext" : [ {
     "objectType" : "",

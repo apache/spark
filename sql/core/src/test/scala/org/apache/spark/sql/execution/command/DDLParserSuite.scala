@@ -107,7 +107,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
       context = ExpectedContext(
         fragment = sql,
@@ -119,7 +119,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
       context = ExpectedContext(
         fragment = sql,
@@ -133,7 +133,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |(dt='2008-08-08', country='us') WITH TABLE table_name_2""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE EXCHANGE PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -145,7 +145,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')"
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE ARCHIVE PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -157,7 +157,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')"
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE UNARCHIVE PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -169,7 +169,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'"
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE SET FILEFORMAT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -180,7 +180,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       "SET FILEFORMAT PARQUET"
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE SET FILEFORMAT"),
       context = ExpectedContext(
         fragment = sql2,
@@ -192,7 +192,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name TOUCH"
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE TOUCH"),
       context = ExpectedContext(
         fragment = sql1,
@@ -202,7 +202,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')"
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE TOUCH"),
       context = ExpectedContext(
         fragment = sql2,
@@ -214,7 +214,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name COMPACT 'compaction_type'"
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE COMPACT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -226,7 +226,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |COMPACT 'MAJOR'""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE COMPACT"),
       context = ExpectedContext(
         fragment = sql2,
@@ -238,7 +238,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name CONCATENATE"
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE CONCATENATE"),
       context = ExpectedContext(
         fragment = sql1,
@@ -248,7 +248,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE"
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE CONCATENATE"),
       context = ExpectedContext(
         fragment = sql2,
@@ -260,7 +260,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name CLUSTERED BY (col_name) SORTED BY (col2_name) INTO 3 BUCKETS"
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql1,
@@ -270,7 +270,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name CLUSTERED BY (col_name) INTO 3 BUCKETS"
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql2,
@@ -280,7 +280,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "ALTER TABLE table_name NOT CLUSTERED"
     checkError(
       exception = parseException(sql3),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE NOT CLUSTERED"),
       context = ExpectedContext(
         fragment = sql3,
@@ -290,7 +290,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "ALTER TABLE table_name NOT SORTED"
     checkError(
       exception = parseException(sql4),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE NOT SORTED"),
       context = ExpectedContext(
         fragment = sql4,
@@ -302,7 +302,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name NOT SKEWED"
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE NOT SKEWED"),
       context = ExpectedContext(
         fragment = sql1,
@@ -312,7 +312,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name NOT STORED AS DIRECTORIES"
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE NOT STORED AS DIRECTORIES"),
       context = ExpectedContext(
         fragment = sql2,
@@ -322,7 +322,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\""
     checkError(
       exception = parseException(sql3),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE SET SKEWED LOCATION"),
       context = ExpectedContext(
         fragment = sql3,
@@ -332,7 +332,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES"
     checkError(
       exception = parseException(sql4),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE SKEWED BY"),
       context = ExpectedContext(
         fragment = sql4,
@@ -346,7 +346,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "ALTER TABLE REPLACE COLUMNS"),
       context = ExpectedContext(
         fragment = sql,
@@ -371,7 +371,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
     checkError(
       exception = parseException(sql1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "CREATE TEMPORARY TABLE ... AS ..., use CREATE TEMPORARY VIEW instead"),
       context = ExpectedContext(
@@ -385,7 +385,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
       context = ExpectedContext(
@@ -399,7 +399,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
     checkError(
       exception = parseException(sql3),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(
         fragment = sql3,
@@ -610,7 +610,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
     checkError(
       exception = parseException(v1),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE VIEW ... PARTITIONED ON"),
       context = ExpectedContext(
         fragment = v1,
@@ -686,7 +686,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "CREATE FUNCTION a as 'fun' USING OTHER 'o'"
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE FUNCTION with resource type 'other'"),
       context = ExpectedContext(
         fragment = sql,
@@ -744,7 +744,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |AS SELECT * FROM tab1""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
       context = ExpectedContext(
         fragment = sql,

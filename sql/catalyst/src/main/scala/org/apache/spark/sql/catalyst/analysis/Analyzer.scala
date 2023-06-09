@@ -2070,7 +2070,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case _: NoSuchFunctionException =>
               u.failAnalysis(
                 errorClass = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-                messageParameters = Map("name" -> u.name.quoted))
+                messageParameters = Map("name" -> toSQLId(u.name)))
           }
         }
 

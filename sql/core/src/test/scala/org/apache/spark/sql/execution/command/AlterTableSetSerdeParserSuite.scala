@@ -31,7 +31,7 @@ class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession
       "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
       context = ExpectedContext(
         fragment = sql,

@@ -255,7 +255,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(sql)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = parameters,
       context = context
     )
@@ -1348,7 +1348,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(sql)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" ->
         "ALTER TABLE table ALTER COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER"),
       context = ExpectedContext(fragment = sql, start = 0, stop = 33))
@@ -2673,7 +2673,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         extractTableDesc(s4)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'storage.handler.class.name'",
@@ -2768,7 +2768,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "CREATE TEMPORARY TABLE ..., use CREATE TEMPORARY VIEW instead"),
       context = ExpectedContext(fragment = query, start = 0, stop = 48))
@@ -2840,7 +2840,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query1)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query1, start = 0, stop = 72))
 
@@ -2849,7 +2849,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query2)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query2, start = 0, stop = 96))
 
@@ -2858,7 +2858,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query3)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query3, start = 0, stop = 118))
   }
@@ -2913,7 +2913,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query1)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'org.papachi.StorageHandler'",
@@ -2925,7 +2925,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query2)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')",

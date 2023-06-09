@@ -739,7 +739,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
       messageParameters = Map(
-        "targetString" -> targetString,
+        "targetString" -> toSQLId(targetString),
         "columns" -> columns))
   }
 
@@ -2983,7 +2983,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     val threshold = if (intervalString == null) "" else intervalString
     new AnalysisException(
       errorClass = "CANNOT_PARSE_INTERVAL",
-      messageParameters = Map("intervalString" -> threshold),
+      messageParameters = Map("intervalString" -> toSQLValue(threshold, StringType)),
       cause = Some(e))
   }
 
