@@ -453,14 +453,14 @@ class StreamingQueryProgress:
         return self._jprogress.numInputRows()
 
     @property
-    def inputRowsPerSecond(self) -> str:
+    def inputRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate of data arriving.
         """
         return self._jprogress.inputRowsPerSecond()
 
     @property
-    def processedRowsPerSecond(self) -> str:
+    def processedRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate at which Spark is processing data..
         """
