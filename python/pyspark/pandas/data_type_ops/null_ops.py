@@ -45,51 +45,27 @@ class NullOps(DataTypeOps):
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        result = pyspark_column_op("__eq__")(left, right)
-        if is_remote():
-            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
-            result = result.fillna(False)
-        return result
+        return pyspark_column_op("__eq__", left, right, fillna=False)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        result = pyspark_column_op("__ne__")(left, right)
-        if is_remote():
-            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
-            result = result.fillna(True)
-        return result
+        return pyspark_column_op("__ne__", left, right, fillna=True)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        result = pyspark_column_op("__lt__")(left, right)
-        if is_remote():
-            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
-            result = result.fillna(False)
-        return result
+        return pyspark_column_op("__lt__", left, right, fillna=False)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        result = pyspark_column_op("__le__")(left, right)
-        if is_remote():
-            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
-            result = result.fillna(False)
-        return result
+        return pyspark_column_op("__le__", left, right, fillna=False)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        result = pyspark_column_op("__ge__")(left, right)
-        if is_remote():
-            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
-            result = result.fillna(False)
-        return result
+        return pyspark_column_op("__ge__", left, right, fillna=False)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        result = pyspark_column_op("__gt__")(left, right)
-        if is_remote():
-            # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
-            result = result.fillna(False)
-        return result
+        return pyspark_column_op("__gt__", left, right, fillna=False)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

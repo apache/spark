@@ -237,7 +237,7 @@ def try_remote_observation(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def pyspark_column_op(func_name: str) -> Callable[..., "SeriesOrIndex"]:
+def pyspark_column_op(func_name: str, left, right, fillna=None) -> Callable[..., "SeriesOrIndex"]:
     """
     Wrapper function for column_op to get proper Column class.
     """
@@ -250,4 +250,6 @@ def pyspark_column_op(func_name: str) -> Callable[..., "SeriesOrIndex"]:
         Column = ConnectColumn
     else:
         Column = PySparkColumn  # type: ignore[assignment]
-    return column_op(getattr(Column, func_name))
+    result = column_op(getattr(Column, func_name))(left, right)
+    # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+    return result.fillna(fillna) if fillna is not None else result
