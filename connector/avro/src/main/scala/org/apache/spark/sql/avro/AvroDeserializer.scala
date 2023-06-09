@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimeMicros, TimeMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
@@ -162,8 +162,7 @@ private[sql] class AvroDeserializer(
             updater.setLong(ordinal, value.asInstanceOf[Long])
           case (_, LongType) => avroType.getLogicalType match {
             case _: TimestampMicros | _: TimestampMillis |
-                 _: LocalTimestampMillis | _: LocalTimestampMicros |
-                 _: TimeMicros | _: TimeMillis => (updater, ordinal, value) =>
+                 _: LocalTimestampMillis | _: LocalTimestampMicros => (updater, ordinal, value) =>
               updater.setLong(ordinal, value.asInstanceOf[Long])
             case other => throw new IncompatibleSchemaException(errorPrefix +
               s"Avro logical type $other cannot be converted to SQL type ${TimestampType.sql}.")
