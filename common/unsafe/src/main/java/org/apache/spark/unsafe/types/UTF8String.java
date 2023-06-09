@@ -535,14 +535,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces in the left side
-    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
+    while (s < this.numBytes && (Character.isWhitespace(getByte(s)) || Character.isISOControl(getByte(s)))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
-    while (e > s && Character.isWhitespace(getByte(e))) e--;
+    while (e > s && (Character.isWhitespace(getByte(e)) || Character.isISOControl(getByte(e)))) e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1131,11 +1131,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes &&
+            (Character.isWhitespace(getByte(offset)) || Character.isISOControl(getByte(offset)))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && (Character.isWhitespace(getByte(end)) || Character.isISOControl(getByte(end)))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1228,11 +1229,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes &&
+            (Character.isWhitespace(getByte(offset)) || Character.isISOControl(getByte(offset)))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && (Character.isWhitespace(getByte(end)) || Character.isISOControl(getByte(end)))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
