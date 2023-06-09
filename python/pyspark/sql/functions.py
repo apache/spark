@@ -1215,6 +1215,8 @@ def csc(col: "ColumnOrName") -> Column:
 def e() -> Column:
     """Returns Euler's number.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> spark.range(1).select(e()).show()
@@ -1457,6 +1459,8 @@ negate = negative
 @try_remote_functions
 def pi() -> Column:
     """Returns Pi.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
@@ -5529,6 +5533,8 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 def unix_date(col: "ColumnOrName") -> Column:
     """Returns the number of days since 1970-01-01.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -5543,6 +5549,8 @@ def unix_date(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def unix_micros(col: "ColumnOrName") -> Column:
     """Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
@@ -5560,6 +5568,8 @@ def unix_millis(col: "ColumnOrName") -> Column:
     """Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
     Truncates higher levels of precision.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -5575,6 +5585,8 @@ def unix_millis(col: "ColumnOrName") -> Column:
 def unix_seconds(col: "ColumnOrName") -> Column:
     """Returns the number of seconds since 1970-01-01 00:00:00 UTC.
     Truncates higher levels of precision.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
@@ -5644,6 +5656,8 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
     Returns a string array of values within the nodes of xml that match the XPath expression.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> df = spark.createDataFrame(
@@ -5658,6 +5672,8 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
     Returns true if the XPath expression evaluates to true, or if a matching node is found.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
@@ -5674,6 +5690,8 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     Returns a double value, the value zero if no match is found,
     or NaN if a match is found but the value is non-numeric.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
@@ -5688,6 +5706,8 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
     Returns a double value, the value zero if no match is found,
     or NaN if a match is found but the value is non-numeric.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
@@ -5704,6 +5724,8 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     Returns a float value, the value zero if no match is found,
     or NaN if a match is found but the value is non-numeric.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
@@ -5718,6 +5740,8 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
     Returns an integer value, or the value zero if no match is found,
     or a match is found but the value is non-numeric.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
@@ -5734,6 +5758,8 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     Returns a long integer value, or the value zero if no match is found,
     or a match is found but the value is non-numeric.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
@@ -5749,6 +5775,8 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     Returns a short integer value, or the value zero if no match is found,
     or a match is found but the value is non-numeric.
 
+    .. versionadded:: 3.5.0
+
     Examples
     --------
     >>> df = spark.createDataFrame([('<a><b>1</b><b>2</b></a>',)], ['x'])
@@ -5762,6 +5790,8 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
 def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
     Returns the text contents of the first xml node that matches the XPath expression.
+
+    .. versionadded:: 3.5.0
 
     Examples
     --------
