@@ -1663,14 +1663,17 @@ class ListTables(LogicalPlan):
 
 
 class ListFunctions(LogicalPlan):
-    def __init__(self, db_name: Optional[str] = None) -> None:
+    def __init__(self, db_name: Optional[str] = None, pattern: Optional[str] = None) -> None:
         super().__init__(None)
         self._db_name = db_name
+        self._pattern = pattern
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = proto.Relation(catalog=proto.Catalog(list_functions=proto.ListFunctions()))
         if self._db_name is not None:
             plan.catalog.list_functions.db_name = self._db_name
+        if self._pattern is not None:
+            plan.catalog.list_functions.pattern = self._pattern
         return plan
 
 
