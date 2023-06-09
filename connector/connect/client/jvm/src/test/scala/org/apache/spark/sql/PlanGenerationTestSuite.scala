@@ -1498,7 +1498,11 @@ class PlanGenerationTestSuite
     fn.regexp_extract(fn.col("g"), "(\\d+)-(\\d+)", 1)
   }
 
-  functionTest("regexp_extract_all") {
+  functionTest("regexp_extract_all without regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"))
+  }
+
+  functionTest("regexp_extract_all with regex group index") {
     fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"), lit(1))
   }
 
@@ -1510,7 +1514,11 @@ class PlanGenerationTestSuite
     fn.regexp_substr(fn.col("g"), lit("\\d{2}(a|b|m)"))
   }
 
-  functionTest("regexp_instr") {
+  functionTest("regexp_instr without regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"))
+  }
+
+  functionTest("regexp_instr with regex group index") {
     fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"), lit(1))
   }
 
