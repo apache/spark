@@ -986,6 +986,10 @@ class PlanGenerationTestSuite
     fn.min_by(fn.col("a"), fn.col("b"))
   }
 
+  functionTest("percentile") {
+    fn.percentile(fn.col("a"), fn.lit(0.3))
+  }
+
   functionTest("percentile_approx") {
     fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
   }
@@ -1000,6 +1004,10 @@ class PlanGenerationTestSuite
 
   functionTest("stddev") {
     fn.stddev("a")
+  }
+
+  functionTest("std") {
+    fn.std(fn.col("a"))
   }
 
   functionTest("stddev_samp") {
@@ -1178,6 +1186,14 @@ class PlanGenerationTestSuite
     fn.ceil(fn.col("b"), lit(2))
   }
 
+  functionTest("ceiling") {
+    fn.ceiling(fn.col("b"))
+  }
+
+  functionTest("ceiling scale") {
+    fn.ceiling(fn.col("b"), lit(2))
+  }
+
   functionTest("conv") {
     fn.conv(fn.col("b"), 10, 16)
   }
@@ -1196,6 +1212,10 @@ class PlanGenerationTestSuite
 
   functionTest("csc") {
     fn.csc(fn.col("b"))
+  }
+
+  functionTest("e") {
+    fn.e()
   }
 
   functionTest("exp") {
@@ -1242,6 +1262,10 @@ class PlanGenerationTestSuite
     fn.log("b")
   }
 
+  functionTest("ln") {
+    fn.ln(fn.col("b"))
+  }
+
   functionTest("log with base") {
     fn.log(2, "b")
   }
@@ -1258,8 +1282,24 @@ class PlanGenerationTestSuite
     fn.log2("a")
   }
 
+  functionTest("negative") {
+    fn.negative(fn.col("a"))
+  }
+
+  functionTest("pi") {
+    fn.pi()
+  }
+
+  functionTest("positive") {
+    fn.positive(fn.col("a"))
+  }
+
   functionTest("pow") {
     fn.pow("a", "b")
+  }
+
+  functionTest("power") {
+    fn.power(fn.col("a"), fn.col("b"))
   }
 
   functionTest("pmod") {
@@ -1296,6 +1336,10 @@ class PlanGenerationTestSuite
 
   functionTest("signum") {
     fn.signum("b")
+  }
+
+  functionTest("sign") {
+    fn.sign(fn.col("b"))
   }
 
   functionTest("sin") {
@@ -2126,6 +2170,10 @@ class PlanGenerationTestSuite
 
   test("pivot without column values") {
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
+  }
+
+  test("width_bucket") {
+    simple.select(fn.width_bucket(fn.col("b"), fn.col("b"), fn.col("b"), fn.col("a")))
   }
 
   test("test broadcast") {

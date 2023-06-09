@@ -21,7 +21,6 @@ from typing import Any, Union
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql.column import Column
 from pyspark.sql.types import (
     BooleanType,
     DayTimeIntervalType,
@@ -66,8 +65,6 @@ class TimedeltaOps(DataTypeOps):
         return col
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
 
         if (
@@ -75,17 +72,15 @@ class TimedeltaOps(DataTypeOps):
             and isinstance(right.spark.data_type, DayTimeIntervalType)
             or isinstance(right, timedelta)
         ):
-            return column_op(Column.__sub__)(left, right)
+            return pyspark_column_op("__sub__")(left, right)
         else:
             raise TypeError("Timedelta subtraction can only be applied to timedelta series.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
 
         if isinstance(right, timedelta):
-            return column_op(Column.__rsub__)(left, right)
+            return pyspark_column_op("__rsub__")(left, right)
         else:
             raise TypeError("Timedelta subtraction can only be applied to timedelta series.")
 
