@@ -51,7 +51,7 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedLocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -358,7 +358,8 @@ class SparkSession:
                 arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
 
             timezone, safecheck = self._client.get_configs(
-                "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
+                "spark.sql.session.timeZone",
+                "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
             ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
@@ -466,10 +467,17 @@ class SparkSession:
             )
 
         if _schema is not None:
-            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
+            localRelation = LocalRelation(_table, schema=_schema.json())
         else:
-            df = DataFrame.withPlan(LocalRelation(_table), self)
+            localRelation = LocalRelation(_table)
 
+        cacheThreshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
+        if cacheThreshold[0] is None or _table.nbytes < int(cacheThreshold[0]):
+            plan = localRelation
+        else:
+            plan = CachedLocalRelation(hash=self.cacheLocalRelation(localRelation))
+
+        df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
             df = df.toDF(*_cols)
         return df

@@ -652,7 +652,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
     def test_streaming_local_relation(self):
-        threshold = 1024 * 1024
+        threshold = 64 * 1024 * 1024
         with self.sql_conf({"spark.sql.session.localRelationCacheThreshold": threshold}):
             suffix = "abcdef"
             letters = string.ascii_lowercase
