@@ -1215,7 +1215,6 @@ def csc(col: "ColumnOrName") -> Column:
 def e() -> Column:
     """Returns Euler's number.
 
-
     .. versionadded:: 3.5.0
 
     Examples
@@ -5550,7 +5549,6 @@ def unix_date(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def unix_micros(col: "ColumnOrName") -> Column:
     """Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
-
 
     .. versionadded:: 3.5.0
 
