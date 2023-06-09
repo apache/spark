@@ -362,7 +362,7 @@ class LocalRelation(LogicalPlan):
         if self._schema is not None:
             plan.local_relation.schema = self._schema
         return plan
-    
+
     def serialize(self, session: "SparkConnectClient") -> bytes:
         p = self.plan(session)
         return bytes(p.local_relation.SerializeToString())

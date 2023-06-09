@@ -657,7 +657,6 @@ class SparkSession:
         serialized = localRelation.serialize(self._client)
         return self._client.cache_artifact(serialized)
 
-
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
         Copy file from local to cloud storage file system.
