@@ -473,14 +473,14 @@ class SparkSession:
             )
 
         if _schema is not None:
-            localRelation = LocalRelation(_table, schema=_schema.json())
+            local_relation = LocalRelation(_table, schema=_schema.json())
         else:
-            localRelation = LocalRelation(_table)
+            local_relation = LocalRelation(_table)
 
         cacheThreshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
-        plan: LogicalPlan = localRelation
+        plan: LogicalPlan = local_relation
         if cacheThreshold[0] is not None and int(cacheThreshold[0]) <= _table.nbytes:
-            plan = CachedLocalRelation(self._cacheLocalRelation(localRelation))
+            plan = CachedLocalRelation(self._cache_local_relation(local_relation))
 
         df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
@@ -656,11 +656,11 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
-    def _cacheLocalRelation(self, localRelation: LocalRelation) -> str:
+    def _cache_local_relation(self, local_relation: LocalRelation) -> str:
         """
         Cache the local relation at the server side if it has not been cached yet.
         """
-        serialized = localRelation.serialize(self._client)
+        serialized = local_relation.serialize(self._client)
         return self._client.cache_artifact(serialized)
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
