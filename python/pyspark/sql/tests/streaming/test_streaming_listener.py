@@ -66,7 +66,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"
             ),
-            17,
+            15,
             msg,
         )
         self.assertEquals(
@@ -113,8 +113,15 @@ class StreamingListenerTests(ReusedSQLTestCase):
             self.spark.streams.addListener(test_listener)
 
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-            df = df.groupBy().count()  # make query stateful
-            q = df.writeStream.format("noop").queryName("test").outputMode("complete").start()
+
+            # check successful stateful query
+            df_stateful = df.groupBy().count()  # make query stateful
+            q = (
+                df_stateful.writeStream.format("noop")
+                .queryName("test")
+                .outputMode("complete")
+                .start()
+            )
             self.assertTrue(q.isActive)
             time.sleep(10)
             q.stop()
@@ -125,6 +132,17 @@ class StreamingListenerTests(ReusedSQLTestCase):
             self.check_start_event(start_event)
             self.check_progress_event(progress_event)
             self.check_terminated_event(terminated_event)
+
+            # Check query terminated with exception
+            from pyspark.sql.functions import col, udf
+
+            bad_udf = udf(lambda x: 1 / 0)
+            q = df.select(bad_udf(col("value"))).writeStream.format("noop").start()
+            time.sleep(5)
+            q.stop()
+            self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
+            self.check_terminated_event(terminated_event, "ZeroDivisionError")
+
         finally:
             self.spark.streams.removeListener(test_listener)
 
@@ -144,14 +162,20 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(event, QueryProgressEvent))
         self.check_streaming_query_progress(event.progress)
 
-    def check_terminated_event(self, event):
+    def check_terminated_event(self, event, exception=None, error_class=None):
         """Check QueryTerminatedEvent"""
         self.assertTrue(isinstance(event, QueryTerminatedEvent))
         self.assertTrue(isinstance(event.id, uuid.UUID))
         self.assertTrue(isinstance(event.runId, uuid.UUID))
-        # TODO: Needs a test for exception.
-        self.assertEquals(event.exception, None)
-        self.assertEquals(event.errorClassOnException, None)
+        if exception:
+            self.assertTrue(exception in event.exception)
+        else:
+            self.assertEquals(event.exception, None)
+
+        if error_class:
+            self.assertTrue(error_class in event.errorClassOnException)
+        else:
+            self.assertEquals(event.errorClassOnException, None)
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""
@@ -324,14 +348,14 @@ class StreamingListenerTests(ReusedSQLTestCase):
             {
                 "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
                 "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
-                "exception" : null,
+                "exception" : "org.apache.spark.SparkException: Job aborted due to stage failure...",
                 "errorClassOnException" : null}
         """
         terminated_event = QueryTerminatedEvent.fromJson(json.loads(terminated_json))
-        self.check_terminated_event(terminated_event)
+        self.check_terminated_event(terminated_event, "SparkException")
         self.assertTrue(terminated_event.id == uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
         self.assertTrue(terminated_event.runId == uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
-        self.assertTrue(terminated_event.exception is None)
+        self.assertTrue("SparkException" in terminated_event.exception)
         self.assertTrue(terminated_event.errorClassOnException is None)
 
     def test_streaming_query_progress_fromJson(self):
