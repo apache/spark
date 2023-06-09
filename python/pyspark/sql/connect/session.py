@@ -51,7 +51,14 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedLocalRelation, CachedRelation
+from pyspark.sql.connect.plan import (
+    SQL,
+    Range,
+    LocalRelation,
+    LogicalPlan,
+    CachedLocalRelation,
+    CachedRelation,
+)
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -471,10 +478,9 @@ class SparkSession:
             localRelation = LocalRelation(_table)
 
         cacheThreshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
-        if cacheThreshold[0] is None or _table.nbytes < int(cacheThreshold[0]):
-            plan = localRelation
-        else:
-            plan = CachedLocalRelation(hash=self._cacheLocalRelation(localRelation))
+        plan: LogicalPlan = localRelation
+        if cacheThreshold[0] is not None and int(cacheThreshold[0]) <= _table.nbytes:
+            plan = CachedLocalRelation(self._cacheLocalRelation(localRelation))
 
         df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
