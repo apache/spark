@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -853,6 +854,35 @@ object functions {
   def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr)
+    }
+  }
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(
+      e: Column,
+      percentage: Column,
+      frequency: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr, frequency.expr)
+    }
+  }
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
    * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
    * no more than `percentage` of `col` values is less than the value or equal to that value.
@@ -900,6 +930,14 @@ object functions {
    * @since 1.6.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1043,6 +1081,89 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = withAggregateFunction { RegrAvgX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = withAggregateFunction { RegrAvgY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = withAggregateFunction { RegrCount(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line
+   * for non-null pairs in a group, where `y` is the dependent variable and
+   * `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column =
+    withAggregateFunction { RegrIntercept(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = withAggregateFunction { RegrR2(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column =
+    withAggregateFunction { RegrSlope(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = withAggregateFunction { RegrSXX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = withAggregateFunction { RegrSXY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = withAggregateFunction { RegrSYY(y.expr, x.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1912,6 +2033,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -1974,6 +2111,14 @@ object functions {
    * @since 3.3.0
    */
   def csc(e: Column): Column = withExpr { Csc(e.expr) }
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = withExpr { EulerNumber() }
 
   /**
    * Computes the exponential of the given value.
@@ -2173,6 +2318,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 1.4.0
    */
   def log(e: Column): Column = withExpr { Log(e.expr) }
@@ -2250,6 +2403,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = withExpr { UnaryMinus(e.expr) }
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = withExpr { Pi() }
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = withExpr { UnaryPositive(e.expr) }
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2312,6 +2489,14 @@ object functions {
    * @since 1.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2444,6 +2629,14 @@ object functions {
   def shiftrightunsigned(e: Column, numBits: Int): Column = withExpr {
     ShiftRightUnsigned(e.expr, lit(numBits).expr)
   }
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2604,6 +2797,23 @@ object functions {
    * @since 2.1.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
+
+  /**
+   * Returns the bucket number into which the value of this expression would fall
+   * after being evaluated. Note that input arguments must follow conditions listed below;
+   * otherwise, the method will return null.
+   *
+   * @param v value to compute a bucket number in the histogram
+   * @param min minimum value of the histogram
+   * @param max maximum value of the histogram
+   * @param numBucket the number of buckets
+   * @return the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column = withExpr {
+    WidthBucket(v.expr, min.expr, max.expr, numBucket.expr)
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
@@ -3709,6 +3919,48 @@ object functions {
    */
   def to_date(e: Column, fmt: String): Column = withExpr {
     new ParseToDate(e.expr, Literal(fmt))
+  }
+
+  /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = withExpr {
+    UnixDate(e.expr)
+  }
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = withExpr {
+    UnixMicros(e.expr)
+  }
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = withExpr {
+    UnixMillis(e.expr)
+  }
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = withExpr {
+    UnixSeconds(e.expr)
   }
 
   /**
@@ -5243,6 +5495,102 @@ object functions {
   def days(e: Column): Column = withExpr { Days(e.expr) }
 
   /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(x: Column, p: Column): Column = withExpr {
+    XPathList(x.expr, p.expr)
+  }
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(x: Column, p: Column): Column = withExpr {
+    XPathBoolean(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a float value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(x: Column, p: Column): Column = withExpr {
+    XPathFloat(x.expr, p.expr)
+  }
+
+  /**
+   * Returns an integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(x: Column, p: Column): Column = withExpr {
+    XPathInt(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(x: Column, p: Column): Column = withExpr {
+    XPathLong(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(x: Column, p: Column): Column = withExpr {
+    XPathShort(x.expr, p.expr)
+  }
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(x: Column, p: Column): Column = withExpr {
+    XPathString(x.expr, p.expr)
+  }
+
+    /**
    * A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms

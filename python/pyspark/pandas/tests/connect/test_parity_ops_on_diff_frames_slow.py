@@ -25,12 +25,6 @@ class OpsOnDiffFramesEnabledSlowParityTests(
     OpsOnDiffFramesEnabledSlowTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
     @unittest.skip(
-        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_cov(self):
-        super().test_cov()
-
-    @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_diff(self):
