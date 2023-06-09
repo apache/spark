@@ -441,15 +441,18 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
 
-  private def checkInvalidParameter(plan: LogicalPlan, ctx: ParserRuleContext, statement: String):
+  private def checkInvalidParameter(plan: LogicalPlan, statement: String):
   Unit = {
     plan.foreach { p =>
-      if (p.expressions.exists(_.containsPattern(PARAMETER))) {
-        throw QueryParsingErrors.parameterMarkerNotAllowed(statement, ctx)
+      p.expressions.foreach { expr =>
+        if (expr.containsPattern(PARAMETER)) {
+          throw QueryParsingErrors.parameterMarkerNotAllowed(statement, p.origin)
+        }
       }
     }
+    plan.children.foreach(p => checkInvalidParameter(p, statement))
     plan.innerChildren.collect {
-      case child: LogicalPlan => checkInvalidParameter(child, ctx, statement)
+      case child: LogicalPlan => checkInvalidParameter(child, statement)
     }
   }
 
@@ -508,7 +511,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     // To lift this we would need to reconstitute the body with parameter markers replaced with the
     // values given at CREATE VIEW time, or we would need to store the parameter values alongside
     // the text.
-    checkInvalidParameter(qPlan, ctx.query, "CREATE VIEW body")
+    checkInvalidParameter(qPlan, "CREATE VIEW body")
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,
