@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.Arrays
-
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
@@ -476,7 +474,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val ivEncoder: AgnosticEncoder[IV],
     private val vEncoder: AgnosticEncoder[V],
     private val groupingFunc: Option[ScalarUserDefinedFunction],
-    private val groupingExprs: java.util.List[proto.Expression],
+    private val groupingExprs: Seq[proto.Expression],
     private val valueMapFunc: IV => V)
     extends KeyValueGroupedDataset[K, V] {
 
@@ -511,7 +509,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
           .dropDuplicates()
           .as(kEncoder)
       case None =>
-        ds.select(groupingExprs.asScala.map(e => new Column(e)): _*)
+        ds.select(groupingExprs.map(e => new Column(e)): _*)
           .dropDuplicates()
           .as(kEncoder)
     }
@@ -527,7 +525,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       builder.getGroupMapBuilder
         .setInput(ds.plan.getRoot)
         .addAllSortingExpressions(sortExprs.map(e => e.expr).asJava)
-        .addAllGroupingExpressions(groupingExprs)
+        .addAllGroupingExpressions(udfGroupingExprs())
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
     }
   }
@@ -543,12 +541,27 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     ds.sparkSession.newDataset[R](outputEncoder) { builder =>
       builder.getCoGroupMapBuilder
         .setInput(ds.plan.getRoot)
-        .addAllInputGroupingExpressions(groupingExprs)
+        .addAllInputGroupingExpressions(udfGroupingExprs())
         .addAllInputSortingExpressions(thisSortExprs.map(e => e.expr).asJava)
         .setOther(otherImpl.ds.plan.getRoot)
-        .addAllOtherGroupingExpressions(otherImpl.groupingExprs)
+        .addAllOtherGroupingExpressions(otherImpl.udfGroupingExprs())
         .addAllOtherSortingExpressions(otherSortExprs.map(e => e.expr).asJava)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder, otherImpl.ivEncoder))
+    }
+  }
+
+  private def udfGroupingExprs(): java.util.List[proto.Expression] = {
+    groupingFunc match {
+      case Some(gf) =>
+        groupingExprs.asJava
+      case None =>
+        // Needs a dummy udf to pass the K V encoders
+        val dummyGroupingFunc = ScalarUserDefinedFunction(
+          function = UdfUtils.noOp[V, K](),
+          inputEncoders = vEncoder :: Nil,
+          outputEncoder = kEncoder
+        ).apply(col("*")).expr
+        (Seq(dummyGroupingFunc) ++ groupingExprs).asJava
     }
   }
 
@@ -558,23 +571,23 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       // The plan is rewrite to
       // "Select grouping_exprs(*) as keys, mapValue_udf(*); GroupBy keys; Agg agg_exprs"
       builder.getAggregateBuilder
-        .setInput(modifiedInputPlan().getRoot)
+        .setInput(aggInputPlan().getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
-        .addAllGroupingExpressions(modifiedGroupingExprs())
+        .addAllGroupingExpressions(aggGroupingExprs())
         .addAllAggregateExpressions(columns.map(_.expr).asJava)
     }
   }
 
-  private def modifiedGroupingExprs(): java.util.List[proto.Expression] = {
+  private def aggGroupingExprs(): java.util.List[proto.Expression] = {
     // The grouping is now done on the (key, mapped_value) inputs
-    groupingExprs.asScala.zipWithIndex.map {
+    groupingExprs.zipWithIndex.map {
       case (_, i) => col(s"key_$i").expr
     }.asJava
   }
 
-  private def modifiedInputPlan(): proto.Plan = {
+  private def aggInputPlan(): proto.Plan = {
     // Inputs changed from value to (key, mapped_value)
-    val keys = groupingExprs.asScala.zipWithIndex.map {
+    val keys = groupingExprs.zipWithIndex.map {
       case (e, i) => new Column(e).alias(s"key_$i")
     }
     val value =
@@ -631,7 +644,7 @@ private object KeyValueGroupedDatasetImpl {
       ds.encoder,
       ds.encoder,
       Some(gf),
-      Arrays.asList(gf.apply(col("*")).expr),
+      Seq(gf.apply(col("*")).expr),
       UdfUtils.identical())
   }
 
@@ -639,15 +652,15 @@ private object KeyValueGroupedDatasetImpl {
       df: DataFrame,
       kEncoder: AgnosticEncoder[K],
       vEncoder: AgnosticEncoder[V],
-      groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
+      groupingExprs: Seq[proto.Expression]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     new KeyValueGroupedDatasetImpl(
-      df.as[V](vEncoder), // TODO Can I assume on this?
+      df.as[V](vEncoder),
       kEncoder,
       kEncoder,
       vEncoder,
       vEncoder,
       None,
-      groupingExprs.map(_.expr).asJava, // TODO expr is enough, revert changes in RelGroupedDS.
+      groupingExprs,
       UdfUtils.identical())
   }
 }

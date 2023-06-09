@@ -17,7 +17,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.connect.client.util.QueryTest
-import org.apache.spark.sql.functions.expr
 
 /**
  * All tests in this class requires client UDF artifacts synced with the server.
@@ -27,23 +26,16 @@ class MyE2ETestSuite extends QueryTest with SQLHelper {
   lazy val session: SparkSession = spark
   import session.implicits._
 
-  test("groupby") { // TODO: how to fix this then?
-    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
-      .toDF("key", "seq", "value")
-    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
-    val aggregated = grouped
-      .flatMapSortedGroups($"seq", expr("length(key)"), $"value") { (g, iter) =>
-        Iterator(g, iter.mkString(", "))
-      }
-
+  test("reduceGroups, keyAs, mapValues") {
+    val ds = Seq("abc", "xyz", "hello").toDS()
     checkDatasetUnorderly(
-      aggregated,
-      "a",
-      "(a,1,10), (a,2,20)",
-      "b",
-      "(b,1,2), (b,2,1)",
-      "c",
-      "(c,1,1)"
+      ds.groupByKey(_.length)
+        .keyAs[Double]
+        .mapValues(v => v + "-")
+        .mapValues(v => v.length + v)
+        .reduceGroups(_ + _),
+      (3.0, "4abc-4xyz-"),
+      (5.0, "6hello-")
     )
   }
 }

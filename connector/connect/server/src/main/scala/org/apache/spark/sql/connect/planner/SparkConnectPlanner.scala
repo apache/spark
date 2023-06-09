@@ -736,9 +736,9 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
   private case class TypedScalaUdf(
       function: AnyRef,
       outEnc: ExpressionEncoder[_],
-      outputObjAttr: Attribute,
-      firstInEnc: ExpressionEncoder[_],
-      inputObjAttr: Attribute) {
+      firstInEnc: ExpressionEncoder[_]) {
+    val outputObjAttr: Attribute = generateObjAttr(outEnc)
+    val inputObjAttr: Attribute = generateObjAttr(firstInEnc)
     val outputNamedExpression: Seq[NamedExpression] = outEnc.namedExpressions
     def inputDeserializer(inputAttributes: Seq[Attribute] = Nil): Expression = {
       UnresolvedDeserializer(firstInEnc.deserializer, inputAttributes)
@@ -755,21 +755,18 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
     }
 
     def apply(commonUdf: proto.CommonInlineUserDefinedFunction): TypedScalaUdf = {
-      val udf = unpackUdf(commonUdf)
-      val outEnc = ExpressionEncoder(udf.outputEncoder)
+      apply(transformScalarScalaUDF(commonUdf))
+    }
+
+    def apply(udf: ScalaUDF): TypedScalaUdf = {
+      val outEnc = udf.outputEncoder.get
       // There might be more than one inputs, but we only interested in the first one.
       // Most typed API takes one UDF input.
       // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
       // the first input which is the key of the grouping function.
       assert(udf.inputEncoders.nonEmpty)
-      val inEnc = ExpressionEncoder(udf.inputEncoders.head) // single input encoder or key encoder
-      TypedScalaUdf(udf.function, outEnc, generateObjAttr(outEnc), inEnc, generateObjAttr(inEnc))
-    }
-
-    def apply(udf: ScalaUDF): TypedScalaUdf = {
       val inEnc = udf.inputEncoders.head.get
-      val outEnc = udf.outputEncoder.get
-      TypedScalaUdf(udf.function, outEnc, generateObjAttr(outEnc), inEnc, generateObjAttr(inEnc))
+      TypedScalaUdf(udf.function, outEnc, inEnc)
     }
   }
 
@@ -1988,24 +1985,6 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
   }
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
-    rel.getGroupType match {
-      case _ =>
-        transformRelationalGroupedAggregate(rel)
-    }
-  }
-
-  private def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
-    val input = transformRelation(rel.getInput)
-    val ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
-
-    val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
-    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
-      .map(toNamedExpression)
-    logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
-  }
-
-  private def transformRelationalGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Aggregate needs a plan input")
     }
@@ -2097,10 +2076,11 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
+        // TODO: This dose not work with the new value
         val analyzed = session.sessionState.executePlan(plan).analyzed
         transformTypedReduceExpression(
           expr.getUnresolvedFunction,
-          analyzed.output.filterNot(a => a.name.startsWith("key"))
+          analyzed.output.filterNot(a => a.name.startsWith("key_"))
         )
       case _ => transformExpression(expr)
     }
