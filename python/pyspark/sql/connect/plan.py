@@ -520,6 +520,7 @@ class WithWatermark(LogicalPlan):
 class CachedRemoteRelation(LogicalPlan):
     """Logical plan object for a DataFrame reference which represents a DataFrame that's been
     cached on the server with a given id."""
+
     def __init__(self, relationId: str):
         super().__init__(None)
         self._relationId = relationId
