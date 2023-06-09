@@ -5913,8 +5913,8 @@ object functions {
   def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
 
   /**
-   * Returns same result as the EQUAL(=) operator for non-null operands,
-   * but returns true if both are null, false if one of the them is null.
+   * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
+   * are null, false if one of the them is null.
    *
    * @group conditional_funcs
    * @since 3.5.0
