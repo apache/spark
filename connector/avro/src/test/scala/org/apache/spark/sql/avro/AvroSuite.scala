@@ -950,6 +950,7 @@ abstract class AvroSuite
     "time-millis",
     "time-micros",
     "timestamp-micros",
+    "timestamp-millis",
     "local-timestamp-millis",
     "local-timestamp-micros"
   ).foreach { timeLogicalType =>
