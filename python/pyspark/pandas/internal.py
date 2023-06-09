@@ -935,10 +935,11 @@ class InternalFrame:
         )
         return sdf.select(sequential_index.alias(column_name), *scols)
 
-    # TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect.
     @staticmethod
     def attach_distributed_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
+        if is_remote():
+            return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
         jvm = sdf.sparkSession._jvm
         tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
         jexpr = F.monotonically_increasing_id()._jc.expr()
