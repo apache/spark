@@ -67,6 +67,8 @@ class ClassificationTestsMixin:
         model = lorv2.fit(df1)
         assert model.uid == lorv2.uid
 
+        model.saveToLocal("/tmp/lorv2_model", overwrite=True)
+
         expected_predictions = [1, 0]
         expected_probabilities = [
             [0.217875, 0.782125],

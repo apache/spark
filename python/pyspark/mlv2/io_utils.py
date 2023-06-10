@@ -48,7 +48,7 @@ def _get_metadata_to_save(
     # Default param values
     json_default_params = {}
     for p in instance._defaultParamMap:
-        json_default_params[p.name] = instance.json_default_params[p]
+        json_default_params[p.name] = instance._defaultParamMap[p]
 
     metadata = {
         "class": cls,
@@ -144,7 +144,7 @@ class ParamsReadWrite:
         return instance
 
 
-class ModelReadWrite:
+class ModelReadWrite(ParamsReadWrite):
 
     def _get_core_model_filename(self):
         """
@@ -166,8 +166,8 @@ class ModelReadWrite:
         """
         raise NotImplementedError()
 
-    def saveToLocal(self, path):
-        super(ModelReadWrite, self).save(path)
+    def saveToLocal(self, path,  *, overwrite=False):
+        super(ModelReadWrite, self).saveToLocal(path, overwrite=overwrite)
         self._save_core_model(os.path.join(path, self._get_core_model_filename()))
 
     @classmethod

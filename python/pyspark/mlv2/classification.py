@@ -23,9 +23,9 @@ from typing import Any, Union, List, Tuple, Callable
 import numpy as np
 import os
 import pandas as pd
+import pickle
 import math
 
-from pyspark import cloudpickle
 from pyspark.sql import DataFrame
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.torch.distributor import TorchDistributor
@@ -41,6 +41,7 @@ from pyspark.ml.param.shared import (
     HasMomentum,
 )
 from pyspark.mlv2.base import Predictor, PredictionModel
+from pyspark.mlv2.io_utils import ParamsReadWrite, ModelReadWrite
 from pyspark.sql.functions import lit, count, countDistinct
 
 import torch
@@ -69,17 +70,6 @@ class _LogisticRegressionParams(
     pass
 
 
-class _LinearNet(torch_nn.Module):
-    def __init__(self, num_features: int, num_classes: int, bias: bool) -> None:
-        super(_LinearNet, self).__init__()
-        output_dim = num_classes
-        self.fc = torch_nn.Linear(num_features, output_dim, bias=bias, dtype=torch.float32)
-
-    def forward(self, x: Any) -> Any:
-        output = self.fc(x)
-        return output
-
-
 def _train_logistic_regression_model_worker_fn(
     num_samples_per_worker: int,
     num_features: int,
@@ -103,9 +93,8 @@ def _train_logistic_regression_model_worker_fn(
     # TODO: support L1 / L2 regularization
     torch.distributed.init_process_group("gloo")
 
-    ddp_model = DDP(
-        _LinearNet(num_features=num_features, num_classes=num_classes, bias=fit_intercept)
-    )
+    linear_model = torch_nn.Linear(num_features, num_classes, bias=fit_intercept, dtype=torch.float32)
+    ddp_model = DDP(linear_model)
 
     loss_fn = torch_nn.CrossEntropyLoss()
 
@@ -146,7 +135,7 @@ def _train_logistic_regression_model_worker_fn(
 
 
 @inherit_doc
-class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressionParams):
+class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressionParams, ParamsReadWrite):
     """
     Logistic regression estimator.
 
@@ -230,8 +219,8 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
 
         dataset.unpersist()
 
-        torch_model = _LinearNet(
-            num_features=num_features, num_classes=num_classes, bias=self.getFitIntercept()
+        torch_model = torch_nn.Linear(
+            num_features, num_classes, bias=self.getFitIntercept(), dtype=torch.float32
         )
         torch_model.load_state_dict(model_state_dict)
 
@@ -243,7 +232,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
 
 
 @inherit_doc
-class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
+class LogisticRegressionModel(PredictionModel,  _LogisticRegressionParams, ModelReadWrite):
     """
     Model fitted by LogisticRegression.
 
@@ -279,8 +268,8 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
         fit_intercept = self.getFitIntercept()
 
         def transform_fn(input_series: Any) -> Any:
-            torch_model = _LinearNet(
-                num_features=num_features, num_classes=num_classes, bias=fit_intercept
+            torch_model = torch_nn.Linear(
+                num_features, num_classes, bias=fit_intercept, dtype=torch.float32
             )
             # TODO: Use spark broadast for `model_state_dict`,
             #  it can improve performance when model is large.
@@ -307,18 +296,16 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
 
         return transform_fn
 
+    def _get_core_model_filename(self):
+        return self.__class__.__name__ + ".torch.pkl"
+
     def _save_core_model(self, path):
-        core_model_path = os.path.join(path, self.__class__.__name__ + ".torch.pkl")
-        with open(core_model_path, "wb") as fp:
-            # Note: the model rely on class `pyspark.mlv2.classification._LinearNet`,
-            # to allow loading model without pyspark package,
-            # we use `cloudpickle` to dump it.
-            cloudpickle.dump(self.torch_model, fp)
+        with open(path, "wb") as fp:
+            pickle.dump(self.torch_model, fp)
 
     def _load_core_model(self, path):
-        core_model_path = os.path.join(path, self.__class__.__name__ + ".torch.pkl")
-        with open(core_model_path, "rb") as fp:
-            self.torch_model = cloudpickle.load(fp)
+        with open(path, "rb") as fp:
+            self.torch_model = pickle.load(fp)
 
     def _get_extra_metadata(self) -> Any:
         return {
