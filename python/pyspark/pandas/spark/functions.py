@@ -20,6 +20,7 @@ Additional Spark functions used in pandas-on-Spark.
 from typing import Union, no_type_check
 
 from pyspark import SparkContext
+import pyspark.sql.functions as F
 from pyspark.sql.column import (
     Column,
     _to_java_column,
@@ -90,22 +91,8 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
     """
-    if is_remote():
-        from pyspark.sql.connect.functions import lit, call_udf
-
-        if isinstance(n, int):
-            n = lit(n)  # type: ignore[assignment]
-
-        return call_udf(  # type: ignore[return-value]
-            "repeat",
-            col,  # type: ignore[arg-type]
-            n,  # type: ignore[arg-type]
-        )
-
-    else:
-        sc = SparkContext._active_spark_context
-        n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
-        return _call_udf(sc, "repeat", _to_java_column(col), n)
+    _n = F.lit(n) if isinstance(n, int) else n
+    return F.call_udf("repeat", col, _n)
 
 
 def date_part(field: Union[str, Column], source: Column) -> Column:
