@@ -33,9 +33,7 @@ class FrameParityComputeTests(FrameComputeMixin, PandasOnSparkTestUtils, ReusedC
     def test_diff(self):
         super().test_diff()
 
-    @unittest.skip(
-        "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.mode in Spark Connect."
-    )
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_mode(self):
         super().test_mode()
 
