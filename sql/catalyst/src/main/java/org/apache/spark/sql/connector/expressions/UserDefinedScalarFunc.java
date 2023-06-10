@@ -58,6 +58,6 @@ public class UserDefinedScalarFunc extends ExpressionWithToString {
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, canonicalName, children);
+    return Objects.hash(name, canonicalName) * 31 + Arrays.hashCode(children);
   }
 }

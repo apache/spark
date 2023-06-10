@@ -447,6 +447,6 @@ public class GeneralScalarExpression extends ExpressionWithToString {
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, children);
+    return Objects.hash(name) * 31 + Arrays.hashCode(children);
   }
 }
