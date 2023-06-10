@@ -23,12 +23,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 class SeriesParityStatTests(SeriesStatMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
     @unittest.skip(
-        "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.mode in Spark Connect."
-    )
-    def test_mode(self):
-        super().test_mode()
-
-    @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_pct_change(self):

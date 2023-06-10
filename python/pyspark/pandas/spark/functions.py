@@ -56,8 +56,18 @@ def kurt(col: Column) -> Column:
 
 
 def mode(col: Column, dropna: bool) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_mode",
+            col,  # type: ignore[arg-type]
+            lit(dropna),
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
 
 
 def covar(col1: Column, col2: Column, ddof: int) -> Column:
