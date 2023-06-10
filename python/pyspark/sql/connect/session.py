@@ -45,12 +45,20 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64tz_dtype,
     is_timedelta64_dtype,
 )
+import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
+from pyspark.sql.connect.plan import (
+    SQL,
+    Range,
+    LocalRelation,
+    LogicalPlan,
+    CachedLocalRelation,
+    CachedRelation,
+)
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -465,10 +473,16 @@ class SparkSession:
             )
 
         if _schema is not None:
-            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
+            local_relation = LocalRelation(_table, schema=_schema.json())
         else:
-            df = DataFrame.withPlan(LocalRelation(_table), self)
+            local_relation = LocalRelation(_table)
 
+        cache_threshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
+        plan: LogicalPlan = local_relation
+        if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
+            plan = CachedLocalRelation(self._cache_local_relation(local_relation))
+
+        df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
             df = df.toDF(*_cols)
         return df
@@ -613,7 +627,9 @@ class SparkSession:
         """
         return self._client
 
-    def addArtifacts(self, *path: str, pyfile: bool = False, archive: bool = False) -> None:
+    def addArtifacts(
+        self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
+    ) -> None:
         """
         Add artifact(s) to the client session. Currently only local files are supported.
 
@@ -630,12 +646,50 @@ class SparkSession:
         archive : bool
             Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
             The archives are unpacked on the executor side automatically.
+        file : bool
+            Add a file to be downloaded with this Spark job on every node.
+            The ``path`` passed can only be a local file for now.
         """
-        if pyfile and archive:
-            raise ValueError("'pyfile' and 'archive' cannot be True together.")
-        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive)
+        if sum([file, pyfile, archive]) > 1:
+            raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
+        self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifact = addArtifacts
+
+    def _cache_local_relation(self, local_relation: LocalRelation) -> str:
+        """
+        Cache the local relation at the server side if it has not been cached yet.
+        """
+        serialized = local_relation.serialize(self._client)
+        return self._client.cache_artifact(serialized)
+
+    def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
+        """
+        Copy file from local to cloud storage file system.
+        If the file already exits in destination path, old file is overwritten.
+
+        Parameters
+        ----------
+        local_path: str
+            Path to a local file. Directories are not supported.
+            The path can be either an absolute path or a relative path.
+
+        dest_path: str
+            The cloud storage path to the destination the file will
+            be copied to.
+            The path must be an an absolute path.
+
+        Notes
+        -----
+        This API is a developer API.
+        """
+        if urllib.parse.urlparse(dest_path).scheme:
+            raise ValueError(
+                "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
+                "without scheme, and spark driver uses the default scheme to "
+                "determine the destination file system."
+            )
+        self._client.copy_from_local_to_fs(local_path, dest_path)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

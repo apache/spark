@@ -100,7 +100,12 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // We do not store artifacts that fail the CRC. The failure is reported in the artifact
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
-        addStagedArtifactToArtifactManager(artifact)
+        if (artifact.path.startsWith(
+            SparkConnectArtifactManager.forwardToFSPrefix + File.separator)) {
+          artifactManager.uploadArtifactToFs(holder, artifact.path, artifact.stagedPath)
+        } else {
+          addStagedArtifactToArtifactManager(artifact)
+        }
       }
       artifact.summary()
     }.toSeq

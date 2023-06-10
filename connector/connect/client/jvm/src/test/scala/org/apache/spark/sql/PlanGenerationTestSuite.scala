@@ -986,6 +986,14 @@ class PlanGenerationTestSuite
     fn.min_by(fn.col("a"), fn.col("b"))
   }
 
+  functionTest("percentile without frequency") {
+    fn.percentile(fn.col("a"), fn.lit(0.3))
+  }
+
+  functionTest("percentile with frequency") {
+    fn.percentile(fn.col("a"), fn.lit(0.3), fn.lit(2))
+  }
+
   functionTest("percentile_approx") {
     fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
   }
@@ -1000,6 +1008,10 @@ class PlanGenerationTestSuite
 
   functionTest("stddev") {
     fn.stddev("a")
+  }
+
+  functionTest("std") {
+    fn.std(fn.col("a"))
   }
 
   functionTest("stddev_samp") {
@@ -1028,6 +1040,42 @@ class PlanGenerationTestSuite
 
   functionTest("var_pop") {
     fn.var_pop("a")
+  }
+
+  functionTest("regr_avgx") {
+    fn.regr_avgx(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_avgy") {
+    fn.regr_avgy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_count") {
+    fn.regr_count(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_intercept") {
+    fn.regr_intercept(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_r2") {
+    fn.regr_r2(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_slope") {
+    fn.regr_slope(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_sxx") {
+    fn.regr_sxx(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_sxy") {
+    fn.regr_sxy(fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("regr_syy") {
+    fn.regr_syy(fn.col("a"), fn.col("b"))
   }
 
   functionTest("array") {
@@ -1142,6 +1190,14 @@ class PlanGenerationTestSuite
     fn.ceil(fn.col("b"), lit(2))
   }
 
+  functionTest("ceiling") {
+    fn.ceiling(fn.col("b"))
+  }
+
+  functionTest("ceiling scale") {
+    fn.ceiling(fn.col("b"), lit(2))
+  }
+
   functionTest("conv") {
     fn.conv(fn.col("b"), 10, 16)
   }
@@ -1160,6 +1216,10 @@ class PlanGenerationTestSuite
 
   functionTest("csc") {
     fn.csc(fn.col("b"))
+  }
+
+  functionTest("e") {
+    fn.e()
   }
 
   functionTest("exp") {
@@ -1206,6 +1266,10 @@ class PlanGenerationTestSuite
     fn.log("b")
   }
 
+  functionTest("ln") {
+    fn.ln(fn.col("b"))
+  }
+
   functionTest("log with base") {
     fn.log(2, "b")
   }
@@ -1222,8 +1286,24 @@ class PlanGenerationTestSuite
     fn.log2("a")
   }
 
+  functionTest("negative") {
+    fn.negative(fn.col("a"))
+  }
+
+  functionTest("pi") {
+    fn.pi()
+  }
+
+  functionTest("positive") {
+    fn.positive(fn.col("a"))
+  }
+
   functionTest("pow") {
     fn.pow("a", "b")
+  }
+
+  functionTest("power") {
+    fn.power(fn.col("a"), fn.col("b"))
   }
 
   functionTest("pmod") {
@@ -1260,6 +1340,10 @@ class PlanGenerationTestSuite
 
   functionTest("signum") {
     fn.signum("b")
+  }
+
+  functionTest("sign") {
+    fn.sign(fn.col("b"))
   }
 
   functionTest("sin") {
@@ -1706,6 +1790,58 @@ class PlanGenerationTestSuite
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
+  temporalFunctionTest("xpath") {
+    fn.xpath(fn.col("s"), lit("a/b/text()"))
+  }
+
+  temporalFunctionTest("xpath_boolean") {
+    fn.xpath_boolean(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_double") {
+    fn.xpath_double(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_number") {
+    fn.xpath_number(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_float") {
+    fn.xpath_float(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_int") {
+    fn.xpath_int(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_long") {
+    fn.xpath_long(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_short") {
+    fn.xpath_short(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("xpath_string") {
+    fn.xpath_string(fn.col("s"), lit("a/b"))
+  }
+
+  temporalFunctionTest("unix_date") {
+    fn.unix_date(fn.to_date(fn.col("s"), "yyyy-MM-dd"))
+  }
+
+  temporalFunctionTest("unix_seconds") {
+    fn.unix_seconds(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
+  }
+
+  temporalFunctionTest("unix_millis") {
+    fn.unix_millis(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
+  }
+
+  temporalFunctionTest("unix_micros") {
+    fn.unix_micros(fn.to_timestamp(fn.col("s"), "yyyy-MM-dd HH:mm:ss.SSSS"))
+  }
+
   temporalFunctionTest("trunc") {
     fn.trunc(fn.col("d"), "mm")
   }
@@ -2089,6 +2225,10 @@ class PlanGenerationTestSuite
 
   test("pivot without column values") {
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
+  }
+
+  test("width_bucket") {
+    simple.select(fn.width_bucket(fn.col("b"), fn.col("b"), fn.col("b"), fn.col("a")))
   }
 
   test("test broadcast") {

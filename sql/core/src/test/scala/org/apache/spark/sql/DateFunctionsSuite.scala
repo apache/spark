@@ -545,6 +545,50 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.select(to_date(col("x"))), Row(Date.valueOf("2016-02-29")) :: Row(null) :: Nil)
   }
 
+  test("function unix_date") {
+    val d1 = Date.valueOf("2015-07-22")
+    val d2 = Date.valueOf("2015-07-01")
+    val d3 = Date.valueOf("2014-12-31")
+    val df = Seq(d1, d2, d3).toDF("d")
+
+    val result1 = df.selectExpr("unix_date(d)")
+    val result2 = df.select(unix_date(col("d")))
+    checkAnswer(result1, result2)
+  }
+
+  test("function unix_micros") {
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val df = Seq(t1, t2, t3).toDF("t")
+
+    val result1 = df.selectExpr("unix_micros(t)")
+    val result2 = df.select(unix_micros(col("t")))
+    checkAnswer(result1, result2)
+  }
+
+  test("function unix_millis") {
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val df = Seq(t1, t2, t3).toDF("t")
+
+    val result1 = df.selectExpr("unix_millis(t)")
+    val result2 = df.select(unix_millis(col("t")))
+    checkAnswer(result1, result2)
+  }
+
+  test("function unix_seconds") {
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val df = Seq(t1, t2, t3).toDF("t")
+
+    val result1 = df.selectExpr("unix_seconds(t)")
+    val result2 = df.select(unix_seconds(col("t")))
+    checkAnswer(result1, result2)
+  }
+
   test("function trunc") {
     val df = Seq(
       (1, Timestamp.valueOf("2015-07-22 10:00:00")),
