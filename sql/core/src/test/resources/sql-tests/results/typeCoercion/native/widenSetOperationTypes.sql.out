@@ -1632,8 +1632,8 @@ SELECT cast('1' as binary) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
 struct<CAST(1 AS BINARY):binary>
 -- !query output
-1
-2
+[31]
+[32]
 
 
 -- !query

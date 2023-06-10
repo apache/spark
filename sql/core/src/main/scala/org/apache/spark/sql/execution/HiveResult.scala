@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedComm
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Runs a query returning the result in Hive compatible form.
@@ -104,7 +104,8 @@ object HiveResult {
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
     case (bin: Array[Byte], BinaryType) =>
-      if (hexString) StringUtils.getHexString(bin) else new String(bin, StandardCharsets.UTF_8)
+      if (hexString) UTF8String.fromString(StringUtils.getHexString(bin)).toString
+      else new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
     case (s: String, StringType) => if (nested) "\"" + s + "\"" else s

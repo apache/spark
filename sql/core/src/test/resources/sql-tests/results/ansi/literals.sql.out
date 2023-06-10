@@ -496,7 +496,7 @@ select x'2379ACFe'
 -- !query schema
 struct<X'2379ACFE':binary>
 -- !query output
-#y��
+[23 79 AC FE]
 
 
 -- !query

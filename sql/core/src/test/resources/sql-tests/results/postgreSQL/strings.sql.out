@@ -26,7 +26,7 @@ SELECT binary('\\xDeAdBeEf')
 -- !query schema
 struct<\xDeAdBeEf:binary>
 -- !query output
-\xDeAdBeEf
+[5C 78 44 65 41 64 42 65 45 66]
 
 
 -- !query
@@ -34,7 +34,7 @@ SELECT binary('\\x De Ad Be Ef ')
 -- !query schema
 struct<\x De Ad Be Ef :binary>
 -- !query output
-\x De Ad Be Ef
+[5C 78 20 44 65 20 41 64 20 42 65 20 45 66 20]
 
 
 -- !query
@@ -42,7 +42,7 @@ SELECT binary('\\xDe00BeEf')
 -- !query schema
 struct<\xDe00BeEf:binary>
 -- !query output
-\xDe00BeEf
+[5C 78 44 65 30 30 42 65 45 66]
 
 
 -- !query
@@ -50,7 +50,7 @@ SELECT binary('DeAdBeEf')
 -- !query schema
 struct<DeAdBeEf:binary>
 -- !query output
-DeAdBeEf
+[44 65 41 64 42 65 45 66]
 
 
 -- !query
@@ -58,7 +58,7 @@ SELECT binary('De\\000dBeEf')
 -- !query schema
 struct<De\000dBeEf:binary>
 -- !query output
-De\000dBeEf
+[44 65 5C 30 30 30 64 42 65 45 66]
 
 
 -- !query
@@ -66,7 +66,7 @@ SELECT binary('De\\123dBeEf')
 -- !query schema
 struct<De\123dBeEf:binary>
 -- !query output
-De\123dBeEf
+[44 65 5C 31 32 33 64 42 65 45 66]
 
 
 -- !query

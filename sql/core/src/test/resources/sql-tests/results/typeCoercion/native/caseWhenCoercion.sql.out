@@ -1452,7 +1452,7 @@ SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast('2' as binary) END FROM
 -- !query schema
 struct<CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS BINARY) END:binary>
 -- !query output
-1
+[31]
 
 
 -- !query
