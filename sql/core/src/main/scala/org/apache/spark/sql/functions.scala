@@ -5751,101 +5751,101 @@ object functions {
   }
 
   /**
-   * Create timestamp from year, month, day, hour, min, sec and timezone fields.
-   * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
-   * If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
-   * on invalid inputs. Otherwise, it will throw an error instead.
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
    *
    * @group datetime_funcs
    * @since 3.5.0
    */
   def make_timestamp(
-      year: Column,
-      month: Column,
-      day: Column,
-      hour: Column,
-      min: Column,
-      sec: Column,
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
       timezone: Column): Column = withExpr {
-    MakeTimestamp(year.expr, month.expr, day.expr, hour.expr,
-      min.expr, sec.expr, Some(timezone.expr))
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr))
   }
 
   /**
-   * Create timestamp from year, month, day, hour, min, sec and timezone fields.
-   * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
-   * If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
-   * on invalid inputs. Otherwise, it will throw an error instead.
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
    *
    * @group datetime_funcs
    * @since 3.5.0
    */
   def make_timestamp(
-      year: Column,
-      month: Column,
-      day: Column,
-      hour: Column,
-      min: Column,
-      sec: Column): Column = withExpr {
-    MakeTimestamp(year.expr, month.expr, day.expr, hour.expr, min.expr, sec.expr)
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr, mins.expr, secs.expr)
   }
 
   /**
-   * Create the current timestamp with local time zone from year, month, day, hour, min, sec
-   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false,
-   * the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
    *
    * @group datetime_funcs
    * @since 3.5.0
    */
   def make_timestamp_ltz(
-      year: Column,
-      month: Column,
-      day: Column,
-      hour: Column,
-      min: Column,
-      sec: Column,
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
       timezone: Column): Column = withExpr {
-    MakeTimestamp(year.expr, month.expr, day.expr, hour.expr,
-      min.expr, sec.expr, Some(timezone.expr), dataType = TimestampType)
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr), dataType = TimestampType)
   }
 
   /**
-   * Create the current timestamp with local time zone from year, month, day, hour, min,
-   * sec and timezone fields. If the configuration `spark.sql.ansi.enabled` is false,
-   * the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
    *
    * @group datetime_funcs
    * @since 3.5.0
    */
   def make_timestamp_ltz(
-      year: Column,
-      month: Column,
-      day: Column,
-      hour: Column,
-      min: Column,
-      sec: Column): Column = withExpr {
-    MakeTimestamp(year.expr, month.expr, day.expr, hour.expr,
-      min.expr, sec.expr, dataType = TimestampType)
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampType)
   }
 
   /**
-   * Create local date-time from year, month, day, hour, min, sec fields.
-   * If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
-   * on invalid inputs. Otherwise, it will throw an error instead.
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
    *
    * @group datetime_funcs
    * @since 3.5.0
    */
   def make_timestamp_ntz(
-      year: Column,
-      month: Column,
-      day: Column,
-      hour: Column,
-      min: Column,
-      sec: Column): Column = withExpr {
-    MakeTimestamp(year.expr, month.expr, day.expr, hour.expr,
-      min.expr, sec.expr, dataType = TimestampNTZType)
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampNTZType)
   }
 
   /**
