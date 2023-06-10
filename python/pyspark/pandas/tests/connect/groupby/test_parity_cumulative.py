@@ -16,30 +16,14 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_groupby import GroupByTestsMixin
+from pyspark.pandas.tests.groupby.test_cumulative import GroupbyCumulativeMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupByParityTests(
-    GroupByTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class GroupbyParityCumulativeTests(
+    GroupbyCumulativeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("TODO(SPARK-43628): Enable SparkContext with Spark Connect.")
-    def test_apply_with_side_effect(self):
-        super().test_apply_with_side_effect()
-
-    @unittest.skip(
-        "TODO(SPARK-43622): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_basic_stat_funcs(self):
-        super().test_basic_stat_funcs()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_bfill(self):
-        super().test_bfill()
-
     @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
@@ -70,39 +54,9 @@ class GroupByParityTests(
     def test_cumsum(self):
         super().test_cumsum()
 
-    @unittest.skip(
-        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
-    )
-    def test_ddof(self):
-        super().test_ddof()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_ffill(self):
-        super().test_ffill()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_fillna(self):
-        super().test_fillna()
-
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
-    def test_prod(self):
-        super().test_prod()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_shift(self):
-        super().test_shift()
-
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_groupby import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_cumulative import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
