@@ -2667,7 +2667,6 @@ make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
-    weeks: "ColumnOrName",
     days: "ColumnOrName",
     hours: "ColumnOrName",
     mins: "ColumnOrName",
@@ -2676,11 +2675,11 @@ def make_timestamp(
 ) -> Column:
     if timezone is not None:
         return _invoke_function_over_columns(
-            "make_timestamp", years, months, weeks, days, hours, mins, secs, timezone
+            "make_timestamp", years, months, days, hours, mins, secs, timezone
         )
     else:
         return _invoke_function_over_columns(
-            "make_timestamp", years, months, weeks, days, hours, mins, secs
+            "make_timestamp", years, months, days, hours, mins, secs
         )
 
 
