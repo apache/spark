@@ -188,7 +188,6 @@ class PlanGenerationTestSuite
     .add("e", "array<int>")
     .add("f", MapType(StringType, simpleSchema))
     .add("g", "string")
-    .add("h", "boolean")
 
   private val complexSchemaString = complexSchema.catalogString
 
@@ -211,6 +210,12 @@ class PlanGenerationTestSuite
 
   private val temporalsSchemaString = temporalsSchema.catalogString
 
+  private val booleanSchema = new StructType()
+    .add("id", "long")
+    .add("flag", "boolean")
+
+  private val booleanSchemaString = booleanSchema.catalogString
+
   private def createLocalRelation(schema: String): DataFrame = session.newDataFrame { builder =>
     // TODO API is not consistent. Now we have two different ways of working with schemas!
     builder.getLocalRelationBuilder.setSchema(schema)
@@ -223,6 +228,7 @@ class PlanGenerationTestSuite
   private def complex = createLocalRelation(complexSchemaString)
   private def binary = createLocalRelation(binarySchemaString)
   private def temporals = createLocalRelation(temporalsSchemaString)
+  private def boolean = createLocalRelation(booleanSchemaString)
 
   /* Spark Session API */
   test("range") {
@@ -1123,24 +1129,24 @@ class PlanGenerationTestSuite
     fn.regr_syy(fn.col("a"), fn.col("b"))
   }
 
-  functionTest("every") {
-    fn.every(fn.col("h"))
+  test("function every") {
+    boolean.select(fn.every(fn.col("flag")))
   }
 
-  functionTest("bool_and") {
-    fn.bool_and(fn.col("h"))
+  test("function bool_and") {
+    boolean.select(fn.bool_and(fn.col("flag")))
   }
 
-  functionTest("any") {
-    fn.any(fn.col("h"))
+  test("function any") {
+    boolean.select(fn.any(fn.col("flag")))
   }
 
-  functionTest("some") {
-    fn.some(fn.col("h"))
+  test("function some") {
+    boolean.select(fn.some(fn.col("flag")))
   }
 
-  functionTest("bool_or") {
-    fn.bool_or(fn.col("h"))
+  test("function bool_or") {
+    boolean.select(fn.bool_or(fn.col("flag")))
   }
 
   functionTest("array") {

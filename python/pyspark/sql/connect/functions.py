@@ -1256,11 +1256,11 @@ def bool_and(col: "ColumnOrName") -> Column:
 bool_and.__doc__ = pysparkfuncs.bool_and.__doc__
 
 
-def _any(col: "ColumnOrName") -> Column:
+def py_any(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bool_or", col)
 
 
-_any.__doc__ = pysparkfuncs._any.__doc__
+py_any.__doc__ = pysparkfuncs.py_any.__doc__
 
 
 def some(col: "ColumnOrName") -> Column:

@@ -2562,7 +2562,7 @@ def bool_and(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def _any(col: "ColumnOrName") -> Column:
+def py_any(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns true if at least one value of `col` is true.
 
@@ -2581,7 +2581,7 @@ def _any(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
-    >>> df.select(_any("flag")).show()
+    >>> df.select(py_any("flag")).show()
     +-------------+
     |bool_or(flag)|
     +-------------+
@@ -2589,7 +2589,7 @@ def _any(col: "ColumnOrName") -> Column:
     +-------------+
     <BLANKLINE>
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
-    >>> df.select(_any("flag")).show()
+    >>> df.select(py_any("flag")).show()
     +-------------+
     |bool_or(flag)|
     +-------------+
@@ -2597,7 +2597,7 @@ def _any(col: "ColumnOrName") -> Column:
     +-------------+
     <BLANKLINE>
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
-    >>> df.select(_any("flag")).show()
+    >>> df.select(py_any("flag")).show()
     +-------------+
     |bool_or(flag)|
     +-------------+
