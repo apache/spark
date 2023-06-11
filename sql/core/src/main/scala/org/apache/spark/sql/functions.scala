@@ -73,7 +73,6 @@ import org.apache.spark.util.Utils
  * @groupname collection_funcs Collection functions
  * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
- * @groupname conditional_funcs Conditional functions
  * @since 1.3.0
  */
 @Stable

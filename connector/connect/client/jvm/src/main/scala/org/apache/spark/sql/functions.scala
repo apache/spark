@@ -5940,4 +5940,5 @@ object functions {
       typeTag[A10])
   }
   // scalastyle:off line.size.limit
+
 }
