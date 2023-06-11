@@ -27,12 +27,6 @@ class FrameParityBinaryOpsTests(FrameBinaryOpsMixin, PandasOnSparkTestUtils, Reu
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
-    )
-    def test_binary_operator_multiply(self):
-        super().test_binary_operator_multiply()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_binary_ops import *  # noqa: F401
