@@ -2988,6 +2988,77 @@ object functions {
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
   }
 
+  /**
+   * If `predicate` evaluates to true, then returns `trueValue`; otherwise returns `falseValue`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def `if`(predicate: Column, trueValue: Column, falseValue: Column): Column = withExpr {
+    If(predicate.expr, trueValue.expr, falseValue.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = withExpr {
+    IsNotNull(col.expr)
+  }
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands,
+   * but returns true if both are null, false if one of the them is null.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = withExpr {
+    new EqualNull(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr {
+    new NullIf(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    new Nvl2(col1.expr, col2.expr, col3.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -6155,80 +6226,5 @@ object functions {
    */
   def unwrap_udt(column: Column): Column = withExpr {
     UnwrapUDT(column.expr)
-  }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Conditional Functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * If `predicate` evaluates to true, then returns `trueValue`; otherwise returns `falseValue`.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def `if`(predicate: Column, trueValue: Column, falseValue: Column): Column = withExpr {
-    If(predicate.expr, trueValue.expr, falseValue.expr)
-  }
-
-  /**
-   * Returns `col2` if `col1` is null, or `col1` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def ifnull(col1: Column, col2: Column): Column = withExpr {
-    new Nvl(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns true if `col` is not null, or false otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def isnotnull(col: Column): Column = withExpr {
-    IsNotNull(col.expr)
-  }
-
-  /**
-   * Returns same result as the EQUAL(=) operator for non-null operands,
-   * but returns true if both are null, false if one of the them is null.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def equal_null(col1: Column, col2: Column): Column = withExpr {
-    new EqualNull(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def nullif(col1: Column, col2: Column): Column = withExpr {
-    new NullIf(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns `col2` if `col1` is null, or `col1` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def nvl(col1: Column, col2: Column): Column = withExpr {
-    new Nvl(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns `col2` if `col1` is not null, or `col3` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
-    new Nvl2(col1.expr, col2.expr, col3.expr)
   }
 }

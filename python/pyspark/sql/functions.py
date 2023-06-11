@@ -6683,6 +6683,158 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     return _invoke_function("raise_error", errMsg)
 
 
+@try_remote_functions
+def py_if(
+    predicate: "ColumnOrName", trueValue: "ColumnOrName", falseValue: "ColumnOrName"
+) -> Column:
+    """
+    If `predicate` evaluates to true, then returns `trueValue`; otherwise returns `falseValue`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    predicate : :class:`~pyspark.sql.Column` or str
+    trueValue : :class:`~pyspark.sql.Column` or str
+    falseValue : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     (True, 'one', 'not_one'), (False, 'two', 'not_two')], ["a", "b", "c"])
+    >>> df.select(py_if(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='one'), Row(r='not_two')]
+    """
+    return _invoke_function_over_columns("if", predicate, trueValue, falseValue)
+
+
+@try_remote_functions
+def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns `col2` if `col1` is null, or `col1` otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
+    >>> df.select(ifnull(df.e, lit(8)).alias('r')).collect()
+    [Row(r=8), Row(r=1)]
+    """
+    return _invoke_function_over_columns("ifnull", col1, col2)
+
+
+@try_remote_functions
+def isnotnull(col: "ColumnOrName") -> Column:
+    """
+    Returns true if `col` is not null, or false otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
+    >>> df.select(isnotnull(df.e).alias('r')).collect()
+    [Row(r=False), Row(r=True)]
+    """
+    return _invoke_function_over_columns("isnotnull", col)
+
+
+@try_remote_functions
+def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns same result as the EQUAL(=) operator for non-null operands,
+    but returns true if both are null, false if one of the them is null.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
+    >>> df.select(equal_null(df.a, df.b).alias('r')).collect()
+    [Row(r=True), Row(r=False)]
+    """
+    return _invoke_function_over_columns("equal_null", col1, col2)
+
+
+@try_remote_functions
+def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns null if `col1` equals to `col2`, or `col1` otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
+    >>> df.select(nullif(df.a, df.b).alias('r')).collect()
+    [Row(r=None), Row(r=1)]
+    """
+    return _invoke_function_over_columns("nullif", col1, col2)
+
+
+@try_remote_functions
+def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    """
+    Returns `col2` if `col1` is null, or `col1` otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None, 8,), (1, 9,)], ["a", "b"])
+    >>> df.select(nvl(df.a, df.b).alias('r')).collect()
+    [Row(r=8), Row(r=1)]
+    """
+    return _invoke_function_over_columns("nvl", col1, col2)
+
+
+@try_remote_functions
+def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Column:
+    """
+    Returns `col2` if `col1` is not null, or `col3` otherwise.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col1 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
+    col3 : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None, 8, 6,), (1, 9, 9,)], ["a", "b", "c"])
+    >>> df.select(nvl2(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r=6), Row(r=9)]
+    """
+    return _invoke_function_over_columns("nvl2", col1, col2, col3)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 
@@ -11185,136 +11337,6 @@ def udf(
         )
     else:
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
-
-
-# ---------------  Conditional functions ------------------------
-
-
-@try_remote_functions
-def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    """
-    Returns `col2` if `col1` is null, or `col1` otherwise.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
-    >>> df.select(ifnull(df.e, lit(8)).alias('r')).collect()
-    [Row(r=8), Row(r=1)]
-    """
-    return _invoke_function_over_columns("ifnull", col1, col2)
-
-
-@try_remote_functions
-def isnotnull(col: "ColumnOrName") -> Column:
-    """
-    Returns true if `col` is not null, or false otherwise.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(None,), (1,)], ["e"])
-    >>> df.select(isnotnull(df.e).alias('r')).collect()
-    [Row(r=False), Row(r=True)]
-    """
-    return _invoke_function_over_columns("isnotnull", col1)
-
-
-@try_remote_functions
-def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    """
-    Returns same result as the EQUAL(=) operator for non-null operands,
-    but returns true if both are null, false if one of the them is null.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
-    >>> df.select(equal_null(df.a, df.b).alias('r')).collect()
-    [Row(r=True), Row(r=False)]
-    """
-    return _invoke_function_over_columns("equal_null", col1, col2)
-
-
-@try_remote_functions
-def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    """
-    Returns null if `col1` equals to `col2`, or `col1` otherwise.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(None, None,), (1, 9,)], ["a", "b"])
-    >>> df.select(nullif(df.a, df.b).alias('r')).collect()
-    [Row(r=None), Row(r=1)]
-    """
-    return _invoke_function_over_columns("nullif", col1, col2)
-
-
-@try_remote_functions
-def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    """
-    Returns `col2` if `col1` is null, or `col1` otherwise.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(None, 8,), (1, 9,)], ["a", "b"])
-    >>> df.select(nvl(df.a, df.b).alias('r')).collect()
-    [Row(r=8), Row(r=1)]
-    """
-    return _invoke_function_over_columns("nvl", col1, col2)
-
-
-@try_remote_functions
-def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Column:
-    """
-    Returns `col2` if `col1` is not null, or `col3` otherwise.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
-    col3 : :class:`~pyspark.sql.Column` or str
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([(None, 8, 6,), (1, 9, 9,)], ["a", "b", "c"])
-    >>> df.select(nvl2(df.a, df.b, df.c).alias('r')).collect()
-    [Row(r=6), Row(r=9)]
-    """
-    return _invoke_function_over_columns("nvl2", col1, col2, col3)
 
 
 def _test() -> None:

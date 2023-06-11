@@ -2961,6 +2961,64 @@ object functions {
       allowDifferentLgConfigK: Boolean): Column =
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
 
+  /**
+   * If `predicate` evaluates to true, then returns `trueValue`; otherwise returns `falseValue`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def `if`(predicate: Column, trueValue: Column, falseValue: Column): Column =
+    Column.fn("if", predicate, trueValue, falseValue)
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
+   * are null, false if one of the them is null.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -5882,66 +5940,4 @@ object functions {
       typeTag[A10])
   }
   // scalastyle:off line.size.limit
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Conditional Functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * If `predicate` evaluates to true, then returns `trueValue`; otherwise returns `falseValue`.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def `if`(predicate: Column, trueValue: Column, falseValue: Column): Column =
-    Column.fn("if", predicate, trueValue, falseValue)
-
-  /**
-   * Returns `col2` if `col1` is null, or `col1` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
-
-  /**
-   * Returns true if `col` is not null, or false otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
-
-  /**
-   * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
-   * are null, false if one of the them is null.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
-
-  /**
-   * Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
-
-  /**
-   * Returns `col2` if `col1` is null, or `col1` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
-
-  /**
-   * Returns `col2` if `col1` is not null, or `col3` otherwise.
-   *
-   * @group conditional_funcs
-   * @since 3.5.0
-   */
-  def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
 }
