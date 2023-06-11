@@ -67,6 +67,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
     assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
+
     if (subErrorClass.isEmpty) {
       errorInfo.messageTemplate
     } else {
