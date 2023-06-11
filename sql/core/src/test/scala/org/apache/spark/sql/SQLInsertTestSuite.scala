@@ -230,9 +230,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           sqlState = None,
           errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t1`",
+            "tableName" -> ".*`t1`",
             "tableColumns" -> "`c1`, `c2`",
-            "dataColumns" -> "`col1`, `col2`, `col3`")
+            "dataColumns" -> "`col1`, `col2`, `col3`"),
+          matchPVals = true
         )
         checkError(
           exception = intercept[AnalysisException] {
@@ -241,9 +242,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           sqlState = None,
           errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
-            "tableName" -> "`spark_catalog`.`default`.`t1`",
+            "tableName" -> ".*`t1`",
             "tableColumns" -> "`c1`, `c2`, `c3`",
-            "dataColumns" -> "`col1`, `col2`")
+            "dataColumns" -> "`col1`, `col2`"),
+          matchPVals = true
         )
       }
     }

@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -123,13 +124,19 @@ abstract class InsertIntoTests(
     val t1 = s"${catalogAndNamespace}tbl"
     sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    val exc = intercept[AnalysisException] {
-      doInsert(t1, df)
-    }
 
     verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
-    val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
-    assert(exc.getMessage.contains(s"Cannot write to '$tableName', not enough data columns"))
+    val tableName = if (catalogAndNamespace.isEmpty) toSQLId(s"default.$t1") else toSQLId(t1)
+    checkError(
+      exception = intercept[AnalysisException] {
+        doInsert(t1, df)
+      },
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> tableName,
+        "tableColumns" -> "`id`, `data`, `missing`",
+        "dataColumns" -> "`id`, `data`")
+    )
   }
 
   test("insertInto: fails when an extra column is present") {
@@ -137,13 +144,18 @@ abstract class InsertIntoTests(
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       val df = Seq((1L, "a", "mango")).toDF("id", "data", "fruit")
-      val exc = intercept[AnalysisException] {
-        doInsert(t1, df)
-      }
-
       verifyTable(t1, Seq.empty[(Long, String)].toDF("id", "data"))
-      val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
-      assert(exc.getMessage.contains(s"Cannot write to '$tableName', too many data columns"))
+      val tableName = if (catalogAndNamespace.isEmpty) toSQLId(s"default.$t1") else toSQLId(t1)
+      checkError(
+        exception = intercept[AnalysisException] {
+          doInsert(t1, df)
+        },
+        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> tableName,
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`id`, `data`, `fruit`")
+      )
     }
   }
 
