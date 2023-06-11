@@ -20,6 +20,7 @@ import shutil
 import os
 import tempfile
 import time
+from urllib.parse import urlparse
 from typing import Any, Dict, Optional
 from pyspark.ml.util import _get_active_session
 from pyspark.sql.utils import is_remote
@@ -32,7 +33,7 @@ _META_DATA_FILE_NAME = "metadata.json"
 
 
 def _copy_file_from_local_to_fs(local_path, dest_path):
-    session = _get_active_session()
+    session = _get_active_session(is_remote())
     if is_remote():
         session.copyFromLocalToFs(local_path, dest_path)
     else:
@@ -165,17 +166,21 @@ class ParamsReadWrite:
             paramValue = metadata["defaultParamMap"][paramName]
             instance._setDefault(**{paramName: paramValue})
 
-        instance._load_extra_metadata(metadata["extra"])
+        if "extra" in metadata:
+            instance._load_extra_metadata(metadata["extra"])
         return instance
 
     def save(self, path, *, overwrite=False):
-        session = _get_active_session()
+        session = _get_active_session(is_remote())
         path_exist = True
         try:
             session.read.format("binaryFile").load(path)
         except Exception as e:
-            if "Path does not exist" in e:
+            if "Path does not exist" in str(e):
                 path_exist = False
+            else:
+                # Unexpected error.
+                raise e
 
         if path_exist and not overwrite:
             raise ValueError(f"The path {path} already exists.")
@@ -184,7 +189,25 @@ class ParamsReadWrite:
         try:
             self.saveToLocal(tmp_local_dir, overwrite=True)
             _copy_dir_from_local_to_fs(tmp_local_dir, path)
-        except Exception:
+        finally:
+            shutil.rmtree(tmp_local_dir, ignore_errors=True)
+
+    @classmethod
+    def load(cls, path):
+        session = _get_active_session(is_remote())
+
+        tmp_local_dir = tempfile.mkdtemp(prefix="pyspark_ml_model_")
+        try:
+            file_data_df = session.read.format("binaryFile").load(path)
+
+            for row in file_data_df.toLocalIterator():
+                file_name = os.path.basename(urlparse(row.path).path)
+                file_content = bytes(row.content)
+                with open(os.path.join(tmp_local_dir, file_name), "wb") as f:
+                    f.write(file_content)
+
+            return cls.loadFromLocal(tmp_local_dir)
+        finally:
             shutil.rmtree(tmp_local_dir, ignore_errors=True)
 
 

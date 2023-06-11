@@ -253,15 +253,17 @@ class LogisticRegressionModel(PredictionModel,  _LogisticRegressionParams, Model
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, torch_model: Any, num_features: int, num_classes: int):
+    def __init__(self, torch_model: Any = None, num_features: int = None, num_classes: int = None):
         super().__init__()
         self.torch_model = torch_model
         self.num_features = num_features
         self.num_classes = num_classes
 
+    @property  # type: ignore[misc]
     def numFeatures(self) -> int:
         return self.num_features
 
+    @property  # type: ignore[misc]
     def numClasses(self) -> int:
         return self.num_classes
 

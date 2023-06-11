@@ -15,11 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import tempfile
 import unittest
 import numpy as np
-from pyspark.mlv2.classification import LogisticRegression as LORV2
+from pyspark.mlv2.classification import (
+    LogisticRegression as LORV2,
+    LogisticRegressionModel as LORV2Model,
+)
 from pyspark.sql import SparkSession
 
 
@@ -31,6 +34,7 @@ except ImportError:
 
 
 class ClassificationTestsMixin:
+
     @staticmethod
     def _check_result(result_dataframe, expected_predictions, expected_probabilities=None):
         np.testing.assert_array_equal(list(result_dataframe.prediction), expected_predictions)
@@ -119,9 +123,74 @@ class ClassificationTestsMixin:
         local_transform_result = model.transform(eval_df1.toPandas())
         self._check_result(local_transform_result, expected_predictions, expected_probabilities)
 
-    def save_load(self):
-        with tempfile.NamedTemporaryFile() as f:
+    def test_save_load(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
             estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
+            local_path = os.path.join(tmp_dir, "estimator")
+            estimator.saveToLocal(local_path)
+            loaded_estimator = LORV2.loadFromLocal(local_path)
+            assert loaded_estimator.uid == estimator.uid
+            assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
+            assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
+            assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
+
+            # test overwriting
+            estimator2 = estimator.copy()
+            estimator2.set(estimator2.maxIter, 10)
+            estimator2.saveToLocal(local_path, overwrite=True)
+            loaded_estimator2 = LORV2.loadFromLocal(local_path)
+            assert loaded_estimator2.getOrDefault(loaded_estimator2.maxIter) == 10
+
+            fs_path = os.path.join(tmp_dir, "fs", "estimator")
+            estimator.save(fs_path)
+            loaded_estimator = LORV2.load(fs_path)
+            assert loaded_estimator.uid == estimator.uid
+            assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
+            assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
+            assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
+
+            training_dataset = self.spark.createDataFrame(
+                [
+                    (1.0, [0.0, 5.0]),
+                    (0.0, [1.0, 2.0]),
+                    (1.0, [2.0, 1.0]),
+                    (0.0, [3.0, 3.0]),
+                ]
+                * 100,
+                ["label", "features"],
+            )
+            eval_df1 = self.spark.createDataFrame(
+                [
+                    ([0.0, 2.0],),
+                    ([3.5, 3.0],),
+                ],
+                ["features"],
+            )
+
+            model = estimator.fit(training_dataset)
+            assert model.uid == estimator.uid
+
+            local_model_path = os.path.join(tmp_dir, "model")
+            model.saveToLocal(local_model_path)
+            loaded_model = LORV2Model.loadFromLocal(local_model_path)
+            assert loaded_model.numFeatures == 2
+            assert loaded_model.numClasses == 2
+            assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
+            assert loaded_model.torch_model is not None
+
+            # Test loaded model transformation.
+            loaded_model.transform(eval_df1.toPandas())
+
+            fs_model_path = os.path.join(tmp_dir, "fs", "model")
+            model.save(fs_model_path)
+            loaded_model = LORV2Model.load(fs_model_path)
+            assert loaded_model.numFeatures == 2
+            assert loaded_model.numClasses == 2
+            assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
+            assert loaded_model.torch_model is not None
+
+            # Test loaded model transformation.
+            loaded_model.transform(eval_df1.toPandas())
 
 
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
