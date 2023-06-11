@@ -3441,59 +3441,58 @@ object functions {
    */
   def to_binary(e: Column): Column = Column.fn("to_binary", e)
 
-  // format: off
   /**
-   * Convert `e` to a string based on the `format`.
-   * Throws an exception if the conversion fails. The format can consist of the following
-   * characters, case insensitive:
-   *   '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
-   *     string matches a sequence of digits in the input value, generating a result string of the
-   *     same length as the corresponding sequence in the format string. The result string is
-   *     left-padded with zeros if the 0/9 sequence comprises more digits than the matching part of
-   *     the decimal value, starts with 0, and is before the decimal point. Otherwise, it is
-   *     padded with spaces.
-   *   '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
-   *   ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
-   *     a 0 or 9 to the left and right of each grouping separator.
-   *   '$': Specifies the location of the $ currency sign. This character may only be specified
-   *     once.
-   *   'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
-   *     the beginning or end of the format string). Note that 'S' prints '+' for positive values
-   *     but 'MI' prints a space.
-   *   'PR': Only allowed at the end of the format string; specifies that the result string will be
-   *     wrapped by angle brackets if the input value is negative.
+   * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
+   *
+   * @param e
+   *   A column of number to be converted
+   * @param format
+   *   The format can consist of the following characters, case insensitive: <ul> <li> '0' or '9':
+   *   Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format string
+   *   matches a sequence of digits in the input value, generating a result string of the same
+   *   length as the corresponding sequence in the format string. The result string is left-padded
+   *   with zeros if the 0/9 sequence comprises more digits than the matching part of the decimal
+   *   value, starts with 0, and is before the decimal point. Otherwise, it is padded with
+   *   spaces.</li> <li>'.' or 'D': Specifies the position of the decimal point (optional, only
+   *   allowed once).</li> <li>',' or 'G': Specifies the position of the grouping (thousands)
+   *   separator (,). There must be a 0 or 9 to the left and right of each grouping
+   *   separator.</li> <li>'$': Specifies the location of the $ currency sign. This character may
+   *   only be specified once.</li> <li>'S' or 'MI': Specifies the position of a '-' or '+' sign
+   *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
+   *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
+   *   end of the format string; specifies that the result string will be wrapped by angle
+   *   brackets if the input value is negative.</li> </ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  // format: on
   def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
 
-  // format: off
   /**
-   * Convert string 'e' to a number based on the string format 'format'.
-   * Throws an exception if the conversion fails. The format can consist of the following
-   * characters, case insensitive:
-   *   '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
-   *     string matches a sequence of digits in the input string. If the 0/9 sequence starts with
-   *     0 and is before the decimal point, it can only match a digit sequence of the same size.
-   *     Otherwise, if the sequence starts with 9 or is after the decimal point, it can match a
-   *     digit sequence that has the same or smaller size.
-   *   '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
-   *   ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
-   *     a 0 or 9 to the left and right of each grouping separator. 'expr' must match the
-   *     grouping separator relevant for the size of the number.
-   *   '$': Specifies the location of the $ currency sign. This character may only be specified
-   *     once.
-   *   'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
-   *     the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
-   *   'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
-   *     negative number with wrapping angled brackets.
+   * Convert string 'e' to a number based on the string format 'format'. Throws an exception if
+   * the conversion fails.
+   *
+   * @param e
+   *   A column of string to be converted
+   * @param format
+   *   The format can consist of the following characters, case insensitive: <ul><li> '0' or '9':
+   *   Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format string
+   *   matches a sequence of digits in the input string. If the 0/9 sequence starts with 0 and is
+   *   before the decimal point, it can only match a digit sequence of the same size. Otherwise,
+   *   if the sequence starts with 9 or is after the decimal point, it can match a digit sequence
+   *   that has the same or smaller size.</li> <li>'.' or 'D': Specifies the position of the
+   *   decimal point (optional, only allowed once).</li> <li>',' or 'G': Specifies the position of
+   *   the grouping (thousands) separator (,). There must be a 0 or 9 to the left and right of
+   *   each grouping separator. 'expr' must match the grouping separator relevant for the size of
+   *   the number.</li> <li>'$': Specifies the location of the $ currency sign. This character may
+   *   only be specified once.</li> <li>'S' or 'MI': Specifies the position of a '-' or '+' sign
+   *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
+   *   allows '-' but 'MI' does not.</li> <li>'PR': Only allowed at the end of the format string;
+   *   specifies that 'expr' indicates a negative number with wrapping angled brackets.</li></ul>
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  // format: on
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
