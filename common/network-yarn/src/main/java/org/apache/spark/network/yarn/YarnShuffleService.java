@@ -440,7 +440,9 @@ public class YarnShuffleService extends AuxiliaryService {
         if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
           AppId fullId = new AppId(appId);
           byte[] key = dbAppKey(fullId);
-          byte[] value = mapper.writeValueAsString(shuffleSecret).getBytes(StandardCharsets.UTF_8);
+          ByteBuffer dbVal = metaInfo != null ?
+              JavaUtils.stringToBytes(shuffleSecret) : appServiceData;
+          byte[] value = mapper.writeValueAsString(dbVal).getBytes(StandardCharsets.UTF_8);
           db.put(key, value);
         }
         secretManager.registerApp(appId, shuffleSecret);
