@@ -4,7 +4,7 @@ select try_to_binary('', 'base64')
 -- !query schema
 struct<try_to_binary(, base64):binary>
 -- !query output
-[]
+
 
 
 -- !query
@@ -12,7 +12,7 @@ select try_to_binary('  ', 'base64')
 -- !query schema
 struct<try_to_binary(  , base64):binary>
 -- !query output
-[]
+
 
 
 -- !query
@@ -20,7 +20,7 @@ select try_to_binary(' ab cd ', 'base64')
 -- !query schema
 struct<try_to_binary( ab cd , base64):binary>
 -- !query output
-[69 B7 1D]
+i�
 
 
 -- !query
@@ -28,7 +28,7 @@ select try_to_binary(' ab c=', 'base64')
 -- !query schema
 struct<try_to_binary( ab c=, base64):binary>
 -- !query output
-[69 B7]
+i�
 
 
 -- !query
@@ -46,7 +46,7 @@ select try_to_binary(
 -- !query schema
 struct<try_to_binary(concat( b25lIHR3byB0aHJlZSBmb3VyIGZpdmUgc2l4IHNldmVuIGVpZ2h0IG5pbmUgdGVuIGVsZXZlbiB0, d2VsdmUgdGhpcnRlZW4gZm91cnRlZW4gZml2dGVlbiBzaXh0ZWVuIHNldmVudGVlbiBlaWdodGVl), base64):binary>
 -- !query output
-[6F 6E 65 20 74 77 6F 20 74 68 72 65 65 20 66 6F 75 72 20 66 69 76 65 20 73 69 78 20 73 65 76 65 6E 20 65 69 67 68 74 20 6E 69 6E 65 20 74 65 6E 20 65 6C 65 76 65 6E 20 74 77 65 6C 76 65 20 74 68 69 72 74 65 65 6E 20 66 6F 75 72 74 65 65 6E 20 66 69 76 74 65 65 6E 20 73 69 78 74 65 65 6E 20 73 65 76 65 6E 74 65 65 6E 20 65 69 67 68 74 65 65]
+one two three four five six seven eight nine ten eleven twelve thirteen fourteen fivteen sixteen seventeen eightee
 
 
 -- !query
@@ -103,7 +103,7 @@ select try_to_binary(
 -- !query schema
 struct<try_to_binary(∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β), utf-8):binary>
 -- !query output
-[E2 88 AE 20 45 E2 8B 85 64 61 20 3D 20 51 2C 20 20 6E 20 E2 86 92 20 E2 88 9E 2C 20 E2 88 91 20 66 28 69 29 20 3D 20 E2 88 8F 20 67 28 69 29 2C 20 E2 88 80 78 E2 88 88 E2 84 9D 3A 20 E2 8C 88 78 E2 8C 89 20 3D 20 E2 88 92 E2 8C 8A E2 88 92 78 E2 8C 8B 2C 20 CE B1 20 E2 88 A7 20 C2 AC CE B2 20 3D 20 C2 AC 28 C2 AC CE B1 20 E2 88 A8 20 CE B2 29]
+∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)
 
 
 -- !query
@@ -111,7 +111,7 @@ select try_to_binary('大千世界', 'utf8')
 -- !query schema
 struct<try_to_binary(大千世界, utf8):binary>
 -- !query output
-[E5 A4 A7 E5 8D 83 E4 B8 96 E7 95 8C]
+大千世界
 
 
 -- !query
@@ -119,7 +119,7 @@ select try_to_binary('', 'utf-8')
 -- !query schema
 struct<try_to_binary(, utf-8):binary>
 -- !query output
-[]
+
 
 
 -- !query
@@ -127,7 +127,7 @@ select try_to_binary('  ', 'utf8')
 -- !query schema
 struct<try_to_binary(  , utf8):binary>
 -- !query output
-[20 20]
+
 
 
 -- !query
@@ -135,7 +135,7 @@ select try_to_binary('737472696E67')
 -- !query schema
 struct<try_to_binary(737472696E67):binary>
 -- !query output
-[73 74 72 69 6E 67]
+string
 
 
 -- !query
@@ -143,7 +143,7 @@ select try_to_binary('737472696E67', 'hex')
 -- !query schema
 struct<try_to_binary(737472696E67, hex):binary>
 -- !query output
-[73 74 72 69 6E 67]
+string
 
 
 -- !query
@@ -151,7 +151,7 @@ select try_to_binary('')
 -- !query schema
 struct<try_to_binary():binary>
 -- !query output
-[]
+
 
 
 -- !query
@@ -159,7 +159,7 @@ select try_to_binary('1', 'hex')
 -- !query schema
 struct<try_to_binary(1, hex):binary>
 -- !query output
-[01]
+
 
 
 -- !query
@@ -167,7 +167,7 @@ select try_to_binary('FF')
 -- !query schema
 struct<try_to_binary(FF):binary>
 -- !query output
-[FF]
+�
 
 
 -- !query
@@ -175,7 +175,7 @@ select try_to_binary('123')
 -- !query schema
 struct<try_to_binary(123):binary>
 -- !query output
-[01 23]
+#
 
 
 -- !query
@@ -183,7 +183,7 @@ select try_to_binary('12345')
 -- !query schema
 struct<try_to_binary(12345):binary>
 -- !query output
-[01 23 45]
+#E
 
 
 -- !query
@@ -207,7 +207,7 @@ select try_to_binary('abc', concat('utf', '-8'))
 -- !query schema
 struct<try_to_binary(abc, concat(utf, -8)):binary>
 -- !query output
-[61 62 63]
+abc
 
 
 -- !query
@@ -231,7 +231,8 @@ select try_to_binary('abc', 'Hex')
 -- !query schema
 struct<try_to_binary(abc, Hex):binary>
 -- !query output
-[0A BC]
+
+�
 
 
 -- !query

@@ -92,7 +92,7 @@ select cast(a as binary) from t
 -- !query schema
 struct<a:binary>
 -- !query output
-[61 61]
+aa
 
 
 -- !query

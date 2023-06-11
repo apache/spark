@@ -1452,7 +1452,7 @@ SELECT IF(true, cast('1' as binary), cast('2' as binary)) FROM t
 -- !query schema
 struct<(IF(true, CAST(1 AS BINARY), CAST(2 AS BINARY))):binary>
 -- !query output
-[31]
+1
 
 
 -- !query

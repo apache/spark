@@ -70,10 +70,10 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       // wrap it again with a new execution ID when getting Hive result.
       execution.logical match {
         case _: CommandResult =>
-          hiveResponse = hiveResultString(execution.executedPlan)
+          hiveResponse = hiveResultString(execution.executedPlan, hexString = true)
         case _ =>
           hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
-            hiveResultString(execution.executedPlan)
+            hiveResultString(execution.executedPlan, hexString = true)
           }
       }
       tableSchema = getResultSetSchema(execution)
