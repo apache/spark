@@ -76,8 +76,9 @@ object HiveResult {
         val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
+        val hexString = executedPlan.conf.getConf(SQLConf.BINARY_TO_HEX_STRING)
         // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, true)))
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, hexString)))
           .map(_.mkString("\t"))
     }
 
