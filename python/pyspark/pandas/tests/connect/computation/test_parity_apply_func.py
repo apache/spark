@@ -29,12 +29,6 @@ class FrameParityApplyFunctionTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_aggregate(self):
-        super().test_aggregate()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_apply_func import *  # noqa: F401

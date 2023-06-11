@@ -2354,7 +2354,7 @@
       },
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
-          "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
+          "Parameter markers are not allowed in <statement>."
         ]
       },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {

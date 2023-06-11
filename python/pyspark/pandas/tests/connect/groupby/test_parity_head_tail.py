@@ -16,39 +16,20 @@
 #
 import unittest
 
-from pyspark.pandas.tests.test_groupby_slow import GroupBySlowTestsMixin
+from pyspark.pandas.tests.groupby.test_head_tail import GroupbyHeadTailMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupBySlowParityTests(
-    GroupBySlowTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+class GroupbyParityHeadTailTests(
+    GroupbyHeadTailMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_diff(self):
-        super().test_diff()
 
-    @unittest.skip(
-        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
-    )
-    def test_dropna(self):
-        super().test_dropna()
-
-    @unittest.skip("TODO(SPARK-43652): Enable GroupBy.rank with Spark Connect.")
-    def test_rank(self):
-        super().test_rank()
-
-    @unittest.skip(
-        "TODO(SPARK-43653): Enable GroupBySlowParityTests.test_split_apply_combine_on_series."
-    )
-    def test_split_apply_combine_on_series(self):
-        super().test_split_apply_combine_on_series()
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.test_parity_groupby_slow import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_head_tail import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
