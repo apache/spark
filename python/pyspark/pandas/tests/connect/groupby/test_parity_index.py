@@ -16,46 +16,18 @@
 #
 import unittest
 
-from pyspark import pandas as ps
-from pyspark.pandas.tests.computation.test_compute import FrameComputeMixin
+from pyspark.pandas.tests.groupby.test_index import GroupbyIndexMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class FrameParityComputeTests(FrameComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+class GroupbyParityIndexTests(GroupbyIndexMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
 
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_diff(self):
-        super().test_diff()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_mode(self):
-        super().test_mode()
-
-    @unittest.skip(
-        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
-    )
-    def test_pct_change(self):
-        super().test_pct_change()
-
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
-    def test_product(self):
-        super().test_product()
-
-    @unittest.skip("TODO(SPARK-43618): Fix pyspark.sq.column._unary_op to work with Spark Connect.")
-    def test_rank(self):
-        super().test_rank()
+    pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.computation.test_parity_compute import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_index import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
