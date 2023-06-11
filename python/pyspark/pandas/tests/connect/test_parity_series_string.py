@@ -24,11 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class SeriesStringParityTests(
     SeriesStringTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
-    )
-    def test_string_repeat(self):
-        super().test_string_repeat()
+    pass
 
 
 if __name__ == "__main__":

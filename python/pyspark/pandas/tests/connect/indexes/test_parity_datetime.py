@@ -24,17 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class DatetimeIndexParityTests(
     DatetimeIndexTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_indexer_at_time(self):
-        super().test_indexer_at_time()
-
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_indexer_between_time(self):
-        super().test_indexer_between_time()
+    pass
 
 
 if __name__ == "__main__":

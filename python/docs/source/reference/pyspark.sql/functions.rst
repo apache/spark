@@ -64,11 +64,13 @@ Math Functions
     bin
     cbrt
     ceil
+    ceiling
     conv
     cos
     cosh
     cot
     csc
+    e
     exp
     expm1
     factorial
@@ -76,12 +78,18 @@ Math Functions
     hex
     unhex
     hypot
+    ln
     log
     log10
     log1p
     log2
+    negate
+    negative
+    pi
     pmod
+    positive
     pow
+    power
     rint
     round
     bround
@@ -89,6 +97,7 @@ Math Functions
     shiftleft
     shiftright
     shiftrightunsigned
+    sign
     signum
     sin
     sinh
@@ -98,6 +107,7 @@ Math Functions
     degrees
     toRadians
     radians
+    width_bucket
 
 
 Datetime Functions
@@ -256,6 +266,7 @@ Aggregate Functions
     min
     min_by
     mode
+    percentile
     percentile_approx
     product
     regr_avgx
@@ -268,6 +279,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    std
     stddev
     stddev_pop
     stddev_samp
@@ -372,4 +384,19 @@ Misc Functions
     raise_error
     hll_sketch_estimate
     hll_union
+
+Xml Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    xpath
+    xpath_boolean
+    xpath_double
+    xpath_float
+    xpath_int
+    xpath_long
+    xpath_number
+    xpath_short
+    xpath_string
 
