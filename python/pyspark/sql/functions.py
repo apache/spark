@@ -11182,7 +11182,7 @@ def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def isnotnull(col1: "ColumnOrName") -> Column:
+def isnotnull(col: "ColumnOrName") -> Column:
     """
     Returns true if `col` is not null, or false otherwise.
 
@@ -11226,7 +11226,7 @@ def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 @try_remote_functions
 def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
-    Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.
+    Returns null if `col1` equals to `col2`, or `col1` otherwise.
 
     .. versionadded:: 3.5.0
 
