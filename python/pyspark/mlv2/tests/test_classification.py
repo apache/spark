@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+import tempfile
 import unittest
 import numpy as np
 from pyspark.mlv2.classification import LogisticRegression as LORV2
@@ -67,8 +68,6 @@ class ClassificationTestsMixin:
         model = lorv2.fit(df1)
         assert model.uid == lorv2.uid
 
-        model.saveToLocal("/tmp/lorv2_model", overwrite=True)
-
         expected_predictions = [1, 0]
         expected_probabilities = [
             [0.217875, 0.782125],
@@ -119,6 +118,10 @@ class ClassificationTestsMixin:
         self._check_result(result, expected_predictions, expected_probabilities)
         local_transform_result = model.transform(eval_df1.toPandas())
         self._check_result(local_transform_result, expected_predictions, expected_probabilities)
+
+    def save_load(self):
+        with tempfile.NamedTemporaryFile() as f:
+            estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
 
 
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):

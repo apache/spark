@@ -32,12 +32,13 @@ _META_DATA_FILE_NAME = "metadata.json"
 
 
 def _copy_file_from_local_to_fs(local_path, dest_path):
+    session = _get_active_session()
     if is_remote():
-        session = _get_active_session()
         session.copyFromLocalToFs(local_path, dest_path)
     else:
-        # TODO: Fix this.
-        raise RuntimeError("Copying file to cloud storage does not support Spark legacy mode.")
+        session.sparkContext._gateway.jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(
+            local_path, dest_path
+        )
 
 
 def _copy_dir_from_local_to_fs(local_path, dest_path):
