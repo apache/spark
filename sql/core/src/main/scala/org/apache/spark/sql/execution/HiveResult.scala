@@ -53,7 +53,7 @@ object HiveResult {
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(executedPlan: SparkPlan, hexString: Boolean = false): Seq[String] =
+  def hiveResultString(executedPlan: SparkPlan): Seq[String] =
     stripRootCommandResult(executedPlan) match {
       case ExecutedCommandExec(_: DescribeCommandBase) =>
         formatDescribeTableOutput(executedPlan.executeCollectPublic())
@@ -77,7 +77,7 @@ object HiveResult {
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, hexString)))
+        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters, true)))
           .map(_.mkString("\t"))
     }
 
