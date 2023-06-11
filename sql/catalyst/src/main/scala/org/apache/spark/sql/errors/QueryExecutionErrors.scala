@@ -1773,7 +1773,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def malformedRecordsDetectedInRecordParsingError(
       badRecord: String, e: BadRecordException): Throwable = {
     new SparkException(
-      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
         "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
