@@ -18,15 +18,41 @@
 import json
 import shutil
 import os
+import tempfile
 import time
 from typing import Any, Dict, Optional
-from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError
-from pyspark.util import VersionUtils
+from pyspark.ml.util import _get_active_session
+from pyspark.sql.utils import is_remote
+
 
 from pyspark import __version__ as pyspark_version
 
 
 _META_DATA_FILE_NAME = "metadata.json"
+
+
+def _copy_file_from_local_to_fs(local_path, dest_path):
+    if is_remote():
+        session = _get_active_session()
+        session.copyFromLocalToFs(local_path, dest_path)
+    else:
+        # TODO: Fix this.
+        raise RuntimeError("Copying file to cloud storage does not support Spark legacy mode.")
+
+
+def _copy_dir_from_local_to_fs(local_path, dest_path):
+    """
+    Copy directory from local path to cloud storage path.
+    Limitation: Currently only one level directory is supported.
+    """
+    assert os.path.isdir(local_path)
+
+    file_list = os.listdir(local_path)
+    for file_name in file_list:
+        file_path = os.path.join(local_path, file_name)
+        dest_file_path = os.path.join(dest_path, file_name)
+        assert os.path.isfile(file_path)
+        _copy_file_from_local_to_fs(file_path, dest_file_path)
 
 
 def _get_metadata_to_save(
@@ -94,7 +120,6 @@ class ParamsReadWrite:
         """
         pass
 
-    # TODO: support saving to cloud storage file system.
     def saveToLocal(self, path, *, overwrite=False):
         """
         Save model to provided local path.
@@ -114,7 +139,6 @@ class ParamsReadWrite:
         with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
             json.dump(metadata, fp)
 
-    # TODO: support loading from cloud storage file system.
     @classmethod
     def loadFromLocal(cls, path):
         """
@@ -142,6 +166,25 @@ class ParamsReadWrite:
 
         instance._load_extra_metadata(metadata["extra"])
         return instance
+
+    def save(self, path, *, overwrite=False):
+        session = _get_active_session()
+        path_exist = True
+        try:
+            session.read.format("binaryFile").load(path)
+        except Exception as e:
+            if "Path does not exist" in e:
+                path_exist = False
+
+        if path_exist and not overwrite:
+            raise ValueError(f"The path {path} already exists.")
+
+        tmp_local_dir = tempfile.mkdtemp(prefix="pyspark_ml_model_")
+        try:
+            self.saveToLocal(tmp_local_dir, overwrite=True)
+            _copy_dir_from_local_to_fs(tmp_local_dir, path)
+        except Exception:
+            shutil.rmtree(tmp_local_dir, ignore_errors=True)
 
 
 class ModelReadWrite(ParamsReadWrite):

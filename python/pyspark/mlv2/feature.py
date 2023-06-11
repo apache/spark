@@ -24,10 +24,11 @@ from typing import Any, Union, List, Tuple, Callable
 from pyspark.sql import DataFrame
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
 from pyspark.mlv2.base import Estimator, Model
+from pyspark.mlv2.io_utils import ParamsReadWrite, ModelReadWrite
 from pyspark.mlv2.summarizer import summarize_dataframe
 
 
-class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
+class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     """
     Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
@@ -54,7 +55,7 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol):
         return self._copyValues(model)
 
 
-class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
+class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
     def __init__(self, max_abs_values: "np.ndarray" = None, n_samples_seen: int = None) -> None:
         super().__init__()
         self.max_abs_values = max_abs_values
@@ -105,7 +106,7 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol):
         self.n_samples_seen = sk_model.n_samples_seen_
 
 
-class StandardScaler(Estimator, HasInputCol, HasOutputCol):
+class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     """
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
@@ -129,7 +130,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol):
         return self._copyValues(model)
 
 
-class StandardScalerModel(Model, HasInputCol, HasOutputCol):
+class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
     def __init__(self, mean_values: "np.ndarray" = None, std_values: "np.ndarray" = None, n_samples_seen: int = None) -> None:
         super().__init__()
         self.mean_values = mean_values

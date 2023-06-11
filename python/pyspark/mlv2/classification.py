@@ -297,15 +297,13 @@ class LogisticRegressionModel(PredictionModel,  _LogisticRegressionParams, Model
         return transform_fn
 
     def _get_core_model_filename(self):
-        return self.__class__.__name__ + ".torch.pkl"
+        return self.__class__.__name__ + ".torch"
 
     def _save_core_model(self, path):
-        with open(path, "wb") as fp:
-            pickle.dump(self.torch_model, fp)
+        torch.save(self.torch_model, path)
 
     def _load_core_model(self, path):
-        with open(path, "rb") as fp:
-            self.torch_model = pickle.load(fp)
+        self.torch_model = torch.load(path)
 
     def _get_extra_metadata(self) -> Any:
         return {
