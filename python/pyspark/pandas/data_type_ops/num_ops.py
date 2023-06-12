@@ -218,26 +218,38 @@ class NumericOps(DataTypeOps):
             _sanitize_list_like(right)
         except TypeError:
             return super().eq(left, right)
+        if isinstance(left.dtype, extension_dtypes) or isinstance(right.dtype, extension_dtypes):
+            return pyspark_column_op("__eq__", left, right)
         return pyspark_column_op("__eq__", left, right, fillna=False)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if isinstance(left.dtype, extension_dtypes) or isinstance(right.dtype, extension_dtypes):
+            return pyspark_column_op("__ne__", left, right)
         return pyspark_column_op("__ne__", left, right, fillna=True)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if isinstance(left.dtype, extension_dtypes) or isinstance(right.dtype, extension_dtypes):
+            return pyspark_column_op("__lt__", left, right)
         return pyspark_column_op("__lt__", left, right, fillna=False)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if isinstance(left.dtype, extension_dtypes) or isinstance(right.dtype, extension_dtypes):
+            return pyspark_column_op("__le__", left, right)
         return pyspark_column_op("__le__", left, right, fillna=False)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if isinstance(left.dtype, extension_dtypes) or isinstance(right.dtype, extension_dtypes):
+            return pyspark_column_op("__ge__", left, right)
         return pyspark_column_op("__ge__", left, right, fillna=False)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if isinstance(left.dtype, extension_dtypes) or isinstance(right.dtype, extension_dtypes):
+            return pyspark_column_op("__gt__", left, right)
         return pyspark_column_op("__gt__", left, right, fillna=False)
 
 
