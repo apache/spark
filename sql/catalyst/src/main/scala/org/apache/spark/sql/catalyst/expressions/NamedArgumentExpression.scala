@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.DataType
  * SQL Syntax: key => value
  * SQL grammar: key=identifier FAT_ARROW value=expression
  *
- * Example usage in encode:
+ * Example usage with the "encode" scalar function:
  * SELECT encode("abc", charset => "utf-8");
  *   The second argument generates NamedArgumentExpression("charset", Literal("utf-8"))
  * SELECT encode(charset => "utf-8", value => "abc");
