@@ -18,9 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedWriter, File, FileWriter}
-
 import scala.util.Properties
-
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
@@ -29,7 +27,6 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
@@ -41,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
-import org.apache.spark.sql.internal.SQLConf.{LEGACY_TIME_PARSER_POLICY, SHUFFLE_PARTITIONS}
+import org.apache.spark.sql.internal.SQLConf.{HAS_CUSTOM_PARTITION_LOCATIONS, LEGACY_TIME_PARSER_POLICY, SHUFFLE_PARTITIONS}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
@@ -382,6 +379,19 @@ class HiveSparkSubmitSuite
         unusedJar.toString)
       runSparkSubmit(args)
     }
+  }
+
+  test("SPARK-38230: use listPartitionNames when there is no custom partition locations") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_38230.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-38230",
+      "--master", "local-cluster[2,1,512]",
+      "--conf", s"${EXECUTOR_MEMORY.key}=512m",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      unusedJar.toString)
+    runSparkSubmit(args)
   }
 }
 
@@ -904,6 +914,31 @@ object SPARK_34772 {
       spark.sql("SELECT * FROM t WHERE p='2021-01-01'").collect()
     } finally {
       spark.sql("DROP TABLE IF EXISTS t")
+    }
+  }
+}
+
+object SPARK_38230 {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .config(UI_ENABLED.key, "false")
+      .config(HAS_CUSTOM_PARTITION_LOCATIONS.key, "true")
+      .enableHiveSupport()
+      .getOrCreate()
+    try {
+      spark.sql("create table student53 (student_name string) using parquet partitioned by" +
+        "(father_name string, percentage  float, section string)")
+      spark.sql("insert into student53 values('dikshant','ashok', 95, 'A')")
+      spark.sql("insert into student53 values('raj','ramesh', 90, 'B')")
+      spark.sql("insert into student53 values('alok','ajit', 85, 'C')")
+      spark.sql("insert into student53 values('rajendra','naveen', 70, 'D')")
+      spark.sql("create table student63 (student_name string) using parquet partitioned by" +
+        "(father_name string, percentage  float, section string)")
+      spark.sql("insert overwrite table student63 partition (section, father_name, percentage)" +
+        "select * from student53 where section='A'")
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS student53")
+      spark.sql("DROP TABLE IF EXISTS student63")
     }
   }
 }
