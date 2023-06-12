@@ -25,9 +25,6 @@ import org.apache.spark.sql.types.DataType
  * SQL Syntax: key => value
  * SQL grammar: key=identifier FAT_ARROW value=expression
  *
- * NamedArgumentExpression is expected to be resolved
- * and replaced in class extending [[NamedArgumentFunction]]
- *
  * Example usage in encode:
  * SELECT encode("abc", charset => "utf-8");
  * SELECT encode(charset => "utf-8", value => "abc");

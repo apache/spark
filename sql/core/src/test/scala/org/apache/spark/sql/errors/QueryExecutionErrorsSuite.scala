@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
+import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, NamedArgumentExpression, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
@@ -835,6 +835,18 @@ class QueryExecutionErrorsSuite
       errorClass = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: parameter(foo)"),
       sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Calling eval on Unevaluable NamedArgumentExpression") {
+    val e = intercept[SparkException] {
+      NamedArgumentExpression("arg0", Literal("value0")).eval()
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: arg0 => value0"),
+      sqlState = "XX000"
+    )
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
