@@ -4287,7 +4287,7 @@ object SQLConf {
       .doc("Insert into hdfs will fetch partitions' details(e.g. createTime,sd,parameters...), " +
         "when target table does not have custom partition locations, you can set it to false, " +
         "it will just fetch partitions' name and reduce requests of hive metastore.")
-      .version("3.4.0")
+      .version("3.5.0")
       .booleanConf
       .createWithDefault(true)
 
