@@ -233,31 +233,28 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 "with name '%s' to Arrow Array (%s)."
             )
             raise PySparkTypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
-        except ValueError as e:
-            error_msg = (
-                "Exception thrown when converting pandas.Series (%s) "
-                "with name '%s' to Arrow Array (%s)."
-            )
-            if isinstance(e, pa.ArrowInvalid):
+        except ValueError:
+            def force_cast(array: pa.Array):
+                try:
+                    return array.cast(target_type=arrow_type, safe=self._safecheck)
+                except Exception as e:
+                    error_msg = (
+                        "Exception thrown when converting pandas.Series (%s) "
+                        "with name '%s' to Arrow Array (%s)."
+                    )
+                    if self._safecheck:
+                        error_msg = error_msg + (
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                        )
+                    raise PySparkValueError(
+                        error_msg % (series.dtype, series.name, arrow_type)
+                    ) from e
 
-                def force_cast(array: pa.Array):
-                    try:
-                        return array.cast(target_type=arrow_type)
-                    except Exception as e:
-                        raise PySparkValueError(
-                            error_msg % (series.dtype, series.name, arrow_type)
-                        ) from e
-
-                array = pa.Array.from_pandas(series, mask=mask, safe=self._safecheck)
-                return force_cast(array)
-            if self._safecheck:
-                error_msg = error_msg + (
-                    " It can be caused by overflows or other "
-                    "unsafe conversions warned by Arrow. Arrow safe type check "
-                    "can be disabled by using SQL config "
-                    "`spark.sql.execution.pandas.convertToArrowArraySafely`."
-                )
-            raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
+            array = pa.Array.from_pandas(series, mask=mask, safe=self._safecheck)
+            return force_cast(array)
 
     def _create_batch(self, series):
         """

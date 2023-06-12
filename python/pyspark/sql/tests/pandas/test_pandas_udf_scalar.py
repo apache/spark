@@ -1446,7 +1446,7 @@ class ScalarPandasUDFTestsMixin:
         finally:
             shutil.rmtree(path)
 
-    def test_type_coercion(self):
+    def test_type_coercion_string_to_numeric(self):
         # string to int
         df = self.spark.createDataFrame(["1", "2"], schema="string")
         self.assertEquals(
@@ -1456,6 +1456,15 @@ class ScalarPandasUDFTestsMixin:
         df = self.spark.createDataFrame(["1", "x"], schema="string")
         with self.assertRaises(PythonException):
             df.select(pandas_udf(lambda x: x, "int")("value").alias("res")).collect()
+
+        df = self.spark.createDataFrame(["1", "1.1"], schema="string")
+        with self.assertRaises(PythonException):
+            df.select(pandas_udf(lambda x: x, "int")("value").alias("res")).collect()
+
+        # string to double
+        df = self.spark.createDataFrame(["1.1", "2.2"], schema="string")
+        with self.assertRaises(PythonException):
+            df.select(pandas_udf(lambda x: x, "double")("value").alias("res")).collect()
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
