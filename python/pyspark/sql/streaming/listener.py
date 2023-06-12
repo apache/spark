@@ -426,7 +426,7 @@ class StreamingQueryProgress:
         self._stateOperators: List[StateOperatorProgress] = stateOperators
         self._sources: List[SourceProgress] = sources
         self._sink: SinkProgress = sink
-        self._numInputRows: Optional[str] = numInputRows
+        self._numInputRows: int = numInputRows
         self._inputRowsPerSecond: float = inputRowsPerSecond
         self._processedRowsPerSecond: float = processedRowsPerSecond
         self._observedMetrics: Dict[str, Row] = observedMetrics
