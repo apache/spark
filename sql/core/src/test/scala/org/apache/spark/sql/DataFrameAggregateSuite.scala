@@ -575,6 +575,18 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
   }
 
+  test("array_agg function") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("array_agg(a)", "array_agg(b)"),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(array_agg($"a"), array_agg($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
