@@ -170,6 +170,12 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       }
     })
 
+    val eSep = intercept[IllegalArgumentException](sc.addJobTag("foo,bar"))
+    assert(eSep.getMessage.contains(
+      s"Spark job tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'."))
+    val eEmpty = intercept[IllegalArgumentException](sc.addJobTag(""))
+    assert(eEmpty.getMessage.contains("Spark job tag cannot be an empty string."))
+
     // Note: since tags are added in the Future threads, they don't need to be cleared in between.
     val jobA = Future {
       assert(sc.getJobTags() == Set())

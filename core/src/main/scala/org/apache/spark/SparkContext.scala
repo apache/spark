@@ -2922,7 +2922,7 @@ object SparkContext extends Logging {
     }
     if (tagName.isEmpty) {
       throw new IllegalArgumentException(
-        s"Spark job tag cannot be an empty string.")
+        "Spark job tag cannot be an empty string.")
     }
   }
 
