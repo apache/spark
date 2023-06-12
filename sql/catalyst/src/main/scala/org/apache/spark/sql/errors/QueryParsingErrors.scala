@@ -530,6 +530,15 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
+  def parameterMarkerNotAllowed(statement: String, origin: Origin): Throwable = {
+    new ParseException(
+      command = origin.sqlText,
+      start = origin,
+      stop = origin,
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      messageParameters = Map("statement" -> statement))
+  }
+
   def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0053", ctx)
   }

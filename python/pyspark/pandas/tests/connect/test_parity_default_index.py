@@ -25,12 +25,6 @@ class DefaultIndexParityTests(
     DefaultIndexTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
     @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_default_index_distributed(self):
-        super().test_default_index_distributed()
-
-    @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_default_index_sequence(self):
