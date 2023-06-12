@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
@@ -282,8 +282,10 @@ case class AdaptiveSparkPlanExec(
 
           // Start materialization of all new stages and fail fast if any stages failed eagerly
           reorderedNewStages.foreach { stage =>
+            context.runningStages.put(stage.id, stage)
             try {
               stage.materialize().onComplete { res =>
+                context.runningStages.remove(stage.id)
                 if (res.isSuccess) {
                   events.offer(StageSuccess(stage, res.get))
                 } else {
@@ -294,6 +296,7 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
+                context.runningStages.remove(stage.id)
                 cleanUpAndThrowException(Seq(e), Some(stage.id))
             }
           }
@@ -348,6 +351,7 @@ case class AdaptiveSparkPlanExec(
         result = createQueryStages(currentPhysicalPlan)
       }
 
+      cancelRunningStages()
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         optimizeQueryStage(result.newPlan, isFinalStage = true),
@@ -794,6 +798,27 @@ case class AdaptiveSparkPlanExec(
     }
     throw e
   }
+
+  /**
+   * Cancel stages which are still running when the main query is going to final plan.
+   * e.g., a inner join with empty left and large right, we will convert it to `LocalRelation`
+   * once left is materialized but at that time the right side stage is still running.
+   */
+  private def cancelRunningStages(): Unit = {
+    if (!isSubquery && !context.runningStages.isEmpty) {
+      context.runningStages.values().asScala.foreach {
+        case stage: ExchangeQueryStageExec =>
+          try {
+            stage.cancel()
+          } catch {
+            case NonFatal(t) =>
+              logWarning(s"Exception in cancelling query stage: ${stage.treeString}", t)
+          }
+        case _ =>
+      }
+      context.runningStages.clear()
+    }
+  }
 }
 
 object AdaptiveSparkPlanExec {
@@ -850,6 +875,11 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  /**
+   * The running stage map of the entire query, including sub-queries.
+   */
+  val runningStages = new ConcurrentHashMap[Int, QueryStageExec]
 }
 
 /**

@@ -215,6 +215,11 @@ case class BroadcastExchangeExec(
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))
+      case (_: CancellationException | _: InterruptedException) if conf.adaptiveExecutionEnabled =>
+        // This happens when cancel a broadcast job and we only support cancel broadcast job
+        // in AQE. Then if throw exception, it would be out of control of AQE.
+        // The returned value should never be used, so just return null.
+        null
     }
   }
 
