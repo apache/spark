@@ -16,14 +16,36 @@
  */
 package org.apache.spark.sql.catalyst.types
 
+import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructType}
 
+@JsonSerialize(using = classOf[DataTypeJsonSerializer])
+@JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
 object DataTypeUtils {
+  /**
+   * Enables matching against DataType for expressions:
+   * {{{
+   *   case Cast(child @ BinaryType(), StringType) =>
+   *     ...
+   * }}}
+   *
+   * @since 3.5.0
+   */
+  private[sql] def unapply(dataType: DataType, e: Expression): Boolean = e.dataType == dataType
+
+
+  private[sql] def jsonValue(typeName: String): JValue = typeName
+
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).

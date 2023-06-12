@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkThrowable
@@ -57,7 +56,7 @@ abstract class DataType extends AbstractDataType {
    *     ...
    * }}}
    */
-  private[sql] def unapply(e: Expression): Boolean = e.dataType == this
+  private[sql] def unapply(e: Expression): Boolean = DataTypeUtils.unapply(this, e)
 
   /**
    * The default size of a value of this data type, used internally for size estimation.
@@ -71,7 +70,7 @@ abstract class DataType extends AbstractDataType {
       .toLowerCase(Locale.ROOT)
   }
 
-  private[sql] def jsonValue: JValue = typeName
+  private[sql] def jsonValue: JValue = DataTypeUtils.jsonValue(typeName)
 
   /** The compact JSON representation of this data type. */
   def json: String = compact(render(jsonValue))
