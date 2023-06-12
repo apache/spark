@@ -141,27 +141,27 @@ object SQLMetrics {
    * Create a metric to report the size information (including total, min, med, max) like data size,
    * spill size, etc.
    */
-  def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createSizeMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    val acc = new SQLMetric(SIZE_METRIC, -1)
+    val acc = new SQLMetric(SIZE_METRIC, initValue)
     acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
-  def createTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createTimingMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // duration total (min, med, max):
     // 5s (800ms, 1s, 2s)
-    val acc = new SQLMetric(TIMING_METRIC, -1)
+    val acc = new SQLMetric(TIMING_METRIC, initValue)
     acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
-  def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createNanoTimingMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
-    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
+    val acc = new SQLMetric(NS_TIMING_METRIC, initValue)
     acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
