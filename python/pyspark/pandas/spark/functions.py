@@ -32,8 +32,18 @@ from pyspark.sql.utils import is_remote
 
 
 def product(col: Column, dropna: bool) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_product",
+            col,  # type: ignore[arg-type]
+            lit(dropna),
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
 
 
 def stddev(col: Column, ddof: int) -> Column:
