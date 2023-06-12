@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.GenSeq
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.Random
@@ -45,31 +44,123 @@ private[mllib] object LocalKMeans extends Logging {
       maxIterations: Int,
       threadNumber: Int = -1
   ): Array[VectorWithNorm] = {
-    assert(threadNumber > 0 || threadNumber == -1,
-      "threadNumber must be greater than or equal to -1")
-    val paralllelism = threadNumber match {
-      case -1 => Runtime.getRuntime.availableProcessors()
-      case _ => threadNumber
+    threadNumber match {
+      case -1 =>
+        kMeansPlusPlusParallel(seed, points, weights, k, maxIterations,
+          Runtime.getRuntime.availableProcessors())
+      case num if num > 0 =>
+        kMeansPlusPlusParallel(seed, points, weights, k, maxIterations, threadNumber)
+      case _ => kMeansPlusPlus(seed, points, weights, k, maxIterations)
     }
-    val kmeansPool = ThreadUtils.newForkJoinPool("localKMeans-task-support", paralllelism)
+  }
 
+  private def kMeansPlusPlus(
+      seed: Int,
+      points: Array[VectorWithNorm],
+      weights: Array[Double],
+      k: Int,
+      maxIterations: Int
+  ): Array[VectorWithNorm] = {
+    val rand = new Random(seed)
+    val dimensions = points(0).vector.size
+    val centers = new Array[VectorWithNorm](k)
+
+    // Initialize centers by sampling using the k-means++ procedure.
+    centers(0) = pickWeighted(rand, points, weights).toDense
+    val costArray = points.map(EuclideanDistanceMeasure.fastSquaredDistance(_, centers(0)))
+
+    for (i <- 1 until k) {
+      val sum = costArray.zip(weights).map(p => p._1 * p._2).sum
+      val r = rand.nextDouble() * sum
+      var cumulativeScore = 0.0
+      var j = 0
+      while (j < points.length && cumulativeScore < r) {
+        cumulativeScore += weights(j) * costArray(j)
+        j += 1
+      }
+      if (j == 0) {
+        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
+          s" Using duplicate point for center k = $i.")
+        centers(i) = points(0).toDense
+      } else {
+        centers(i) = points(j - 1).toDense
+      }
+
+      // update costArray
+      for (p <- points.indices) {
+        costArray(p) = math.min(
+          EuclideanDistanceMeasure.fastSquaredDistance(points(p), centers(i)),
+          costArray(p))
+      }
+
+    }
+
+    val distanceMeasureInstance = new EuclideanDistanceMeasure
+
+    // Run up to maxIterations iterations of Lloyd's algorithm
+    val oldClosest = Array.fill(points.length)(-1)
+    var iteration = 0
+    var moved = true
+    while (moved && iteration < maxIterations) {
+      moved = false
+      val counts = Array.ofDim[Double](k)
+      val sums = Array.fill(k)(Vectors.zeros(dimensions))
+      var i = 0
+      while (i < points.length) {
+        val p = points(i)
+        val index = distanceMeasureInstance.findClosest(centers, p)._1
+        axpy(weights(i), p.vector, sums(index))
+        counts(index) += weights(i)
+        if (index != oldClosest(i)) {
+          moved = true
+          oldClosest(i) = index
+        }
+        i += 1
+      }
+      // Update centers
+      var j = 0
+      while (j < k) {
+        if (counts(j) == 0.0) {
+          // Assign center to a random point
+          centers(j) = points(rand.nextInt(points.length)).toDense
+        } else {
+          scal(1.0 / counts(j), sums(j))
+          centers(j) = new VectorWithNorm(sums(j))
+        }
+        j += 1
+      }
+      iteration += 1
+    }
+
+    if (iteration == maxIterations) {
+      logInfo(s"Local KMeans++ reached the max number of iterations: $maxIterations.")
+    } else {
+      logInfo(s"Local KMeans++ converged in $iteration iterations.")
+    }
+
+    centers
+  }
+
+  private def kMeansPlusPlusParallel(
+      seed: Int,
+      points: Array[VectorWithNorm],
+      weights: Array[Double],
+      k: Int,
+      maxIterations: Int,
+      threadNumber: Int
+    ): Array[VectorWithNorm] = {
+    val kmeansPool = ThreadUtils.newForkJoinPool("localKMeans-task-support", threadNumber)
+    logInfo(s"kMeansPlusPlus run in thread nums: $threadNumber.")
     try {
+      val pointsParVector = new ParVector(points.toVector)
+      pointsParVector.tasksupport = new ForkJoinTaskSupport(kmeansPool)
+
       val rand = new Random(seed)
       val dimensions = points(0).vector.size
       val centers = new Array[VectorWithNorm](k)
 
       // Initialize centers by sampling using the k-means++ procedure.
       centers(0) = pickWeighted(rand, points, weights).toDense
-
-      val pointsParVector: GenSeq[VectorWithNorm] = paralllelism match {
-        case 1 => points
-        case _ =>
-          logInfo(s"kMeansPlusPlus run in thread nums: $paralllelism.")
-          val pointsPar = new ParVector(points.toVector)
-          pointsPar.tasksupport = new ForkJoinTaskSupport(kmeansPool)
-          pointsPar
-      }
-
       val costArray = pointsParVector.map(
         EuclideanDistanceMeasure.fastSquaredDistance(_, centers(0))).toArray
 
