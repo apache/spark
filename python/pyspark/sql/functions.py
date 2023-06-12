@@ -8159,6 +8159,59 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("to_number", col, format)
 
 
+@try_remote_functions
+def char(n: "ColumnOrName") -> Column:
+    """
+    Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the
+    result is equivalent to char(n % 256)
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    n : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(65,)], ['a'])
+    >>> df.select(char(df.a).alias('r')).collect()
+    [Row(r='A')]
+    """
+    return _invoke_function_over_columns("char", n)
+
+
+@try_remote_functions
+def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Remove the leading and trailing `trim` characters from `str`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    trim : :class:`~pyspark.sql.Column` or str
+        The trim string characters to trim, the default value is a single space
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("SSparkSQLS", "SL", )], ['a', 'b'])
+    >>> df.select(btrim(df.a, df.b).alias('r')).collect()
+    [Row(r='parkSQ')]
+
+    >>> df = spark.createDataFrame([("    SparkSQL   ",)], ['a'])
+    >>> df.select(btrim(df.a).alias('r')).collect()
+    [Row(r='SparkSQL')]
+
+    """
+    if trim is not None:
+        return _invoke_function_over_columns("btrim", str, trim)
+    else:
+        return _invoke_function_over_columns("btrim", str)
+
+
 # ---------------------- Collection functions ------------------------------
 
 

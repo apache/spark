@@ -777,7 +777,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("to_number") {
-     val df = Seq("$78.12").toDF("a")
+    val df = Seq("$78.12").toDF("a")
     checkAnswer(
       df.selectExpr("to_number(a, '$99.99')"),
       Seq(Row(78.12))
@@ -786,5 +786,88 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(to_number(col("a"), lit("$99.99"))),
       Seq(Row(78.12))
     )
+  }
+
+  test("char & chr function") {
+    val df = Seq(65).toDF("a")
+    checkAnswer(df.selectExpr("char(a)"), Seq(Row("A")))
+    checkAnswer(df.select(char(col("a"))), Seq(Row("A")))
+
+    checkAnswer(df.selectExpr("chr(a)"), Seq(Row("A")))
+    checkAnswer(df.select(chr(col("a"))), Seq(Row("A")))
+  }
+
+  test("btrim function") {
+    val df = Seq(("SSparkSQLS", "SL")).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("btrim(a)"), Seq(Row("SSparkSQLS")))
+    checkAnswer(df.select(btrim(col("a"))), Seq(Row("SSparkSQLS")))
+
+    checkAnswer(df.selectExpr("btrim(a, b)"), Seq(Row("parkSQ")))
+    checkAnswer(df.select(btrim(col("a"), col("b"))), Seq(Row("parkSQ")))
+  }
+
+  test("char_length & character_length function") {
+    val df = Seq("SSparkSQLS").toDF("a")
+    checkAnswer(df.selectExpr("char_length(a)"), Seq(Row(10)))
+    checkAnswer(df.select(char_length(col("a"))), Seq(Row(10)))
+
+    checkAnswer(df.selectExpr("character_length(a)"), Seq(Row(10)))
+    checkAnswer(df.select(character_length(col("a"))), Seq(Row(10)))
+  }
+
+  test("contains function") {
+    // TODO
+    val df = Seq(("Spark SQL", "Spark")).toDF("a", "b")
+    checkAnswer(df.selectExpr("contains(a, b)"), Seq(Row(true)))
+    checkAnswer(df.select(contains(lit("Spark SQL"), lit("Spark"))), Seq(Row(true)))
+  }
+
+  test("elt function") {
+    val df = Seq((1, "scala", "java")).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("elt(a, b, c)"), Seq(Row("scala")))
+    checkAnswer(df.select(elt(col("a"), col("b"), col("c"))), Seq(Row("scala")))
+  }
+
+  test("find_in_set function") {
+    val df = Seq(("ab", "abc,b,ab,c,def")).toDF("a", "b")
+    checkAnswer(df.selectExpr("find_in_set(a, b)"), Seq(Row(3)))
+    checkAnswer(df.select(find_in_set(col("a"), col("b"))), Seq(Row(3)))
+  }
+
+  test("like & ilike function") {
+    val df = Seq(("Spark", "_park")).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("like(a, b)"), Seq(Row(true)))
+    checkAnswer(df.select(like(col("a"), col("b"))), Seq(Row(true)))
+
+    checkAnswer(df.selectExpr("ilike(a, b)"), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"))), Seq(Row(true)))
+  }
+
+  test("lcase & ucase function") {
+    val df = Seq("Spark").toDF("a")
+
+    checkAnswer(df.selectExpr("lcase(a)"), Seq(Row("spark")))
+    checkAnswer(df.select(lcase(col("a"))), Seq(Row("spark")))
+
+    checkAnswer(df.selectExpr("ucase(a)"), Seq(Row("SPARK")))
+    checkAnswer(df.select(ucase(col("a"))), Seq(Row("SPARK")))
+  }
+
+  test("len function") {
+    val df = Seq("Spark").toDF("a")
+    checkAnswer(df.selectExpr("len(a)"), Seq(Row(5)))
+    checkAnswer(df.select(len(col("a"))), Seq(Row(5)))
+  }
+
+  test("left & right function") {
+    val df = Seq(("Spark SQL", 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("left(a, b)"), Seq(Row("Spa")))
+    checkAnswer(df.select(left(col("a"), col("b"))), Seq(Row("Spa")))
+
+    checkAnswer(df.selectExpr("right(a, b)"), Seq(Row("SQL")))
+    checkAnswer(df.select(right(col("a"), col("b"))), Seq(Row("SQL")))
   }
 }

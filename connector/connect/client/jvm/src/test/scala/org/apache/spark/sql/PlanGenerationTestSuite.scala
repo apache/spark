@@ -2136,6 +2136,70 @@ class PlanGenerationTestSuite
     fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("char") {
+    fn.char(fn.col("a"))
+  }
+
+  functionTest("btrim") {
+    fn.btrim(fn.col("g"))
+  }
+
+  functionTest("btrim with trim") {
+    fn.btrim(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("char_length") {
+    fn.char_length(fn.col("g"))
+  }
+
+  functionTest("character_length") {
+    fn.character_length(fn.col("g"))
+  }
+
+  functionTest("chr") {
+    fn.chr(fn.col("a"))
+  }
+
+  functionTest("contains") {
+    fn.contains(fn.lit("Spark SQL"), fn.lit("Spark"))
+  }
+
+  functionTest("elt") {
+    fn.elt(fn.col("a"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("find_in_set") {
+    fn.find_in_set(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("like") {
+    fn.like(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("ilike") {
+    fn.ilike(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("lcase") {
+    fn.lcase(fn.col("g"))
+  }
+
+  functionTest("ucase") {
+    fn.ucase(fn.col("g"))
+  }
+
+  functionTest("len") {
+    fn.len(fn.col("g"))
+  }
+
+  functionTest("left") {
+    fn.left(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("right") {
+    fn.right(fn.col("g"), fn.col("g"))
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))

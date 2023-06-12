@@ -3495,6 +3495,151 @@ object functions {
    */
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the
+   * result is equivalent to char(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char(n: Column): Column = Column.fn("char", n)
+
+  /**
+   * Removes the leading and trailing space characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column): Column = Column.fn("btrim", str)
+
+  /**
+   * Remove the leading and trailing `trim` characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column, trim: Column): Column = Column.fn("btrim", str, trim)
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data. The length of
+   * string data includes the trailing spaces. The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char_length(str: Column): Column = Column.fn("char_length", str)
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data. The length of
+   * string data includes the trailing spaces. The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def character_length(str: Column): Column = Column.fn("character_length", str)
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the
+   * result is equivalent to chr(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def chr(n: Column): Column = Column.fn("chr", n)
+
+  /**
+   * Returns a boolean. The value is True if right is found inside left. Returns NULL if either
+   * input expression is NULL. Otherwise, returns False. Both left or right must be of STRING or
+   * BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def contains(left: Column, right: Column): Column = Column.fn("contains", left, right)
+
+  /**
+   * Returns the `n`-th input, e.g., returns `input2` when `n` is 2. The function returns NULL if
+   * the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false. If
+   * `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException for invalid
+   * indices.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def elt(inputs: Column*): Column = Column.fn("elt", inputs: _*)
+
+  /**
+   * Returns the index (1-based) of the given string (`str`) in the comma-delimited list
+   * (`strArray`). Returns 0, if the string was not found or if the given string (`str`) contains
+   * a comma.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def find_in_set(str: Column, strArray: Column): Column = Column.fn("find_in_set", str, strArray)
+
+  /**
+   * Returns true if str matches `pattern` with `escape`, null if any arguments are null, false
+   * otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column): Column = Column.fn("like", str, pattern)
+
+  /**
+   * Returns true if str matches `pattern` with `escape` case-insensitively, null if any arguments
+   * are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column): Column = Column.fn("ilike", str, pattern)
+
+  /**
+   * Returns `str` with all characters changed to lowercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def lcase(str: Column): Column = Column.fn("lcase", str)
+
+  /**
+   * Returns `str` with all characters changed to uppercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ucase(str: Column): Column = Column.fn("ucase", str)
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data. The length of
+   * string data includes the trailing spaces. The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def len(str: Column): Column = Column.fn("len", str)
+
+  /**
+   * Returns the leftmost `len`(`len` can be string type) characters from the string `str`, if
+   * `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def left(str: Column, len: Column): Column = Column.fn("left", str, len)
+
+  /**
+   * Returns the rightmost `len`(`len` can be string type) characters from the string `str`, if
+   * `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def right(str: Column, len: Column): Column = Column.fn("right", str, len)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
