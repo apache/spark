@@ -3557,4 +3557,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       )
     )
   }
+
+  def optionMustBeLiteralString(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      messageParameters = Map(
+        "key" -> key,
+        "supported" -> "literal strings"))
+  }
+
+  def optionMustBeConstant(key: String, cause: Option[Throwable] = None): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      messageParameters = Map(
+        "key" -> key,
+        "supported" -> "constant expressions"),
+      cause = cause)
+  }
 }

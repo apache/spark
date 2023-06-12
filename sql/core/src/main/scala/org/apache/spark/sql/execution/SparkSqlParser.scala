@@ -29,17 +29,18 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.types.StringType
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -332,7 +333,19 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       withIdentClause(identCtx, ident => {
         val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-        val optionsWithLocation = location.map(l => options + ("path" -> l)).getOrElse(options)
+        val optionsList: Map[String, String] =
+          options.options.map { case (key, value) =>
+            val newValue: String =
+              if (value == null) {
+                null
+              } else value match {
+                case Literal(_, _: StringType) => value.toString
+                case _ => throw QueryCompilationErrors.optionMustBeLiteralString(key)
+              }
+            (key, newValue)
+          }.toMap
+        val optionsWithLocation =
+          location.map(l => optionsList + ("path" -> l)).getOrElse(optionsList)
         CreateTempViewUsing(table, schema, replace = false, global = false, provider,
           optionsWithLocation)
       })
