@@ -172,27 +172,38 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     // Note: since tags are added in the Future threads, they don't need to be cleared in between.
     val jobA = Future {
+      assert(sc.getJobTags() == Set())
       sc.addJobTag("two")
+      assert(sc.getJobTags() == Set("two"))
       sc.clearJobTags() // check that clearing all tags works
+      assert(sc.getJobTags() == Set())
       sc.addJobTag("one")
+      assert(sc.getJobTags() == Set("one"))
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
     }
     val jobB = Future {
+      assert(sc.getJobTags() == Set())
       sc.addJobTag("one")
       sc.addJobTag("two")
       sc.addJobTag("one")
       sc.addJobTag("two") // duplicates shouldn't matter
+      assert(sc.getJobTags() == Set("one", "two"))
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
     }
     val jobC = Future {
+      assert(sc.getJobTags() == Set())
       sc.addJobTag("two")
+      assert(sc.getJobTags() == Set("two"))
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
     }
     val jobD = Future {
+      assert(sc.getJobTags() == Set())
       sc.addJobTag("one")
       sc.addJobTag("two")
       sc.addJobTag("two")
+      assert(sc.getJobTags() == Set("one", "two"))
       sc.removeJobTag("two") // check that remove works, despite duplicate add
+      assert(sc.getJobTags() == Set("one"))
       sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
     }
 

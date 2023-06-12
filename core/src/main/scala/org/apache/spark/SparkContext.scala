@@ -848,8 +848,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def addJobTag(tagName: String): Unit = {
     SparkContext.throwIfInvalidTagName(tagName)
-    val existingTags = Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
-      .split(SparkContext.SPARK_JOB_TAGS_SEP).toSet
+    val existingTags = getJobTags()
     val newTags = (existingTags + tagName).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
@@ -862,10 +861,16 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def removeJobTag(tagName: String): Unit = {
     SparkContext.throwIfInvalidTagName(tagName)
-    val existingTags = Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
-      .split(SparkContext.SPARK_JOB_TAGS_SEP).toSet
+    val existingTags = getJobTags()
     val newTags = (existingTags - tagName).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+  }
+
+  /** Get the tags that are currently set to be assigned to all the jobs started by this thread. */
+  def getJobTags(): Set[String] = {
+    Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
   }
 
   /** Clear the current thread's job tags. */
@@ -2914,6 +2919,10 @@ object SparkContext extends Logging {
     if (tagName.contains(SPARK_JOB_TAGS_SEP)) {
       throw new IllegalArgumentException(
         s"Spark job tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
+    }
+    if (tagName.isEmpty) {
+      throw new IllegalArgumentException(
+        s"Spark job tag cannot be an empty string.")
     }
   }
 

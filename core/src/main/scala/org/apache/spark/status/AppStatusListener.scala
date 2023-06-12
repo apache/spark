@@ -440,8 +440,10 @@ private[spark] class AppStatusListener(
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
     val jobTags = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_TAGS)) }
-      .getOrElse("")
-      .split(SparkContext.SPARK_JOB_TAGS_SEP)
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
+      .toSeq
+      .sorted
     val sqlExecutionId = Option(event.properties)
       .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))
 
