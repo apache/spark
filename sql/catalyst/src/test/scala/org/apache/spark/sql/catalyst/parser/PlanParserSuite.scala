@@ -1412,6 +1412,31 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select($"a", $"b"))
   }
 
+  test("table valued function with named arguments") {
+    // All named arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => 'value1', arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1", Literal("value1")) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Unnamed and named arguments
+    assertEqual(
+      "select * from my_tvf(2, arg1 => 'value1', arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        Literal(2) ::
+          NamedArgumentExpression("arg1", Literal("value1")) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    // Mixed arguments
+    assertEqual(
+      "select * from my_tvf(arg1 => 'value1', 2, arg2 => true)",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("arg1", Literal("value1")) ::
+          Literal(2) ::
+          NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+  }
+
   test("SPARK-32106: TRANSFORM plan") {
     // verify schema less
     assertEqual(
