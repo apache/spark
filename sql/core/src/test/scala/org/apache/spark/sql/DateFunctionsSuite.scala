@@ -796,11 +796,22 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
         checkAnswer(df.selectExpr("to_unix_timestamp(ts)"), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("ts"))), Seq(
+          Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+
         checkAnswer(df.selectExpr("to_unix_timestamp(ss)"), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("ss"))), Seq(
+          Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+
         checkAnswer(df.selectExpr(s"to_unix_timestamp(d, '$fmt')"), Seq(
           Row(secs(date1.getTime)), Row(secs(date2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("d"), lit("$fmt"))), Seq(
+          Row(secs(date1.getTime)), Row(secs(date2.getTime))))
+
         checkAnswer(df.selectExpr(s"to_unix_timestamp(s, '$fmt')"), Seq(
+          Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("s"), lit(fmt))), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
 
         val x1 = "2015-07-24 10:00:00"
@@ -828,6 +839,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
         val e = intercept[IllegalArgumentException](invalid.collect())
         assert(e.getMessage.contains('b'))
+
+        val df3 = Seq("2016-04-08").toDF("a")
+        checkAnswer(df3.selectExpr("unix_timestamp(a)"), Seq(Row(null)))
+        checkAnswer(df3.select(unix_timestamp(col("a"))), Seq(Row(null)))
       }
     }
   }
@@ -1038,5 +1053,25 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkTrunc("SECOND", "1961-04-12 00:01:02")
     checkTrunc("MINUTE", "1961-04-12 00:01:00")
+  }
+
+  test("to_timestamp_ltz") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = Seq("2012-11-30").toDF("d")
+      checkAnswer(
+        df.selectExpr("to_timestamp_ltz(d, 'yyyy-MM-dd')"),
+        df.select(to_timestamp_ltz(col("d"), lit("yyyy-MM-dd")))
+      )
+    }
+  }
+
+  test("to_timestamp_ntz") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = Seq("1990-11-22").toDF("d")
+      checkAnswer(
+        df.selectExpr("to_timestamp_ntz(d, 'yyyy-MM-dd')"),
+        df.select(to_timestamp_ntz(col("d"), lit("yyyy-MM-dd")))
+      )
+    }
   }
 }
