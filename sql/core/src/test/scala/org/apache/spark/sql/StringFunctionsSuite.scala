@@ -619,6 +619,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
       )
     )
+    checkAnswer(
+      df1.select(str_to_map(col("a"), lit(","), lit("="))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
+      )
+    )
 
     val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
 
@@ -626,9 +633,17 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
+    checkAnswer(
+      df2.select(str_to_map(col("a"))),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
 
     checkAnswer(
       df2.selectExpr("str_to_map(a, ',')"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+    checkAnswer(
+      df2.select(str_to_map(col("a"), lit(","))),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
@@ -644,6 +659,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Map("k" -> "2", "v" -> "3"))
       )
     )
+    checkAnswer(
+      df3.select(str_to_map(col("str"), col("delim1"), col("delim2"))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
 
     val df4 = Seq(
       ("a:1&b:2", "&"),
@@ -652,6 +674,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df4.selectExpr("str_to_map(str, delim1)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+    checkAnswer(
+      df4.select(str_to_map(col("str"), col("delim1"))),
       Seq(
         Row(Map("a" -> "1", "b" -> "2")),
         Row(Map("k" -> "2", "v" -> "3"))
@@ -724,6 +753,38 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("mask(a,'Q','q','d','o')"),
       Row("QqQQdddoooo") :: Row(null) :: Nil
+    )
+  }
+
+  test("to_binary") {
+    val df = Seq("abc").toDF("a")
+    checkAnswer(
+      df.selectExpr("to_binary(a, 'utf-8')"),
+      df.select(to_binary(col("a"), lit("utf-8")))
+    )
+  }
+
+  test("to_char") {
+    val df = Seq(78.12).toDF("a")
+    checkAnswer(
+      df.selectExpr("to_char(a, '$99.99')"),
+      Seq(Row("$78.12"))
+    )
+    checkAnswer(
+      df.select(to_char(col("a"), lit("$99.99"))),
+      Seq(Row("$78.12"))
+    )
+  }
+
+  test("to_number") {
+     val df = Seq("$78.12").toDF("a")
+    checkAnswer(
+      df.selectExpr("to_number(a, '$99.99')"),
+      Seq(Row(78.12))
+    )
+    checkAnswer(
+      df.select(to_number(col("a"), lit("$99.99"))),
+      Seq(Row(78.12))
     )
   }
 }

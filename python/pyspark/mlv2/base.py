@@ -35,7 +35,11 @@ from pyspark import since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param import Params
-
+from pyspark.ml.param.shared import (
+    HasLabelCol,
+    HasFeaturesCol,
+    HasPredictionCol,
+)
 from pyspark.mlv2.util import transform_dataframe_column
 
 if TYPE_CHECKING:
@@ -118,9 +122,9 @@ class Transformer(Params, metaclass=ABCMeta):
     .. versionadded:: 3.5.0
     """
 
-    def _input_column_name(self) -> str:
+    def _input_columns(self) -> List[str]:
         """
-        Return the name of the input column that is transformed.
+        Return a list of input column names which are used as inputs of transformation.
         """
         raise NotImplementedError()
 
@@ -134,7 +138,11 @@ class Transformer(Params, metaclass=ABCMeta):
     def _get_transform_fn(self) -> Callable[["pd.Series"], Any]:
         """
         Return a transformation function that accepts an instance of `pd.Series` as input and
-        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`
+        returns transformed result as an instance of `pd.Series` or `pd.DataFrame`.
+        If there's only one output column, the transformed result must be an
+        instance of `pd.Series`, if there are multiple output columns, the transformed result
+        must be an instance of `pd.DataFrame` with column names matching output schema
+        returned by  `_output_columns` interface.
         """
         raise NotImplementedError()
 
@@ -142,7 +150,13 @@ class Transformer(Params, metaclass=ABCMeta):
         """
         Transforms the input dataset.
         The dataset can be either pandas dataframe or spark dataframe,
-        if it is pandas dataframe, transforms the dataframe locally without creating spark jobs.
+        if it is a spark DataFrame, the result of transformation is a new spark DataFrame
+        that contains all existing columns and output columns with names.
+        if it is a pandas DataFrame, the input pandas dataframe is appended with output
+        columns in place.
+
+        Note: Transformers does not allow output column having the same name with
+        existing columns.
 
         Parameters
         ----------
@@ -155,13 +169,21 @@ class Transformer(Params, metaclass=ABCMeta):
             transformed dataset, the type of output dataframe is consistent with
             input dataframe.
         """
-        input_col_name = self._input_column_name()
+        input_cols = self._input_columns()
         transform_fn = self._get_transform_fn()
         output_cols = self._output_columns()
 
+        existing_cols = list(dataset.columns)
+        for col_name, _ in output_cols:
+            if col_name in existing_cols:
+                raise ValueError(
+                    "Transformers does not allow output column having the same name with "
+                    "existing columns."
+                )
+
         return transform_dataframe_column(
             dataset,
-            input_col_name=input_col_name,
+            input_cols=input_cols,
             transform_fn=transform_fn,
             output_cols=output_cols,
         )
@@ -239,3 +261,72 @@ class Model(Transformer, metaclass=ABCMeta):
     """
 
     pass
+
+
+@inherit_doc
+class _PredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+    """
+    Params for :py:class:`Predictor` and :py:class:`PredictorModel`.
+
+    .. versionadded:: 3.5.0
+    """
+
+    pass
+
+
+@inherit_doc
+class Predictor(Estimator[M], _PredictorParams, metaclass=ABCMeta):
+    """
+    Estimator for prediction tasks (regression and classification).
+    """
+
+    @since("3.5.0")
+    def setLabelCol(self, value: str) -> "Predictor":
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.5.0")
+    def setFeaturesCol(self, value: str) -> "Predictor":
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.5.0")
+    def setPredictionCol(self, value: str) -> "Predictor":
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+
+@inherit_doc
+class PredictionModel(Model, _PredictorParams, metaclass=ABCMeta):
+    """
+    Model for prediction tasks (regression and classification).
+    """
+
+    @since("3.5.0")
+    def setFeaturesCol(self, value: str) -> "PredictionModel":
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.5.0")
+    def setPredictionCol(self, value: str) -> "PredictionModel":
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @property  # type: ignore[misc]
+    @abstractmethod
+    @since("3.5.0")
+    def numFeatures(self) -> int:
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        raise NotImplementedError()

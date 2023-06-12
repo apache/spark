@@ -3537,4 +3537,51 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
     )
   }
+
+  def avroIncorrectTypeError(
+      avroPath: String, sqlPath: String, avroType: String,
+      sqlType: String, key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_INCORRECT_TYPE",
+      messageParameters = Map(
+        "avroPath" -> avroPath,
+        "sqlPath" -> sqlPath,
+        "avroType" -> avroType,
+        "sqlType" -> toSQLType(sqlType),
+        "key" -> key
+      )
+    )
+  }
+
+  def avroLowerPrecisionError(
+      avroPath: String, sqlPath: String, avroType: String,
+      sqlType: String, key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_LOWER_PRECISION",
+      messageParameters = Map(
+        "avroPath" -> avroPath,
+        "sqlPath" -> sqlPath,
+        "avroType" -> avroType,
+        "sqlType" -> toSQLType(sqlType),
+        "key" -> key
+      )
+    )
+  }
+
+  def optionMustBeLiteralString(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      messageParameters = Map(
+        "key" -> key,
+        "supported" -> "literal strings"))
+  }
+
+  def optionMustBeConstant(key: String, cause: Option[Throwable] = None): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX.OPTION_IS_INVALID",
+      messageParameters = Map(
+        "key" -> key,
+        "supported" -> "constant expressions"),
+      cause = cause)
+  }
 }
