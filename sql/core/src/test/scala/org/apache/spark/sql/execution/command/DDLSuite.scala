@@ -87,7 +87,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
           sql(s"CREATE TABLE $tabName (i INT, j STRING) STORED AS parquet")
         },
         errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-        parameters = Map("cmd" -> "CREATE HIVE TABLE (AS SELECT)")
+        parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
       )
     }
   }
@@ -107,7 +107,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
                """.stripMargin)
           },
           errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-          parameters = Map("cmd" -> "CREATE HIVE TABLE (AS SELECT)")
+          parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
         )
       }
     }
@@ -121,7 +121,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
           sql("CREATE TABLE t STORED AS parquet SELECT 1 as a, 1 as b")
         },
         errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-        parameters = Map("cmd" -> "CREATE HIVE TABLE (AS SELECT)")
+        parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
       )
 
       spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b")).write.saveAsTable("t1")
@@ -130,7 +130,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
           sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
         },
         errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-        parameters = Map("cmd" -> "CREATE HIVE TABLE (AS SELECT)")
+        parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
       )
     }
   }

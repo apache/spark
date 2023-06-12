@@ -367,7 +367,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           "staticPartCols" -> "`b`, `c`",
           "tableColumns" -> "`a`, `d`, `b`, `c`",
           "dataColumns" -> "`1`, `2`, `3`",
-          "tableName" -> s"`spark_catalog`.`default`.`$tableName`")
+          "tableName" -> s"`spark_catalog`.`default`.`${tableName}`")
       )
   }
 

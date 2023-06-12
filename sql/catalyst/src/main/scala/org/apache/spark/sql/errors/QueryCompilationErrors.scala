@@ -1736,7 +1736,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def ddlWithoutHiveSupportEnabledError(cmd: String): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
-      messageParameters = Map("cmd" -> toSQLStmt(cmd)))
+      messageParameters = Map("cmd" -> cmd))
   }
 
   def createTableColumnTypesOptionColumnNotFoundInSchemaError(
