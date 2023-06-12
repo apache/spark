@@ -867,6 +867,9 @@ private[spark] class SparkSubmit extends Logging {
     if (args.verbose && isSqlShell(childMainClass)) {
       childArgs ++= Seq("--verbose")
     }
+
+    sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
+
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -916,7 +919,7 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(s"Main class:\n$childMainClass")
       logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
-      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).mkString("\n")}")
+      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n")}")
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       logInfo("\n")
     }
@@ -1293,6 +1296,12 @@ private[spark] object SparkSubmitUtils extends Logging {
     ivySettings.addResolver(repoResolver)
     ivySettings.setDefaultResolver(repoResolver.getName)
     processRemoteRepoArg(ivySettings, remoteRepos)
+    // (since 2.5) Setting the property ivy.maven.lookup.sources to false
+    // disables the lookup of the sources artifact.
+    // And setting the property ivy.maven.lookup.javadoc to false
+    // disables the lookup of the javadoc artifact.
+    ivySettings.setVariable("ivy.maven.lookup.sources", "false")
+    ivySettings.setVariable("ivy.maven.lookup.javadoc", "false")
     ivySettings
   }
 
@@ -1458,9 +1467,9 @@ private[spark] object SparkSubmitUtils extends Logging {
           throw new RuntimeException(rr.getAllProblemMessages.toString)
         }
         // retrieve all resolved dependencies
+        retrieveOptions.setDestArtifactPattern(packagesDirectory.getAbsolutePath + File.separator +
+          "[organization]_[artifact]-[revision](-[classifier]).[ext]")
         ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-          packagesDirectory.getAbsolutePath + File.separator +
-            "[organization]_[artifact]-[revision](-[classifier]).[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
         resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
       } finally {
