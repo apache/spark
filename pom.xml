@@ -2782,6 +2782,17 @@
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
+                  <enforceBytecodeVersion>
+                    <maxJdkVersion>${java.version}</maxJdkVersion>
+                    <ignoredScopes>test</ignoredScopes>
+                    <ignoredScopes>provided</ignoredScopes>
+                    <excludes>
+                      <!--
+                        TODO(SPARK-44032): Remove the exclusion of threeten-extra when orc-core fixes the violation
+                      -->
+                      <exclude>org.threeten:threeten-extra</exclude>
+                    </excludes>
+                  </enforceBytecodeVersion>
                 </rules>
               </configuration>
             </execution>
@@ -2797,6 +2808,13 @@
               </configuration>
             </execution>
           </executions>
+          <dependencies>
+            <dependency>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>extra-enforcer-rules</artifactId>
+              <version>1.7.0</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
