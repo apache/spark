@@ -22,13 +22,13 @@ import java.util.Locale
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -57,7 +57,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -83,7 +83,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         Map.empty[String, String],
         Some("parquet"),
-        Map.empty[String, String],
+        OptionsListExpressions(Seq.empty),
         None,
         None,
         None),
@@ -103,7 +103,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("a"))),
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -157,7 +157,7 @@ class DDLParserSuite extends AnalysisTest {
           LiteralValue(34, IntegerType)))),
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -179,7 +179,7 @@ class DDLParserSuite extends AnalysisTest {
       List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -198,7 +198,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       Some("abc"),
       None)
@@ -218,7 +218,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Map("test" -> "test"),
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -236,7 +236,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         Map.empty[String, String],
         Some("parquet"),
-        Map.empty[String, String],
+        OptionsListExpressions(Seq.empty),
         Some("/tmp/file"),
         None,
         None)
@@ -254,7 +254,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -272,7 +272,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -290,7 +290,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -308,7 +308,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       Some("parquet"),
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -381,7 +381,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       Some(SerdeInfo(storedAs = Some("parquet"))))
@@ -406,7 +406,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq(IdentityTransform(FieldReference("part"))),
         Map.empty[String, String],
         None,
-        Map.empty[String, String],
+        OptionsListExpressions(Seq.empty),
         None,
         None,
         Some(SerdeInfo(storedAs = Some(format), serde = Some("customSerde"), serdeProperties = Map(
@@ -463,7 +463,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       Some(SerdeInfo(storedAs = Some("textfile"), serdeProperties = Map(
@@ -514,7 +514,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       Some(SerdeInfo(formatClasses = Some(FormatClasses("inFormat", "outFormat")))))
@@ -537,7 +537,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(IdentityTransform(FieldReference("part"))),
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       Some(SerdeInfo(
@@ -878,9 +878,13 @@ class DDLParserSuite extends AnalysisTest {
           Seq("table_name"),
           Some(new StructType),
           Seq.empty[Transform],
-          Map.empty[String, String],
+          Map.empty,
           Some("json"),
-          Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+          OptionsListExpressions(
+            Seq(
+              ("a", Literal(1)),
+              ("b", Literal(Decimal(0.1))),
+              ("c" -> Literal(true)))),
           None,
           None,
           None),
@@ -935,7 +939,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty[Transform],
         Map("p1" -> "v1", "p2" -> "v2"),
         Some("parquet"),
-        Map.empty[String, String],
+        OptionsListExpressions(Seq.empty),
         Some("/user/external/page_view"),
         Some("This is the staging page view table"),
         None)
@@ -2472,7 +2476,7 @@ class DDLParserSuite extends AnalysisTest {
       partitioning: Seq[Transform],
       properties: Map[String, String],
       provider: Option[String],
-      options: Map[String, String],
+      options: OptionsListExpressions,
       location: Option[String],
       comment: Option[String],
       serdeInfo: Option[SerdeInfo],
@@ -2488,7 +2492,7 @@ class DDLParserSuite extends AnalysisTest {
             create.partitioning,
             create.tableSpec.properties,
             create.tableSpec.provider,
-            create.tableSpec.options,
+            create.optionsListExpressions,
             create.tableSpec.location,
             create.tableSpec.comment,
             create.tableSpec.serde,
@@ -2500,7 +2504,7 @@ class DDLParserSuite extends AnalysisTest {
             replace.partitioning,
             replace.tableSpec.properties,
             replace.tableSpec.provider,
-            replace.tableSpec.options,
+            replace.optionsListExpressions,
             replace.tableSpec.location,
             replace.tableSpec.comment,
             replace.tableSpec.serde)
@@ -2511,7 +2515,7 @@ class DDLParserSuite extends AnalysisTest {
             ctas.partitioning,
             ctas.tableSpec.properties,
             ctas.tableSpec.provider,
-            ctas.tableSpec.options,
+            ctas.optionsListExpressions,
             ctas.tableSpec.location,
             ctas.tableSpec.comment,
             ctas.tableSpec.serde,
@@ -2523,7 +2527,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.partitioning,
             rtas.tableSpec.properties,
             rtas.tableSpec.provider,
-            rtas.tableSpec.options,
+            rtas.optionsListExpressions,
             rtas.tableSpec.location,
             rtas.tableSpec.comment,
             rtas.tableSpec.serde)
@@ -2560,7 +2564,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq.empty[Transform],
       Map.empty[String, String],
       None,
-      Map.empty[String, String],
+      OptionsListExpressions(Seq.empty),
       None,
       None,
       None)
@@ -2610,8 +2614,8 @@ class DDLParserSuite extends AnalysisTest {
           .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false)
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
+          None, None, None, false), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(
@@ -2623,8 +2627,8 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
       "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
+          None, None, None, false), false))
     // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
@@ -2779,13 +2783,13 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
+          None, None, None, false), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+        Seq.empty[Transform], UnresolvedTableSpec(Map.empty[String, String], Some("parquet"),
+          None, None, None, false), false))
     // Two generation expressions
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +

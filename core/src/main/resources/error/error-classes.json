@@ -1389,6 +1389,11 @@
           "<statement> with multiple part function name(<funcName>) is not allowed."
         ]
       },
+      "OPTION_IS_INVALID" : {
+        "message" : [
+          "option or property key <key> is invalid; only <supported> are supported"
+        ]
+      },
       "REPETITIVE_WINDOW_DEFINITION" : {
         "message" : [
           "The definition of window <windowName> is repetitive."
