@@ -39,7 +39,7 @@ case class NamedArgumentExpression(key: String, value: Expression)
 
   override def dataType: DataType = value.dataType
 
-  override def toString: String = s"""$key => $value"""
+  override def toString: String = s"$key => $value"
 
   // NamedArgumentExpression has a single child, which is its value expression,
   // so the value expression can be resolved by Analyzer rules recursively.

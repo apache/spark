@@ -368,6 +368,25 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
+  def checkParseSyntaxError(sqlCommand: String, errorString: String, hint: String = ""): Unit = {
+    checkError(
+      exception = parseException(sqlCommand),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> errorString, "hint" -> hint)
+    )
+  }
+
+  test("PARSE_SYNTAX_ERROR: named arguments invalid syntax") {
+    checkParseSyntaxError("select * from my_tvf(arg1 ==> 'value1')", "'>'")
+    checkParseSyntaxError("select * from my_tvf(arg1 = => 'value1')", "'=>'")
+    checkParseSyntaxError("select * from my_tvf((arg1 => 'value1'))", "'=>'")
+    checkParseSyntaxError("select * from my_tvf(arg1 => )", "')'")
+    checkParseSyntaxError("select * from my_tvf(arg1 => , 42)", "','")
+    checkParseSyntaxError("select * from my_tvf(my_tvf.arg1 => 'value1')", "'=>'")
+    checkParseSyntaxError("select * from my_tvf(arg1 => table t1)", "'t1'", hint = ": extra input 't1'")
+  }
+
   test("PARSE_SYNTAX_ERROR: extraneous input") {
     checkError(
       exception = parseException("select 1 1"),

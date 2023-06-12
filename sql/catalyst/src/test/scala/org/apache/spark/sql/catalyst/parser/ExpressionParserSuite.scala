@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
@@ -339,6 +340,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("encode(charset => 'utf-8', 'abc')",
                 $"encode".function(
                   NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
+    assertEqual("encode('abc', charset => 'utf' || '-8')",
+                $"encode".function(Literal("abc"),
+                  NamedArgumentExpression("charset",
+                    Concat(Literal("utf") :: Literal("-8") :: Nil))))
+    val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
+    assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
+                $"encode".function(
+                  NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+                  NamedArgumentExpression("charset", Literal("utf-8"))))
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))

@@ -1435,6 +1435,11 @@ class PlanParserSuite extends AnalysisTest {
         NamedArgumentExpression("arg1", Literal("value1")) ::
           Literal(2) ::
           NamedArgumentExpression("arg2", Literal(true)) :: Nil).select(star()))
+
+    assertEqual(
+      "select * from my_tvf(group => 'abc')",
+      UnresolvedTableValuedFunction("my_tvf",
+        NamedArgumentExpression("group", Literal("abc")) :: Nil).select(star()))
   }
 
   test("SPARK-32106: TRANSFORM plan") {
