@@ -52,7 +52,7 @@ case class CreateIndexExec(
     }
     try {
       table.createIndex(
-        indexName, columns.unzip._1.toArray, colProperties, propertiesWithIndexType.asJava)
+        indexName, columns.map(_._1).toArray, colProperties, propertiesWithIndexType.asJava)
     } catch {
       case _: IndexAlreadyExistsException if ignoreIfExists =>
         logWarning(s"Index $indexName already exists in table ${table.name}. Ignoring.")

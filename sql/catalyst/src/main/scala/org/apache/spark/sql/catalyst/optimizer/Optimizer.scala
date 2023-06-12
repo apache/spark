@@ -861,7 +861,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
           newOutput.contains(a)
-        }.unzip._1
+        }.map(_._1)
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
