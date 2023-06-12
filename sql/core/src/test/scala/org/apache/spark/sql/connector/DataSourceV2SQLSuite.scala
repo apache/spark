@@ -2599,8 +2599,8 @@ class DataSourceV2SQLSuiteV1Filter
         },
         errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
         parameters = Map(
-          "targetString" -> "ns1.ns2.ns3.tbl",
-          "columns" -> "id, name"),
+          "targetString" -> "`ns1`.`ns2`.`ns3`.`tbl`",
+          "columns" -> "`id`, `name`"),
         context = ExpectedContext(fragment = "ns1.ns2.ns3.tbl.*", start = 7, stop = 23))
     }
   }

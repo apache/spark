@@ -219,14 +219,19 @@ class ResolveSubquerySuite extends AnalysisTest {
         LateralSubquery(Project(Seq(outerA, outerB, b, c), t2.as("t2")), Seq(a, b)), Inner, None)
     )
     // SELECT * FROM t1, LATERAL (SELECT t2.*)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("t1"), t0.select(star("t2"))),
-      Seq("cannot resolve 't2.*' given input columns ''")
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
     )
     // Check case sensitivities.
     // SELECT * FROM t1, LATERAL (SELECT T1.*)
     val plan = lateralJoin(t1.as("t1"), t0.select(star("T1")))
-    assertAnalysisError(plan, "cannot resolve 'T1.*' given input columns ''" :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`T1`", "columns" -> "")
+    )
     assertAnalysisSuccess(plan, caseSensitive = false)
   }
 
