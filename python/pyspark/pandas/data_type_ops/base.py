@@ -219,6 +219,10 @@ def _is_boolean_type(right: Any) -> bool:
     )
 
 
+def _is_extension_dtypes(object: Any) -> bool:
+    return isinstance(getattr(object, "dtype", None), extension_dtypes)
+
+
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
