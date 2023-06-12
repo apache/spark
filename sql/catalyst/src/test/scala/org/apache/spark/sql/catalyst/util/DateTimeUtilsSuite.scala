@@ -127,7 +127,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     stringToDate(UTF8String.fromString(s))
   }
 
-  test("string to date trim Control Characters") {
+  test("SPARK-32559: string to date trim Control Characters") {
     assert(toDate("MIDDLE\u0003") === None)
   }
 
