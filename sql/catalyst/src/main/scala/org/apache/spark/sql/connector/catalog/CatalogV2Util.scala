@@ -375,6 +375,7 @@ private[sql] object CatalogV2Util {
   }
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {
+    assert(t.isInstanceOf[ResolvedTableSpec], "Table spec is supposed to be resolved")
     val props = convertTableProperties(
       t.properties, t.asInstanceOf[ResolvedTableSpec].options, t.serde, t.location, t.comment,
       t.provider, t.external)

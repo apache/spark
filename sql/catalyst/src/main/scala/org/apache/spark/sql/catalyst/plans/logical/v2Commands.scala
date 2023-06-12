@@ -1388,7 +1388,6 @@ case class DropIndex(
 trait TableSpec {
   def properties: Map[String, String]
   def provider: Option[String]
-  def options: Map[String, String]
   def location: Option[String]
   def comment: Option[String]
   def serde: Option[SerdeInfo]
@@ -1407,9 +1406,6 @@ case class UnresolvedTableSpec(
 
   override def dataType: DataType =
     throw new UnsupportedOperationException("UnresolvedTableSpec doesn't have a data type")
-
-  override def options: Map[String, String] =
-    throw new UnsupportedOperationException("Can't access options of UnresolvedTableSpec")
 
   override def child: Expression = optionExpression
 
