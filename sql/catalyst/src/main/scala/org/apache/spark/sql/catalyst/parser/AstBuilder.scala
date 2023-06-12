@@ -1545,11 +1545,16 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
         }
         val args = func.functionArgument.asScala.map { e =>
-          if (e.namedArgumentExpression != null) {
-            val key = e.namedArgumentExpression.key.getText
-            val value = e.namedArgumentExpression.value
-            NamedArgumentExpression(key, expression(value))
-          } else {
+          Option(e.namedArgumentExpression).map { n =>
+            if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
+              NamedArgumentExpression(n.key.getText, expression(n.value))
+            } else {
+              throw new ParseException(
+                errorClass = "Named arguments not enabled.",
+                messageParameters = Map("msg" -> (n.key.getText + " is a named argument.")),
+                ctx)
+            }
+          }.getOrElse {
             expression(e)
           }
         }
@@ -2186,11 +2191,16 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
     val arguments = ctx.argument.asScala.map { e =>
-      if (e.namedArgumentExpression != null) {
-        val key = e.namedArgumentExpression.key.getText
-        val value = e.namedArgumentExpression.value
-        NamedArgumentExpression(key, expression(value))
-      } else {
+      Option(e.namedArgumentExpression).map { n =>
+        if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
+          NamedArgumentExpression(n.key.getText, expression(n.value))
+        } else {
+          throw new ParseException(
+            errorClass = "Named arguments not enabled.",
+            messageParameters = Map("msg" -> (n.key.getText + " is a named argument.")),
+            ctx)
+        }
+      }.getOrElse {
         expression(e)
       }
     }.toSeq match {
