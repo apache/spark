@@ -23,6 +23,8 @@ import io.grpc.StatusRuntimeException
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 
 /**
  * All tests in this class requires client UDF artifacts synced with the server.
@@ -446,5 +448,21 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     val keys = grouped.keyAs[String].keys.sort($"value")
 
     checkDataset(keys, "1", "2", "10", "20")
+  }
+
+  test("flatMapGroupsWithState") {
+    val stateFunc = (key: String, values: Iterator[String], state: GroupState[Int]) => {
+      if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+      Iterator((key, values.size))
+    }
+
+    val session: SparkSession = spark
+    import session.implicits._
+    val values = Seq("a", "a", "b", "c", "c", "c", "c").toDS()
+      .groupByKey(x => x)
+      .flatMapGroupsWithState(Append, GroupStateTimeout.NoTimeout)(stateFunc)
+      .collect()
+
+    assert(values sameElements Array(("a", 2), ("b", 1), ("c", 4)))
   }
 }
