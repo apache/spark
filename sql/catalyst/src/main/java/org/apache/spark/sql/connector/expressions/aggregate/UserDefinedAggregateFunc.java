@@ -60,11 +60,11 @@ public class UserDefinedAggregateFunc extends ExpressionWithToString implements 
     if (o == null || getClass() != o.getClass()) return false;
     UserDefinedAggregateFunc that = (UserDefinedAggregateFunc) o;
     return Objects.equals(name, that.name) && Objects.equals(canonicalName, that.canonicalName) &&
-      Arrays.equals(children, that.children);
+      isDistinct == that.isDistinct && Arrays.equals(children, that.children);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, canonicalName) * 31 + Arrays.hashCode(children);
+    return Objects.hash(name, canonicalName, isDistinct) * 31 + Arrays.hashCode(children);
   }
 }

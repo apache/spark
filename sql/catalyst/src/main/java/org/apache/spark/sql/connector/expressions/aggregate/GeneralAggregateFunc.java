@@ -69,12 +69,12 @@ public final class GeneralAggregateFunc extends ExpressionWithToString implement
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     GeneralAggregateFunc that = (GeneralAggregateFunc) o;
-    return Objects.equals(name, that.name) && Objects.equals(isDistinct, that.isDistinct) &&
+    return Objects.equals(name, that.name) && isDistinct == that.isDistinct &&
       Arrays.equals(children, that.children);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name) * 31 + Arrays.hashCode(children);
+    return Objects.hash(name, isDistinct) * 31 + Arrays.hashCode(children);
   }
 }
