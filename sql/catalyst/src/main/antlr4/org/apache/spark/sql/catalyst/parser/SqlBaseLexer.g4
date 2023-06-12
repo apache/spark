@@ -445,6 +445,7 @@ COLON: ':';
 ARROW: '->';
 HENT_START: '/*+';
 HENT_END: '*/';
+QUESTION: '?';
 
 STRING_LITERAL
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
