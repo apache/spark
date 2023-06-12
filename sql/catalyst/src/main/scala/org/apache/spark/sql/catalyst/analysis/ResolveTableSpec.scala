@@ -49,8 +49,8 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
   /** Helper method to resolve the table specification within a logical plan. */
   private def resolveTableSpec(
       input: LogicalPlan,
-      tableSpec: TableSpec,
-      withNewSpec: TableSpec => LogicalPlan): LogicalPlan = tableSpec match {
+      tableSpec: TableSpecBase,
+      withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
     case u: UnresolvedTableSpec if u.optionExpression.resolved =>
       val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
@@ -76,7 +76,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           }
           (key, newValue)
       }
-      val newTableSpec = ResolvedTableSpec(
+      val newTableSpec = TableSpec(
         properties = u.properties,
         provider = u.provider,
         options = newOptions.toMap,

@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{ResolvedTableSpec, SerdeInfo, TableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
@@ -375,9 +375,8 @@ private[sql] object CatalogV2Util {
   }
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {
-    assert(t.isInstanceOf[ResolvedTableSpec], "Table spec is supposed to be resolved")
     val props = convertTableProperties(
-      t.properties, t.asInstanceOf[ResolvedTableSpec].options, t.serde, t.location, t.comment,
+      t.properties, t.options, t.serde, t.location, t.comment,
       t.provider, t.external)
     withDefaultOwnership(props)
   }

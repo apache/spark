@@ -445,7 +445,7 @@ case class CreateTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    tableSpec: TableSpec,
+    tableSpec: TableSpecBase,
     ignoreIfExists: Boolean)
   extends UnaryCommand with V2CreateTablePlan {
 
@@ -466,7 +466,7 @@ case class CreateTableAsSelect(
     name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
-    tableSpec: TableSpec,
+    tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
     isAnalyzed: Boolean = false)
@@ -497,7 +497,7 @@ case class ReplaceTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    tableSpec: TableSpec,
+    tableSpec: TableSpecBase,
     orCreate: Boolean)
   extends UnaryCommand with V2CreateTablePlan {
 
@@ -521,7 +521,7 @@ case class ReplaceTableAsSelect(
     name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
-    tableSpec: TableSpec,
+    tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     orCreate: Boolean,
     isAnalyzed: Boolean = false)
@@ -1385,14 +1385,13 @@ case class DropIndex(
     copy(table = newChild)
 }
 
-trait TableSpec {
+trait TableSpecBase {
   def properties: Map[String, String]
   def provider: Option[String]
   def location: Option[String]
   def comment: Option[String]
   def serde: Option[SerdeInfo]
   def external: Boolean
-  def withNewLocation(newLocation: Option[String]): TableSpec
 }
 
 case class UnresolvedTableSpec(
@@ -1402,7 +1401,7 @@ case class UnresolvedTableSpec(
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean) extends UnaryExpression with Unevaluable with TableSpec {
+    external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
     throw new UnsupportedOperationException("UnresolvedTableSpec doesn't have a data type")
@@ -1411,10 +1410,6 @@ case class UnresolvedTableSpec(
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(optionExpression = newChild.asInstanceOf[OptionList])
-
-  override def withNewLocation(loc: Option[String]): TableSpec = {
-    UnresolvedTableSpec(properties, provider, optionExpression, loc, comment, serde, external)
-  }
 
   override def simpleString(maxFields: Int): String = {
     this.copy(properties = Utils.redact(properties).toMap).toString
@@ -1444,15 +1439,15 @@ case class OptionList(options: Seq[(String, Expression)])
   }
 }
 
-case class ResolvedTableSpec(
+case class TableSpec(
     properties: Map[String, String],
     provider: Option[String],
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean) extends TableSpec {
-  override def withNewLocation(newLocation: Option[String]): TableSpec = {
-    ResolvedTableSpec(properties, provider, options, newLocation, comment, serde, external)
+    external: Boolean) extends TableSpecBase {
+  def withNewLocation(newLocation: Option[String]): TableSpec = {
+    TableSpec(properties, provider, options, newLocation, comment, serde, external)
   }
 }
