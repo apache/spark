@@ -49,17 +49,13 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     createUserDefinedPythonTableFunction("SimpleUDTF", pythonScript, returnType)
 
   test("Simple PythonUDTF") {
-    // scalastyle:off assume
     assume(shouldTestPythonUDFs)
-    // scalastyle:on assume
     val df = pythonUDTF(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
   }
 
   test("PythonUDTF with lateral join") {
-    // scalastyle:off assume
     assume(shouldTestPythonUDFs)
-    // scalastyle:on assume
     withTempView("t") {
       spark.udtf.registerPython("testUDTF", pythonUDTF)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
@@ -70,9 +66,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
   }
 
   test("PythonUDTF in correlated subquery") {
-    // scalastyle:off assume
     assume(shouldTestPythonUDFs)
-    // scalastyle:on assume
     withTempView("t") {
       spark.udtf.registerPython("testUDTF", pythonUDTF)
       Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")

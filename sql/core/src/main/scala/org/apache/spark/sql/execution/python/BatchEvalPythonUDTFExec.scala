@@ -93,6 +93,7 @@ case class BatchEvalPythonUDTFExec(
 
       // Add rows to the queue to join later with the result.
       // Also keep track of the number rows added to the queue.
+      // This is needed to process extra output rows from the `terminate()` call of the UDTF.
       var count = 0L
       val projectedRowIter = contextAwareIterator.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
@@ -113,16 +114,27 @@ case class BatchEvalPythonUDTFExec(
       val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.flatMap { outputRows =>
+        // If `count` is greater than zero, it means there are remaining input rows in the queue.
+        // In this case, the output rows of the UDTF are joined with the corresponding input row
+        // in the queue.
         if (count > 0) {
           val left = queue.remove()
           count -= 1
           joined.withLeft(pruneChildForResult(left))
         }
+        // If `count` is zero, it means all input rows have been consumed. Any additional rows
+        // from the UDTF are from the `terminate()` call. We leave the left side as the last
+        // element of its child output to keep it consistent with the Generate implementation
+        // and Hive UDTFs.
         outputRows.map(r => resultProj(joined.withRight(r)))
       }
     }
   }
 
+  /**
+   * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
+   * an iterator of internal rows for every input row.
+   */
   private def evaluate(
       udtf: PythonUDTF,
       argOffsets: Array[Array[Int]],
