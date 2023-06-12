@@ -50,10 +50,6 @@ class Observation:
 
     .. versionadded:: 3.3.0
 
-    Notes
-    -----
-    This class does not support streaming datasets.
-
     Examples
     --------
     >>> from pyspark.sql.functions import col, count, lit, max
