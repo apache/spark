@@ -307,7 +307,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       }.getCause
       checkError(
         exception = exception1.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
       )
 
