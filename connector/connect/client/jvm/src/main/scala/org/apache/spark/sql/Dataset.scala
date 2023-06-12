@@ -2569,7 +2569,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset[T](encoder) { builder =>
       builder.getFilterBuilder
         .setInput(plan.getRoot)
-        .setCondition(udf.apply(col("*")).expr)
+        .setCondition(udf.applyUnresolvedStar().expr)
     }
   }
 
@@ -2622,7 +2622,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(outputEncoder) { builder =>
       builder.getMapPartitionsBuilder
         .setInput(plan.getRoot)
-        .setFunc(udf.apply(col("*")).expr.getCommonInlineUserDefinedFunction)
+        .setFunc(udf.applyUnresolvedStar().expr.getCommonInlineUserDefinedFunction)
     }
   }
 

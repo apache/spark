@@ -26,6 +26,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.util.Utils
 
 /**
@@ -125,6 +126,17 @@ case class ScalarUserDefinedFunction(
       .addAllArguments(exprs.map(_.expr).asJava)
 
     name.foreach(udfBuilder.setFunctionName)
+  }
+
+  /**
+   * Used internally to mark a UDF is used for typed APIs. Semantically assigning col(*) to each
+   * UDF input may not be correct. However the
+   * [[org.apache.spark.sql.catalyst.expressions.ScalaUDF]] assumes the inputs are resolved and
+   * the count of the encoders matches the count of input columns. Thus col(*) is used as a
+   * placeholder for Typed UDFs until the server resolves the real inputs.
+   */
+  private[sql] def applyUnresolvedStar(): Column = {
+    apply(inputEncoders.map(_ => col("*")): _*)
   }
 
   override def withName(name: String): ScalarUserDefinedFunction = copy(name = Option(name))

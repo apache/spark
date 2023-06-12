@@ -409,6 +409,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
   }
 
+  test("typed aggregation on option type") {
+    val ds = Seq(Some(1), Some(2), None, None).toDS()
+    val agg = ds.groupByKey(x => x).agg(count("*"))
+    checkDatasetUnorderly(agg, (Some(1), 1L), (Some(2), 1L), (None, 2L))
+  }
+
   test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
     // TODO(SPARK-43416): Recursively rename the position based tuple to the schema name from the
     //  server.
@@ -438,8 +444,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
         .mapValues(v => v.length + v)
         .reduceGroups(_ + _),
       (3.0, "4abc-4xyz-"),
-      (5.0, "6hello-")
-    )
+      (5.0, "6hello-"))
   }
 
   test("groupby") {

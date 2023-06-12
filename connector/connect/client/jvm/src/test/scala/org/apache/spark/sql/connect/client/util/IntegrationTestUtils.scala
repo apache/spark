@@ -30,7 +30,7 @@ object IntegrationTestUtils {
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
   // Enable this flag to print all client debug log + server logs to the console
-  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "true").toBoolean
+  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
 
   private[sql] lazy val scalaVersion = {
     versionNumberString.split('.') match {
@@ -53,8 +53,8 @@ object IntegrationTestUtils {
     if (isDebug) {
       Seq(
         // Enable to see the server plan change log
-         "--conf",
-         "spark.sql.planChangeLog.level=WARN",
+        // "--conf",
+        // "spark.sql.planChangeLog.level=WARN",
 
         // Enable to see the server grpc received
         // "--conf",

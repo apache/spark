@@ -525,7 +525,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       builder.getGroupMapBuilder
         .setInput(ds.plan.getRoot)
         .addAllSortingExpressions(sortExprs.map(e => e.expr).asJava)
-        .addAllGroupingExpressions(udfGroupingExprs())
+        .addAllGroupingExpressions(getGroupingExprs())
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
     }
   }
@@ -541,16 +541,16 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     ds.sparkSession.newDataset[R](outputEncoder) { builder =>
       builder.getCoGroupMapBuilder
         .setInput(ds.plan.getRoot)
-        .addAllInputGroupingExpressions(udfGroupingExprs())
+        .addAllInputGroupingExpressions(getGroupingExprs())
         .addAllInputSortingExpressions(thisSortExprs.map(e => e.expr).asJava)
         .setOther(otherImpl.ds.plan.getRoot)
-        .addAllOtherGroupingExpressions(otherImpl.udfGroupingExprs())
+        .addAllOtherGroupingExpressions(otherImpl.getGroupingExprs())
         .addAllOtherSortingExpressions(otherSortExprs.map(e => e.expr).asJava)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder, otherImpl.ivEncoder))
     }
   }
 
-  private def udfGroupingExprs(): java.util.List[proto.Expression] = {
+  private def getGroupingExprs(): java.util.List[proto.Expression] = {
     groupingFunc match {
       case Some(gf) =>
         groupingExprs.asJava
@@ -559,17 +559,27 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         val dummyGroupingFunc = ScalarUserDefinedFunction(
           function = UdfUtils.noOp[V, K](),
           inputEncoders = vEncoder :: Nil,
-          outputEncoder = kEncoder
-        ).apply(col("*")).expr
+          outputEncoder = kEncoder).applyUnresolvedStar().expr
         (Seq(dummyGroupingFunc) ++ groupingExprs).asJava
     }
+  }
+
+  private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
+      inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
+    val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
+    ScalarUserDefinedFunction(
+      function = nf,
+      inputEncoders = inputEncoders,
+      outputEncoder = outputEncoder).applyUnresolvedStar().expr.getCommonInlineUserDefinedFunction
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(_.encoder)) // apply keyAs change
     ds.sparkSession.newDataset(rEnc) { builder =>
       // The plan is rewrite to
-      // "Select grouping_exprs(*) as keys, mapValue_udf(*); GroupBy keys; Agg agg_exprs"
+      // ds.select(grouping_udf(*).as("key_1"), mapValue_udf(*))
+      //   .groupBy(col("key_1"))
+      //   .agg(agg_exprs)
       builder.getAggregateBuilder
         .setInput(aggInputPlan().getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
@@ -580,15 +590,15 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   private def aggGroupingExprs(): java.util.List[proto.Expression] = {
     // The grouping is now done on the (key, mapped_value) inputs
-    groupingExprs.zipWithIndex.map {
-      case (_, i) => col(s"key_$i").expr
+    groupingExprs.zipWithIndex.map { case (_, i) =>
+      col(s"key_$i").expr
     }.asJava
   }
 
   private def aggInputPlan(): proto.Plan = {
     // Inputs changed from value to (key, mapped_value)
-    val keys = groupingExprs.zipWithIndex.map {
-      case (e, i) => new Column(e).alias(s"key_$i")
+    val keys = groupingExprs.zipWithIndex.map { case (e, i) =>
+      new Column(e).as(s"key_$i")
     }
     val value =
       if (valueMapFunc == UdfUtils.identical()) {
@@ -598,8 +608,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         ScalarUserDefinedFunction(
           function = valueMapFunc,
           inputEncoders = Seq(ivEncoder),
-          outputEncoder = vEncoder
-        ).apply(col("*"))
+          outputEncoder = vEncoder).applyUnresolvedStar()
       }
     // Select grouping_udf(*) as key, mapValue_udf(*)
     ds.select(keys :+ value: _*).plan
@@ -607,24 +616,13 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val inputEncoders = Seq(vEncoder, vEncoder)
-    val udf = ScalarUserDefinedFunction(
+    val input = ScalarUserDefinedFunction(
       function = f,
       inputEncoders = inputEncoders,
-      outputEncoder = vEncoder)
-    val input = udf.apply(inputEncoders.map(_ => col("*")): _*)
+      outputEncoder = vEncoder).applyUnresolvedStar()
     val expr = Column.fn("reduce", input).expr
     val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr, vEncoder)
     agg(aggregator)
-  }
-
-  private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
-      inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
-    val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
-    val udf = ScalarUserDefinedFunction(
-      function = nf,
-      inputEncoders = inputEncoders,
-      outputEncoder = outputEncoder)
-    udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
   }
 }
 
@@ -644,7 +642,7 @@ private object KeyValueGroupedDatasetImpl {
       ds.encoder,
       ds.encoder,
       Some(gf),
-      Seq(gf.apply(col("*")).expr),
+      Seq(gf.applyUnresolvedStar().expr),
       UdfUtils.identical())
   }
 
