@@ -180,7 +180,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest
+            included-tags: org.apache.spark.tags.ExtendedSQLCommandTest
+            comment: "- command tests"
+          - modules: sql
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.ExtendedSQLCommandTest
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}

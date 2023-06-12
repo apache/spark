@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `CREATE NAMESPACE` command that checks V1
@@ -56,6 +57,7 @@ trait CreateNamespaceSuiteBase extends command.CreateNamespaceSuiteBase
  * The class contains tests for the `CREATE NAMESPACE` command to check V1 In-Memory
  * table catalog.
  */
+@ExtendedSQLCommandTest
 class CreateNamespaceSuite extends CreateNamespaceSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
 }

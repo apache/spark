@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]`
@@ -70,6 +71,7 @@ trait AlterTableSetSerdeSuiteBase extends command.AlterTableSetSerdeSuiteBase {
  * The class contains tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]` command to check
  * V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSuiteBase {
 
   test("In-Memory catalog - datasource table: alter table set serde") {

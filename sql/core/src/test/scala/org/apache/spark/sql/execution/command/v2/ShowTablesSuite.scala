@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
 

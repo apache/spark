@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. ADD PARTITION` command that
@@ -178,4 +179,5 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
  * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
  * V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with CommandSuiteBase

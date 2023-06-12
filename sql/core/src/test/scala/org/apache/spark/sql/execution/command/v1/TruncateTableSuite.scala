@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.execution.command.FakeLocalFsFileSystem
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1
@@ -188,6 +189,7 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 /**
  * The class contains tests for the `TRUNCATE TABLE` command to check V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
   test("truncation of external tables is not allowed") {
     import testImplicits._

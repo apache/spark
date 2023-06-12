@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `CREATE NAMESPACE` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
 }

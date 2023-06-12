@@ -22,6 +22,7 @@ import java.util.Locale
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `SHOW FUNCTIONS` command that checks V1
@@ -48,6 +49,7 @@ trait ShowFunctionsSuiteBase extends command.ShowFunctionsSuiteBase
 /**
  * The class contains tests for the `SHOW FUNCTIONS` command to check V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class ShowFunctionsSuite extends ShowFunctionsSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowFunctionsSuiteBase].commandVersion
 }

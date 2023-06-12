@@ -23,11 +23,13 @@ import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, 
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command
  * to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class AlterTableAddPartitionSuite
   extends command.AlterTableAddPartitionSuiteBase
   with CommandSuiteBase {

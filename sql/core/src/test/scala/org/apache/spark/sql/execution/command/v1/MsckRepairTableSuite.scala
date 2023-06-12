@@ -23,6 +23,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `MSCK REPAIR TABLE` command that
@@ -74,4 +75,5 @@ trait MsckRepairTableSuiteBase extends command.MsckRepairTableSuiteBase {
  * The class contains tests for the `MSCK REPAIR TABLE` command to check
  * V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class MsckRepairTableSuite extends MsckRepairTableSuiteBase with CommandSuiteBase

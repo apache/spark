@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 trait V1WriteCommandSuiteBase extends SQLTestUtils {
 
@@ -105,6 +106,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
   }
 }
 
+@ExtendedSQLCommandTest
 class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1WriteCommandSuiteBase {
 
   import testImplicits._

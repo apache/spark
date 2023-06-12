@@ -21,10 +21,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `TRUNCATE TABLE` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase {
 
   override val invalidPartColumnError = "not a valid partition column in table"

@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `ALTER NAMESPACE ... SET LOCATION` command to check V2 table
  * catalogs.
  */
+@ExtendedSQLCommandTest
 class AlterNamespaceSetLocationSuite extends command.AlterNamespaceSetLocationSuiteBase
     with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"

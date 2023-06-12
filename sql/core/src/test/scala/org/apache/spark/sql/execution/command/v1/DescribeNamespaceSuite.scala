@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `DESCRIBE NAMESPACE` command that checks V1
@@ -60,6 +61,7 @@ trait DescribeNamespaceSuiteBase extends command.DescribeNamespaceSuiteBase
  * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 In-Memory
  * table catalog.
  */
+@ExtendedSQLCommandTest
 class DescribeNamespaceSuite extends DescribeNamespaceSuiteBase with CommandSuiteBase {
   override def notFoundMsgPrefix: String = if (conf.useV1Command) "Database" else "Namespace"
   override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion

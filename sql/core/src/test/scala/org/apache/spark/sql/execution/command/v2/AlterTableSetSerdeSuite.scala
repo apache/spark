@@ -21,11 +21,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `ALTER TABLE .. SET [SERDE|SERDEPROPERTIES]` command to
  * check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class AlterTableSetSerdeSuite extends command.AlterTableSetSerdeSuiteBase with CommandSuiteBase {
 
   override def sparkConf: SparkConf = super.sparkConf

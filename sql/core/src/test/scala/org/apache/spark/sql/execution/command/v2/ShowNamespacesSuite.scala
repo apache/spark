@@ -22,10 +22,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `SHOW NAMESPACES` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryTableCatalog].getName)

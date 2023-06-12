@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that checks V1
@@ -209,6 +210,7 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
  * The class contains tests for the `DESCRIBE TABLE` command to check V1 In-Memory
  * table catalog.
  */
+@ExtendedSQLCommandTest
 class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
 

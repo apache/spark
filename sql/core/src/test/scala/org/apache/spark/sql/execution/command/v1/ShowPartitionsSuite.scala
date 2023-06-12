@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1
@@ -88,6 +89,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
 /**
  * The class contains tests for the `SHOW PARTITIONS` command to check V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase {
   // The test is placed here because it fails with `USING HIVE`:
   // org.apache.spark.sql.AnalysisException:

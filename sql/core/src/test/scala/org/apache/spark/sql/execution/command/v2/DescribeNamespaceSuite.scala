@@ -21,11 +21,13 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.tags.ExtendedSQLCommandTest
 import org.apache.spark.util.Utils
 
 /**
  * The class contains tests for the `DESCRIBE NAMESPACE` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with CommandSuiteBase {
   override def notFoundMsgPrefix: String = "Namespace"
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER NAMESPACE ... SET PROPERTIES` command that
@@ -39,6 +40,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends command.AlterNamespaceSetProp
  * The class contains tests for the `ALTER NAMESPACE ... SET PROPERTIES` command to
  * check V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class AlterNamespaceSetPropertiesSuite extends AlterNamespaceSetPropertiesSuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterNamespaceSetPropertiesSuiteBase].commandVersion

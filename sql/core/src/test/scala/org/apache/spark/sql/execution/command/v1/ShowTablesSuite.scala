@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `SHOW TABLES` command that check V1
@@ -143,6 +144,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
 /**
  * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowTablesSuiteBase].commandVersion
 

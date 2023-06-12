@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `DROP NAMESPACE` commands that check V1 table
@@ -42,6 +43,7 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
   }
 }
 
+@ExtendedSQLCommandTest
 class DropNamespaceSuite extends DropNamespaceSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[DropNamespaceSuiteBase].commandVersion
 }

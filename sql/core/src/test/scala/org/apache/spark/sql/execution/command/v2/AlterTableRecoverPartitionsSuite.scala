@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command
  * to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class AlterTableRecoverPartitionsSuite
   extends command.AlterTableRecoverPartitionsSuiteBase
   with CommandSuiteBase {

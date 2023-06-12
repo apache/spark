@@ -21,6 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RENAME` command that check V1
@@ -85,4 +86,5 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with Q
  * The class contains tests for the `ALTER TABLE .. RENAME` command to check
  * V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class AlterTableRenameSuite extends AlterTableRenameSuiteBase with CommandSuiteBase

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `SHOW TBLPROPERTIES` command that checks V1
@@ -58,6 +59,7 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
  * The class contains tests for the `SHOW TBLPROPERTIES` command to check V1 In-Memory
  * table catalog.
  */
+@ExtendedSQLCommandTest
 class ShowTblPropertiesSuite extends ShowTblPropertiesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowTblPropertiesSuiteBase].commandVersion
 }

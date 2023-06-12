@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. ADD COLUMNS` command that
@@ -35,4 +36,5 @@ trait AlterTableAddColumnsSuiteBase extends command.AlterTableAddColumnsSuiteBas
  * The class contains tests for the `ALTER TABLE .. ADD COLUMNS` command to check
  * V1 In-Memory table catalog.
  */
+@ExtendedSQLCommandTest
 class AlterTableAddColumnsSuite extends AlterTableAddColumnsSuiteBase with CommandSuiteBase

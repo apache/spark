@@ -21,10 +21,12 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `SHOW PARTITIONS` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSuiteBase {
 
   test("show partitions of non-partitioned table") {

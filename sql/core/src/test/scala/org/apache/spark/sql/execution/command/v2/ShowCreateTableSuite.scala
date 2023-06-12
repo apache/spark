@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `SHOW CREATE TABLE` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with CommandSuiteBase {
   override def fullName: String = s"$catalog.$ns.$table"
 

@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `ALTER TABLE .. RENAME` command to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class AlterTableRenameSuite extends command.AlterTableRenameSuiteBase with CommandSuiteBase {
   test("destination namespace is different") {
     withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>

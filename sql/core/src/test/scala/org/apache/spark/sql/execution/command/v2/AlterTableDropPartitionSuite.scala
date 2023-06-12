@@ -21,11 +21,13 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command
  * to check V2 table catalogs.
  */
+@ExtendedSQLCommandTest
 class AlterTableDropPartitionSuite
   extends command.AlterTableDropPartitionSuiteBase
   with CommandSuiteBase {
