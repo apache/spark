@@ -158,7 +158,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.14</scala.version>
+    <scala.version>2.12.15</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
     <!--
@@ -2736,16 +2736,6 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
-<!--  <dependencies>-->
-<!--    <dependency>-->
-<!--      <groupId>software.amazon.awssdk</groupId>-->
-<!--      <artifactId>aws-sdk-java</artifactId>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>software.amazon.awssdk</groupId>-->
-<!--      <artifactId>s3</artifactId>-->
-<!--    </dependency>-->
-<!--  </dependencies>-->
   <build>
     <pluginManagement>
       <plugins>
