@@ -1661,4 +1661,21 @@ class PlanParserSuite extends AnalysisTest {
         Seq(Literal("abc")) :: Nil).as("tbl").select($"interval")
     )
   }
+
+  test("SPARK-XXXXX: parsing of positional parameters") {
+    comparePlans(
+      parsePlan("SELECT ?"),
+      Project(UnresolvedAlias(Parameter("_7"), None) :: Nil, OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT abs(?)"),
+      Project(UnresolvedAlias(
+        UnresolvedFunction(
+          "abs" :: Nil,
+          Parameter("_11") :: Nil,
+          isDistinct = false), None) :: Nil,
+        OneRowRelation()))
+    comparePlans(
+      parsePlan("SELECT * FROM a LIMIT ?"),
+      table("a").select(star()).limit(Parameter("_22")))
+  }
 }
