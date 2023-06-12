@@ -821,25 +821,61 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
 
     // Same children, structurally different metrics - fail
-    assertAnalysisError(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
-      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      Union(
+        CollectMetrics("evt1", count :: Nil, testRelation) ::
+          CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+      expectedErrorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
+      expectedMessageParameters = Map(
+        "name" -> "evt1",
+        "plan" ->
+         """Union false, false
+           |:- CollectMetrics evt1, [count(1) AS cnt#23L]
+           |:  +- LocalRelation <empty>, [a#0]
+           |+- CollectMetrics evt1, [sum(a#25) AS sum#21L]
+           |   +- LocalRelation <empty>, [a#25]
+           |""".stripMargin)
+    )
 
     // Different children, same metrics - fail
     val b = $"b".string
     val tblB = LocalRelation(b)
-    assertAnalysisError(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
-      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      Union(
+        CollectMetrics("evt1", count :: Nil, testRelation) ::
+          CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+      expectedErrorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
+      expectedMessageParameters = Map(
+        "name" -> "evt1",
+        "plan" ->
+          """Union false, false
+            |:- Project [cast(a#0 as string) AS a#27]
+            |:  +- CollectMetrics evt1, [count(1) AS cnt#23L]
+            |:     +- LocalRelation <empty>, [a#0]
+            |+- CollectMetrics evt1, [count(1) AS cnt#23L]
+            |   +- LocalRelation <empty>, [b#26]
+            |""".stripMargin)
+    )
 
     // Subquery different tree - fail
     val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
     val query = Project(
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
       CollectMetrics("evt1", count :: Nil, tblB))
-    assertAnalysisError(query, "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      query,
+      expectedErrorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
+      expectedMessageParameters = Map(
+        "name" -> "evt1",
+        "plan" ->
+          """Project [b#26, scalar-subquery#28 [] AS sum#29L]
+            |:  +- Aggregate [sum(a#0) AS sum#21L]
+            |:     +- CollectMetrics evt1, [count(1) AS cnt#23L]
+            |:        +- LocalRelation <empty>, [a#0]
+            |+- CollectMetrics evt1, [count(1) AS cnt#23L]
+            |   +- LocalRelation <empty>, [b#26]
+            |""".stripMargin)
+    )
 
     // Aggregate with filter predicate - fail
     val sumWithFilter = sum.transform {

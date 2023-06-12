@@ -302,7 +302,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "\nReplacement is unresolved: " + e.replacement)
 
           case g: Grouping =>
-            g.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_2445", messageParameters = Map.empty)
+            g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
           case g: GroupingID =>
             g.failAnalysis(
               errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
@@ -721,10 +722,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2438",
+              errorClass = "SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
               messageParameters = Map(
-                "colName" -> mapCol.name,
-                "dataType" -> mapCol.dataType.catalogString))
+                "colName" -> toSQLExpr(mapCol),
+                "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -734,9 +735,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2439",
+              errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
               messageParameters = Map(
-                "sqlExprs" -> o.expressions.map(_.sql).mkString(","),
+                "sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "),
                 "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)))
 
           case _: UnresolvedHint => throw new IllegalStateException(
@@ -1056,7 +1057,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               // of a CTE that is used multiple times or a self join.
               if (!simplifiedMetrics.sameResult(simplifiedOther)) {
                 failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2443",
+                  errorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
                   messageParameters = Map(
                     "name" -> name,
                     "plan" -> plan.toString))

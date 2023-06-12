@@ -2326,8 +2326,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           processV2AggregateFunction(aggFunc, arguments, u)
         case _ =>
           failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2444",
-            messageParameters = Map("funcName" -> bound.name()))
+            errorClass = "INVALID_UDF_IMPLEMENTATION",
+            messageParameters = Map("funcName" -> toSQLId(bound.name())))
       }
     }
 

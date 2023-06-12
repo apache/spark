@@ -643,6 +643,11 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATED_OBSERVED_METRICS_NAME" : {
+    "message" : [
+      "Multiple definitions of observed metrics named '<name>': <plan>."
+    ]
+  },
   "DUPLICATE_CLAUSES" : {
     "message" : [
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
@@ -1237,6 +1242,13 @@
       }
     }
   },
+  "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
+    "message" : [
+      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
+      "<sqlExprs>",
+      "in operator <operator>."
+    ]
+  },
   "INVALID_NUMERIC_LITERAL_RANGE" : {
     "message" : [
       "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
@@ -1511,6 +1523,11 @@
       "The value of the typed literal <valueType> is invalid: <value>."
     ],
     "sqlState" : "42604"
+  },
+  "INVALID_UDF_IMPLEMENTATION" : {
+    "message" : [
+      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction."
+    ]
   },
   "INVALID_URL" : {
     "message" : [
@@ -2014,6 +2031,11 @@
   "SEED_EXPRESSION_IS_UNFOLDABLE" : {
     "message" : [
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
+    ]
+  },
+  "SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED" : {
+    "message" : [
+      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
     ]
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
@@ -5651,33 +5673,6 @@
       "Failure when resolving conflicting references in AsOfJoin:",
       "<plan>",
       "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2438" : {
-    "message" : [
-      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2439" : {
-    "message" : [
-      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
-      "<sqlExprs>",
-      "in operator <operator>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2443" : {
-    "message" : [
-      "Multiple definitions of observed metrics named '<name>': <plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2444" : {
-    "message" : [
-      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2445" : {
-    "message" : [
-      "grouping() can only be used with GroupingSets/Cube/Rollup."
     ]
   },
   "_LEGACY_ERROR_TEMP_2446" : {
