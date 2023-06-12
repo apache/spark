@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.DataType
  *
  * Example usage in encode:
  * SELECT encode("abc", charset => "utf-8");
-    The second argument generates a `NamedArgumentExpression("charset", ......
+ *   The second argument generates `NamedArgumentExpression("charset", Literal("utf-8"))
  * SELECT encode(charset => "utf-8", value => "abc");
  *
  * @param key The name of the function argument
