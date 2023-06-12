@@ -1542,7 +1542,20 @@
     "message" : [
       "Malformed records are detected in record parsing: <badRecord>.",
       "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
-    ]
+    ],
+    "subClass" : {
+      "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
+        "message" : [
+          "Parsing JSON arrays as structs is forbidden."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "22023"
   },
   "MISSING_AGGREGATION" : {
     "message" : [
@@ -4690,11 +4703,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2132" : {
-    "message" : [
-      "Parsing JSON arrays as structs is forbidden."
     ]
   },
   "_LEGACY_ERROR_TEMP_2133" : {
