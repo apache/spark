@@ -348,7 +348,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
             {
                 "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
                 "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
-                "exception" : "org.apache.spark.SparkException: Job aborted due to stage failure...",
+                "exception" : "org.apache.spark.SparkException: Job aborted due to stage failure",
                 "errorClassOnException" : null}
         """
         terminated_event = QueryTerminatedEvent.fromJson(json.loads(terminated_json))
