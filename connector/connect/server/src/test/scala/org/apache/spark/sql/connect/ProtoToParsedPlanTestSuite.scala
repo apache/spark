@@ -24,6 +24,8 @@ import java.util
 
 import scala.util.{Failure, Success, Try}
 
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
@@ -90,6 +92,13 @@ class ProtoToParsedPlanTestSuite
           " theid INTEGER, \"Dept\" INTEGER)")
       .executeUpdate()
     conn.commit()
+
+    if (regenerateGoldenFiles) {
+      if (goldenFilePath.toFile.exists()) {
+        FileUtils.deleteDirectory(goldenFilePath.toFile)
+      }
+      FileUtils.forceMkdir(goldenFilePath.toFile)
+    }
   }
 
   override def afterAll(): Unit = {

@@ -27,6 +27,7 @@ import scala.util.{Failure, Success, Try}
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
+import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
@@ -103,6 +104,12 @@ class PlanGenerationTestSuite
     val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+    if (regenerateGoldenFiles) {
+      if (queryFilePath.toFile.exists()) {
+        FileUtils.deleteDirectory(queryFilePath.toFile)
+      }
+      FileUtils.forceMkdir(queryFilePath.toFile)
+    }
   }
 
   override protected def beforeEach(): Unit = {
