@@ -4023,7 +4023,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # same result, and only have internal differences in their behavior.
         is_empty = (
             self._internal.resolved_copy.spark_frame.isEmpty()
-            if is_remote
+            if is_remote()
             else self._internal.resolved_copy.spark_frame.rdd.isEmpty()
         )
         return len(self._internal.column_labels) == 0 or is_empty
