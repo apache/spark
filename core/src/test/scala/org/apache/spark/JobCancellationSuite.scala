@@ -175,6 +175,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       s"Spark job tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'."))
     val eEmpty = intercept[IllegalArgumentException](sc.addJobTag(""))
     assert(eEmpty.getMessage.contains("Spark job tag cannot be an empty string."))
+    val eNull = intercept[IllegalArgumentException](sc.addJobTag(null))
+    assert(eNull.getMessage.contains("Spark job tag cannot be null."))
 
     // Note: since tags are added in the Future threads, they don't need to be cleared in between.
     val jobA = Future {
@@ -185,7 +187,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       assert(sc.getJobTags() == Set())
       sc.addJobTag("one")
       assert(sc.getJobTags() == Set("one"))
-      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      try {
+        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      } finally {
+        sc.clearJobTags() // clear for the case of thread reuse by another Future
+      }
     }
     val jobB = Future {
       assert(sc.getJobTags() == Set())
@@ -194,13 +200,21 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       sc.addJobTag("one")
       sc.addJobTag("two") // duplicates shouldn't matter
       assert(sc.getJobTags() == Set("one", "two"))
-      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      try {
+        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      } finally {
+        sc.clearJobTags() // clear for the case of thread reuse by another Future
+      }
     }
     val jobC = Future {
       assert(sc.getJobTags() == Set())
       sc.addJobTag("two")
       assert(sc.getJobTags() == Set("two"))
-      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      try {
+        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      } finally {
+        sc.clearJobTags() // clear for the case of thread reuse by another Future
+      }
     }
     val jobD = Future {
       assert(sc.getJobTags() == Set())
@@ -210,7 +224,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       assert(sc.getJobTags() == Set("one", "two"))
       sc.removeJobTag("two") // check that remove works, despite duplicate add
       assert(sc.getJobTags() == Set("one"))
-      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      try {
+        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+      } finally {
+        sc.clearJobTags() // clear for the case of thread reuse by another Future
+      }
     }
 
     // Block until three jobs have started.

@@ -2916,6 +2916,9 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_TAGS_SEP = ","
 
   private[spark] def throwIfInvalidTagName(tagName: String) = {
+    if (tagName == null) {
+      throw new IllegalArgumentException("Spark job tag cannot be null.")
+    }
     if (tagName.contains(SPARK_JOB_TAGS_SEP)) {
       throw new IllegalArgumentException(
         s"Spark job tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
