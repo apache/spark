@@ -1557,6 +1557,13 @@
     },
     "sqlState" : "22023"
   },
+  "MERGE_CARDINALITY_VIOLATION" : {
+    "message" : [
+      "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
+      "This could result in the target row being operated on more than once with an update or delete operation and is not allowed."
+    ],
+    "sqlState" : "23K01"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",

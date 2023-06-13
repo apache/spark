@@ -25,10 +25,12 @@ import org.apache.spark.sql.{DataFrame, Encoders, QueryTest}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.QueryExecutionListener
 
 abstract class RowLevelOperationSuiteBase
   extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
@@ -91,5 +93,25 @@ abstract class RowLevelOperationSuiteBase
     } else {
       spark.read.schema(schemaString).json(jsonDS)
     }
+  }
+
+  // executes an operation and keeps the executed plan
+  protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
+    var executedPlan: SparkPlan = null
+
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        executedPlan = qe.executedPlan
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+      }
+    }
+    spark.listenerManager.register(listener)
+
+    func
+
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    stripAQEPlan(executedPlan)
   }
 }

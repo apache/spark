@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, Literal, MetadataAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, MetadataAttribute}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
@@ -108,16 +108,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // original row ID values must be preserved and passed back to the table to encode updates
     // if there are any assignments to row ID attributes, add extra columns for the original values
-    val rowIdAttrSet = AttributeSet(rowIdAttrs)
-    val originalRowIdValues = assignments.flatMap { assignment =>
-      val key = assignment.key.asInstanceOf[Attribute]
-      val value = assignment.value
-      if (rowIdAttrSet.contains(key) && !key.semanticEquals(value)) {
-        Some(Alias(key, ORIGINAL_ROW_ID_VALUE_PREFIX + key.name)())
-      } else {
-        None
-      }
-    }
+    val originalRowIdValues = buildOriginalRowIdValues(rowIdAttrs, assignments)
 
     val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
 
@@ -133,27 +124,11 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       MetadataAttribute.isValid(attr.metadata)
     }
     val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
-    val insertOutput = deltaInsertOutput(assignments.map(_.value), metadataAttrs)
-    val output = buildDeletesAndInsertsOutput(matchedRowsPlan, deleteOutput, insertOutput)
-    Expand(Seq(deleteOutput, insertOutput), output, matchedRowsPlan)
-  }
-
-  private def buildDeletesAndInsertsOutput(
-      child: LogicalPlan,
-      deleteOutput: Seq[Expression],
-      insertOutput: Seq[Expression]): Seq[Attribute] = {
-
+    val insertOutput = deltaInsertOutput(assignments, metadataAttrs)
+    val outputs = Seq(deleteOutput, insertOutput)
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
-    val attrs = operationTypeAttr +: child.output
-
-    // build a correct nullability map for output attributes
-    // an attribute is nullable if at least one output projection may produce null
-    val nullabilityMap = attrs.indices.map { index =>
-      index -> (deleteOutput(index).nullable || insertOutput(index).nullable)
-    }.toMap
-
-    attrs.zipWithIndex.map { case (attr, index) =>
-      AttributeReference(attr.name, attr.dataType, nullabilityMap(index))()
-    }
+    val attrs = operationTypeAttr +: matchedRowsPlan.output
+    val expandOutput = generateExpandOutput(attrs, outputs)
+    Expand(outputs, expandOutput, matchedRowsPlan)
   }
 }

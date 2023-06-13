@@ -2851,4 +2851,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "data" -> data,
         "enumString" -> enumString))
   }
+
+  def mergeCardinalityViolationError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MERGE_CARDINALITY_VIOLATION",
+      messageParameters = Map.empty)
+  }
 }
