@@ -19,12 +19,15 @@ import array
 import datetime
 import os
 import unittest
+import random
 import shutil
+import string
 import tempfile
 from collections import defaultdict
 
 from pyspark.errors import (
     PySparkAttributeError,
+    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
@@ -648,6 +651,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.assertEqual(sdf.schema, cdf.schema)
             self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+    def test_streaming_local_relation(self):
+        threshold_conf = "spark.sql.session.localRelationCacheThreshold"
+        old_threshold = self.connect.conf.get(threshold_conf)
+        threshold = 1024 * 1024
+        self.connect.conf.set(threshold_conf, threshold)
+        try:
+            suffix = "abcdef"
+            letters = string.ascii_lowercase
+            str = "".join(random.choice(letters) for i in range(threshold)) + suffix
+            data = [[0, str], [1, str]]
+            for i in range(0, 2):
+                cdf = self.connect.createDataFrame(data, ["a", "b"])
+                self.assert_eq(cdf.count(), len(data))
+                self.assert_eq(cdf.filter(f"endsWith(b, '{suffix}')").isEmpty(), False)
+        finally:
+            self.connect.conf.set(threshold_conf, old_threshold)
 
     def test_with_atom_type(self):
         for data in [[(1), (2), (3)], [1, 2, 3]]:
@@ -3160,6 +3180,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         row_count = 100 * 1000
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
+
+    def test_unsupported_udtf(self):
+        with self.assertRaises(PySparkNotImplementedError) as e:
+            self.connect.udtf.register()
+
+        self.check_error(
+            exception=e.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "udtf()"},
+        )
 
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.

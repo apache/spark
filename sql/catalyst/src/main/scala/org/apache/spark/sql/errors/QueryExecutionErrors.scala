@@ -1416,10 +1416,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def cannotParseJsonArraysAsStructsError(): SparkRuntimeException = {
+  def cannotParseJsonArraysAsStructsError(recordStr: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2132",
-      messageParameters = Map.empty)
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS",
+      messageParameters = Map(
+        "badRecord" -> recordStr,
+        "failFastMode" -> FailFastMode.name))
   }
 
   def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
@@ -1771,7 +1773,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def malformedRecordsDetectedInRecordParsingError(
       badRecord: String, e: BadRecordException): Throwable = {
     new SparkException(
-      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
         "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
@@ -2398,7 +2400,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "autoBroadcastjoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
         "driverMemory" -> SparkLauncher.DRIVER_MEMORY,
         "analyzeTblMsg" -> analyzeTblMsg),
-      cause = oe).initCause(oe.getCause)
+      cause = oe.getCause)
   }
 
   def executeCodePathUnsupportedError(execName: String): SparkUnsupportedOperationException = {
@@ -2867,5 +2869,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "left" -> left,
         "right" -> right,
         "function" -> function))
+  }
+
+  def mergeCardinalityViolationError(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MERGE_CARDINALITY_VIOLATION",
+      messageParameters = Map.empty)
   }
 }

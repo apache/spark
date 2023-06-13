@@ -1399,6 +1399,11 @@
           "<statement> with multiple part function name(<funcName>) is not allowed."
         ]
       },
+      "OPTION_IS_INVALID" : {
+        "message" : [
+          "option or property key <key> is invalid; only <supported> are supported"
+        ]
+      },
       "REPETITIVE_WINDOW_DEFINITION" : {
         "message" : [
           "The definition of window <windowName> is repetitive."
@@ -1547,7 +1552,27 @@
     "message" : [
       "Malformed records are detected in record parsing: <badRecord>.",
       "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
-    ]
+    ],
+    "subClass" : {
+      "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
+        "message" : [
+          "Parsing JSON arrays as structs is forbidden."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
+  "MERGE_CARDINALITY_VIOLATION" : {
+    "message" : [
+      "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
+      "This could result in the target row being operated on more than once with an update or delete operation and is not allowed."
+    ],
+    "sqlState" : "23K01"
   },
   "MISSING_AGGREGATION" : {
     "message" : [
@@ -2345,7 +2370,7 @@
       },
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
-          "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
+          "Parameter markers are not allowed in <statement>."
         ]
       },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
@@ -4695,11 +4720,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2132" : {
-    "message" : [
-      "Parsing JSON arrays as structs is forbidden."
     ]
   },
   "_LEGACY_ERROR_TEMP_2133" : {

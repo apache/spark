@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, TableSpec, View}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowNamespaces, ShowTables, UnresolvedTableSpec, View}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, FunctionCatalog, Identifier, SupportsNamespaces, Table => V2Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -240,6 +241,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
+    listFunctionsInternal(dbName, None)
+  }
+
+  /**
+   * Returns a list of functions registered in the specified database (namespace)
+   * which name match the specify pattern (the name can be qualified with catalog).
+   * This includes all built-in and temporary functions.
+   *
+   * @since 3.5.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def listFunctions(dbName: String, pattern: String): Dataset[Function] = {
+    listFunctionsInternal(dbName, Some(pattern))
+  }
+
+  private def listFunctionsInternal(dbName: String, pattern: Option[String]): Dataset[Function] = {
     val namespace = resolveNamespace(dbName)
     val functions = collection.mutable.ArrayBuilder.make[Function]
 
@@ -249,7 +266,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // List built-in functions. We don't need to specify the namespace here as SHOW FUNCTIONS with
     // only system scope does not need to know the catalog and namespace.
-    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), userScope = false, systemScope = true, None)
+    val plan0 = ShowFunctions(UnresolvedNamespace(Nil), false, true, pattern)
     sparkSession.sessionState.executePlan(plan0).toRdd.collect().foreach { row =>
       // Built-in functions do not belong to any catalog or namespace. We can only look it up with
       // a single part name.
@@ -258,8 +275,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
 
     // List user functions.
-    val plan1 = ShowFunctions(UnresolvedNamespace(namespace),
-      userScope = true, systemScope = false, None)
+    val plan1 = ShowFunctions(UnresolvedNamespace(namespace), true, false, pattern)
     sparkSession.sessionState.executePlan(plan1).toRdd.collect().foreach { row =>
       functions += makeFunction(parseIdent(row.getString(0)))
     }
@@ -646,10 +662,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       None
     }
 
-    val tableSpec = TableSpec(
+    val newOptions = OptionList(options.map { case (key, value) =>
+      (key, Literal(value).asInstanceOf[Expression])
+    }.toSeq)
+    val tableSpec = UnresolvedTableSpec(
       properties = Map(),
       provider = Some(source),
-      options = options,
+      optionExpression = newOptions,
       location = location,
       comment = { if (description.isEmpty) None else Some(description) },
       serde = None,

@@ -813,6 +813,25 @@ object functions {
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = Column.fn("percentile", e, percentage)
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the given
+   * percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column, frequency: Column): Column =
+    Column.fn("percentile", e, percentage, frequency)
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
    * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
    * more than `percentage` of `col` values is less than the value or equal to that value.
@@ -853,6 +872,14 @@ object functions {
    * @since 3.4.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1368,6 +1395,34 @@ object functions {
    */
   def map_from_arrays(keys: Column, values: Column): Column =
     Column.fn("map_from_arrays", keys, values)
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters. Both
+   * `pairDelim` and `keyValueDelim` are treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column, keyValueDelim: Column): Column =
+    Column.fn("str_to_map", text, pairDelim, keyValueDelim)
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters. The `pairDelim`
+   * is treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column): Column =
+    Column.fn("str_to_map", text, pairDelim)
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column): Column = Column.fn("str_to_map", text)
 
   /**
    * Marks a DataFrame as small enough for use in broadcast joins.
@@ -1960,6 +2015,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -2033,6 +2104,14 @@ object functions {
    * @since 3.4.0
    */
   def csc(e: Column): Column = Column.fn("csc", e)
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = Column.fn("e")
 
   /**
    * Computes the exponential of the given value.
@@ -2226,6 +2305,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 3.4.0
    */
   def log(e: Column): Column = Column.fn("log", e)
@@ -2303,6 +2390,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = Column.fn("negative", e)
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = Column.fn("pi")
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = Column.fn("positive", e)
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2365,6 +2476,14 @@ object functions {
    * @since 3.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2494,6 +2613,14 @@ object functions {
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2682,6 +2809,27 @@ object functions {
    * @since 3.4.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
+
+  /**
+   * Returns the bucket number into which the value of this expression would fall after being
+   * evaluated. Note that input arguments must follow conditions listed below; otherwise, the
+   * method will return null.
+   *
+   * @param v
+   *   value to compute a bucket number in the histogram
+   * @param min
+   *   minimum value of the histogram
+   * @param max
+   *   maximum value of the histogram
+   * @param numBucket
+   *   the number of buckets
+   * @return
+   *   the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column =
+    Column.fn("width_bucket", v, min, max, numBucket)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
@@ -3272,6 +3420,80 @@ object functions {
    * @since 3.4.0
    */
   def upper(e: Column): Column = Column.fn("upper", e)
+
+  /**
+   * Converts the input `e` to a binary value based on the supplied `f`. The `f` can be a
+   * case-insensitive string literal of "hex", "utf-8", "utf8", or "base64". By default, the
+   * binary format for conversion is "hex" if `fmt` is omitted. The function returns NULL if at
+   * least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column, f: Column): Column = Column.fn("to_binary", e, f)
+
+  /**
+   * Converts the input `e` to a binary value based on the format "hex". The function returns NULL
+   * if at least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column): Column = Column.fn("to_binary", e)
+
+  /**
+   * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
+   *
+   * @param e
+   *   A column of number to be converted
+   * @param format
+   *   The format can consist of the following characters, case insensitive: <ul> <li> '0' or '9':
+   *   Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format string
+   *   matches a sequence of digits in the input value, generating a result string of the same
+   *   length as the corresponding sequence in the format string. The result string is left-padded
+   *   with zeros if the 0/9 sequence comprises more digits than the matching part of the decimal
+   *   value, starts with 0, and is before the decimal point. Otherwise, it is padded with
+   *   spaces.</li> <li>'.' or 'D': Specifies the position of the decimal point (optional, only
+   *   allowed once).</li> <li>',' or 'G': Specifies the position of the grouping (thousands)
+   *   separator (,). There must be a 0 or 9 to the left and right of each grouping
+   *   separator.</li> <li>'$': Specifies the location of the $ currency sign. This character may
+   *   only be specified once.</li> <li>'S' or 'MI': Specifies the position of a '-' or '+' sign
+   *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
+   *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
+   *   end of the format string; specifies that the result string will be wrapped by angle
+   *   brackets if the input value is negative.</li> </ul>
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
+
+  /**
+   * Convert string 'e' to a number based on the string format 'format'. Throws an exception if
+   * the conversion fails.
+   *
+   * @param e
+   *   A column of string to be converted
+   * @param format
+   *   The format can consist of the following characters, case insensitive: <ul><li> '0' or '9':
+   *   Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format string
+   *   matches a sequence of digits in the input string. If the 0/9 sequence starts with 0 and is
+   *   before the decimal point, it can only match a digit sequence of the same size. Otherwise,
+   *   if the sequence starts with 9 or is after the decimal point, it can match a digit sequence
+   *   that has the same or smaller size.</li> <li>'.' or 'D': Specifies the position of the
+   *   decimal point (optional, only allowed once).</li> <li>',' or 'G': Specifies the position of
+   *   the grouping (thousands) separator (,). There must be a 0 or 9 to the left and right of
+   *   each grouping separator. 'expr' must match the grouping separator relevant for the size of
+   *   the number.</li> <li>'$': Specifies the location of the $ currency sign. This character may
+   *   only be specified once.</li> <li>'S' or 'MI': Specifies the position of a '-' or '+' sign
+   *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
+   *   allows '-' but 'MI' does not.</li> <li>'PR': Only allowed at the end of the format string;
+   *   specifies that 'expr' indicates a negative number with wrapping angled brackets.</li></ul>
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
@@ -4146,6 +4368,64 @@ object functions {
    */
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
+  /**
+   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column, format: Column): Column =
+    Column.fn("to_timestamp_ltz", timestamp, format)
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column): Column =
+    Column.fn("to_timestamp_ltz", timestamp)
+
+  /**
+   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column, format: Column): Column =
+    Column.fn("to_timestamp_ntz", timestamp, format)
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column): Column =
+    Column.fn("to_timestamp_ntz", timestamp)
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(timeExp: Column, format: Column): Column =
+    Column.fn("to_unix_timestamp", timeExp, format)
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(timeExp: Column): Column =
+    Column.fn("to_unix_timestamp", timeExp)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4363,6 +4643,93 @@ object functions {
    */
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
+
+  /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(xml: Column, path: Column): Column =
+    Column.fn("xpath", xml, path)
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(xml: Column, path: Column): Column =
+    Column.fn("xpath_boolean", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(xml: Column, path: Column): Column =
+    Column.fn("xpath_double", xml, path)
+
+  /**
+   * Returns a double value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(xml: Column, path: Column): Column =
+    Column.fn("xpath_number", xml, path)
+
+  /**
+   * Returns a float value, the value zero if no match is found, or NaN if a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(xml: Column, path: Column): Column =
+    Column.fn("xpath_float", xml, path)
+
+  /**
+   * Returns an integer value, or the value zero if no match is found, or a match is found but the
+   * value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(xml: Column, path: Column): Column =
+    Column.fn("xpath_int", xml, path)
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found, or a match is found but
+   * the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(xml: Column, path: Column): Column =
+    Column.fn("xpath_long", xml, path)
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found, or a match is found
+   * but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(xml: Column, path: Column): Column =
+    Column.fn("xpath_short", xml, path)
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(xml: Column, path: Column): Column =
+    Column.fn("xpath_string", xml, path)
 
   private def newLambdaVariable(name: String): proto.Expression.UnresolvedNamedLambdaVariable = {
     proto.Expression.UnresolvedNamedLambdaVariable

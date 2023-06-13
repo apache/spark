@@ -32,9 +32,6 @@
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect-client-jvm</sbt.project.name>
-    <guava.version>31.0.1-jre</guava.version>
-    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <mima.version>1.1.2</mima.version>
   </properties>
 
   <dependencies>
@@ -63,6 +60,11 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <scope>compile</scope>
@@ -70,7 +72,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
+      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -163,6 +165,7 @@
               <include>org.codehaus.mojo:*</include>
               <include>org.checkerframework:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
+              <include>org.apache.spark:spark-common-utils_${scala.binary.version}</include>
             </includes>
           </artifactSet>
           <relocations>

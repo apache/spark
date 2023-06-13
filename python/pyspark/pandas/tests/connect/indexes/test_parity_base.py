@@ -35,21 +35,9 @@ class IndexesParityTests(
     def test_append(self):
         super().test_append()
 
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_drop_duplicates(self):
-        super().test_drop_duplicates()
-
     @unittest.skip("TODO(SPARK-43620): Support `Column` for SparkConnectColumn.__getitem__.")
     def test_factorize(self):
         super().test_factorize()
-
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_index_drop_duplicates(self):
-        super().test_index_drop_duplicates()
 
     @unittest.skip("TODO(SPARK-43703): Enable IndexesParityTests.test_monotonic.")
     def test_monotonic(self):
