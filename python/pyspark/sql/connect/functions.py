@@ -2183,6 +2183,114 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 to_number.__doc__ = pysparkfuncs.to_number.__doc__
 
 
+def char(n: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("char", n)
+
+
+char.__doc__ = pysparkfuncs.char.__doc__
+
+
+def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("btrim", str, trim)
+    else:
+        return _invoke_function_over_columns("btrim", str)
+
+
+btrim.__doc__ = pysparkfuncs.btrim.__doc__
+
+
+def char_length(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("char_length", str)
+
+
+char_length.__doc__ = pysparkfuncs.char_length.__doc__
+
+
+def character_length(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("character_length", str)
+
+
+character_length.__doc__ = pysparkfuncs.character_length.__doc__
+
+
+def chr(n: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("chr", n)
+
+
+chr.__doc__ = pysparkfuncs.chr.__doc__
+
+
+def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("contains", left, right)
+
+
+contains.__doc__ = pysparkfuncs.contains.__doc__
+
+
+def elt(*inputs: "ColumnOrName") -> Column:
+    return _invoke_function("elt", *[_to_col(input) for input in inputs])
+
+
+elt.__doc__ = pysparkfuncs.elt.__doc__
+
+
+def find_in_set(str: "ColumnOrName", str_array: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("find_in_set", str, str_array)
+
+
+find_in_set.__doc__ = pysparkfuncs.find_in_set.__doc__
+
+
+def like(str: "ColumnOrName", pattern: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("like", str, pattern)
+
+
+like.__doc__ = pysparkfuncs.like.__doc__
+
+
+def ilike(str: "ColumnOrName", pattern: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ilike", str, pattern)
+
+
+ilike.__doc__ = pysparkfuncs.ilike.__doc__
+
+
+def lcase(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("lcase", str)
+
+
+lcase.__doc__ = pysparkfuncs.lcase.__doc__
+
+
+def ucase(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ucase", str)
+
+
+ucase.__doc__ = pysparkfuncs.ucase.__doc__
+
+
+def len(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("len", str)
+
+
+len.__doc__ = pysparkfuncs.len.__doc__
+
+
+def left(str: "ColumnOrName", len: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("left", str, len)
+
+
+left.__doc__ = pysparkfuncs.left.__doc__
+
+
+def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("right", str, len)
+
+
+right.__doc__ = pysparkfuncs.right.__doc__
+
+
 # Date/Timestamp functions
 # TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,

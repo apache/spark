@@ -8204,12 +8204,335 @@ def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     >>> df = spark.createDataFrame([("    SparkSQL   ",)], ['a'])
     >>> df.select(btrim(df.a).alias('r')).collect()
     [Row(r='SparkSQL')]
-
     """
     if trim is not None:
         return _invoke_function_over_columns("btrim", str, trim)
     else:
         return _invoke_function_over_columns("btrim", str)
+
+
+@try_remote_functions
+def char_length(str: "ColumnOrName") -> Column:
+    """
+    Returns the character length of string data or number of bytes of binary data.
+    The length of string data includes the trailing spaces.
+    The length of binary data includes binary zeros.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("SparkSQL",)], ['a'])
+    >>> df.select(char_length(df.a).alias('r')).collect()
+    [Row(r=8)]
+    """
+    return _invoke_function_over_columns("char_length", str)
+
+
+@try_remote_functions
+def character_length(str: "ColumnOrName") -> Column:
+    """
+    Returns the character length of string data or number of bytes of binary data.
+    The length of string data includes the trailing spaces.
+    The length of binary data includes binary zeros.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("SparkSQL",)], ['a'])
+    >>> df.select(character_length(df.a).alias('r')).collect()
+    [Row(r=8)]
+    """
+    return _invoke_function_over_columns("character_length", str)
+
+
+@try_remote_functions
+def chr(n: "ColumnOrName") -> Column:
+    """
+    Returns the ASCII character having the binary equivalent to `n`.
+    If n is larger than 256 the result is equivalent to chr(n % 256)
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    n : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(65,)], ['a'])
+    >>> df.select(chr(df.a).alias('r')).collect()
+    [Row(r='A')]
+    """
+    return _invoke_function_over_columns("chr", n)
+
+
+@try_remote_functions
+def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a boolean. The value is True if right is found inside left.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    right : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark SQL", "Spark")], ['a', 'b'])
+    >>> df.select(contains(df.a, df.b).alias('r')).collect()
+    [Row(r=True)]
+    """
+    return _invoke_function_over_columns("contains", left, right)
+
+
+@try_remote_functions
+def elt(*inputs: "ColumnOrName") -> Column:
+    """
+    Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+    The function returns NULL if the index exceeds the length of the array
+    and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+    it throws ArrayIndexOutOfBoundsException for invalid indices.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    inputs : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, "scala", "java")], ['a', 'b', 'c'])
+    >>> df.select(elt(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='scala')]
+    """
+    sc = get_active_spark_context()
+    return _invoke_function("elt", _to_seq(sc, inputs, _to_java_column))
+
+
+@try_remote_functions
+def find_in_set(str: "ColumnOrName", str_array: "ColumnOrName") -> Column:
+    """
+    Returns the index (1-based) of the given string (`str`) in the comma-delimited
+    list (`strArray`). Returns 0, if the string was not found or if the given string (`str`)
+    contains a comma.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        The given string to be found.
+    str_array : :class:`~pyspark.sql.Column` or str
+        The comma-delimited list.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("ab", "abc,b,ab,c,def")], ['a', 'b'])
+    >>> df.select(find_in_set(df.a, df.b).alias('r')).collect()
+    [Row(r=3)]
+    """
+    return _invoke_function_over_columns("find_in_set", str, str_array)
+
+
+@try_remote_functions
+def like(str: "ColumnOrName", pattern: "ColumnOrName") -> Column:
+    """
+    Returns true if str matches `pattern` with `escape`,
+    null if any arguments are null, false otherwise.
+    The default escape character is the '\'.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A string.
+    pattern : :class:`~pyspark.sql.Column` or str
+        A string. The pattern is a string which is matched literally, with
+        exception to the following special symbols:
+        _ matches any one character in the input (similar to . in posix regular expressions)
+        % matches zero or more characters in the input (similar to .* in posix regular
+        expressions)
+        Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+        to match "\abc", the pattern should be "\\abc".
+        When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
+        to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+        enabled, the pattern to match "\abc" should be "\abc".
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark", "_park")], ['a', 'b'])
+    >>> df.select(like(df.a, df.b).alias('r')).collect()
+    [Row(r=True)]
+    """
+    return _invoke_function_over_columns("like", str, pattern)
+
+
+@try_remote_functions
+def ilike(str: "ColumnOrName", pattern: "ColumnOrName") -> Column:
+    """
+    Returns true if str matches `pattern` with `escape` case-insensitively,
+    null if any arguments are null, false otherwise.
+    The default escape character is the '\'.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A string.
+    pattern : :class:`~pyspark.sql.Column` or str
+        A string. The pattern is a string which is matched literally, with
+        exception to the following special symbols:
+        _ matches any one character in the input (similar to . in posix regular expressions)
+        % matches zero or more characters in the input (similar to .* in posix regular
+        expressions)
+        Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+        to match "\abc", the pattern should be "\\abc".
+        When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
+        to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+        enabled, the pattern to match "\abc" should be "\abc".
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark", "_park")], ['a', 'b'])
+    >>> df.select(ilike(df.a, df.b).alias('r')).collect()
+    [Row(r=True)]
+    """
+    return _invoke_function_over_columns("ilike", str, pattern)
+
+
+@try_remote_functions
+def lcase(str: "ColumnOrName") -> Column:
+    """
+    Returns `str` with all characters changed to lowercase.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark",)], ['a'])
+    >>> df.select(lcase(df.a).alias('r')).collect()
+    [Row(r='spark')]
+    """
+    return _invoke_function_over_columns("lcase", str)
+
+
+@try_remote_functions
+def ucase(str: "ColumnOrName") -> Column:
+    """
+    Returns `str` with all characters changed to uppercase.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark",)], ['a'])
+    >>> df.select(ucase(df.a).alias('r')).collect()
+    [Row(r='SPARK')]
+    """
+    return _invoke_function_over_columns("ucase", str)
+
+
+@try_remote_functions
+def len(str: "ColumnOrName") -> Column:
+    """
+    Returns the character length of string data or number of bytes of binary data.
+    The length of string data includes the trailing spaces.
+    The length of binary data includes binary zeros.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark",)], ['a'])
+    >>> df.select(len(df.a).alias('r')).collect()
+    [Row(r=5)]
+    """
+    return _invoke_function_over_columns("len", str)
+
+
+@try_remote_functions
+def left(str: "ColumnOrName", len: "ColumnOrName") -> Column:
+    """
+    Returns the leftmost `len`(`len` can be string type) characters from the string `str`,
+    if `len` is less or equal than 0 the result is an empty string.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    len : :class:`~pyspark.sql.Column` or str
+        Input column or strings, the leftmost `len`.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark SQL", 3,)], ['a', 'b'])
+    >>> df.select(left(df.a, df.b).alias('r')).collect()
+    [Row(r='Spa')]
+    """
+    return _invoke_function_over_columns("left", str, len)
+
+
+@try_remote_functions
+def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
+    """
+    Returns the rightmost `len`(`len` can be string type) characters from the string `str`,
+    if `len` is less or equal than 0 the result is an empty string.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    len : :class:`~pyspark.sql.Column` or str
+        Input column or strings, the rightmost `len`.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark SQL", 3,)], ['a', 'b'])
+    >>> df.select(right(df.a, df.b).alias('r')).collect()
+    [Row(r='SQL')]
+    """
+    return _invoke_function_over_columns("right", str, len)
 
 
 # ---------------------- Collection functions ------------------------------
