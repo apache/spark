@@ -2841,6 +2841,14 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-44040: Fix compute stats when AggregateExec nodes above QueryStageExec") {
+    val emptyDf = spark.range(1).where("false")
+    val aggDf1 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df1"))
+    val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
+    val unionDF = aggDf1.union(aggDf2)
+    checkAnswer(unionDF.select("id").distinct, Seq(Row(null)))
+  }
 }
 
 /**
