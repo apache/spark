@@ -1554,7 +1554,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           }.getOrElse {
             expression(e)
           }
-        }
+        }.toSeq
 
         val tvf = UnresolvedTableValuedFunction(name, args)
 
