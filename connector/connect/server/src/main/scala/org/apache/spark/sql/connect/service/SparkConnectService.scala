@@ -306,7 +306,7 @@ object SparkConnectService {
       val SessionHolder(userId, sessionId, session) = notification.getValue
       val blockManager = session.sparkContext.env.blockManager
       blockManager.removeCache(userId, sessionId)
-      cachedDataFrameManager.remove(userId, sessionId)
+      cachedDataFrameManager.remove(session)
     }
   }
 

@@ -146,7 +146,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
       case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
-        transformCachedRemoteRelation(rel.getCachedRemoteRelation)
+        transformCachedRemoteRelation(session, rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -790,9 +790,10 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       .logicalPlan
   }
 
-  private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
+  private def transformCachedRemoteRelation(session: SparkSession, rel: proto.CachedRemoteRelation)
+  : LogicalPlan = {
     SparkConnectService.cachedDataFrameManager
-      .get(rel.getUserId, rel.getSessionId, rel.getRelationId)
+      .get(session, rel.getRelationId)
       .logicalPlan
   }
 
