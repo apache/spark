@@ -381,6 +381,21 @@ class QueryExecutionErrorsSuite
       sqlState = "22018")
   }
 
+  test("CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS: parse json arrays as structs") {
+    val jsonStr = """[{"a":1, "b":0.8}]"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"SELECT from_json('$jsonStr', 'a INT, b DOUBLE', map('mode','FAILFAST') )")
+          .collect()
+      },
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS",
+      parameters = Map(
+        "badRecord" -> jsonStr,
+        "failFastMode" -> "FAILFAST"
+      ),
+      sqlState = "22023")
+  }
+
   test("FAILED_EXECUTE_UDF: execute user defined function") {
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)

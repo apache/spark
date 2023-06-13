@@ -305,3 +305,19 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
     }
   }
 }
+
+/**
+ * Extracts PythonUDTFs from operators, rewriting the query plan so that UDTFs can be evaluated.
+ */
+object ExtractPythonUDTFs extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    // A correlated subquery will be rewritten into join later, and will go through this rule
+    // eventually. Here we skip subquery, as Python UDTFs only need to be extracted once.
+    case s: Subquery if s.correlated => plan
+
+    case _ => plan.transformUpWithPruning(_.containsPattern(GENERATE)) {
+      case g @ Generate(func: PythonUDTF, _, _, _, _, child) =>
+        BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
+    }
+  }
+}
