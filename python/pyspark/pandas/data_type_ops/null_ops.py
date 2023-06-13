@@ -17,7 +17,7 @@
 
 from typing import Any, Union
 
-from pandas.api.types import CategoricalDtype, is_list_like
+from pandas.api.types import CategoricalDtype, is_list_like  # type: ignore[attr-defined]
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike
 from pyspark.pandas.data_type_ops.base import (
