@@ -356,7 +356,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
-  ignore("SPARK-34316 Disable configmap volume on executor pod's container") {
+  test("SPARK-43657: Reuse config map if set on driver for default and non-default profile") {
+    baseConf.set(SPARK_CONF_DIR_CONFIG_MAP_NAME.key, "test-configmap")
+    val rp = new ResourceProfileBuilder().build()
+    Seq(defaultProfile, rp).foreach { profile =>
+      val initPod = SparkPod.initialPod()
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        profile)
+      val executorPod = step.configurePod(initPod)
+      assert(SecretVolumeUtils.podHasConfigMapVolume(
+        executorPod.pod, SPARK_CONF_VOLUME_EXEC, "test-configmap"))
+    }
+  }
+
+  test("SPARK-34316 Disable configmap volume on executor pod's container") {
     baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
     val baseDriverPod = SparkPod.initialPod()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
@@ -377,7 +390,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
-  ignore("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
+  test("SPARK-40065 Disable configmap volume on executor pod's container (non-default profile)") {
     baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
     val baseDriverPod = SparkPod.initialPod()
     val rp = new ResourceProfileBuilder().build()

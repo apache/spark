@@ -28,6 +28,14 @@ private[spark] object SecretVolumeUtils {
     }
   }
 
+  def podHasConfigMapVolume(pod: Pod, volumeName: String, configMapName: String): Boolean = {
+    pod.getSpec.getVolumes.asScala.exists { volume =>
+      volume.getName == volumeName &&
+        volume.getConfigMap != null &&
+        volume.getConfigMap.getName == configMapName
+    }
+  }
+
   def containerHasVolume(container: Container, volumeName: String, mountPath: String): Boolean = {
     container.getVolumeMounts.asScala.exists { volumeMount =>
       volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath

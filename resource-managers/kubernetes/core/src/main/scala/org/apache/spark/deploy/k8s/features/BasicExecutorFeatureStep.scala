@@ -58,6 +58,7 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
+  private val disableConfigMap = kubernetesConf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)
   private val memoryOverheadFactor = if (kubernetesConf.contains(EXECUTOR_MEMORY_OVERHEAD_FACTOR)) {
     kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
   } else {
@@ -206,7 +207,9 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
-    val executorContainerWithConfVolume = {
+    val executorContainerWithConfVolume = if (disableConfigMap) {
+      executorContainer
+    } else {
       new ContainerBuilder(executorContainer)
         .addNewVolumeMount()
           .withName(SPARK_CONF_VOLUME_EXEC)
@@ -271,7 +274,9 @@ private[spark] class BasicExecutorFeatureStep(
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
-    val executorPod = {
+    val executorPod = if (disableConfigMap) {
+      executorPodBuilder.endSpec().build()
+    } else {
       executorPodBuilder
         .addNewVolume()
           .withName(SPARK_CONF_VOLUME_EXEC)

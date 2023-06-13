@@ -388,9 +388,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
     ConfigBuilder("spark.kubernetes.executor.disableConfigMap")
-      .doc("If true, disable ConfigMap creation for executors. Deprecated since 3.5.0 as spark " +
-        "will propagate config map from the driver pod to executor pod, which wouldn't create " +
-        "new config map.")
+      .doc("If true, disable ConfigMap creation for executors.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
