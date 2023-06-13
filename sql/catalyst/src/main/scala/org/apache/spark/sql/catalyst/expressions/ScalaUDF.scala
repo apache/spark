@@ -1168,7 +1168,8 @@ case class ScalaUDF(
          |  $funcInvocation;
          |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "$funcCls", "$inputTypesString", "$outputType", e);
+         |    "${udfName.map { uName => s"$uName in $funcCls" }.getOrElse(funcCls)}",
+         |    "$inputTypesString", "$outputType", e);
          |}
        """.stripMargin
 
