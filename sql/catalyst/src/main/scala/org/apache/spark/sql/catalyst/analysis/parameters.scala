@@ -105,6 +105,12 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     }
   }
 
+  private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
+    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
+      case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
+    })
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (plan.containsPattern(PARAMETERIZED_QUERY)) {
       // One unresolved plan can have at most one ParameterizedQuery.
@@ -117,15 +123,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       // relations are not children of `UnresolvedWith`.
       case p @ NameParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
         checkArgs(args)
-
-        def bind(p: LogicalPlan): LogicalPlan = {
-          p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-            case NamedParameter(name) if args.contains(name) =>
-              args(name)
-            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan))
-          }
-        }
-        val res = bind(child)
+        val res = bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
         res.copyTagsFrom(p)
         res
 
@@ -134,23 +132,11 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
         val positions = scala.collection.mutable.Set.empty[Int]
-        def collectPositions(p: LogicalPlan): LogicalPlan = {
-          p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-            case p @ PosParameter(pos) => positions.add(pos); p
-            case sub: SubqueryExpression => sub.withNewPlan(collectPositions(sub.plan))
-          }
-        }
-        collectPositions(child)
+        bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
-        def bind(p: LogicalPlan): LogicalPlan = {
-          p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-            case PosParameter(pos) if posToIndex.contains(pos) =>
-              args(posToIndex(pos))
-            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan))
-          }
-        }
-        val res = bind(child)
+        val res = bind(child) {
+          case PosParameter(pos) if posToIndex.contains(pos) => args(posToIndex(pos)) }
         res.copyTagsFrom(p)
         res
 
