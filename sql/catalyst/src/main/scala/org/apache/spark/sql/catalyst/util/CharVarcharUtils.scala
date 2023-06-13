@@ -49,6 +49,15 @@ object CharVarcharUtils extends Logging {
     })
   }
 
+  def cleanCharVarcharTypeStringMetaDataKey(schema: StructType): StructType = {
+    val fields = schema.map { field =>
+      val metadata = new MetadataBuilder().withMetadata(field.metadata)
+        .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY).build()
+      field.copy(metadata = metadata)
+    }
+    StructType(fields)
+  }
+
   /**
    * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
    */

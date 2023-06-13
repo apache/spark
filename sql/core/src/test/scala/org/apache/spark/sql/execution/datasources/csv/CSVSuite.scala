@@ -81,6 +81,7 @@ abstract class CSVSuite
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val peopleFile = "test-data/people.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -177,6 +178,21 @@ abstract class CSVSuite
     val expectedSchema = StructType(List(
       StructField("bool", BooleanType, nullable = true)))
     assert(result.schema === expectedSchema)
+  }
+
+  test("SAARK44025: CSV Table Read Error with CharType(length) column") {
+    val tableName = "csv_bug"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (name STRING, age INT, job CHAR(4))
+           |USING CSV OPTIONS ('header' = 'true', 'sep' = ';')
+           |LOCATION '${testFile(peopleFile)}'
+         """.stripMargin)
+      val rows = sql(s"SELECT * FROM $tableName")
+      val expectedRows = Seq(Row("Jorge", 30, "Developer"), Row("Bob", 32, "Developer"))
+      checkAnswer(rows, expectedRows)
+    }
   }
 
   test("test inferring decimals") {
