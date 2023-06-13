@@ -95,7 +95,7 @@ class ProtoToParsedPlanTestSuite
 
     if (regenerateGoldenFiles) {
       if (goldenFilePath.toFile.exists()) {
-        FileUtils.deleteDirectory(goldenFilePath.toFile)
+        Utils.deleteRecursively(goldenFilePath.toFile)
       }
       FileUtils.forceMkdir(goldenFilePath.toFile)
     }

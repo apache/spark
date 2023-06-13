@@ -45,6 +45,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 // scalastyle:off
 /**
@@ -106,7 +107,7 @@ class PlanGenerationTestSuite
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
     if (regenerateGoldenFiles) {
       if (queryFilePath.toFile.exists()) {
-        FileUtils.deleteDirectory(queryFilePath.toFile)
+        Utils.deleteRecursively(queryFilePath.toFile)
       }
       FileUtils.forceMkdir(queryFilePath.toFile)
     }
