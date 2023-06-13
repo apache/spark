@@ -217,7 +217,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
         )
         self.assertTrue(all(map(lambda v: isinstance(v, int), progress.durationMs.values())))
 
-        self.assertEquals(progress.eventTime, {})
+        self.assertTrue(all(map(lambda v: isinstance(v, str), progress.eventTime.values())))
 
         self.assertTrue(isinstance(progress.stateOperators, list))
         self.assertTrue(len(progress.stateOperators) >= 1)
