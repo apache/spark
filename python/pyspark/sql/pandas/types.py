@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
 
-def to_arrow_type(dt: DataType) -> "pa.DataType":
+def to_arrow_type(dt: DataType, prefers_large_types: bool = False) -> "pa.DataType":
     """Convert Spark data type to pyarrow type"""
     from distutils.version import LooseVersion
     import pyarrow as pa
@@ -80,8 +80,12 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
         arrow_type = pa.decimal128(dt.precision, dt.scale)
+    elif type(dt) == StringType and prefers_large_types:
+        arrow_type = pa.large_string()
     elif type(dt) == StringType:
         arrow_type = pa.string()
+    elif type(dt) == BinaryType and prefers_large_types:
+        arrow_type = pa.large_binary()
     elif type(dt) == BinaryType:
         arrow_type = pa.binary()
     elif type(dt) == DateType:
@@ -101,7 +105,9 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
                 message_parameters={"data_type": "Array of StructType"},
             )
-        field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
+        field = pa.field(
+            "element", to_arrow_type(dt.elementType, prefers_large_types), nullable=dt.containsNull
+        )
         arrow_type = pa.list_(field)
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
@@ -109,19 +115,25 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
                 error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
                 message_parameters={"data_type": "MapType"},
             )
-        key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
-        value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
+        key_field = pa.field("key", to_arrow_type(dt.keyType, prefers_large_types), nullable=False)
+        value_field = pa.field(
+            "value", to_arrow_type(dt.valueType, prefers_large_types), nullable=dt.valueContainsNull
+        )
         arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
         fields = [
-            pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+            pa.field(
+                field.name,
+                to_arrow_type(field.dataType, prefers_large_types),
+                nullable=field.nullable,
+            )
             for field in dt
         ]
         arrow_type = pa.struct(fields)
     elif type(dt) == NullType:
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
-        arrow_type = to_arrow_type(dt.sqlType())
+        arrow_type = to_arrow_type(dt.sqlType(), prefers_large_types)
     else:
         raise PySparkTypeError(
             error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
@@ -130,12 +142,14 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     return arrow_type
 
 
-def to_arrow_schema(schema: StructType) -> "pa.Schema":
+def to_arrow_schema(schema: StructType, prefers_large_types: bool = False) -> "pa.Schema":
     """Convert a schema from Spark to Arrow"""
     import pyarrow as pa
 
     fields = [
-        pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+        pa.field(
+            field.name, to_arrow_type(field.dataType, prefers_large_types), nullable=field.nullable
+        )
         for field in schema
     ]
     return pa.schema(fields)

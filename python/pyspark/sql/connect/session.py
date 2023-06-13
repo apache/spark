@@ -338,13 +338,16 @@ class SparkSession:
                 _num_cols = len(_cols)
 
             # Determine arrow types to coerce data when creating batches
+            prefers_large_types: bool = (
+                self._client.get_configs("spark.sql.execution.arrow.useLargeVarTypes")[0] == "true"
+            )
             arrow_schema: Optional[pa.Schema] = None
             spark_types: List[Optional[DataType]]
             arrow_types: List[Optional[pa.DataType]]
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
-                arrow_schema = to_arrow_schema(deduped_schema)
+                arrow_schema = to_arrow_schema(deduped_schema, prefers_large_types)
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
@@ -362,7 +365,10 @@ class SparkSession:
                     else None
                     for t in data.dtypes
                 ]
-                arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
+                arrow_types = [
+                    to_arrow_type(dt, prefers_large_types) if dt is not None else None
+                    for dt in spark_types
+                ]
 
             timezone, safecheck = self._client.get_configs(
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
@@ -459,7 +465,10 @@ class SparkSession:
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema)
+            prefers_large_types: bool = (
+                self._client.get_configs("spark.sql.execution.arrow.useLargeVarTypes")[0] == "true"
+            )
+            _table = LocalDataToArrowConversion.convert(_data, _schema, prefers_large_types)
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.

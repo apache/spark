@@ -96,7 +96,7 @@ class PandasConversionMixin:
                 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema)
+                to_arrow_schema(self.schema, jconf.arrowUseLargeVarTypes())
             except Exception as e:
 
                 if jconf.arrowPySparkFallbackEnabled():
@@ -616,9 +616,10 @@ class SparkConversionMixin:
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
+        prefers_large_var_types = self._jconf.arrowUseLargeVarTypes()
         arrow_data = [
             [
-                (c, to_arrow_type(t) if t is not None else None, t)
+                (c, to_arrow_type(t, prefers_large_var_types) if t is not None else None, t)
                 for (_, c), t in zip(pdf_slice.items(), spark_types)
             ]
             for pdf_slice in pdf_slices

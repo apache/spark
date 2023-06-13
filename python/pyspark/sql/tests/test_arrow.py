@@ -574,7 +574,11 @@ class ArrowTestsMixin:
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 
-        arrow_schema = to_arrow_schema(self.schema)
+        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=False)
+        schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
+        self.assertEqual(self.schema, schema_rt)
+
+        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=True)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
