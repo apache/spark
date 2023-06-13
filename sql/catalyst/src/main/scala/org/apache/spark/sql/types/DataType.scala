@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 import org.json4s._
 import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkThrowable
@@ -70,7 +71,7 @@ abstract class DataType extends AbstractDataType {
       .toLowerCase(Locale.ROOT)
   }
 
-  private[sql] def jsonValue: JValue = DataTypeUtils.jsonValue(typeName)
+  private[sql] def jsonValue: JValue = typeName
 
   /** The compact JSON representation of this data type. */
   def json: String = compact(render(jsonValue))
