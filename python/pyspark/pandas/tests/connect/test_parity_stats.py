@@ -29,12 +29,6 @@ class StatsParityTests(StatsTestsMixin, PandasOnSparkTestUtils, ReusedConnectTes
         super().test_axis_on_dataframe()
 
     @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
-    def test_product(self):
-        super().test_product()
-
-    @unittest.skip(
         "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
     )
     def test_skew_kurt_numerical_stability(self):
@@ -52,21 +46,15 @@ class StatsParityTests(StatsTestsMixin, PandasOnSparkTestUtils, ReusedConnectTes
     def test_stat_functions_multiindex_column(self):
         super().test_stat_functions_multiindex_column()
 
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
+    @unittest.skip("TODO(SPARK-43622): Enable pyspark.pandas.spark.functions.var in Spark Connect.")
     def test_stats_on_boolean_dataframe(self):
         super().test_stats_on_boolean_dataframe()
 
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
+    @unittest.skip("TODO(SPARK-43622): Enable pyspark.pandas.spark.functions.var in Spark Connect.")
     def test_stats_on_boolean_series(self):
         super().test_stats_on_boolean_series()
 
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
+    @unittest.skip("TODO(SPARK-43622): Enable pyspark.pandas.spark.functions.var in Spark Connect.")
     def test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true(self):
         super().test_stats_on_non_numeric_columns_should_be_discarded_if_numeric_only_is_true()
 

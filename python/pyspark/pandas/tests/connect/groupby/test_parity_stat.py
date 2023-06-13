@@ -29,12 +29,6 @@ class GroupbyParityStatTests(GroupbyStatMixin, PandasOnSparkTestUtils, ReusedCon
         super().test_basic_stat_funcs()
 
     @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
-    def test_prod(self):
-        super().test_prod()
-
-    @unittest.skip(
         "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
     )
     def test_ddof(self):
