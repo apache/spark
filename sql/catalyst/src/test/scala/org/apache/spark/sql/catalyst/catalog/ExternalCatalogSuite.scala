@@ -475,6 +475,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
   }
 
+  test("list partitions by partNames") {
+    val catalog = newBasicCatalog()
+
+    val parts = catalog.listPartitionsByNames("db2", "tbl2", List("a=1/b=2", "a=3/b=4"))
+    assert(parts.length == 2)
+
+    // if no partition is matched for the given partition spec, an empty list should be returned.
+    assert(catalog.listPartitionsByNames("db2", "tbl2", List("a=unknown/b=1")).isEmpty)
+    assert(catalog.listPartitionsByNames("db2", "tbl2", List("a=unknown")).isEmpty)
+  }
+
   test("SPARK-21457: list partitions with special chars") {
     val catalog = newBasicCatalog()
     assert(catalog.listPartitions("db2", "tbl1").isEmpty)

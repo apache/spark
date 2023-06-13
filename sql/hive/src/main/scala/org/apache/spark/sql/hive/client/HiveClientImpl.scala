@@ -790,6 +790,20 @@ private[hive] class HiveClientImpl(
     getPartitions(hiveTable, spec)
   }
 
+  override def getPartitionsByNames(
+      db: String,
+      table: String,
+      partNames: Seq[String]): Seq[CatalogTablePartition] = {
+    val hiveTable = withHiveState {
+      getRawTableOption(db, table).getOrElse(throw new NoSuchTableException(db, table))
+    }
+    val parts = shim
+      .getPartitionsByNames(client, hiveTable, partNames.asJava)
+      .map(fromHivePartition)
+    HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
+    parts.toSeq
+  }
+
   private def getPartitions(
       hiveTable: HiveTable,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {

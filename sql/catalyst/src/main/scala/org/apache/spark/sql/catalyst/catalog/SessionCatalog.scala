@@ -1288,6 +1288,20 @@ class SessionCatalog(
   }
 
   /**
+   * List the metadata of partitions that belong to the specified table and
+   * the giving list of part names. e.g. ('a=1/b=1', 'a=1/b=2'), assuming it exists.
+   */
+  def listPartitionsByNames(
+      tableName: TableIdentifier,
+      partNames: Seq[String]): Seq[CatalogTablePartition] = {
+    val qualifiedIdent = qualifyIdentifier(tableName)
+    val db = qualifiedIdent.database.get
+    requireDbExists(db)
+    requireTableExists(qualifiedIdent)
+    externalCatalog.listPartitionsByNames(db, qualifiedIdent.table, partNames)
+  }
+
+  /**
    * List the metadata of partitions that belong to the specified table, assuming it exists, that
    * satisfy the given partition-pruning predicate expressions.
    */
