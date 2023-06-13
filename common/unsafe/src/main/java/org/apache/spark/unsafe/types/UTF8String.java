@@ -500,6 +500,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Determines if the specified character (Unicode code point) is white space or an ISO control
+   * character according to Java.
+   */
+  private boolean isWhitespaceOrISOControl(int codePoint) {
+    return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
+  }
+
+  /**
    * Trims space characters (ASCII 32) from both ends of this string.
    *
    * @return this string with no spaces at the start or end
@@ -535,14 +543,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces in the left side
-    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
+    while (s < this.numBytes && isWhitespaceOrISOControl(getByte(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
-    while (e > s && Character.isWhitespace(getByte(e))) e--;
+    while (e > s && isWhitespaceOrISOControl(getByte(e))) e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1116,11 +1124,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1213,11 +1221,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
