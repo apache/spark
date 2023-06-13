@@ -3420,11 +3420,10 @@ object SQLConf {
       .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
         "types. Regular string and binary types have a 2GiB limit for a column in a single " +
         "record batch. Large variable types remove this limitation at the cost of higher memory " +
-        "usage per value. Note that this only works for DataFrame.mapInArrow.")
+        "usage per value.")
       .version("3.5.0")
-      .internal()
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_UDF_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.python.udf.maxRecordsPerBatch")

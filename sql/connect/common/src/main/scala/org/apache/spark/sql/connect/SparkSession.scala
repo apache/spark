@@ -110,7 +110,8 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val arrowData = ArrowSerializer.serialize(data, encoder, allocator, timeZoneId)
+        val arrowData =
+          ArrowSerializer.serialize(data, encoder, allocator, timeZoneId, largeVarTypes)
         if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
@@ -467,6 +468,8 @@ class SparkSession private[sql] (
   }
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
+  private[sql] def largeVarTypes: Boolean =
+    conf.get(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toBoolean
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = executeInternal(plan)
