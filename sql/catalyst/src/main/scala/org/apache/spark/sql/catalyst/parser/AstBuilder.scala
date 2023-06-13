@@ -5081,7 +5081,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * */
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
-    Parameter(ctx.identifier().getText)
+    NamedParameter(ctx.identifier().getText)
   }
 
   /**
@@ -5090,6 +5090,6 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * */
   override def visitPosParameterLiteral(
       ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
-    Parameter("_" + ctx.QUESTION().getSymbol.getStartIndex.toString)
+    PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
   }
 }

@@ -25,12 +25,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.DataType
 
-/**
- * The expression represents a named parameter that should be replaced by a literal.
- *
- * @param name The identifier of the parameter without the marker.
- */
-case class Parameter(name: String) extends LeafExpression with Unevaluable {
+sealed trait Parameter extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
 
   private def unboundError(methodName: String): Nothing = {
@@ -41,6 +36,24 @@ case class Parameter(name: String) extends LeafExpression with Unevaluable {
   override def nullable: Boolean = unboundError("nullable")
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETER)
+
+  def name: String
+}
+
+/**
+ * The expression represents a named parameter that should be replaced by a literal.
+ *
+ * @param name The identifier of the parameter without the marker.
+ */
+case class NamedParameter(name: String) extends Parameter
+
+/**
+ * The expression represents a positional parameter that should be replaced by a literal.
+ *
+ * @param pos The position of the parameter in a SQL query.
+ */
+case class PosParameter(pos: Int) extends Parameter {
+  override def name: String = s"_$pos"
 }
 
 /**
@@ -80,7 +93,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
         def bind(p: LogicalPlan): LogicalPlan = {
           p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) {
-            case Parameter(name) if args.contains(name) =>
+            case NamedParameter(name) if args.contains(name) =>
               args(name)
             case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan))
           }

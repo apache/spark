@@ -29,7 +29,7 @@ import org.mockito.Mockito.{mock, spy, when}
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
+import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -828,7 +828,7 @@ class QueryExecutionErrorsSuite
 
   test("INTERNAL_ERROR: Calling eval on Unevaluable expression") {
     val e = intercept[SparkException] {
-      Parameter("foo").eval()
+      NamedParameter("foo").eval()
     }
     checkError(
       exception = e,
@@ -840,7 +840,7 @@ class QueryExecutionErrorsSuite
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
     val e = intercept[SparkException] {
       val ctx = new CodegenContext
-      Grouping(Parameter("foo")).genCode(ctx)
+      Grouping(NamedParameter("foo")).genCode(ctx)
     }
     checkError(
       exception = e,

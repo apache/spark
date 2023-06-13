@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Parameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
@@ -1630,18 +1630,18 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-41271: parsing of named parameters") {
     comparePlans(
       parsePlan("SELECT :param_1"),
-      Project(UnresolvedAlias(Parameter("param_1"), None) :: Nil, OneRowRelation()))
+      Project(UnresolvedAlias(NamedParameter("param_1"), None) :: Nil, OneRowRelation()))
     comparePlans(
       parsePlan("SELECT abs(:1Abc)"),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          Parameter("1Abc") :: Nil,
+          NamedParameter("1Abc") :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
     comparePlans(
       parsePlan("SELECT * FROM a LIMIT :limitA"),
-      table("a").select(star()).limit(Parameter("limitA")))
+      table("a").select(star()).limit(NamedParameter("limitA")))
     // Invalid empty name and invalid symbol in a name
     checkError(
       exception = parseException(s"SELECT :-"),
@@ -1665,17 +1665,17 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-XXXXX: parsing of positional parameters") {
     comparePlans(
       parsePlan("SELECT ?"),
-      Project(UnresolvedAlias(Parameter("_7"), None) :: Nil, OneRowRelation()))
+      Project(UnresolvedAlias(PosParameter(7), None) :: Nil, OneRowRelation()))
     comparePlans(
       parsePlan("SELECT abs(?)"),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          Parameter("_11") :: Nil,
+          PosParameter(11) :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
     comparePlans(
       parsePlan("SELECT * FROM a LIMIT ?"),
-      table("a").select(star()).limit(Parameter("_22")))
+      table("a").select(star()).limit(PosParameter(22)))
   }
 }
