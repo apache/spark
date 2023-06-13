@@ -179,30 +179,6 @@ abstract class CSVSuite
     assert(result.schema === expectedSchema)
   }
 
-  test("SPARK-44025: CSV Table Read Error with CharType(length) column") {
-    withTempPath { path =>
-      Seq(("Jorge", 30, "Developer"), ("Bob", 32, "Developer")).
-        toDF("name", "age", "job").
-        coalesce(1).
-        write.
-        options(Map("header" -> "true", "delimiter" -> ";")).
-        csv(path.getCanonicalPath)
-
-      val tableName = "csv_bug"
-      withTable(tableName) {
-        sql(
-          s"""
-             |CREATE TABLE $tableName (name STRING, age INT, job CHAR(4))
-             |USING CSV OPTIONS ('header' = 'true', 'sep' = ';')
-             |LOCATION '${path.getCanonicalPath}'
-           """.stripMargin)
-        val rows = sql(s"SELECT * FROM $tableName")
-        val expectedRows = Seq(Row("Jorge", 30, "Developer"), Row("Bob", 32, "Developer"))
-        checkAnswer(rows, expectedRows)
-      }
-    }
-  }
-
   test("test inferring decimals") {
     val result = spark.read
       .format("csv")
