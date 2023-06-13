@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   private lazy val parser = new SparkSqlParser()

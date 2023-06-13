@@ -23,7 +23,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InsertAction, Me
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {

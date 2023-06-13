@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class ShowCreateTableParserSuite extends AnalysisTest {
   test("show create table") {
     comparePlans(

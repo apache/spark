@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class CommandUtilsSuite extends SparkFunSuite {
 
   test("Check if compareAndGetNewStats returns correct results") {

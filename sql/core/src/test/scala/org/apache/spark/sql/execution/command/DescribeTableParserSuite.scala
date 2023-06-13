@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation}
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class DescribeTableParserSuite extends AnalysisTest {
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),

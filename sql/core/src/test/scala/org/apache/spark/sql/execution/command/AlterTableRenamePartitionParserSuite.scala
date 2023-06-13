@@ -21,7 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartition
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.RenamePartitions
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class AlterTableRenamePartitionParserSuite extends AnalysisTest with SharedSparkSession {
   test("rename a partition with single part") {
     val sql = """

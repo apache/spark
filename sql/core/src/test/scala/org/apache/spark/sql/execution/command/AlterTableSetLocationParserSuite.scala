@@ -21,7 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.SetTableLocation
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class AlterTableSetLocationParserSuite extends AnalysisTest with SharedSparkSession {
 
   private val HINT = Some("Please use ALTER VIEW instead.")

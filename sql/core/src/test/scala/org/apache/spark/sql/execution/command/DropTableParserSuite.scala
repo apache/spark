@@ -21,7 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifie
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class DropTableParserSuite extends AnalysisTest with SharedSparkSession {
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)

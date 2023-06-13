@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.scalatest.Ignore
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 import org.apache.spark.tags.ExtendedSQLCommandTest

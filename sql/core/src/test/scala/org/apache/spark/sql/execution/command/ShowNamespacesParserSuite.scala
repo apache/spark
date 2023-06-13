@@ -21,7 +21,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.ShowNamespaces
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLCommandTest
 
+@ExtendedSQLCommandTest
 class ShowNamespacesParserSuite extends AnalysisTest with SharedSparkSession {
   private val keywords = Seq("NAMESPACES", "DATABASES", "SCHEMAS")
 
