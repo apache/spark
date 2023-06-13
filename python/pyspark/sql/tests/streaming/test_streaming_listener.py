@@ -338,10 +338,10 @@ class StreamingListenerTests(ReusedSQLTestCase):
         """
         start_event = QueryStartedEvent.fromJson(json.loads(start_event))
         self.check_start_event(start_event)
-        self.assertTrue(start_event.id == uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
-        self.assertTrue(start_event.runId == uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
-        self.assertTrue(start_event.name is None)
-        self.assertTrue(start_event.timestamp == "2023-06-09T18:13:29.741Z")
+        self.assertEqual(start_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(start_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIsNone(start_event.name)
+        self.assertEqual(start_event.timestamp, "2023-06-09T18:13:29.741Z")
 
     def test_query_terminated_event_fromJson(self):
         terminated_json = """
@@ -353,10 +353,10 @@ class StreamingListenerTests(ReusedSQLTestCase):
         """
         terminated_event = QueryTerminatedEvent.fromJson(json.loads(terminated_json))
         self.check_terminated_event(terminated_event, "SparkException")
-        self.assertTrue(terminated_event.id == uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
-        self.assertTrue(terminated_event.runId == uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
-        self.assertTrue("SparkException" in terminated_event.exception)
-        self.assertTrue(terminated_event.errorClassOnException is None)
+        self.assertEqual(terminated_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(terminated_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIn("SparkException", terminated_event.exception)
+        self.assertIsNone(terminated_event.errorClassOnException)
 
     def test_streaming_query_progress_fromJson(self):
         progress_json = """
@@ -430,75 +430,66 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.check_streaming_query_progress(progress)
 
         # checks for progress
-        self.assertTrue(progress.id == uuid.UUID("00000000-0000-0001-0000-000000000001"))
-        self.assertTrue(progress.runId == uuid.UUID("00000000-0000-0001-0000-000000000002"))
-        self.assertTrue(progress.name == "test")
-        self.assertTrue(progress.timestamp == "2016-12-05T20:54:20.827Z")
-        self.assertTrue(progress.batchId == 2)
-        self.assertTrue(progress.numInputRows == 678)
-        self.assertTrue(progress.inputRowsPerSecond == 10.0)
-        self.assertTrue(progress.batchDuration == 5)
-        self.assertTrue(progress.durationMs == {"getBatch": 0})
-        self.assertTrue(
-            progress.eventTime
-            == {
-                "min": "2016-12-05T20:54:20.827Z",
-                "avg": "2016-12-05T20:54:20.827Z",
-                "watermark": "2016-12-05T20:54:20.827Z",
-                "max": "2016-12-05T20:54:20.827Z",
-            }
-        )
-        self.assertTrue(
-            progress.observedMetrics
-            == {
-                "event1": Row("c1", "c2")(1, 3.0),
-                "event2": Row("rc", "min_q", "max_q")(1, "hello", "world"),
-            }
-        )
+        self.assertEqual(progress.id, uuid.UUID("00000000-0000-0001-0000-000000000001"))
+        self.assertEqual(progress.runId, uuid.UUID("00000000-0000-0001-0000-000000000002"))
+        self.assertEqual(progress.name, "test")
+        self.assertEqual(progress.timestamp, "2016-12-05T20:54:20.827Z")
+        self.assertEqual(progress.batchId, 2)
+        self.assertEqual(progress.numInputRows, 678)
+        self.assertEqual(progress.inputRowsPerSecond, 10.0)
+        self.assertEqual(progress.batchDuration, 5)
+        self.assertEqual(progress.durationMs, {"getBatch": 0})
+        self.assertEqual(progress.eventTime, {
+            "min": "2016-12-05T20:54:20.827Z",
+            "avg": "2016-12-05T20:54:20.827Z",
+            "watermark": "2016-12-05T20:54:20.827Z",
+            "max": "2016-12-05T20:54:20.827Z",
+        })
+        self.assertEqual(progress.observedMetrics, {
+            "event1": Row("c1", "c2")(1, 3.0),
+            "event2": Row("rc", "min_q", "max_q")(1, "hello", "world"),
+        })
 
         # Check stateOperators list
-        self.assertTrue(len(progress.stateOperators) == 1)
+        self.assertEqual(len(progress.stateOperators), 1)
         state_operator = progress.stateOperators[0]
         self.assertTrue(isinstance(state_operator, StateOperatorProgress))
-        self.assertTrue(state_operator.operatorName == "op1")
-        self.assertTrue(state_operator.numRowsTotal == 0)
-        self.assertTrue(state_operator.numRowsUpdated == 1)
-        self.assertTrue(state_operator.allUpdatesTimeMs == 1)
-        self.assertTrue(state_operator.numRowsRemoved == 2)
-        self.assertTrue(state_operator.allRemovalsTimeMs == 34)
-        self.assertTrue(state_operator.commitTimeMs == 23)
-        self.assertTrue(state_operator.memoryUsedBytes == 3)
-        self.assertTrue(state_operator.numRowsDroppedByWatermark == 0)
-        self.assertTrue(state_operator.numShufflePartitions == 2)
-        self.assertTrue(state_operator.numStateStoreInstances == 2)
-        self.assertTrue(
-            state_operator.customMetrics
-            == {
-                "loadedMapCacheHitCount": 1,
-                "loadedMapCacheMissCount": 0,
-                "stateOnCurrentVersionSizeBytes": 2,
-            }
-        )
+        self.assertEqual(state_operator.operatorName, "op1")
+        self.assertEqual(state_operator.numRowsTotal, 0)
+        self.assertEqual(state_operator.numRowsUpdated, 1)
+        self.assertEqual(state_operator.allUpdatesTimeMs, 1)
+        self.assertEqual(state_operator.numRowsRemoved, 2)
+        self.assertEqual(state_operator.allRemovalsTimeMs, 34)
+        self.assertEqual(state_operator.commitTimeMs, 23)
+        self.assertEqual(state_operator.memoryUsedBytes, 3)
+        self.assertEqual(state_operator.numRowsDroppedByWatermark, 0)
+        self.assertEqual(state_operator.numShufflePartitions, 2)
+        self.assertEqual(state_operator.numStateStoreInstances, 2)
+        self.assertEqual(state_operator.customMetrics, {
+            "loadedMapCacheHitCount": 1,
+            "loadedMapCacheMissCount": 0,
+            "stateOnCurrentVersionSizeBytes": 2,
+        })
 
         # Check sources list
-        self.assertTrue(len(progress.sources) == 1)
+        self.assertEqual(len(progress.sources), 1)
         source = progress.sources[0]
         self.assertTrue(isinstance(source, SourceProgress))
-        self.assertTrue(source.description == "source")
-        self.assertTrue(source.startOffset == "123")
-        self.assertTrue(source.endOffset == "456")
-        self.assertTrue(source.latestOffset == "789")
-        self.assertTrue(source.numInputRows == 678)
-        self.assertTrue(source.inputRowsPerSecond == 10.0)
-        self.assertTrue(source.processedRowsPerSecond == 5.4)
-        self.assertTrue(source.metrics == {})
+        self.assertEqual(source.description, "source")
+        self.assertEqual(source.startOffset, "123")
+        self.assertEqual(source.endOffset, "456")
+        self.assertEqual(source.latestOffset, "789")
+        self.assertEqual(source.numInputRows, 678)
+        self.assertEqual(source.inputRowsPerSecond, 10.0)
+        self.assertEqual(source.processedRowsPerSecond, 5.4)
+        self.assertEqual(source.metrics, {})
 
         # Check sink
         sink = progress.sink
         self.assertTrue(isinstance(sink, SinkProgress))
-        self.assertTrue(sink.description == "sink")
-        self.assertTrue(sink.numOutputRows == -1)
-        self.assertTrue(sink.metrics == {})
+        self.assertEqual(sink.description, "sink")
+        self.assertEqual(sink.numOutputRows, -1)
+        self.assertEqual(sink.metrics, {})
 
 
 if __name__ == "__main__":
