@@ -19,8 +19,9 @@ import numpy as np
 import os
 import pandas as pd
 import pickle
-from typing import Any, Union, List, Tuple, Callable
+from typing import Any, Union, List, Tuple, Callable, Dict
 
+from pyspark import keyword_only
 from pyspark.sql import DataFrame
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
 from pyspark.mlv2.base import Estimator, Model
@@ -35,10 +36,16 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     any sparsity.
     """
 
-    def __init__(self, inputCol: str, outputCol: str) -> None:
+    _input_kwargs: Dict[str, Any]
+
+    @keyword_only
+    def __init__(self, *, inputCol: str = None, outputCol: str = None) -> None:
+        """
+        __init__(self, \\*, inputCol=None, outputCol=None)
+        """
         super().__init__()
-        self.set(self.inputCol, inputCol)
-        self.set(self.outputCol, outputCol)
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
 
     def _fit(self, dataset: Union["pd.DataFrame", "DataFrame"]) -> "MaxAbsScalerModel":
         input_col = self.getInputCol()
@@ -81,6 +88,9 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
 
         return transform_fn
 
+    def _get_core_model_filename(self):
+        return self.__class__.__name__ + ".sklearn.pkl"
+
     def _save_core_model(self, path):
         from sklearn.preprocessing import MaxAbsScaler as sk_MaxAbsScaler
 
@@ -90,15 +100,11 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
         sk_model.n_features_in_ = len(self.max_abs_values)
         sk_model.n_samples_seen_ = self.n_samples_seen
 
-        core_model_path = os.path.join(path, self.__class__.__name__ + ".sklearn.pkl")
-
-        with open(core_model_path, "wb") as fp:
+        with open(path, "wb") as fp:
             pickle.dump(sk_model, fp)
 
     def _load_core_model(self, path):
-        core_model_path = os.path.join(path, self.__class__.__name__ + ".sklearn.pkl")
-
-        with open(core_model_path, "rb") as fp:
+        with open(path, "rb") as fp:
             sk_model = pickle.load(fp)
 
         self.max_abs_values = sk_model.max_abs_
@@ -112,10 +118,16 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     statistics on the samples in the training set.
     """
 
-    def __init__(self, inputCol: str, outputCol: str) -> None:
+    _input_kwargs: Dict[str, Any]
+
+    @keyword_only
+    def __init__(self, inputCol: str = None, outputCol: str = None) -> None:
+        """
+        __init__(self, \\*, inputCol=None, outputCol=None)
+        """
         super().__init__()
-        self.set(self.inputCol, inputCol)
-        self.set(self.outputCol, outputCol)
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "StandardScalerModel":
         input_col = self.getInputCol()
@@ -163,6 +175,9 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
 
         return transform_fn
 
+    def _get_core_model_filename(self):
+        return self.__class__.__name__ + ".sklearn.pkl"
+
     def _save_core_model(self, path):
         from sklearn.preprocessing import StandardScaler as sk_StandardScaler
 
@@ -173,15 +188,11 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
         sk_model.n_features_in_ = len(self.std_values)
         sk_model.n_samples_seen_ = self.n_samples_seen
 
-        core_model_path = os.path.join(path, self.__class__.__name__ + ".sklearn.pkl")
-
-        with open(core_model_path, "wb") as fp:
+        with open(path, "wb") as fp:
             pickle.dump(sk_model, fp)
 
     def _load_core_model(self, path):
-        core_model_path = os.path.join(path, self.__class__.__name__ + ".sklearn.pkl")
-
-        with open(core_model_path, "rb") as fp:
+        with open(path, "rb") as fp:
             sk_model = pickle.load(fp)
 
         self.std_values = np.sqrt(sk_model.var_)
