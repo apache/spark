@@ -63,7 +63,9 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
 
 class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
-    def __init__(self, max_abs_values: Optional["np.ndarray"] = None, n_samples_seen: Optional[int] = None) -> None:
+    def __init__(
+        self, max_abs_values: Optional["np.ndarray"] = None, n_samples_seen: Optional[int] = None
+    ) -> None:
         super().__init__()
         self.max_abs_values = max_abs_values
         if max_abs_values is not None:

@@ -262,7 +262,12 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelR
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, torch_model: Any = None, num_features: Optional[int] = None, num_classes: Optional[int] = None):
+    def __init__(
+        self,
+        torch_model: Any = None,
+        num_features: Optional[int] = None,
+        num_classes: Optional[int] = None,
+    ):
         super().__init__()
         self.torch_model = torch_model
         self.num_features = num_features
@@ -296,7 +301,8 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelR
             torch_model = torch_nn.Linear(
                 num_features,  # type: ignore[arg-type]
                 num_classes,  # type: ignore[arg-type]
-                bias=fit_intercept, dtype=torch.float32
+                bias=fit_intercept,
+                dtype=torch.float32,
             )
             # TODO: Use spark broadast for `model_state_dict`,
             #  it can improve performance when model is large.
