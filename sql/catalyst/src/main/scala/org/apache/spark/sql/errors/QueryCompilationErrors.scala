@@ -193,10 +193,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("configKey" -> configKey))
   }
 
-  def namedArgumentsNotEnabledError(argumentName: String): Throwable = {
+  def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
     new AnalysisException(
       errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
-      messageParameters = Map("message" -> (argumentName + " is a named argument."))
+      messageParameters = Map("functionName" -> functionName, "argument" -> argumentName)
     )
   }
 

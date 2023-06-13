@@ -1582,7 +1582,7 @@
   },
   "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
     "message" : [
-      "Named arguments support is currently disabled. Enable suppport using ALLOW_NAMED_FUNCTION_ARGUMENTS."
+      "Cannot call function ‘<functionName>’ because named argument references are not supported here. In this case, the named argument reference was ‘<argument>’.\n"
     ]
   },
   "NESTED_AGGREGATE_FUNCTION" : {

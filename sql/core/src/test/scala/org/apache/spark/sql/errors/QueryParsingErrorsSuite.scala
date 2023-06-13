@@ -36,7 +36,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       checkError(
         exception = parseException("SELECT * FROM encode(value => 'abc', charset => 'utf-8')"),
         errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
-        parameters = Map("message" -> "value is a named argument.")
+        parameters = Map("functionName" -> "encode", "argument" -> "value")
       )
     }
   }
