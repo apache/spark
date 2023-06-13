@@ -144,7 +144,7 @@ class JacksonParser(
           array.toArray[InternalRow](schema)
         }
       case START_ARRAY =>
-        throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError()
+        throw JsonArraysAsStructsException()
     }
   }
 
