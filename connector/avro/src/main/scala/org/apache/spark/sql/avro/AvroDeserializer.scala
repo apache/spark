@@ -160,13 +160,8 @@ private[sql] class AvroDeserializer(
         (logicalDataType, catalystType) match {
           case (LongType, LongType) => (updater, ordinal, value) =>
             updater.setLong(ordinal, value.asInstanceOf[Long])
-          case (_, LongType) => avroType.getLogicalType match {
-            case _: TimestampMicros | _: TimestampMillis |
-                 _: LocalTimestampMillis | _: LocalTimestampMicros => (updater, ordinal, value) =>
-              updater.setLong(ordinal, value.asInstanceOf[Long])
-            case other => throw new IncompatibleSchemaException(errorPrefix +
-              s"Avro logical type $other cannot be converted to SQL type ${TimestampType.sql}.")
-          }
+          case (TimestampType, LongType) => (updater, ordinal, value) =>
+            updater.setLong(ordinal, value.asInstanceOf[Long])
           case (LongType, TimestampType)
                | (TimestampType, TimestampType)
                |(TimestampNTZType, TimestampType) => avroType.getLogicalType match {
