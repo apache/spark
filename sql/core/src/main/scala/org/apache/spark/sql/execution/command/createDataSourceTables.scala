@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -189,8 +191,17 @@ case class CreateDataSourceTableAsSelectCommand(
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = tableSchema)
-      // Table location is already validated. No need to check it again during table creation.
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
+      try {
+        // Table location is already validated. No need to check it again during table creation.
+        sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
+      } catch {
+        case e: AnalysisException if tableLocation.isDefined =>
+          val fs = FileSystem.get(tableLocation.get, sparkSession.sessionState.newHadoopConf())
+          fs.delete(new Path(tableLocation.get), true)
+          throw e
+        case other: Throwable =>
+          throw other
+      }
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&

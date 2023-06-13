@@ -2156,6 +2156,28 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
+  test("SPARK-43149: create incorrect table twice reported same error") {
+    val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
+      s"in Hive metastore. Table: `$SESSION_CATALOG_NAME`.`default`.`t`; Column: " +
+      "get_json_object(jstring, $.f1)"
+
+    // create table twice always get same exception
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
+          .write.format("parquet").saveAsTable("t")
+      }.getMessage
+      assert(e.contains(expectedMsg))
+
+      val e2 = intercept[AnalysisException] {
+        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
+          .write.format("parquet").saveAsTable("t")
+      }.getMessage
+      assert(e2.contains(expectedMsg))
+    }
+  }
+
   test("SPARK-19912 String literals should be escaped for Hive metastore partition pruning") {
     withTable("spark_19912") {
       Seq(
