@@ -20,10 +20,10 @@ package org.apache.spark
 import java.util.concurrent.{Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.concurrent.{ExecutionContext, Future}
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfter
@@ -156,104 +156,126 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   test("job tags") {
     sc = new SparkContext("local[2]", "test")
 
-    // Add a listener to release the semaphore once jobs are launched.
-    val sem = new Semaphore(0)
-    val jobEnded = new AtomicInteger(0)
+    // global ExecutionContext has only 2 threads in Apache Spark CI
+    // create own thread pool for four Futures used in this test
+    val numThreads = 4
+    val fpool = ThreadUtils.newForkJoinPool("job-tags-test-thread-pool", numThreads)
+    val executionContext = ExecutionContext.fromExecutorService(fpool)
 
-    sc.addSparkListener(new SparkListener {
-      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        sem.release()
-      }
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        sem.release()
-        jobEnded.incrementAndGet()
-      }
-    })
+    try {
+      // Add a listener to release the semaphore once jobs are launched.
+      val sem = new Semaphore(0)
+      val jobEnded = new AtomicInteger(0)
 
-    val eSep = intercept[IllegalArgumentException](sc.addJobTag("foo,bar"))
-    assert(eSep.getMessage.contains(
-      s"Spark job tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'."))
-    val eEmpty = intercept[IllegalArgumentException](sc.addJobTag(""))
-    assert(eEmpty.getMessage.contains("Spark job tag cannot be an empty string."))
-    val eNull = intercept[IllegalArgumentException](sc.addJobTag(null))
-    assert(eNull.getMessage.contains("Spark job tag cannot be null."))
+      sc.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          sem.release()
+        }
 
-    // Note: since tags are added in the Future threads, they don't need to be cleared in between.
-    val jobA = Future {
-      assert(sc.getJobTags() == Set())
-      sc.addJobTag("two")
-      assert(sc.getJobTags() == Set("two"))
-      sc.clearJobTags() // check that clearing all tags works
-      assert(sc.getJobTags() == Set())
-      sc.addJobTag("one")
-      assert(sc.getJobTags() == Set("one"))
-      try {
-        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
-      } finally {
-        sc.clearJobTags() // clear for the case of thread reuse by another Future
+        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+          sem.release()
+          jobEnded.incrementAndGet()
+        }
+      })
+
+      val eSep = intercept[IllegalArgumentException](sc.addJobTag("foo,bar"))
+      assert(eSep.getMessage.contains(
+        s"Spark job tag cannot contain '${SparkContext.SPARK_JOB_TAGS_SEP}'."))
+      val eEmpty = intercept[IllegalArgumentException](sc.addJobTag(""))
+      assert(eEmpty.getMessage.contains("Spark job tag cannot be an empty string."))
+      val eNull = intercept[IllegalArgumentException](sc.addJobTag(null))
+      assert(eNull.getMessage.contains("Spark job tag cannot be null."))
+
+      // Note: since tags are added in the Future threads, they don't need to be cleared in between.
+      val jobA = Future {
+        assert(sc.getJobTags() == Set())
+        sc.addJobTag("two")
+        assert(sc.getJobTags() == Set("two"))
+        sc.clearJobTags() // check that clearing all tags works
+        assert(sc.getJobTags() == Set())
+        sc.addJobTag("one")
+        assert(sc.getJobTags() == Set("one"))
+        try {
+          sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+        } finally {
+          sc.clearJobTags() // clear for the case of thread reuse by another Future
+        }
       }
+      val jobB = Future {
+        assert(sc.getJobTags() == Set())
+        sc.addJobTag("one")
+        sc.addJobTag("two")
+        sc.addJobTag("one")
+        sc.addJobTag("two") // duplicates shouldn't matter
+        assert(sc.getJobTags() == Set("one", "two"))
+        try {
+          sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+        } finally {
+          sc.clearJobTags() // clear for the case of thread reuse by another Future
+        }
+      }
+      val jobC = Future {
+        assert(sc.getJobTags() == Set())
+        sc.addJobTag("two")
+        assert(sc.getJobTags() == Set("two"))
+        try {
+          sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+        } finally {
+          sc.clearJobTags() // clear for the case of thread reuse by another Future
+        }
+      }
+      val jobD = Future {
+        assert(sc.getJobTags() == Set())
+        sc.addJobTag("one")
+        sc.addJobTag("two")
+        sc.addJobTag("two")
+        assert(sc.getJobTags() == Set("one", "two"))
+        sc.removeJobTag("two") // check that remove works, despite duplicate add
+        assert(sc.getJobTags() == Set("one"))
+        try {
+          sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
+        } finally {
+          sc.clearJobTags() // clear for the case of thread reuse by another Future
+        }
+      }
+
+      // Block until four jobs have started.
+      val acquired1 = sem.tryAcquire(4, 1, TimeUnit.MINUTES)
+      assert(acquired1 == true)
+
+      sc.cancelJobsWithTag("two")
+      val eB = intercept[SparkException] {
+        ThreadUtils.awaitResult(jobB, 1.minute)
+      }.getCause
+      assert(eB.getMessage contains "cancel")
+      val eC = intercept[SparkException] {
+        ThreadUtils.awaitResult(jobC, 1.minute)
+      }.getCause
+      assert(eC.getMessage contains "cancel")
+
+      // two jobs cancelled
+      val acquired2 = sem.tryAcquire(2, 1, TimeUnit.MINUTES)
+      assert(acquired2 == true)
+      assert(jobEnded.intValue == 2)
+
+      // this cancels the remaining two jobs
+      sc.cancelJobsWithTag("one")
+      val eA = intercept[SparkException] {
+        ThreadUtils.awaitResult(jobA, 1.minute)
+      }.getCause
+      assert(eA.getMessage contains "cancel")
+      val eD = intercept[SparkException] {
+        ThreadUtils.awaitResult(jobD, 1.minute)
+      }.getCause
+      assert(eD.getMessage contains "cancel")
+
+      // another two jobs cancelled
+      val acquired3 = sem.tryAcquire(2, 1, TimeUnit.MINUTES)
+      assert(acquired3 == true)
+      assert(jobEnded.intValue == 4)
+    } finally {
+      fpool.shutdownNow()
     }
-    val jobB = Future {
-      assert(sc.getJobTags() == Set())
-      sc.addJobTag("one")
-      sc.addJobTag("two")
-      sc.addJobTag("one")
-      sc.addJobTag("two") // duplicates shouldn't matter
-      assert(sc.getJobTags() == Set("one", "two"))
-      try {
-        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
-      } finally {
-        sc.clearJobTags() // clear for the case of thread reuse by another Future
-      }
-    }
-    val jobC = Future {
-      assert(sc.getJobTags() == Set())
-      sc.addJobTag("two")
-      assert(sc.getJobTags() == Set("two"))
-      try {
-        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
-      } finally {
-        sc.clearJobTags() // clear for the case of thread reuse by another Future
-      }
-    }
-    val jobD = Future {
-      assert(sc.getJobTags() == Set())
-      sc.addJobTag("one")
-      sc.addJobTag("two")
-      sc.addJobTag("two")
-      assert(sc.getJobTags() == Set("one", "two"))
-      sc.removeJobTag("two") // check that remove works, despite duplicate add
-      assert(sc.getJobTags() == Set("one"))
-      try {
-        sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(100); i }.count()
-      } finally {
-        sc.clearJobTags() // clear for the case of thread reuse by another Future
-      }
-    }
-
-    // Block until three jobs have started.
-    sem.acquire(3)
-
-    sc.cancelJobsWithTag("two")
-    val eB = intercept[SparkException] { ThreadUtils.awaitResult(jobB, 1.minute) }.getCause
-    assert(eB.getMessage contains "cancel")
-    val eC = intercept[SparkException] { ThreadUtils.awaitResult(jobC, 1.minute) }.getCause
-    assert(eC.getMessage contains "cancel")
-
-    // two jobs cancelled
-    sem.acquire(2)
-    assert(jobEnded.intValue == 2)
-
-    // this cancels the remaining two jobs
-    sc.cancelJobsWithTag("one")
-    val eA = intercept[SparkException] { ThreadUtils.awaitResult(jobA, 1.minute) }.getCause
-    assert(eA.getMessage contains "cancel")
-    val eD = intercept[SparkException] { ThreadUtils.awaitResult(jobD, 1.minute) }.getCause
-    assert(eD.getMessage contains "cancel")
-
-    // another two jobs cancelled
-    sem.acquire(2)
-    assert(jobEnded.intValue == 4)
   }
 
   test("inherited job group (SPARK-6629)") {
