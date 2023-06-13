@@ -368,7 +368,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       val name = "/absolute/path/"
       val request = createDummyArtifactRequests(name)
       request.foreach { req =>
-        intercept[IllegalArgumentException]{
+        intercept[IllegalArgumentException] {
           handler.onNext(req)
         }
       }
@@ -385,7 +385,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       val names = Seq("..", "../sibling", "../nephew/directory", "a/../../b", "x/../y/../..")
       val request = names.flatMap(createDummyArtifactRequests)
       request.foreach { req =>
-        intercept[IllegalArgumentException]{
+        intercept[IllegalArgumentException] {
           handler.onNext(req)
         }
       }
