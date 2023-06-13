@@ -36,7 +36,9 @@ class OpsOnDiffFramesEnabledSlowParityTests(
     def test_frame_iloc_setitem(self):
         super().test_frame_iloc_setitem()
 
-    @unittest.skip("TODO(SPARK-43652): Enable GroupBy.rank with Spark Connect.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_rank(self):
         super().test_rank()
 
