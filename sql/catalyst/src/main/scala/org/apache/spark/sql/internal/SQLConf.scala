@@ -2834,7 +2834,7 @@ object SQLConf {
         "usage per value.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")

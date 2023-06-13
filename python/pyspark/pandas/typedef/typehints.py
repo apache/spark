@@ -299,7 +299,7 @@ def spark_type_to_pandas_dtype(
         from pyspark.pandas.utils import default_session
 
         prefers_large_var_types = (
-            default_session().conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
+            default_session().conf.get("spark.sql.execution.arrow.useLargeVarTypes", "true")
             == "true"
         )
         return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())

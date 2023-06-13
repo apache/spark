@@ -462,7 +462,7 @@ def assign_cols_by_name(runner_conf):
 
 
 def use_large_var_types(runner_conf):
-    return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower() == "true"
+    return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "true").lower() == "true"
 
 
 # Read and process a serialized user-defined table function (UDTF) from a socket.
