@@ -260,6 +260,8 @@ private[kafka010] class KafkaDataConsumer(
 
   // Total duration spent on reading from Kafka
   private var totalTimeReadNanos: Long = 0
+  // Number of times we poll Kafka consumers.
+  private var numPolls: Long = 0
   // Total number of records fetched from Kafka
   private var totalRecordsRead: Long = 0
   // Starting timestamp when the consumer is created.
@@ -383,7 +385,7 @@ private[kafka010] class KafkaDataConsumer(
     val walTime = System.nanoTime() - startTimestampNano
 
     logInfo(
-      s"From Kafka $kafkaMeta read $totalRecordsRead records, " +
+      s"From Kafka $kafkaMeta read $totalRecordsRead records through $numPolls polls, " +
       s"taking $totalTimeReadNanos nanos, during time span of $walTime nanos."
     )
 
@@ -573,6 +575,7 @@ private[kafka010] class KafkaDataConsumer(
     val (records, offsetAfterPoll, range) = timeNanos {
       consumer.fetch(offset, pollTimeoutMs)
     }
+    numPolls += 1
     fetchedData.withNewPoll(records.listIterator, offsetAfterPoll, range)
   }
 
