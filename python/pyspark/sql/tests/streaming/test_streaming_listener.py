@@ -373,7 +373,12 @@ class StreamingListenerTests(ReusedSQLTestCase):
               "durationMs" : {
                 "getBatch" : 0
               },
-              "eventTime" : {},
+              "eventTime" : {
+                "min" : "2016-12-05T20:54:20.827Z",
+                "avg" : "2016-12-05T20:54:20.827Z",
+                "watermark" : "2016-12-05T20:54:20.827Z",
+                "max" : "2016-12-05T20:54:20.827Z"
+              },
               "stateOperators" : [ {
                 "operatorName" : "op1",
                 "numRowsTotal" : 0,
@@ -434,7 +439,15 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(progress.inputRowsPerSecond == 10.0)
         self.assertTrue(progress.batchDuration == 5)
         self.assertTrue(progress.durationMs == {"getBatch": 0})
-        self.assertTrue(progress.eventTime == {})
+        self.assertTrue(
+            progress.eventTime
+            == {
+                "min": "2016-12-05T20:54:20.827Z",
+                "avg": "2016-12-05T20:54:20.827Z",
+                "watermark": "2016-12-05T20:54:20.827Z",
+                "max": "2016-12-05T20:54:20.827Z",
+            }
+        )
         self.assertTrue(
             progress.observedMetrics
             == {
