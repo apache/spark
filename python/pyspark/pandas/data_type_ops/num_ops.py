@@ -24,6 +24,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_bool_dtype,
     is_integer_dtype,
     CategoricalDtype,
+    is_list_like,
 )
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -215,9 +216,8 @@ class NumericOps(DataTypeOps):
         )
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        try:
-            _sanitize_list_like(right)
-        except TypeError:
+        # We can directly use `super().eq` when given object is list, tuple, dict or set.
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
             return super().eq(left, right)
         if _is_extension_dtypes(left) or _is_extension_dtypes(right):
             return pyspark_column_op("__eq__", left, right)

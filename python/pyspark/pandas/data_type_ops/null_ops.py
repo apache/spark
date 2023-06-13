@@ -17,7 +17,7 @@
 
 from typing import Any, Union
 
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_list_like
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike
 from pyspark.pandas.data_type_ops.base import (
@@ -32,6 +32,7 @@ from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql.types import BooleanType, StringType
 from pyspark.sql.utils import pyspark_column_op
+from pyspark.pandas.base import IndexOpsMixin
 
 
 class NullOps(DataTypeOps):
@@ -44,7 +45,9 @@ class NullOps(DataTypeOps):
         return "nulls"
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        _sanitize_list_like(right)
+        # We can directly use `super().eq` when given object is list, tuple, dict or set.
+        if not isinstance(right, IndexOpsMixin) and is_list_like(right):
+            return super().eq(left, right)
         return pyspark_column_op("__eq__", left, right, fillna=False)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
