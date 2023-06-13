@@ -456,6 +456,7 @@ pyspark_sql = Module(
         "pyspark.sql.streaming.readwriter",
         "pyspark.sql.streaming.listener",
         "pyspark.sql.udf",
+        "pyspark.sql.udtf",
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         "pyspark.sql.protobuf.functions",
@@ -501,6 +502,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_profiler",
+        "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_utils",
     ],
 )

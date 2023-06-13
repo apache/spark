@@ -16,29 +16,15 @@
     under the License.
 
 
-=========
-Spark SQL
-=========
+====
+UDTF
+====
 
-This page gives an overview of all public Spark SQL API.
+.. currentmodule:: pyspark.sql
 
-.. toctree::
-    :maxdepth: 2
+.. autosummary::
+    :toctree: api/
 
-    core_classes
-    spark_session
-    configuration
-    io
-    dataframe
-    column
-    data_types
-    row
-    functions
-    window
-    grouping
-    catalog
-    avro
-    observation
-    udf
-    udtf
-    protobuf
+    udtf.UserDefinedTableFunction.asNondeterministic
+    udtf.UserDefinedTableFunction.returnType
+    UDTFRegistration.register
