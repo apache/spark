@@ -1602,48 +1602,27 @@ class PlanGenerationTestSuite
   }
 
   functionTest("make_interval years months weeks days hours mins") {
-    fn.make_interval(
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"))
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
   }
 
   functionTest("make_interval years months weeks days hours") {
-    fn.make_interval(
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"))
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
   }
 
   functionTest("make_interval years months weeks days") {
-    fn.make_interval(
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"))
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
   }
 
   functionTest("make_interval years months weeks") {
-    fn.make_interval(
-      fn.col("a"),
-      fn.col("a"),
-      fn.col("a"))
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"))
   }
 
   functionTest("make_interval years months") {
-    fn.make_interval(
-      fn.col("a"),
-      fn.col("a"))
+    fn.make_interval(fn.col("a"), fn.col("a"))
   }
 
   functionTest("make_interval years") {
-    fn.make_interval(
-      fn.col("a"))
+    fn.make_interval(fn.col("a"))
   }
 
   functionTest("make_interval") {
