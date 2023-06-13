@@ -211,12 +211,13 @@ object DateTimeUtils {
   /**
    * Converts an Java object to microseconds.
    *
-   * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
+   * @param obj Either an object of `java.sql.Timestamp` or `java.time.{Instant,LocalDateTime}`.
    * @return The number of micros since the epoch.
    */
   def anyToMicros(obj: Any): Long = obj match {
     case t: Timestamp => fromJavaTimestamp(t)
     case i: Instant => instantToMicros(i)
+    case ldt: LocalDateTime => localDateTimeToMicros(ldt)
   }
 
   /**

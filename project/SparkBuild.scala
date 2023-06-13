@@ -60,10 +60,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, _*
+    commonUtils, sqlApi, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils"
+    "tags", "sketch", "kvstore", "common-utils", "sql-api"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
@@ -228,12 +228,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.12 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.13 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.12"
+        val silencerVersion = "1.7.13"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -410,7 +410,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
-      commonUtils, protobufAssembly
+      commonUtils, sqlApi, protobufAssembly
     ).contains(x)
   }
 
@@ -677,7 +677,8 @@ object SparkConnectCommon {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -691,7 +692,8 @@ object SparkConnectCommon {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -756,7 +758,8 @@ object SparkConnect {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -770,7 +773,8 @@ object SparkConnect {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -845,7 +849,8 @@ object SparkConnectClient {
     // of these dependendencies that we need to shade later on.
     libraryDependencies ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -854,7 +859,8 @@ object SparkConnectClient {
 
     dependencyOverrides ++= {
       val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String]
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
@@ -934,8 +940,13 @@ object SparkProtobuf {
 
     (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
 
+    (Test / PB.protocOptions) += "--include_imports",
+
     (Test / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-test-sources"
+      PB.gens.java -> target.value / "generated-test-sources",
+      PB.gens.descriptorSet -> target.value / "generated-test-sources/descriptor-set-sbt.desc",
+      // The above creates single descriptor file with all the proto files. This is different from
+      // Maven, which create one descriptor file for each proto file.
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
@@ -961,7 +972,8 @@ object SparkProtobufAssembly {
 
     (assembly / test) := { },
 
-    (assembly / assemblyJarName) := s"spark-protobuf-assembly_${scalaBinaryVersion.value}-${version.value}.jar",
+    (assembly / assemblyJarName) :=
+      s"spark-protobuf-assembly_${scalaBinaryVersion.value}-${version.value}.jar",
 
     (assembly / logLevel) := Level.Info,
 
@@ -980,7 +992,8 @@ object SparkProtobufAssembly {
     },
 
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark_protobuf.protobuf.@1").inAll,
+      ShadeRule.rename(
+        "com.google.protobuf.**" -> "org.sparkproject.spark_protobuf.protobuf.@1").inAll,
     ),
 
     (assembly / assemblyMergeStrategy) := {

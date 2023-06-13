@@ -33,7 +33,9 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
 
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
-    conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+    conf
+      .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+      .set("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
   }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
@@ -144,5 +146,19 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       artifactManager.addArtifact(session, remotePath, stagingPath, None)
       assert(artifactManager.getSparkConnectPythonIncludes == Seq("abc.zip"))
     }
+  }
+
+  test("SPARK-43790: Forward artifact file to cloud storage path") {
+    val copyDir = Utils.createTempDir().toPath
+    val destFSDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val stagingPath = copyDir.resolve("smallClassFile.class")
+    val remotePath = Paths.get("forward_to_fs", destFSDir.toString, "smallClassFileCopied.class")
+    assert(stagingPath.toFile.exists())
+    artifactManager.uploadArtifactToFs(sessionHolder, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath, None)
+
+    val copiedClassFile = Paths.get(destFSDir.toString, "smallClassFileCopied.class").toFile
+    assert(copiedClassFile.exists())
   }
 }

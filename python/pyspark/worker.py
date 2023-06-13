@@ -64,7 +64,7 @@ from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
 pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -456,6 +456,84 @@ def assign_cols_by_name(runner_conf):
     )
 
 
+# Read and process a serialized user-defined table function (UDTF) from a socket.
+# It expects the UDTF to be in a specific format and performs various checks to
+# ensure the UDTF is valid. This function also prepares a mapper function for applying
+# the UDTF logic to input rows.
+def read_udtf(pickleSer, infile, eval_type):
+    num_udtfs = read_int(infile)
+    if num_udtfs != 1:
+        raise PySparkValueError(f"Unexpected number of UDTFs. Expected 1 but got {num_udtfs}.")
+
+    # See `PythonUDFRunner.writeUDFs`.
+    num_arg = read_int(infile)
+    arg_offsets = [read_int(infile) for _ in range(num_arg)]
+    num_chained_funcs = read_int(infile)
+    if num_chained_funcs != 1:
+        raise PySparkValueError(
+            f"Unexpected number of chained UDTFs. Expected 1 but got {num_chained_funcs}."
+        )
+
+    handler, return_type = read_command(pickleSer, infile)
+    if not isinstance(handler, type):
+        raise PySparkRuntimeError(
+            f"Invalid UDTF handler type. Expected a class (type 'type'), but "
+            f"got an instance of {type(handler).__name__}."
+        )
+
+    # Instantiate the UDTF class.
+    try:
+        udtf = handler()
+    except Exception as e:
+        raise PySparkRuntimeError(
+            f"User defined table function encountered an error in "
+            f"the '__init__' method: {str(e)}"
+        )
+
+    # Validate the UDTF
+    if not hasattr(udtf, "eval"):
+        raise PySparkRuntimeError(
+            "Failed to execute the user defined table function because it has not "
+            "implemented the 'eval' method. Please add the 'eval' method and try "
+            "the query again."
+        )
+
+    # Wrap the UDTF and convert the results.
+    def wrap_udtf(f, return_type):
+        if return_type.needConversion():
+            toInternal = return_type.toInternal
+            return lambda *a: map(toInternal, f(*a))
+        else:
+            return lambda *a: f(*a)
+
+    eval = wrap_udtf(getattr(udtf, "eval"), return_type)
+
+    if hasattr(udtf, "terminate"):
+        terminate = wrap_udtf(getattr(udtf, "terminate"), return_type)
+    else:
+        terminate = None
+
+    # Return an iterator of iterators.
+    def mapper(_, it):
+        try:
+            for a in it:
+                yield tuple(eval(*[a[o] for o in arg_offsets]))
+        finally:
+            if terminate is not None:
+                try:
+                    yield tuple(terminate())
+                except BaseException as e:
+                    raise PySparkRuntimeError(
+                        f"User defined table function encountered an error in "
+                        f"the 'terminate' method: {str(e)}"
+                    )
+
+    # Each row is a group so do not batch but send one by one.
+    ser = BatchedSerializer(CPickleSerializer(), 1)
+
+    return mapper, None, ser, ser
+
+
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
@@ -511,13 +589,20 @@ def read_udfs(pickleSer, infile, eval_type):
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
             df_for_struct = (
-                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+                eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF
                 or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
+            # Arrow-optimized Python UDF takes a struct type argument as a Row
+            struct_in_pandas = (
+                "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
+            )
             ser = ArrowStreamPandasUDFSerializer(
-                timezone, safecheck, assign_cols_by_name(runner_conf), df_for_struct
+                timezone,
+                safecheck,
+                assign_cols_by_name(runner_conf),
+                df_for_struct,
+                struct_in_pandas,
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)
@@ -852,6 +937,8 @@ def main(infile, outfile):
         eval_type = read_int(infile)
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
+        elif eval_type == PythonEvalType.SQL_TABLE_UDF:
+            func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 

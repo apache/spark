@@ -34,18 +34,6 @@ class StringOpsParityTests(
     def test_astype(self):
         super().test_astype()
 
-    @unittest.skip(
-        "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
-    )
-    def test_mul(self):
-        super().test_mul()
-
-    @unittest.skip(
-        "TODO(SPARK-43621): Enable pyspark.pandas.spark.functions.repeat in Spark Connect."
-    )
-    def test_rmul(self):
-        super().test_rmul()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.data_type_ops.test_parity_string_ops import *  # noqa: F401
