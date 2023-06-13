@@ -509,7 +509,7 @@ object UnsupportedOperationChecker extends Logging {
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
         case Window(_, _, _, child) if child.isStreaming =>
-          val windowFuncs = subPlan.asInstanceOf[Window].projectList.flatMap { e =>
+          val windowFuncs = subPlan.asInstanceOf[Window].windowExpressions.flatMap { e =>
             e.collect {
               case we: WindowExpression => s"${we.windowFunction} AS ${e.toAttribute.sql}"
             }
