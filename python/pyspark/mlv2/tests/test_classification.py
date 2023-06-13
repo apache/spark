@@ -34,7 +34,6 @@ except ImportError:
 
 
 class ClassificationTestsMixin:
-
     @staticmethod
     def _check_result(result_dataframe, expected_predictions, expected_probabilities=None):
         np.testing.assert_array_equal(list(result_dataframe.prediction), expected_predictions)

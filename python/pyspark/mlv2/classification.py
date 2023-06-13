@@ -71,7 +71,12 @@ class _LogisticRegressionParams(
     def __init__(self, *args: Any):
         super(_LogisticRegressionParams, self).__init__(*args)
         self._setDefault(
-            maxIter=100, tol=1e-6, batchSize=32, learningRate=0.001, momentum=0.9, seed=0,
+            maxIter=100,
+            tol=1e-6,
+            batchSize=32,
+            learningRate=0.001,
+            momentum=0.9,
+            seed=0,
         )
 
 
@@ -98,7 +103,9 @@ def _train_logistic_regression_model_worker_fn(
     # TODO: support L1 / L2 regularization
     torch.distributed.init_process_group("gloo")
 
-    linear_model = torch_nn.Linear(num_features, num_classes, bias=fit_intercept, dtype=torch.float32)
+    linear_model = torch_nn.Linear(
+        num_features, num_classes, bias=fit_intercept, dtype=torch.float32
+    )
     ddp_model = DDP(linear_model)
 
     loss_fn = torch_nn.CrossEntropyLoss()
@@ -140,7 +147,9 @@ def _train_logistic_regression_model_worker_fn(
 
 
 @inherit_doc
-class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressionParams, ParamsReadWrite):
+class LogisticRegression(
+    Predictor["LogisticRegressionModel"], _LogisticRegressionParams, ParamsReadWrite
+):
     """
     Logistic regression estimator.
 
@@ -246,7 +255,7 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
 
 
 @inherit_doc
-class LogisticRegressionModel(PredictionModel,  _LogisticRegressionParams, ModelReadWrite):
+class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelReadWrite):
     """
     Model fitted by LogisticRegression.
 

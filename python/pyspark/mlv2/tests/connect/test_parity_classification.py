@@ -23,7 +23,11 @@ from pyspark.mlv2.tests.test_classification import ClassificationTestsMixin
 
 class FeatureTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[2]").config("spark.connect.copyFromLocalToFs.allowDestLocal", "true").getOrCreate()
+        self.spark = (
+            SparkSession.builder.remote("local[2]")
+            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+            .getOrCreate()
+        )
 
     def tearDown(self) -> None:
         self.spark.stop()

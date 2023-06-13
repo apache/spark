@@ -131,7 +131,12 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
 
 class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
-    def __init__(self, mean_values: "np.ndarray" = None, std_values: "np.ndarray" = None, n_samples_seen: int = None) -> None:
+    def __init__(
+        self,
+        mean_values: "np.ndarray" = None,
+        std_values: "np.ndarray" = None,
+        n_samples_seen: int = None,
+    ) -> None:
         super().__init__()
         self.mean_values = mean_values
         self.std_values = std_values

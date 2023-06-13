@@ -58,8 +58,8 @@ def _copy_dir_from_local_to_fs(local_path, dest_path):
 
 
 def _get_metadata_to_save(
-        instance: "Params",
-        extra_metadata: Optional[Dict[str, Any]] = None,
+    instance: "Params",
+    extra_metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Extract metadata of Estimator / Transformer / Model / Evaluator instance.
@@ -213,7 +213,6 @@ class ParamsReadWrite:
 
 
 class ModelReadWrite(ParamsReadWrite):
-
     def _get_core_model_filename(self):
         """
         Returns the name of the file for saving the core model.
@@ -234,7 +233,7 @@ class ModelReadWrite(ParamsReadWrite):
         """
         raise NotImplementedError()
 
-    def saveToLocal(self, path,  *, overwrite=False):
+    def saveToLocal(self, path, *, overwrite=False):
         super(ModelReadWrite, self).saveToLocal(path, overwrite=overwrite)
         self._save_core_model(os.path.join(path, self._get_core_model_filename()))
 
