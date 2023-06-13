@@ -227,7 +227,8 @@ private[spark] class IndexShuffleBlockResolver(
     remoteShuffleMaxDisk.foreach { maxBytes =>
       val bytesUsed = getShuffleBytesStored()
       if (maxBytes < bytesUsed) {
-        throw new SparkException(s"Not storing remote shuffles $bytesUsed exceeds $maxBytes")
+        throw SparkException.internalError(
+          s"Not storing remote shuffles $bytesUsed exceeds $maxBytes", category = "SHUFFLE")
       }
     }
     val file = blockId match {
@@ -236,8 +237,8 @@ private[spark] class IndexShuffleBlockResolver(
       case ShuffleDataBlockId(shuffleId, mapId, _) =>
         getDataFile(shuffleId, mapId)
       case _ =>
-        throw new IllegalStateException(s"Unexpected shuffle block transfer ${blockId} as " +
-          s"${blockId.getClass().getSimpleName()}")
+        throw SparkException.internalError(s"Unexpected shuffle block transfer $blockId as " +
+          s"${blockId.getClass().getSimpleName()}", category = "SHUFFLE")
     }
     val fileTmp = createTempFile(file)
     val channel = Channels.newChannel(
@@ -263,7 +264,8 @@ private[spark] class IndexShuffleBlockResolver(
             file.delete()
           }
           if (!fileTmp.renameTo(file)) {
-            throw new IOException(s"fail to rename file ${fileTmp} to ${file}")
+            throw SparkException.internalError(
+              s"fail to rename file $fileTmp to $file", category = "SHUFFLE")
           }
         }
         blockManager.reportBlockStatus(blockId, BlockStatus(StorageLevel.DISK_ONLY, 0, diskSize))
@@ -300,7 +302,7 @@ private[spark] class IndexShuffleBlockResolver(
 
       // Make sure the index exist.
       if (!indexFile.exists()) {
-        throw new FileNotFoundException("Index file is deleted already.")
+        throw SparkException.internalError("Index file is deleted already.", category = "SHUFFLE")
       }
       if (dataFile.exists()) {
         List((dataBlockId, dataBlockData), (indexBlockId, indexBlockData))
@@ -389,7 +391,8 @@ private[spark] class IndexShuffleBlockResolver(
             dataFile.delete()
           }
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
-            throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
+            throw SparkException.internalError(
+              s"fail to rename file $dataTmp to $dataFile", category = "SHUFFLE")
           }
 
           // write the checksum file
@@ -464,7 +467,7 @@ private[spark] class IndexShuffleBlockResolver(
     if (!tmpFile.renameTo(targetFile)) {
       val errorMsg = s"fail to rename file $tmpFile to $targetFile"
       if (propagateError) {
-        throw new IOException(errorMsg)
+        throw SparkException.internalError(errorMsg, category = "SHUFFLE")
       } else {
         logWarning(errorMsg)
       }
@@ -567,7 +570,8 @@ private[spark] class IndexShuffleBlockResolver(
       case batchId: ShuffleBlockBatchId =>
         (batchId.shuffleId, batchId.mapId, batchId.startReduceId, batchId.endReduceId)
       case _ =>
-        throw new IllegalArgumentException("unexpected shuffle block id format: " + blockId)
+        throw SparkException.internalError(
+          s"unexpected shuffle block id format: $blockId", category = "SHUFFLE")
     }
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
@@ -589,8 +593,9 @@ private[spark] class IndexShuffleBlockResolver(
       val actualPosition = channel.position()
       val expectedPosition = endReduceId * 8L + 8
       if (actualPosition != expectedPosition) {
-        throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
-          s"expected $expectedPosition but actual position was $actualPosition.")
+        throw SparkException.internalError(s"SPARK-22982: Incorrect channel position after index" +
+          s" file reads: expected $expectedPosition but actual position was $actualPosition.",
+          category = "SHUFFLE")
       }
       new FileSegmentManagedBuffer(
         transportConf,
