@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison, CurrentDate, CurrentTimestampLike, Expression, GreaterThan, GreaterThanOrEqual, GroupingSets, LessThan, LessThanOrEqual, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison, CurrentDate, CurrentTimestampLike, Expression, GreaterThan, GreaterThanOrEqual, GroupingSets, LessThan, LessThanOrEqual, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -509,7 +509,18 @@ object UnsupportedOperationChecker extends Logging {
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
         case Window(_, _, _, child) if child.isStreaming =>
-          throwError("Non-time-based windows are not supported on streaming DataFrames/Datasets")
+          val windowFuncs = subPlan.asInstanceOf[Window].projectList.flatMap { e =>
+            e.collect {
+              case we: WindowExpression => s"${we.windowFunction} AS ${e.toAttribute.sql}"
+            }
+          }.mkString(", ")
+          throw new AnalysisException(
+            s"Unsupported window function found in column '$windowFuncs'. Structured " +
+            "streaming only supports time-window aggregation using the `window` function.",
+            subPlan.origin.line,
+            subPlan.origin.startPosition)
+
+
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
