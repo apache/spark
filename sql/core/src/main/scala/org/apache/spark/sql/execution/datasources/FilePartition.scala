@@ -24,6 +24,7 @@ import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A collection of file blocks that should be read as a single task
@@ -95,7 +96,11 @@ object FilePartition extends Logging {
         partitionedFiles.map(_.length + openCostBytes).map(BigDecimal(_)).sum[BigDecimal]
       val desiredSplitBytes =
         (totalSizeInBytes / BigDecimal(maxPartitionNum.get)).setScale(0, RoundingMode.UP).longValue
-      getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
+      val desiredPartitions = getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
+      logWarning(s"The number of partitions is ${partitions.size}, which exceeds the maximum " +
+        s"number configured: $maxPartitionNum. Spark rescales it to ${desiredPartitions.size} " +
+        s"by ignoring the configuration of ${SQLConf.FILES_MAX_PARTITION_BYTES.key}.")
+      desiredPartitions
     } else {
       partitions
     }

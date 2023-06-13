@@ -1751,7 +1751,7 @@ object SQLConf {
 
   val FILES_MAX_PARTITION_NUM = buildConf("spark.sql.files.maxPartitionNum")
     .doc("The suggested (not guaranteed) maximum number of split file partitions. If it is set, " +
-      "Spark will reorganize each partition to make the number of partitions is close to this " +
+      "Spark will rescale each partition to make the number of partitions is close to this " +
       "value if the initial number of partitions exceeds this value. This configuration is " +
       "effective only when using file-based sources such as Parquet, JSON and ORC.")
     .version("3.5.0")
