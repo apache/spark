@@ -173,7 +173,6 @@ class ParamsReadWrite:
     def save(self, path, *, overwrite=False):
         session = _get_active_session(is_remote())
         path_exist = True
-        print("DBG: #1")
         try:
             session.read.format("binaryFile").load(path).head()
         except Exception as e:

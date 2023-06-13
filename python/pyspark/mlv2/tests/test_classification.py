@@ -176,6 +176,14 @@ class ClassificationTestsMixin:
             assert loaded_model.numClasses == 2
             assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
             assert loaded_model.torch_model is not None
+            np.testing.assert_allclose(
+                loaded_model.torch_model.weight.detach().numpy(),
+                model.torch_model.weight.detach().numpy(),
+            )
+            np.testing.assert_allclose(
+                loaded_model.torch_model.bias.detach().numpy(),
+                model.torch_model.bias.detach().numpy(),
+            )
 
             # Test loaded model transformation.
             loaded_model.transform(eval_df1.toPandas())
@@ -187,8 +195,7 @@ class ClassificationTestsMixin:
             assert loaded_model.numClasses == 2
             assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
             assert loaded_model.torch_model is not None
-
-            # Test loaded model transformation.
+            # Test loaded model transformation works.
             loaded_model.transform(eval_df1.toPandas())
 
 
