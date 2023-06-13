@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OptionList, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.IntegerType
@@ -110,6 +110,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val tableSpec = UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
+      optionExpression = OptionList(Seq.empty),
       location = None,
       comment = None,
       serde = None,
@@ -198,6 +199,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
     val tableSpec = UnresolvedTableSpec(
       properties = properties.toMap,
       provider = provider,
+      optionExpression = OptionList(Seq.empty),
       location = None,
       comment = None,
       serde = None,
