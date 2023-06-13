@@ -225,6 +225,8 @@ class SparkSession private(
    */
   def udf: UDFRegistration = sessionState.udfRegistration
 
+  def udtf: UDTFRegistration = sessionState.udtfRegistration
+
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * `StreamingQuery`s active on `this`.
