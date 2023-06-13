@@ -551,6 +551,24 @@ class WithWatermark(LogicalPlan):
         return plan
 
 
+class CachedRemoteRelation(LogicalPlan):
+    """Logical plan object for a DataFrame reference which represents a DataFrame that's been
+    cached on the server with a given id."""
+
+    def __init__(self, relationId: str):
+        super().__init__(None)
+        self._relationId = relationId
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.cached_remote_relation.relationId = self._relationId
+        if session._user_id:
+            plan.cached_remote_relation.userId = session._user_id
+        plan.cached_remote_relation.sessionId = session._session_id
+
+        return plan
+
+
 class Hint(LogicalPlan):
     """Logical plan object for a Hint operation."""
 
