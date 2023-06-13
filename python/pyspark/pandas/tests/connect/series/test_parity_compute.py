@@ -22,10 +22,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SeriesParityComputeTests(SeriesComputeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("TODO(SPARK-43663): Enable SeriesParityTests.test_compare.")
-    def test_compare(self):
-        super().test_compare()
-
     @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
