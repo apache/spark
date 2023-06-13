@@ -50,7 +50,7 @@ case class NamedParameter(name: String) extends Parameter
 /**
  * The expression represents a positional parameter that should be replaced by a literal.
  *
- * @param pos The position of the parameter in a SQL query.
+ * @param pos An unique position of the parameter in a SQL query.
  */
 case class PosParameter(pos: Int) extends Parameter {
   override def name: String = s"_$pos"
@@ -60,11 +60,34 @@ case class PosParameter(pos: Int) extends Parameter {
  * The logical plan representing a parameterized query. It will be removed during analysis after
  * the parameters are bind.
  */
-case class ParameterizedQuery(child: LogicalPlan, args: Map[String, Expression]) extends UnaryNode {
-  assert(args.nonEmpty)
+abstract class ParameterizedQuery(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = Nil
   override lazy val resolved = false
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETERIZED_QUERY)
+}
+
+/**
+ * The logical plan representing a parameterized query with named parameters.
+ *
+ * @param child The parameterized logical plan.
+ * @param args The map of parameter names to its literal values.
+ */
+case class NameParameterizedQuery(child: LogicalPlan, args: Map[String, Expression])
+  extends ParameterizedQuery(child) {
+  assert(args.nonEmpty)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan representing a parameterized query with positional parameters.
+ *
+ * @param child The parameterized logical plan.
+ * @param args The literal values of positional parameters.
+ */
+case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
+  extends ParameterizedQuery(child) {
+  assert(args.nonEmpty)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 }
@@ -84,7 +107,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
-      case p @ ParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
+      case p @ NameParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
         args.find(!_._2.isInstanceOf[Literal]).foreach { case (name, expr) =>
           expr.failAnalysis(
             errorClass = "INVALID_SQL_ARG",
