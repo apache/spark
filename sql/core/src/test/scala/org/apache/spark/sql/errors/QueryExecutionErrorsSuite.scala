@@ -833,7 +833,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: parameter(foo)"),
+      parameters = Map("message" -> "Cannot evaluate expression: namedparameter(foo)"),
       sqlState = "XX000")
   }
 
@@ -847,7 +847,7 @@ class QueryExecutionErrorsSuite
       errorClass = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Cannot generate code for expression: " +
-          "grouping(parameter(foo))")),
+          "grouping(namedparameter(foo))")),
       sqlState = "XX000")
   }
 
