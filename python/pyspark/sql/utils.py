@@ -245,6 +245,7 @@ def pyspark_column_op(
     """
     from pyspark.pandas.base import column_op
     from pyspark.sql.column import Column as PySparkColumn
+    from pyspark.pandas.data_type_ops.base import _is_extension_dtypes
 
     if is_remote():
         from pyspark.sql.connect.column import Column as ConnectColumn
@@ -253,5 +254,8 @@ def pyspark_column_op(
     else:
         Column = PySparkColumn  # type: ignore[assignment]
     result = column_op(getattr(Column, func_name))(left, right)
+    # It works as expected on extension dtype, so we don't need to call `fillna` for this case.
+    if (fillna is not None) and (_is_extension_dtypes(left) or _is_extension_dtypes(right)):
+        fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
