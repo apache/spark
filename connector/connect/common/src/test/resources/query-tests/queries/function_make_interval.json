@@ -13,36 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "make_interval",
-        "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
-          }
-        }]
+        "functionName": "make_interval"
       }
     }]
   }

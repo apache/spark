@@ -13,24 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "make_dt_interval",
-        "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "b"
-          }
-        }]
+        "functionName": "make_dt_interval"
       }
     }]
   }

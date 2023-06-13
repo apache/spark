@@ -1076,7 +1076,7 @@ abstract class JsonSuite
     }.getCause
     checkError(
       exception = exceptionTwo.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
         "failFastMode" -> "FAILFAST")
@@ -1997,7 +1997,7 @@ abstract class JsonSuite
       }.getCause
       checkError(
         exception = exceptionTwo.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null]",
           "failFastMode" -> "FAILFAST")

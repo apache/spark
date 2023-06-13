@@ -1397,6 +1397,34 @@ object functions {
     Column.fn("map_from_arrays", keys, values)
 
   /**
+   * Creates a map after splitting the text into key/value pairs using delimiters. Both
+   * `pairDelim` and `keyValueDelim` are treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column, keyValueDelim: Column): Column =
+    Column.fn("str_to_map", text, pairDelim, keyValueDelim)
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters. The `pairDelim`
+   * is treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column): Column =
+    Column.fn("str_to_map", text, pairDelim)
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column): Column = Column.fn("str_to_map", text)
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
@@ -3393,6 +3421,80 @@ object functions {
    */
   def upper(e: Column): Column = Column.fn("upper", e)
 
+  /**
+   * Converts the input `e` to a binary value based on the supplied `f`. The `f` can be a
+   * case-insensitive string literal of "hex", "utf-8", "utf8", or "base64". By default, the
+   * binary format for conversion is "hex" if `fmt` is omitted. The function returns NULL if at
+   * least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column, f: Column): Column = Column.fn("to_binary", e, f)
+
+  /**
+   * Converts the input `e` to a binary value based on the format "hex". The function returns NULL
+   * if at least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column): Column = Column.fn("to_binary", e)
+
+  /**
+   * Convert `e` to a string based on the `format`. Throws an exception if the conversion fails.
+   *
+   * @param e
+   *   A column of number to be converted
+   * @param format
+   *   The format can consist of the following characters, case insensitive: <ul> <li> '0' or '9':
+   *   Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format string
+   *   matches a sequence of digits in the input value, generating a result string of the same
+   *   length as the corresponding sequence in the format string. The result string is left-padded
+   *   with zeros if the 0/9 sequence comprises more digits than the matching part of the decimal
+   *   value, starts with 0, and is before the decimal point. Otherwise, it is padded with
+   *   spaces.</li> <li>'.' or 'D': Specifies the position of the decimal point (optional, only
+   *   allowed once).</li> <li>',' or 'G': Specifies the position of the grouping (thousands)
+   *   separator (,). There must be a 0 or 9 to the left and right of each grouping
+   *   separator.</li> <li>'$': Specifies the location of the $ currency sign. This character may
+   *   only be specified once.</li> <li>'S' or 'MI': Specifies the position of a '-' or '+' sign
+   *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
+   *   prints '+' for positive values but 'MI' prints a space.</li> <li>'PR': Only allowed at the
+   *   end of the format string; specifies that the result string will be wrapped by angle
+   *   brackets if the input value is negative.</li> </ul>
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
+
+  /**
+   * Convert string 'e' to a number based on the string format 'format'. Throws an exception if
+   * the conversion fails.
+   *
+   * @param e
+   *   A column of string to be converted
+   * @param format
+   *   The format can consist of the following characters, case insensitive: <ul><li> '0' or '9':
+   *   Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format string
+   *   matches a sequence of digits in the input string. If the 0/9 sequence starts with 0 and is
+   *   before the decimal point, it can only match a digit sequence of the same size. Otherwise,
+   *   if the sequence starts with 9 or is after the decimal point, it can match a digit sequence
+   *   that has the same or smaller size.</li> <li>'.' or 'D': Specifies the position of the
+   *   decimal point (optional, only allowed once).</li> <li>',' or 'G': Specifies the position of
+   *   the grouping (thousands) separator (,). There must be a 0 or 9 to the left and right of
+   *   each grouping separator. 'expr' must match the grouping separator relevant for the size of
+   *   the number.</li> <li>'$': Specifies the location of the $ currency sign. This character may
+   *   only be specified once.</li> <li>'S' or 'MI': Specifies the position of a '-' or '+' sign
+   *   (optional, only allowed once at the beginning or end of the format string). Note that 'S'
+   *   allows '-' but 'MI' does not.</li> <li>'PR': Only allowed at the end of the format string;
+   *   specifies that 'expr' indicates a negative number with wrapping angled brackets.</li></ul>
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4265,6 +4367,64 @@ object functions {
    * @since 3.4.0
    */
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
+
+  /**
+   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column, format: Column): Column =
+    Column.fn("to_timestamp_ltz", timestamp, format)
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column): Column =
+    Column.fn("to_timestamp_ltz", timestamp)
+
+  /**
+   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column, format: Column): Column =
+    Column.fn("to_timestamp_ntz", timestamp, format)
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column): Column =
+    Column.fn("to_timestamp_ntz", timestamp)
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(timeExp: Column, format: Column): Column =
+    Column.fn("to_unix_timestamp", timeExp, format)
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(timeExp: Column): Column =
+    Column.fn("to_unix_timestamp", timeExp)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions

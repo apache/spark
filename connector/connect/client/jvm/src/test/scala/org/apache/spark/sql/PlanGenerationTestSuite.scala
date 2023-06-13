@@ -1570,11 +1570,27 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
-  functionTest("make_dt_interval") {
+  functionTest("make_dt_interval days hours mins secs") {
     fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("b"))
   }
 
-  functionTest("make_interval") {
+  functionTest("make_dt_interval days hours mins") {
+    fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_dt_interval days hours") {
+    fn.make_dt_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_dt_interval days") {
+    fn.make_dt_interval(fn.col("a"))
+  }
+
+  functionTest("make_dt_interval") {
+    fn.make_dt_interval()
+  }
+
+  functionTest("make_interval years months weeks days hours mins secs") {
     fn.make_interval(
       fn.col("a"),
       fn.col("a"),
@@ -1585,7 +1601,56 @@ class PlanGenerationTestSuite
       fn.col("b"))
   }
 
-  functionTest("make_timestamp") {
+  functionTest("make_interval years months weeks days hours mins") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("make_interval years months weeks days hours") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("make_interval years months weeks days") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("make_interval years months weeks") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("make_interval years months") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("make_interval years") {
+    fn.make_interval(
+      fn.col("a"))
+  }
+
+  functionTest("make_interval") {
+    fn.make_interval()
+  }
+
+  functionTest("make_timestamp with timezone") {
     fn.make_timestamp(
       fn.col("a"),
       fn.col("a"),
@@ -1596,7 +1661,17 @@ class PlanGenerationTestSuite
       fn.col("g"))
   }
 
-  functionTest("make_timestamp_ltz") {
+  functionTest("make_timestamp without timezone") {
+    fn.make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_timestamp_ltz with timezone") {
     fn.make_timestamp_ltz(
       fn.col("a"),
       fn.col("a"),
@@ -1605,6 +1680,16 @@ class PlanGenerationTestSuite
       fn.col("a"),
       fn.col("b"),
       fn.col("g"))
+  }
+
+  functionTest("make_timestamp_ltz without timezone") {
+    fn.make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
   }
 
   functionTest("make_timestamp_ntz") {
@@ -1617,8 +1702,16 @@ class PlanGenerationTestSuite
       fn.col("b"))
   }
 
-  functionTest("make_ym_interval") {
+  functionTest("make_ym_interval years months") {
     fn.make_ym_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_ym_interval years") {
+    fn.make_ym_interval(fn.col("a"))
+  }
+
+  functionTest("make_ym_interval") {
+    fn.make_ym_interval()
   }
 
   functionTest("bucket") {
@@ -2133,6 +2226,58 @@ class PlanGenerationTestSuite
 
   functionTest("to_csv") {
     fn.to_csv(fn.col("d"), Collections.singletonMap("sep", "|"))
+  }
+
+  functionTest("str_to_map") {
+    fn.str_to_map(fn.col("g"))
+  }
+
+  functionTest("str_to_map with pair delimiter") {
+    fn.str_to_map(fn.col("g"), lit(","), lit("="))
+  }
+
+  functionTest("str_to_map with pair and keyValue delimiter") {
+    fn.str_to_map(fn.col("g"), lit(","))
+  }
+
+  functionTest("to_binary") {
+    fn.to_binary(fn.col("g"))
+  }
+
+  functionTest("to_binary with format") {
+    fn.to_binary(fn.col("g"), lit("utf-8"))
+  }
+
+  functionTest("to_char") {
+    fn.to_char(fn.col("b"), lit("$99.99"))
+  }
+
+  functionTest("to_number") {
+    fn.to_char(fn.col("g"), lit("$99.99"))
+  }
+
+  functionTest("to_timestamp_ltz") {
+    fn.to_timestamp_ltz(fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ltz with format") {
+    fn.to_timestamp_ltz(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ntz") {
+    fn.to_timestamp_ntz(fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ntz with format") {
+    fn.to_timestamp_ntz(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("to_unix_timestamp") {
+    fn.to_unix_timestamp(fn.col("g"))
+  }
+
+  functionTest("to_unix_timestamp with format") {
+    fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
   test("groupby agg") {

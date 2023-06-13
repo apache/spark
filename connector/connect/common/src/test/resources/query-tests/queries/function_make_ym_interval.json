@@ -13,16 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "make_ym_interval",
-        "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }, {
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
-          }
-        }]
+        "functionName": "make_ym_interval"
       }
     }]
   }
