@@ -29,6 +29,7 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.sql.connect.config.Connect.CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
@@ -67,7 +68,7 @@ class SparkConnectArtifactManager private[connect] {
   private[connect] lazy val classArtifactDir = SparkEnv.get.conf
     .getOption("spark.repl.class.outputDir")
     .map(p => Paths.get(p))
-    .getOrElse(artifactRootPath.resolve("classes"))
+    .getOrElse(ArtifactUtils.concatenatePaths(artifactRootPath, "classes"))
 
   private[connect] lazy val classArtifactUri: String =
     SparkEnv.get.conf.getOption("spark.repl.class.uri") match {
@@ -127,13 +128,14 @@ class SparkConnectArtifactManager private[connect] {
       }(catchBlock = { tmpFile.delete() })
     } else if (remoteRelativePath.startsWith(s"classes${File.separator}")) {
       // Move class files to common location (shared among all users)
-      val target = classArtifactDir.resolve(
+      val target = ArtifactUtils.concatenatePaths(
+        classArtifactDir,
         remoteRelativePath.toString.stripPrefix(s"classes${File.separator}"))
       Files.createDirectories(target.getParent)
       // Allow overwriting class files to capture updates to classes.
       Files.move(serverLocalStagingPath, target, StandardCopyOption.REPLACE_EXISTING)
     } else {
-      val target = artifactRootPath.resolve(remoteRelativePath)
+      val target = ArtifactUtils.concatenatePaths(artifactRootPath, remoteRelativePath)
       Files.createDirectories(target.getParent)
       // Disallow overwriting jars because spark doesn't support removing jars that were
       // previously added,
