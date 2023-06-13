@@ -19,7 +19,7 @@ import numpy as np
 import os
 import pandas as pd
 import pickle
-from typing import Any, Union, List, Tuple, Callable, Dict
+from typing import Any, Union, List, Tuple, Callable, Dict, Optional
 
 from pyspark import keyword_only
 from pyspark.sql import DataFrame
@@ -39,7 +39,7 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(self, *, inputCol: str = None, outputCol: str = None) -> None:
+    def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
         """
@@ -63,7 +63,7 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
 
 class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
-    def __init__(self, max_abs_values: "np.ndarray" = None, n_samples_seen: int = None) -> None:
+    def __init__(self, max_abs_values: Optional["np.ndarray"] = None, n_samples_seen: Optional[int] = None) -> None:
         super().__init__()
         self.max_abs_values = max_abs_values
         if max_abs_values is not None:
@@ -88,22 +88,22 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
 
         return transform_fn
 
-    def _get_core_model_filename(self):
+    def _get_core_model_filename(self) -> str:
         return self.__class__.__name__ + ".sklearn.pkl"
 
-    def _save_core_model(self, path):
+    def _save_core_model(self, path: str) -> None:
         from sklearn.preprocessing import MaxAbsScaler as sk_MaxAbsScaler
 
         sk_model = sk_MaxAbsScaler()
         sk_model.scale_ = self.scale_values
         sk_model.max_abs_ = self.max_abs_values
-        sk_model.n_features_in_ = len(self.max_abs_values)
+        sk_model.n_features_in_ = len(self.max_abs_values)  # type: ignore[arg-type]
         sk_model.n_samples_seen_ = self.n_samples_seen
 
         with open(path, "wb") as fp:
             pickle.dump(sk_model, fp)
 
-    def _load_core_model(self, path):
+    def _load_core_model(self, path: str) -> None:
         with open(path, "rb") as fp:
             sk_model = pickle.load(fp)
 
@@ -121,7 +121,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(self, inputCol: str = None, outputCol: str = None) -> None:
+    def __init__(self, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
         """
@@ -145,9 +145,9 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
     def __init__(
         self,
-        mean_values: "np.ndarray" = None,
-        std_values: "np.ndarray" = None,
-        n_samples_seen: int = None,
+        mean_values: Optional["np.ndarray"] = None,
+        std_values: Optional["np.ndarray"] = None,
+        n_samples_seen: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.mean_values = mean_values
@@ -175,23 +175,23 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
 
         return transform_fn
 
-    def _get_core_model_filename(self):
+    def _get_core_model_filename(self) -> str:
         return self.__class__.__name__ + ".sklearn.pkl"
 
-    def _save_core_model(self, path):
+    def _save_core_model(self, path: str) -> None:
         from sklearn.preprocessing import StandardScaler as sk_StandardScaler
 
         sk_model = sk_StandardScaler(with_mean=True, with_std=True)
         sk_model.scale_ = self.scale_values
-        sk_model.var_ = self.std_values * self.std_values
+        sk_model.var_ = self.std_values * self.std_values  # type: ignore[operator]
         sk_model.mean_ = self.mean_values
-        sk_model.n_features_in_ = len(self.std_values)
+        sk_model.n_features_in_ = len(self.std_values)  # type: ignore[arg-type]
         sk_model.n_samples_seen_ = self.n_samples_seen
 
         with open(path, "wb") as fp:
             pickle.dump(sk_model, fp)
 
-    def _load_core_model(self, path):
+    def _load_core_model(self, path: str) -> None:
         with open(path, "rb") as fp:
             sk_model = pickle.load(fp)
 

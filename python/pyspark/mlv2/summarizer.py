@@ -71,7 +71,7 @@ class SummarizerAggState:
                     * (self.count / (self.count - 1))
                 )
             if metric == "count":
-                result["count"] = self.count
+                result["count"] = self.count  # type: ignore[assignment]
 
         return result
 

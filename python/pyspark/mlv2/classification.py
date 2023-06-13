@@ -20,7 +20,7 @@ from pyspark.mlv2.base import _PredictorParams
 
 from pyspark.ml.param.shared import HasProbabilityCol
 
-from typing import Any, Dict, Union, List, Tuple, Callable
+from typing import Any, Dict, Union, List, Tuple, Callable, Optional
 import numpy as np
 import os
 import pandas as pd
@@ -262,19 +262,19 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelR
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, torch_model: Any = None, num_features: int = None, num_classes: int = None):
+    def __init__(self, torch_model: Any = None, num_features: Optional[int] = None, num_classes: Optional[int] = None):
         super().__init__()
         self.torch_model = torch_model
         self.num_features = num_features
         self.num_classes = num_classes
 
-    @property  # type: ignore[misc]
+    @property
     def numFeatures(self) -> int:
-        return self.num_features
+        return self.num_features  # type: ignore[return-value]
 
-    @property  # type: ignore[misc]
+    @property
     def numClasses(self) -> int:
-        return self.num_classes
+        return self.num_classes  # type: ignore[return-value]
 
     def _input_columns(self) -> List[str]:
         return [self.getOrDefault(self.featuresCol)]
@@ -294,7 +294,9 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelR
 
         def transform_fn(input_series: Any) -> Any:
             torch_model = torch_nn.Linear(
-                num_features, num_classes, bias=fit_intercept, dtype=torch.float32
+                num_features,  # type: ignore[arg-type]
+                num_classes,  # type: ignore[arg-type]
+                bias=fit_intercept, dtype=torch.float32
             )
             # TODO: Use spark broadast for `model_state_dict`,
             #  it can improve performance when model is large.
@@ -321,22 +323,22 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelR
 
         return transform_fn
 
-    def _get_core_model_filename(self):
+    def _get_core_model_filename(self) -> str:
         return self.__class__.__name__ + ".torch"
 
-    def _save_core_model(self, path):
+    def _save_core_model(self, path: str) -> None:
         torch.save(self.torch_model, path)
 
-    def _load_core_model(self, path):
+    def _load_core_model(self, path: str) -> None:
         self.torch_model = torch.load(path)
 
-    def _get_extra_metadata(self) -> Any:
+    def _get_extra_metadata(self) -> Dict[str, Any]:
         return {
             "num_features": self.num_features,
             "num_classes": self.num_classes,
         }
 
-    def _load_extra_metadata(self, extra_metadata):
+    def _load_extra_metadata(self, extra_metadata: Dict[str, Any]) -> None:
         """
         Load extra metadata attribute from extra metadata json object.
         """

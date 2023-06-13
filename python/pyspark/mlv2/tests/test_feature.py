@@ -22,12 +22,16 @@ import numpy as np
 import tempfile
 import unittest
 
-from pyspark.mlv2.feature import MaxAbsScaler, MaxAbsScalerModel, StandardScaler, StandardScalerModel
+from pyspark.mlv2.feature import (
+    MaxAbsScaler,
+    MaxAbsScalerModel,
+    StandardScaler,
+    StandardScalerModel,
+)
 from pyspark.sql import SparkSession
 
 
 class FeatureTestsMixin:
-
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [

@@ -32,17 +32,18 @@ from pyspark import __version__ as pyspark_version
 _META_DATA_FILE_NAME = "metadata.json"
 
 
-def _copy_file_from_local_to_fs(local_path, dest_path):
+def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
     session = _get_active_session(is_remote())
     if is_remote():
-        session.copyFromLocalToFs(local_path, dest_path)
+        session.copyFromLocalToFs(local_path, dest_path)  # type: ignore[attr-defined]
     else:
-        session.sparkContext._gateway.jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(
+        jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
+        jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(
             local_path, dest_path
         )
 
 
-def _copy_dir_from_local_to_fs(local_path, dest_path):
+def _copy_dir_from_local_to_fs(local_path: str, dest_path: str) -> None:
     """
     Copy directory from local path to cloud storage path.
     Limitation: Currently only one level directory is supported.
@@ -58,9 +59,9 @@ def _copy_dir_from_local_to_fs(local_path, dest_path):
 
 
 def _get_metadata_to_save(
-    instance: "Params",
+    instance: Any,
     extra_metadata: Optional[Dict[str, Any]] = None,
-) -> str:
+) -> Dict[str, Any]:
     """
     Extract metadata of Estimator / Transformer / Model / Evaluator instance.
     """
@@ -116,13 +117,13 @@ class ParamsReadWrite:
         """
         return None
 
-    def _load_extra_metadata(self, metadata):
+    def _load_extra_metadata(self, metadata: Dict[str, Any]) -> None:
         """
         Load extra metadata attribute from metadata json object.
         """
         pass
 
-    def saveToLocal(self, path, *, overwrite=False):
+    def saveToLocal(self, path: str, *, overwrite: bool = False) -> None:
         """
         Save model to provided local path.
         """
@@ -142,7 +143,7 @@ class ParamsReadWrite:
             json.dump(metadata, fp)
 
     @classmethod
-    def loadFromLocal(cls, path):
+    def loadFromLocal(cls, path: str) -> Any:
         """
         Load model from provided local path.
         """
@@ -170,7 +171,7 @@ class ParamsReadWrite:
             instance._load_extra_metadata(metadata["extra"])
         return instance
 
-    def save(self, path, *, overwrite=False):
+    def save(self, path: str, *, overwrite: bool = False) -> None:
         session = _get_active_session(is_remote())
         path_exist = True
         try:
@@ -193,7 +194,7 @@ class ParamsReadWrite:
             shutil.rmtree(tmp_local_dir, ignore_errors=True)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path: str) -> Any:
         session = _get_active_session(is_remote())
 
         tmp_local_dir = tempfile.mkdtemp(prefix="pyspark_ml_model_")
@@ -212,13 +213,13 @@ class ParamsReadWrite:
 
 
 class ModelReadWrite(ParamsReadWrite):
-    def _get_core_model_filename(self):
+    def _get_core_model_filename(self) -> str:
         """
         Returns the name of the file for saving the core model.
         """
         raise NotImplementedError()
 
-    def _save_core_model(self, path):
+    def _save_core_model(self, path: str) -> None:
         """
         Save the core model to provided local path.
         Different pyspark models contain different type of core model,
@@ -226,18 +227,18 @@ class ModelReadWrite(ParamsReadWrite):
         """
         raise NotImplementedError()
 
-    def _load_core_model(self, path):
+    def _load_core_model(self, path: str) -> None:
         """
         Load the core model from provided local path.
         """
         raise NotImplementedError()
 
-    def saveToLocal(self, path, *, overwrite=False):
+    def saveToLocal(self, path: str, *, overwrite: bool = False) -> None:
         super(ModelReadWrite, self).saveToLocal(path, overwrite=overwrite)
         self._save_core_model(os.path.join(path, self._get_core_model_filename()))
 
     @classmethod
-    def loadFromLocal(cls, path):
+    def loadFromLocal(cls, path: str) -> Any:
         instance = super(ModelReadWrite, cls).loadFromLocal(path)
         instance._load_core_model(os.path.join(path, instance._get_core_model_filename()))
         return instance
