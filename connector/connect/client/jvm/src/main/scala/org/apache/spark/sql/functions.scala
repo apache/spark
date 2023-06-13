@@ -2857,7 +2857,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def current_schema(): Column = current_database()
+  def current_schema(): Column = Column.fn("current_schema")
 
   /**
    * Returns the user name of current execution context.
@@ -3027,7 +3027,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
-  def user(): Column = current_user()
+  def user(): Column = Column.fn("user")
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3661,7 +3661,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def curdate(): Column = current_date()
+  def curdate(): Column = Column.fn("curdate")
 
   /**
    * Returns the current date at the start of query evaluation as a date column. All calls of

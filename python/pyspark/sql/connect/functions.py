@@ -2252,13 +2252,18 @@ to_number.__doc__ = pysparkfuncs.to_number.__doc__
 #     timestamp_seconds, current_timestamp, date_trunc
 
 
+def curdate() -> Column:
+    return _invoke_function("curdate")
+
+
+curdate.__doc__ = pysparkfuncs.curdate.__doc__
+
+
 def current_date() -> Column:
     return _invoke_function("current_date")
 
 
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
-
-curdate = current_date
 
 
 def current_timestamp() -> Column:
@@ -2786,7 +2791,11 @@ def current_database() -> Column:
 current_database.__doc__ = pysparkfuncs.current_database.__doc__
 
 
-current_schema = current_database
+def current_schema() -> Column:
+    return _invoke_function("current_schema")
+
+
+current_schema.__doc__ = pysparkfuncs.current_schema.__doc__
 
 
 def current_user() -> Column:
@@ -2796,7 +2805,11 @@ def current_user() -> Column:
 current_user.__doc__ = pysparkfuncs.current_user.__doc__
 
 
-user = current_user
+def user() -> Column:
+    return _invoke_function("user")
+
+
+user.__doc__ = pysparkfuncs.user.__doc__
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:

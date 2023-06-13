@@ -13,7 +13,7 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "current_date"
+        "functionName": "curdate"
       }
     }]
   }
