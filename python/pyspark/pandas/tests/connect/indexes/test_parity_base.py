@@ -39,10 +39,6 @@ class IndexesParityTests(
     def test_factorize(self):
         super().test_factorize()
 
-    @unittest.skip("TODO(SPARK-43703): Enable IndexesParityTests.test_monotonic.")
-    def test_monotonic(self):
-        super().test_monotonic()
-
     @unittest.skip("TODO(SPARK-43704): Enable IndexesParityTests.test_to_series.")
     def test_to_series(self):
         super().test_to_series()
