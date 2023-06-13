@@ -1549,10 +1549,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
               NamedArgumentExpression(n.key.getText, expression(n.value))
             } else {
-              throw new ParseException(
-                errorClass = "Named arguments not enabled.",
-                messageParameters = Map("msg" -> (n.key.getText + " is a named argument.")),
-                ctx)
+              throw QueryCompilationErrors.namedArgumentsNotEnabledError(n.key.getText)
             }
           }.getOrElse {
             expression(e)
@@ -2195,10 +2192,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
           NamedArgumentExpression(n.key.getText, expression(n.value))
         } else {
-          throw new ParseException(
-            errorClass = "Named arguments not enabled.",
-            messageParameters = Map("msg" -> (n.key.getText + " is a named argument.")),
-            ctx)
+          throw QueryCompilationErrors.namedArgumentsNotEnabledError(n.key.getText)
         }
       }.getOrElse {
         expression(e)

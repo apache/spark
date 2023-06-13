@@ -1580,6 +1580,11 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ]
   },
+  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
+    "message" : [
+      "Named arguments support is currently disabled. Enable suppport using ALLOW_NAMED_FUNCTION_ARGUMENTS."
+    ]
+  },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
