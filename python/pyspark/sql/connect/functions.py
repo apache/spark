@@ -2247,6 +2247,96 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
 to_number.__doc__ = pysparkfuncs.to_number.__doc__
 
 
+def replace(
+    src: "ColumnOrName", search: "ColumnOrName", replace: Optional["ColumnOrName"] = None
+) -> Column:
+    if replace is not None:
+        return _invoke_function_over_columns("replace", src, search, replace)
+    else:
+        return _invoke_function_over_columns("replace", src, search)
+
+
+replace.__doc__ = pysparkfuncs.replace.__doc__
+
+
+def split_part(src: "ColumnOrName", delimiter: "ColumnOrName", partNum: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("split_part", src, delimiter, partNum)
+
+
+split_part.__doc__ = pysparkfuncs.split_part.__doc__
+
+
+def substr(
+    str: "ColumnOrName", pos: "ColumnOrName", len: Optional["ColumnOrName"] = None
+) -> Column:
+    if len is not None:
+        return _invoke_function_over_columns("substr", str, pos, len)
+    else:
+        return _invoke_function_over_columns("substr", str, pos)
+
+
+substr.__doc__ = pysparkfuncs.substr.__doc__
+
+
+def parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    if key is not None:
+        return _invoke_function_over_columns("parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("parse_url", url, partToExtract)
+
+
+parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
+
+
+def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    return _invoke_function("printf", lit(format), *[_to_col(c) for c in cols])
+
+
+printf.__doc__ = pysparkfuncs.printf.__doc__
+
+
+def url_decode(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("url_decode", str)
+
+
+url_decode.__doc__ = pysparkfuncs.url_decode.__doc__
+
+
+def url_encode(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("url_encode", str)
+
+
+url_encode.__doc__ = pysparkfuncs.url_encode.__doc__
+
+
+def position(
+    substr: "ColumnOrName", str: "ColumnOrName", start: Optional["ColumnOrName"] = None
+) -> Column:
+    if start is not None:
+        return _invoke_function_over_columns("position", substr, str, start)
+    else:
+        return _invoke_function_over_columns("position", substr, str)
+
+
+position.__doc__ = pysparkfuncs.position.__doc__
+
+
+def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("endswith", str, suffix)
+
+
+endswith.__doc__ = pysparkfuncs.endswith.__doc__
+
+
+def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("startswith", str, prefix)
+
+
+startswith.__doc__ = pysparkfuncs.startswith.__doc__
+
+
 # Date/Timestamp functions
 # TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,

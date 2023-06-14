@@ -8466,6 +8466,7 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
         return _invoke_function_over_columns("to_binary", col)
 
 
+@try_remote_functions
 def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
     Convert `col` to a string based on the `format`.
@@ -8505,6 +8506,7 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("to_char", col, format)
 
 
+@try_remote_functions
 def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     """
     Convert string 'col' to a number based on the string format 'format'.
@@ -8543,6 +8545,291 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     [Row(r=Decimal('78.12'))]
     """
     return _invoke_function_over_columns("to_number", col, format)
+
+
+@try_remote_functions
+def replace(
+    src: "ColumnOrName", search: "ColumnOrName", replace: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    Replaces all occurrences of `search` with `replace`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        A column of string to be replaced.
+    search : :class:`~pyspark.sql.Column` or str
+        A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+    replace : :class:`~pyspark.sql.Column` or str, optional
+        A column of string, If `replace` is not specified or is an empty string,
+        nothing replaces the string that is removed from `str`.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("ABCabc", "abc", "DEF",)], ["a", "b", "c"])
+    >>> df.select(replace(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='ABCDEF')]
+
+    >>> df.select(replace(df.a, df.b).alias('r')).collect()
+    [Row(r='ABC')]
+    """
+    if replace is not None:
+        return _invoke_function_over_columns("replace", src, search, replace)
+    else:
+        return _invoke_function_over_columns("replace", src, search)
+
+
+@try_remote_functions
+def split_part(src: "ColumnOrName", delimiter: "ColumnOrName", partNum: "ColumnOrName") -> Column:
+    """
+    Splits `str` by delimiter and return requested part of the split (1-based).
+    If any input is null, returns null. if `partNum` is out of range of split parts,
+    returns empty string. If `partNum` is 0, throws an error. If `partNum` is negative,
+    the parts are counted backward from the end of the string.
+    If the `delimiter` is an empty string, the `str` is not split.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        A column of string to be splited.
+    delimiter : :class:`~pyspark.sql.Column` or str
+        A column of string, the delimiter used for split.
+    partNum : :class:`~pyspark.sql.Column` or str
+        A column of string, requested part of the split (1-based).
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("11.12.13", ".", 3,)], ["a", "b", "c"])
+    >>> df.select(split_part(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='13')]
+    """
+    return _invoke_function_over_columns("split_part", src, delimiter, partNum)
+
+
+@try_remote_functions
+def substr(
+    str: "ColumnOrName", pos: "ColumnOrName", len: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    Returns the substring of `str` that starts at `pos` and is of length `len`,
+    or the slice of byte array that starts at `pos` and is of length `len`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        A column of string.
+    pos : :class:`~pyspark.sql.Column` or str
+        A column of string, the substring of `str` that starts at `pos`.
+    len : :class:`~pyspark.sql.Column` or str, optional
+        A column of string, the substring of `str` is of length `len`.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark SQL", 5, 1,)], ["a", "b", "c"])
+    >>> df.select(substr(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='k')]
+
+    >>> df.select(substr(df.a, df.b).alias('r')).collect()
+    [Row(r='k SQL')]
+    """
+    if len is not None:
+        return _invoke_function_over_columns("substr", str, pos, len)
+    else:
+        return _invoke_function_over_columns("substr", str, pos)
+
+
+@try_remote_functions
+def parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    Extracts a part from a URL.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    url : :class:`~pyspark.sql.Column` or str
+        A column of string.
+    partToExtract : :class:`~pyspark.sql.Column` or str
+        A column of string, the path.
+    key : :class:`~pyspark.sql.Column` or str, optional
+        A column of string, the key.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [("http://spark.apache.org/path?query=1", "QUERY", "query",)],
+    ...     ["a", "b", "c"]
+    ... )
+    >>> df.select(parse_url(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='1')]
+
+    >>> df.select(parse_url(df.a, df.b).alias('r')).collect()
+    [Row(r='query=1')]
+    """
+    if key is not None:
+        return _invoke_function_over_columns("parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("parse_url", url, partToExtract)
+
+
+@try_remote_functions
+def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
+    """
+    Formats the arguments in printf-style and returns the result as a string column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    format : :class:`~pyspark.sql.Column` or str
+        string that can contain embedded format tags and used as result column's value
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("aa%d%s", 123, "cc",)], ["a", "b", "c"])
+    >>> df.select(printf(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r='aa123cc')]
+    """
+    sc = get_active_spark_context()
+    return _invoke_function("printf", _to_java_column(format), _to_seq(sc, cols, _to_java_column))
+
+
+@try_remote_functions
+def url_decode(str: "ColumnOrName") -> Column:
+    """
+    Decodes a `str` in 'application/x-www-form-urlencoded' format
+    using a specific encoding scheme.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of string to decode.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["a"])
+    >>> df.select(url_decode(df.a).alias('r')).collect()
+    [Row(r='https://spark.apache.org')]
+    """
+    return _invoke_function_over_columns("url_decode", str)
+
+
+@try_remote_functions
+def url_encode(str: "ColumnOrName") -> Column:
+    """
+    Translates a string into 'application/x-www-form-urlencoded' format
+    using a specific encoding scheme.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of string to encode.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("https://spark.apache.org",)], ["a"])
+    >>> df.select(url_encode(df.a).alias('r')).collect()
+    [Row(r='https%3A%2F%2Fspark.apache.org')]
+    """
+    return _invoke_function_over_columns("url_encode", str)
+
+
+@try_remote_functions
+def position(
+    substr: "ColumnOrName", str: "ColumnOrName", start: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    Returns the position of the first occurrence of `substr` in `str` after position `start`.
+    The given `start` and return value are 1-based.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    substr : :class:`~pyspark.sql.Column` or str
+        A column of string, substring.
+    str : :class:`~pyspark.sql.Column` or str
+        A column of string.
+    start : :class:`~pyspark.sql.Column` or str, optional
+        A column of string, start position.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("bar", "foobarbar", 5,)], ["a", "b", "c"])
+    >>> df.select(position(df.a, df.b, df.c).alias('r')).collect()
+    [Row(r=7)]
+
+    >>> df.select(position(df.a, df.b).alias('r')).collect()
+    [Row(r=4)]
+    """
+    if start is not None:
+        return _invoke_function_over_columns("position", substr, str, start)
+    else:
+        return _invoke_function_over_columns("position", substr, str)
+
+
+@try_remote_functions
+def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
+    """
+    Returns a boolean. The value is True if str ends with suffix.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both str or suffix must be of STRING or BINARY type.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of string.
+    suffix : :class:`~pyspark.sql.Column` or str
+        A column of string, the suffix.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark SQL", "Spark",)], ["a", "b"])
+    >>> df.select(endswith(df.a, df.b).alias('r')).collect()
+    [Row(r=False)]
+    """
+    return _invoke_function_over_columns("endswith", str, suffix)
+
+
+@try_remote_functions
+def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
+    """
+    Returns a boolean. The value is True if str starts with prefix.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both str or prefix must be of STRING or BINARY type.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of string.
+    prefix : :class:`~pyspark.sql.Column` or str
+        A column of string, the prefix.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("Spark SQL", "Spark",)], ["a", "b"])
+    >>> df.select(startswith(df.a, df.b).alias('r')).collect()
+    [Row(r=True)]
+    """
+    return _invoke_function_over_columns("startswith", str, prefix)
 
 
 # ---------------------- Collection functions ------------------------------

@@ -13,14 +13,14 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "to_number",
+        "functionName": "parse_url",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }
         }, {
-          "literal": {
-            "string": "$99.99"
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }

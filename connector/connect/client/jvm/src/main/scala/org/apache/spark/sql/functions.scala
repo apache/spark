@@ -3618,6 +3618,152 @@ object functions {
    */
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column, replace: Column): Column =
+    Column.fn("replace", src, search, replace)
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column): Column = Column.fn("replace", src, search)
+
+  /**
+   * Splits `str` by delimiter and return requested part of the split (1-based). If any input is
+   * null, returns null. if `partNum` is out of range of split parts, returns empty string. If
+   * `partNum` is 0, throws an error. If `partNum` is negative, the parts are counted backward
+   * from the end of the string. If the `delimiter` is an empty string, the `str` is not split.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def split_part(str: Column, delimiter: Column, partNum: Column): Column =
+    Column.fn("split_part", str, delimiter, partNum)
+
+  /**
+   * Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of
+   * byte array that starts at `pos` and is of length `len`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column, len: Column): Column =
+    Column.fn("substr", str, pos, len)
+
+  /**
+   * Returns the substring of `str` that starts at `pos`, or the slice of byte array that starts
+   * at `pos`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("parse_url", url, partToExtract)
+
+  /**
+   * Formats the arguments in printf-style and returns the result as a string column.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def printf(format: Column, arguments: Column*): Column =
+    Column.fn("format_string", lit(format) +: arguments: _*)
+
+  /**
+   * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
+   * scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_decode(str: Column): Column = Column.fn("url_decode", str)
+
+  /**
+   * Translates a string into 'application/x-www-form-urlencoded' format using a specific encoding
+   * scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_encode(str: Column): Column = Column.fn("url_encode", str)
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `start`. The
+   * given `start` and return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column, start: Column): Column =
+    Column.fn("position", substr, str, start)
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `1`. The
+   * return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column): Column =
+    Column.fn("position", substr, str)
+
+  /**
+   * Returns a boolean. The value is True if str ends with suffix. Returns NULL if either input
+   * expression is NULL. Otherwise, returns False. Both str or suffix must be of STRING or BINARY
+   * type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def endswith(str: Column, suffix: Column): Column =
+    Column.fn("endswith", str, suffix)
+
+  /**
+   * Returns a boolean. The value is True if str starts with prefix. Returns NULL if either input
+   * expression is NULL. Otherwise, returns False. Both str or prefix must be of STRING or BINARY
+   * type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def startswith(str: Column, prefix: Column): Column =
+    Column.fn("startswith", str, prefix)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////

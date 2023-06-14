@@ -2296,7 +2296,63 @@ class PlanGenerationTestSuite
   }
 
   functionTest("to_number") {
-    fn.to_char(fn.col("g"), lit("$99.99"))
+    fn.to_number(fn.col("g"), lit("$99.99"))
+  }
+
+  functionTest("replace") {
+    fn.replace(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("replace with replace") {
+    fn.replace(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("split_part") {
+    fn.split_part(fn.col("g"), fn.col("g"), fn.col("a"))
+  }
+
+  functionTest("substr") {
+    fn.substr(fn.col("g"), fn.col("a"))
+  }
+
+  functionTest("substr with len") {
+    fn.substr(fn.col("g"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("parse_url") {
+    fn.parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("parse_url with key") {
+    fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("printf") {
+    fn.printf(fn.col("g"), fn.col("a"), fn.col("g"))
+  }
+
+  functionTest("url_decode") {
+    fn.url_decode(fn.col("g"))
+  }
+
+  functionTest("url_encode") {
+    fn.url_encode(fn.col("g"))
+  }
+
+  functionTest("position") {
+    fn.position(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("position with start") {
+    fn.position(fn.col("g"), fn.col("g"), fn.col("a"))
+  }
+
+  functionTest("endswith") {
+    fn.endswith(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("startswith") {
+    fn.startswith(fn.col("g"), fn.col("g"))
   }
 
   functionTest("to_timestamp_ltz") {

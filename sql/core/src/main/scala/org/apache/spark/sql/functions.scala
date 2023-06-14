@@ -3697,6 +3697,173 @@ object functions {
     ToNumber(e.expr, format.expr)
   }
 
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column, replace: Column): Column = withExpr {
+    StringReplace(src.expr, search.expr, replace.expr)
+  }
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column): Column = withExpr {
+    new StringReplace(src.expr, search.expr)
+  }
+
+  /**
+   * Splits `str` by delimiter and return requested part of the split (1-based).
+   * If any input is null, returns null. if `partNum` is out of range of split parts,
+   * returns empty string. If `partNum` is 0, throws an error. If `partNum` is negative,
+   * the parts are counted backward from the end of the string.
+   * If the `delimiter` is an empty string, the `str` is not split.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def split_part(str: Column, delimiter: Column, partNum: Column): Column = withExpr {
+    SplitPart(str.expr, delimiter.expr, partNum.expr)
+  }
+
+  /**
+   * Returns the substring of `str` that starts at `pos` and is of length `len`,
+   * or the slice of byte array that starts at `pos` and is of length `len`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column, len: Column): Column = withExpr {
+    Substring(str.expr, pos.expr, len.expr)
+  }
+
+  /**
+   * Returns the substring of `str` that starts at `pos`,
+   * or the slice of byte array that starts at `pos`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column): Column = withExpr {
+    new Substring(str.expr, pos.expr)
+  }
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column, key: Column): Column = withExpr {
+    ParseUrl(Seq(url.expr, partToExtract.expr, key.expr))
+  }
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column): Column = withExpr {
+    ParseUrl(Seq(url.expr, partToExtract.expr))
+  }
+
+  /**
+   * Formats the arguments in printf-style and returns the result as a string column.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def printf(format: Column, arguments: Column*): Column = withExpr {
+    FormatString((lit(format) +: arguments).map(_.expr): _*)
+  }
+
+  /**
+   * Decodes a `str` in 'application/x-www-form-urlencoded' format
+   * using a specific encoding scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_decode(str: Column): Column = withExpr {
+    UrlDecode(str.expr)
+  }
+
+  /**
+   * Translates a string into 'application/x-www-form-urlencoded' format
+   * using a specific encoding scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_encode(str: Column): Column = withExpr {
+    UrlEncode(str.expr)
+  }
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `start`.
+   * The given `start` and return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column, start: Column): Column = withExpr {
+    StringLocate(substr.expr, str.expr, start.expr)
+  }
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `1`.
+   * The return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column): Column = withExpr {
+    new StringLocate(substr.expr, str.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if str ends with suffix.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both str or suffix must be of STRING or BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def endswith(str: Column, suffix: Column): Column = withExpr {
+    EndsWithExpressionBuilder.build("endswith", Seq(str.expr, suffix.expr))
+  }
+
+  /**
+   * Returns a boolean. The value is True if str starts with prefix.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both str or prefix must be of STRING or BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def startswith(str: Column, prefix: Column): Column = withExpr {
+    StartsWithExpressionBuilder.build("startswith", Seq(str.expr, prefix.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
