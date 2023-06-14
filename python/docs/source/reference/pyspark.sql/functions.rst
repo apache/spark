@@ -135,6 +135,12 @@ Datetime Functions
     month
     last_day
     localtimestamp
+    make_dt_interval
+    make_interval
+    make_timestamp
+    make_timestamp_ltz
+    make_timestamp_ntz
+    make_ym_interval
     minute
     months_between
     next_day

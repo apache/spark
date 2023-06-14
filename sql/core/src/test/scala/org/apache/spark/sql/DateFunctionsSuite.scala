@@ -853,7 +853,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-
   test("to_timestamp") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
@@ -1079,5 +1078,131 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(to_timestamp_ntz(col("d"), lit("yyyy-MM-dd")))
       )
     }
+  }
+
+  test("make_dt_interval") {
+    val df = Seq((1, 12, 30, 01.001001)).toDF("day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(s"make_dt_interval(day, hour, min, sec)")
+    val result2 = df.select(make_dt_interval(col("day"), col("hour"), col("min"), col("sec")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_dt_interval(day, hour, min)")
+    val result4 = df.select(make_dt_interval(col("day"), col("hour"), col("min")))
+    checkAnswer(result3, result4)
+
+    val result5 = df.selectExpr(s"make_dt_interval(day, hour)")
+    val result6 = df.select(make_dt_interval(col("day"), col("hour")))
+    checkAnswer(result5, result6)
+
+    val result7 = df.selectExpr(s"make_dt_interval(day)")
+    val result8 = df.select(make_dt_interval(col("day")))
+    checkAnswer(result7, result8)
+
+    val result9 = df.selectExpr(s"make_dt_interval()")
+    val result10 = df.select(make_dt_interval())
+    checkAnswer(result9, result10)
+  }
+
+  test("make_interval") {
+    val df = Seq((100, 11, 1, 1, 12, 30, 01.001001)).
+      toDF("year", "month", "week", "day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(s"make_interval(year, month, week, day, hour, min, sec)")
+    val result2 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day"), col("hour"), col("min"), col("sec")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_interval(year, month, week, day, hour, min)")
+    val result4 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day"), col("hour"), col("min")))
+    checkAnswer(result3, result4)
+
+    val result5 = df.selectExpr(s"make_interval(year, month, week, day, hour)")
+    val result6 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day"), col("hour")))
+    checkAnswer(result5, result6)
+
+    val result7 = df.selectExpr(s"make_interval(year, month, week, day)")
+    val result8 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day")))
+    checkAnswer(result7, result8)
+
+    val result9 = df.selectExpr(s"make_interval(year, month, week)")
+    val result10 = df.select(make_interval(col("year"), col("month"), col("week")))
+    checkAnswer(result9, result10)
+
+    val result11 = df.selectExpr(s"make_interval(year, month)")
+    val result12 = df.select(make_interval(col("year"), col("month")))
+    checkAnswer(result11, result12)
+
+    val result13 = df.selectExpr(s"make_interval(year)")
+    val result14 = df.select(make_interval(col("year")))
+    checkAnswer(result13, result14)
+
+    val result15 = df.selectExpr(s"make_interval()")
+    val result16 = df.select(make_interval())
+    checkAnswer(result15, result16)
+  }
+
+  test("make_timestamp") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr(s"make_timestamp(year, month, day, hour, min, sec, timezone)")
+    val result2 = df.select(make_timestamp(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec"), col("timezone")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_timestamp(year, month, day, hour, min, sec)")
+    val result4 = df.select(make_timestamp(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result3, result4)
+  }
+
+  test("make_timestamp_ltz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr(s"make_timestamp_ltz(year, month, day, hour, min, sec, timezone)")
+    val result2 = df.select(make_timestamp_ltz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec"), col("timezone")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_timestamp_ltz(year, month, day, hour, min, sec)")
+    val result4 = df.select(make_timestamp_ltz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result3, result4)
+  }
+
+  test("make_timestamp_ntz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001)).
+      toDF("year", "month", "day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(s"make_timestamp_ntz(year, month, day, hour, min, sec)")
+    val result2 = df.select(make_timestamp_ntz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result1, result2)
+  }
+
+  test("make_ym_interval") {
+    val df = Seq((100, 11)).toDF("year", "month")
+
+    val result1 = df.selectExpr(s"make_ym_interval(year, month)")
+    val result2 = df.select(make_ym_interval(col("year"), col("month")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_ym_interval(year)")
+    val result4 = df.select(make_ym_interval(col("year")))
+    checkAnswer(result3, result4)
+
+    val result5 = df.selectExpr(s"make_ym_interval()")
+    val result6 = df.select(make_ym_interval())
+    checkAnswer(result5, result6)
   }
 }
