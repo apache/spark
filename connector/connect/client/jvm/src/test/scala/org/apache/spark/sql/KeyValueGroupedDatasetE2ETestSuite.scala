@@ -537,6 +537,10 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
 
     val session: SparkSession = spark
     import session.implicits._
+
+    val initialStateDS = Seq(ClickState("a", 2), ClickState("b", 1)).toDS()
+    val initialState = initialStateDS.groupByKey(_.id).mapValues(x => x)
+
     val values = Seq(
       ClickEvent("a", new Timestamp(12345)),
       ClickEvent("a", new Timestamp(12346)),
@@ -546,8 +550,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       ClickEvent("c", new Timestamp(12350)))
       .toDS()
       .groupByKey(_.id)
-      .mapGroupsWithState(GroupStateTimeout.NoTimeout)(stateFunc)
+      .mapGroupsWithState(GroupStateTimeout.NoTimeout, initialState)(stateFunc)
 
-    checkDataset(values, ClickState("a", 3), ClickState("b", 2), ClickState("c", 1))
+    checkDataset(values, ClickState("a", 5), ClickState("b", 3), ClickState("c", 1))
   }
 }
