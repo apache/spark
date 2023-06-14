@@ -138,6 +138,7 @@ class NullOpsTestsMixin:
     def test_eq(self):
         pser, psser = self.pser, self.psser
         self.assert_eq(pser == pser, psser == psser)
+        self.assert_eq(pser == [None, 1, None], psser == [None, 1, None])
 
     def test_ne(self):
         pser, psser = self.pser, self.psser

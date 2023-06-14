@@ -2836,6 +2836,38 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = Column.fn("current_catalog")
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = Column.fn("current_database")
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = Column.fn("current_schema")
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = Column.fn("current_user")
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value as a 32 character hex
    * string.
    *
@@ -2988,6 +3020,14 @@ object functions {
       columnName2: String,
       allowDifferentLgConfigK: Boolean): Column =
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def user(): Column = Column.fn("user")
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3203,6 +3243,39 @@ object functions {
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
   /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def rlike(str: Column, regexp: Column): Column = Column.fn("rlike", str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp(str: Column, regexp: Column): Column = Column.fn("regexp", str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_like(str: Column, regexp: Column): Column = Column.fn("regexp_like", str, regexp)
+
+  /**
+   * Returns a count of the number of times that the regular expression pattern `regexp` is
+   * matched in the string `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_count(str: Column, regexp: Column): Column = Column.fn("regexp_count", str, regexp)
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column. If the
    * regex did not match, or the specified group did not match, an empty string is returned. if
    * the specified group index exceeds the group count of regex, an IllegalArgumentException will
@@ -3213,6 +3286,26 @@ object functions {
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column =
     Column.fn("regexp_extract", e, lit(exp), lit(groupIdx))
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and corresponding to the
+   * first regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column): Column =
+    Column.fn("regexp_extract_all", str, regexp)
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and corresponding to the
+   * regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column, idx: Column): Column =
+    Column.fn("regexp_extract_all", str, regexp, idx)
 
   /**
    * Replace all substrings of the specified string value that match regexp with rep.
@@ -3231,6 +3324,36 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
+
+  /**
+   * Returns the substring that matches the regular expression `regexp` within the string `str`.
+   * If the regular expression is not found, the result is null.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_substr(str: Column, regexp: Column): Column = Column.fn("regexp_substr", str, regexp)
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates the
+   * beginning position of the matched substring. Positions are 1-based, not 0-based. If no match
+   * is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column): Column = Column.fn("regexp_instr", str, regexp)
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates the
+   * beginning position of the matched substring. Positions are 1-based, not 0-based. If no match
+   * is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column, idx: Column): Column =
+    Column.fn("regexp_instr", str, regexp, idx)
 
   /**
    * Decodes a BASE64 encoded string column and returns it as a binary column. This is the reverse
@@ -3536,9 +3659,26 @@ object functions {
    * current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = Column.fn("curdate")
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column. All calls of
+   * current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 3.4.0
    */
   def current_date(): Column = Column.fn("current_date")
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = Column.fn("current_timezone")
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column. All
@@ -5769,6 +5909,255 @@ object functions {
    */
   def hours(e: Column): Column =
     Column.fn("hours", e)
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column =
+    Column.fn("make_dt_interval", days, hours, mins, secs)
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column): Column =
+    Column.fn("make_dt_interval", days, hours, mins)
+
+  /**
+   * Make DayTimeIntervalType duration from days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column): Column =
+    Column.fn("make_dt_interval", days, hours)
+
+  /**
+   * Make DayTimeIntervalType duration from days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column): Column =
+    Column.fn("make_dt_interval", days)
+
+  /**
+   * Make DayTimeIntervalType duration.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(): Column =
+    Column.fn("make_dt_interval")
+
+  /**
+   * Make interval from years, months, weeks, days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * Make interval from years, months, weeks, days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours, mins)
+
+  /**
+   * Make interval from years, months, weeks, days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours)
+
+  /**
+   * Make interval from years, months, weeks and days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days)
+
+  /**
+   * Make interval from years, months and weeks.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column): Column =
+    Column.fn("make_interval", years, months, weeks)
+
+  /**
+   * Make interval from years and months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column): Column =
+    Column.fn("make_interval", years, months)
+
+  /**
+   * Make interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column): Column =
+    Column.fn("make_interval", years)
+
+  /**
+   * Make interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(): Column =
+    Column.fn("make_interval")
+
+  /**
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("make_timestamp", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs)
+
+  /**
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Make year-month interval from years, months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column, months: Column): Column =
+    Column.fn("make_ym_interval", years, months)
+
+  /**
+   * Make year-month interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column): Column = Column.fn("make_ym_interval", years)
+
+  /**
+   * Make year-month interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
    * A transform for any type that partitions by a hash of the input column.

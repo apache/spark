@@ -1370,6 +1370,26 @@ class PlanGenerationTestSuite
     fn.radians("b")
   }
 
+  functionTest("current_catalog") {
+    fn.current_catalog()
+  }
+
+  functionTest("current_database") {
+    fn.current_database()
+  }
+
+  functionTest("current_schema") {
+    fn.current_schema()
+  }
+
+  functionTest("current_user") {
+    fn.current_user()
+  }
+
+  functionTest("user") {
+    fn.user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -1478,12 +1498,48 @@ class PlanGenerationTestSuite
     fn.octet_length(fn.col("g"))
   }
 
+  functionTest("rlike") {
+    fn.rlike(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp") {
+    fn.regexp(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp_like") {
+    fn.regexp_like(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp_count") {
+    fn.regexp_count(fn.col("g"), lit("\\d+"))
+  }
+
   functionTest("regexp_extract") {
     fn.regexp_extract(fn.col("g"), "(\\d+)-(\\d+)", 1)
   }
 
+  functionTest("regexp_extract_all without regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"))
+  }
+
+  functionTest("regexp_extract_all with regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"), lit(1))
+  }
+
   functionTest("regexp_replace") {
     fn.regexp_replace(fn.col("g"), "(\\d+)", "XXX")
+  }
+
+  functionTest("regexp_substr") {
+    fn.regexp_substr(fn.col("g"), lit("\\d{2}(a|b|m)"))
+  }
+
+  functionTest("regexp_instr without regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"))
+  }
+
+  functionTest("regexp_instr with regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"), lit(1))
   }
 
   functionTest("unbase64") {
@@ -1570,6 +1626,129 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
+  functionTest("make_dt_interval days hours mins secs") {
+    fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("b"))
+  }
+
+  functionTest("make_dt_interval days hours mins") {
+    fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_dt_interval days hours") {
+    fn.make_dt_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_dt_interval days") {
+    fn.make_dt_interval(fn.col("a"))
+  }
+
+  functionTest("make_dt_interval") {
+    fn.make_dt_interval()
+  }
+
+  functionTest("make_interval years months weeks days hours mins secs") {
+    fn.make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_interval years months weeks days hours mins") {
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_interval years months weeks days hours") {
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_interval years months weeks days") {
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_interval years months weeks") {
+    fn.make_interval(fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_interval years months") {
+    fn.make_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_interval years") {
+    fn.make_interval(fn.col("a"))
+  }
+
+  functionTest("make_interval") {
+    fn.make_interval()
+  }
+
+  functionTest("make_timestamp with timezone") {
+    fn.make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("make_timestamp without timezone") {
+    fn.make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_timestamp_ltz with timezone") {
+    fn.make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("make_timestamp_ltz without timezone") {
+    fn.make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_timestamp_ntz") {
+    fn.make_timestamp_ntz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("make_ym_interval years months") {
+    fn.make_ym_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("make_ym_interval years") {
+    fn.make_ym_interval(fn.col("a"))
+  }
+
+  functionTest("make_ym_interval") {
+    fn.make_ym_interval()
+  }
+
   functionTest("bucket") {
     fn.bucket(3, Column("a"))
   }
@@ -1623,8 +1802,16 @@ class PlanGenerationTestSuite
     fn.add_months(fn.col("d"), 2)
   }
 
+  temporalFunctionTest("curdate") {
+    fn.curdate()
+  }
+
   temporalFunctionTest("current_date") {
     fn.current_date()
+  }
+
+  temporalFunctionTest("current_timezone") {
+    fn.current_timezone()
   }
 
   temporalFunctionTest("current_timestamp") {
