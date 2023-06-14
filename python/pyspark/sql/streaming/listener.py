@@ -150,8 +150,6 @@ class QueryStartedEvent:
     Event representing the start of a query.
 
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
@@ -220,8 +218,6 @@ class QueryProgressEvent:
     Event representing any progress updates in a query.
 
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
@@ -304,8 +300,6 @@ class QueryTerminatedEvent:
     Event representing that termination of a query.
 
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
@@ -385,8 +379,6 @@ class QueryTerminatedEvent:
 class StreamingQueryProgress:
     """
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
@@ -627,8 +619,6 @@ class StreamingQueryProgress:
 class StateOperatorProgress:
     """
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
@@ -774,8 +764,6 @@ class StateOperatorProgress:
 class SourceProgress:
     """
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
@@ -910,8 +898,6 @@ class SourceProgress:
 class SinkProgress:
     """
     .. versionadded:: 3.4.0
-    .. versionchanged:: 3.5.0
-        Add fromJson constructor to support Spark Connect.
 
     Notes
     -----
