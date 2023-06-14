@@ -43,12 +43,6 @@ class OpsOnDiffFramesEnabledSlowParityTests(
         super().test_rank()
 
     @unittest.skip(
-        "TODO(SPARK-43659): Enable OpsOnDiffFramesEnabledSlowParityTests.test_series_eq."
-    )
-    def test_series_eq(self):
-        super().test_series_eq()
-
-    @unittest.skip(
         "TODO(SPARK-43658): Fix unexpected `SparkConnectGrpcException` from Spark Connect client."
     )
     def test_series_iloc_setitem(self):
