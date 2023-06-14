@@ -387,8 +387,6 @@ class StreamingQueryProgress:
 
     def __init__(
         self,
-        json: str,
-        prettyJson: str,
         id: uuid.UUID,
         runId: uuid.UUID,
         name: Optional[str],
@@ -404,9 +402,11 @@ class StreamingQueryProgress:
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         observedMetrics: Dict[str, Row],
+        jprogress: JavaObject = None,
+        jdict: Dict[str, Any] = None,
     ):
-        self._json: str = json
-        self._prettyJson: str = prettyJson
+        self._jprogress: JavaObject = jprogress
+        self._jdict: Dict[str, Any] = jdict
         self._id: uuid.UUID = id
         self._runId: uuid.UUID = runId
         self._name: Optional[str] = name
@@ -428,8 +428,7 @@ class StreamingQueryProgress:
         from pyspark import SparkContext
 
         return cls(
-            json=jprogress.json(),
-            prettyJson=jprogress.prettyJson(),
+            jprogress=jprogress,
             id=uuid.UUID(jprogress.id().toString()),
             runId=uuid.UUID(jprogress.runId().toString()),
             name=jprogress.name(),
@@ -457,8 +456,7 @@ class StreamingQueryProgress:
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "StreamingQueryProgress":
         return cls(
-            json=json.dumps(j),
-            prettyJson=json.dumps(j, indent=4),
+            jdict=j,
             id=uuid.UUID(j["id"]),
             runId=uuid.UUID(j["runId"]),
             name=j["name"],
@@ -603,14 +601,22 @@ class StreamingQueryProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._json
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._prettyJson
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -627,8 +633,6 @@ class StateOperatorProgress:
 
     def __init__(
         self,
-        json: str,
-        prettyJson: str,
         operatorName: str,
         numRowsTotal: int,
         numRowsUpdated: int,
@@ -641,9 +645,11 @@ class StateOperatorProgress:
         numShufflePartitions: int,
         numStateStoreInstances: int,
         customMetrics: Dict[str, int],
+        jprogress: JavaObject = None,
+        jdict: Dict[str, Any] = None,
     ):
-        self._json: str = json
-        self._prettyJson: str = prettyJson
+        self._jprogress: JavaObject = jprogress
+        self._jdict: Dict[str, Any] = jdict
         self._operatorName: str = operatorName
         self._numRowsTotal: int = numRowsTotal
         self._numRowsUpdated: int = numRowsUpdated
@@ -660,8 +666,7 @@ class StateOperatorProgress:
     @classmethod
     def fromJObject(cls, jprogress: JavaObject) -> "StateOperatorProgress":
         return cls(
-            json=jprogress.json(),
-            prettyJson=jprogress.prettyJson(),
+            jprogress=jprogress,
             operatorName=jprogress.operatorName(),
             numRowsTotal=jprogress.numRowsTotal(),
             numRowsUpdated=jprogress.numRowsUpdated(),
@@ -679,8 +684,7 @@ class StateOperatorProgress:
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "StateOperatorProgress":
         return cls(
-            json=json.dumps(j),
-            prettyJson=json.dumps(j, indent=4),
+            jdict=j,
             operatorName=j["operatorName"],
             numRowsTotal=j["numRowsTotal"],
             numRowsUpdated=j["numRowsUpdated"],
@@ -748,14 +752,22 @@ class StateOperatorProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._json
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._prettyJson
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -772,8 +784,6 @@ class SourceProgress:
 
     def __init__(
         self,
-        json: str,
-        prettyJson: str,
         description: str,
         startOffset: str,
         endOffset: str,
@@ -782,9 +792,11 @@ class SourceProgress:
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         metrics: Dict[str, str],
+        jprogress: JavaObject = None,
+        jdict: Dict[str, Any] = None,
     ) -> None:
-        self._json: str = json
-        self._prettyJson: str = prettyJson
+        self._jprogress: JavaObject = jprogress
+        self._jdict: Dict[str, Any] = jdict
         self._description: str = description
         self._startOffset: str = startOffset
         self._endOffset: str = endOffset
@@ -797,8 +809,7 @@ class SourceProgress:
     @classmethod
     def fromJObject(cls, jprogress: JavaObject) -> "SourceProgress":
         return cls(
-            json=jprogress.json(),
-            prettyJson=jprogress.prettyJson(),
+            jprogress=jprogress,
             description=jprogress.description(),
             startOffset=str(jprogress.startOffset()),
             endOffset=str(jprogress.endOffset()),
@@ -812,8 +823,7 @@ class SourceProgress:
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "SourceProgress":
         return cls(
-            json=json.dumps(j),
-            prettyJson=json.dumps(j, indent=4),
+            jdict=j,
             description=j["description"],
             startOffset=str(j["startOffset"]),
             endOffset=str(j["endOffset"]),
@@ -882,14 +892,22 @@ class SourceProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._json
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._prettyJson
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -906,14 +924,14 @@ class SinkProgress:
 
     def __init__(
         self,
-        json: str,
-        prettyJson: str,
         description: str,
         numOutputRows: int,
         metrics: Dict[str, str],
+        jprogress: JavaObject = None,
+        jdict: Dict[str, Any] = None,
     ) -> None:
-        self._json: str = json
-        self._prettyJson: str = prettyJson
+        self._jprogress: JavaObject = jprogress
+        self._jdict: Dict[str, Any] = jdict
         self._description: str = description
         self._numOutputRows: int = numOutputRows
         self._metrics: Dict[str, str] = metrics
@@ -921,8 +939,7 @@ class SinkProgress:
     @classmethod
     def fromJObject(cls, jprogress: JavaObject) -> "SinkProgress":
         return cls(
-            json=jprogress.json(),
-            prettyJson=jprogress.prettyJson(),
+            jprogress=jprogress,
             description=jprogress.description(),
             numOutputRows=jprogress.numOutputRows(),
             metrics=dict(jprogress.metrics()),
@@ -931,8 +948,7 @@ class SinkProgress:
     @classmethod
     def fromJson(cls, j: Dict[str, Any]) -> "SinkProgress":
         return cls(
-            json=json.dumps(j),
-            prettyJson=json.dumps(j, indent=4),
+            jdict=j,
             description=j["description"],
             numOutputRows=j["numOutputRows"],
             metrics=j["metrics"],
@@ -962,14 +978,22 @@ class SinkProgress:
         """
         The compact JSON representation of this progress.
         """
-        return self._json
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._prettyJson
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
         return self.prettyJson
