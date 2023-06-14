@@ -1376,6 +1376,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(actual2, expected2)
   }
 
+  test("SPARK-XXXXX: bind positional parameters to literals") {
+    CTERelationDef.curId.set(0)
+    val actual1 = PosParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+      args = Seq(Literal(10))).analyze
+    CTERelationDef.curId.set(0)
+    val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
+    comparePlans(actual1, expected1)
+    // Ignore unused arguments
+    CTERelationDef.curId.set(0)
+    val actual2 = PosParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+      args = Seq(Literal(20), Literal(10))).analyze
+    CTERelationDef.curId.set(0)
+    val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
+    comparePlans(actual2, expected2)
+  }
+
   test("SPARK-41489: type of filter expression should be a bool") {
     assertAnalysisErrorClass(parsePlan(
       s"""
