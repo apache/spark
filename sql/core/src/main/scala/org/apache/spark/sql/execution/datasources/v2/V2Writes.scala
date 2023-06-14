@@ -95,7 +95,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, funCatalogOpt)
       WriteToDataSourceV2(relation, microBatchWrite, newQuery, customMetrics)
 
-    case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, None) =>
+    case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, _, None) =>
       val rowSchema = StructType.fromAttributes(rd.dataInput)
       val writeBuilder = newWriteBuilder(r.table, Map.empty, rowSchema)
       val write = writeBuilder.build()
