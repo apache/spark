@@ -18,6 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import decimal
 import inspect
 import warnings
 import functools
@@ -2095,11 +2096,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 split.__doc__ = pysparkfuncs.split.__doc__
 
 
+def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("rlike", str, regexp)
+
+
+rlike.__doc__ = pysparkfuncs.rlike.__doc__
+
+
+def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp", str, regexp)
+
+
+regexp.__doc__ = pysparkfuncs.regexp.__doc__
+
+
+def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_like", str, regexp)
+
+
+regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_count", str, regexp)
+
+
+regexp_count.__doc__ = pysparkfuncs.regexp_count.__doc__
+
+
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_col(str), lit(pattern), lit(idx))
 
 
 regexp_extract.__doc__ = pysparkfuncs.regexp_extract.__doc__
+
+
+def regexp_extract_all(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+
+
+regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
@@ -2115,6 +2158,27 @@ def regexp_replace(
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
+
+
+def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_substr", str, regexp)
+
+
+regexp_substr.__doc__ = pysparkfuncs.regexp_substr.__doc__
+
+
+def regexp_instr(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_instr", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+
+
+regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
 
 
 def initcap(col: "ColumnOrName") -> Column:
@@ -2297,6 +2361,13 @@ right.__doc__ = pysparkfuncs.right.__doc__
 #     timestamp_seconds, current_timestamp, date_trunc
 
 
+def curdate() -> Column:
+    return _invoke_function("curdate")
+
+
+curdate.__doc__ = pysparkfuncs.curdate.__doc__
+
+
 def current_date() -> Column:
     return _invoke_function("current_date")
 
@@ -2309,6 +2380,13 @@ def current_timestamp() -> Column:
 
 
 current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
+
+
+def current_timezone() -> Column:
+    return _invoke_function("current_timezone")
+
+
+current_timezone.__doc__ = pysparkfuncs.current_timezone.__doc__
 
 
 def localtimestamp() -> Column:
@@ -2805,7 +2883,156 @@ def hours(col: "ColumnOrName") -> Column:
 
 hours.__doc__ = pysparkfuncs.hours.__doc__
 
+
+def make_dt_interval(
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns("make_dt_interval", _days, _hours, _mins, _secs)
+
+
+make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
+
+
+def make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    _weeks = lit(0) if weeks is None else _to_col(weeks)
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns(
+        "make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
+
+
+make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
+
+
+def make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "make_timestamp", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "make_timestamp", years, months, days, hours, mins, secs
+        )
+
+
+make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
+
+
+def make_timestamp_ltz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "make_timestamp_ltz", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "make_timestamp_ltz", years, months, days, hours, mins, secs
+        )
+
+
+make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
+
+
+def make_timestamp_ntz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns(
+        "make_timestamp_ntz", years, months, days, hours, mins, secs
+    )
+
+
+make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
+
+
+def make_ym_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    return _invoke_function_over_columns("make_ym_interval", _years, _months)
+
+
+make_ym_interval.__doc__ = pysparkfuncs.make_ym_interval.__doc__
+
 # Misc Functions
+
+
+def current_catalog() -> Column:
+    return _invoke_function("current_catalog")
+
+
+current_catalog.__doc__ = pysparkfuncs.current_catalog.__doc__
+
+
+def current_database() -> Column:
+    return _invoke_function("current_database")
+
+
+current_database.__doc__ = pysparkfuncs.current_database.__doc__
+
+
+def current_schema() -> Column:
+    return _invoke_function("current_schema")
+
+
+current_schema.__doc__ = pysparkfuncs.current_schema.__doc__
+
+
+def current_user() -> Column:
+    return _invoke_function("current_user")
+
+
+current_user.__doc__ = pysparkfuncs.current_user.__doc__
+
+
+def user() -> Column:
+    return _invoke_function("user")
+
+
+user.__doc__ = pysparkfuncs.user.__doc__
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:

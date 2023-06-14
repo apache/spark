@@ -54,7 +54,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 from pandas.tseries.frequencies import DateOffset
 from pyspark import SparkContext
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -70,6 +70,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.window import Window
+from pyspark.sql.utils import is_remote
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
@@ -451,7 +452,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self._anchor = psdf
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
-    def _with_new_scol(self, scol: Column, *, field: Optional[InternalField] = None) -> "Series":
+    def _with_new_scol(
+        self, scol: PySparkColumn, *, field: Optional[InternalField] = None
+    ) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.
 
@@ -2251,8 +2254,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         scol = self.spark.column
         sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-        last_non_null = Column(sql_utils.lastNonNull(scol._jc))
-        null_index = Column(sql_utils.nullIndex(scol._jc))
+        last_non_null = PySparkColumn(sql_utils.lastNonNull(scol._jc))
+        null_index = PySparkColumn(sql_utils.nullIndex(scol._jc))
 
         window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
@@ -4080,7 +4083,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if q_float < 0.0 or q_float > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-            def quantile(psser: Series) -> Column:
+            def quantile(psser: Series) -> PySparkColumn:
                 spark_type = psser.spark.data_type
                 spark_column = psser.spark.column
                 if isinstance(spark_type, (BooleanType, NumericType)):
@@ -4210,6 +4213,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
         if ascending:
             asc_func = Column.asc
         else:
@@ -4218,8 +4227,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if method == "first":
             window = (
                 Window.orderBy(
-                    asc_func(self.spark.column),
-                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
+                    asc_func(self.spark.column),  # type: ignore[arg-type]
+                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),  # type: ignore[arg-type]
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
@@ -4227,7 +4236,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.row_number().over(window)
         elif method == "dense":
             window = (
-                Window.orderBy(asc_func(self.spark.column))
+                Window.orderBy(asc_func(self.spark.column))  # type: ignore[arg-type]
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -4240,7 +4249,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             elif method == "max":
                 stat_func = F.max
             window1 = (
-                Window.orderBy(asc_func(self.spark.column))
+                Window.orderBy(asc_func(self.spark.column))  # type: ignore[arg-type]
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -6931,7 +6940,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _cum(
         self,
-        func: Callable[[Column], Column],
+        func: Callable[[PySparkColumn], PySparkColumn],
         skipna: bool,
         part_cols: Sequence["ColumnOrName"] = (),
         ascending: bool = True,
@@ -7078,7 +7087,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     # ----------------------------------------------------------------------
 
     def _apply_series_op(
-        self, op: Callable[["Series"], Union["Series", Column]], should_resolve: bool = False
+        self, op: Callable[["Series"], Union["Series", PySparkColumn]], should_resolve: bool = False
     ) -> "Series":
         psser_or_scol = op(self)
         if isinstance(psser_or_scol, Series):
@@ -7093,7 +7102,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Callable[["Series"], Column],
+        sfun: Callable[["Series"], PySparkColumn],
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,

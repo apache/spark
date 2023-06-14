@@ -196,11 +196,16 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
   }
 
   class CustomAnalyzer(catalogManager: CatalogManager) extends Analyzer(catalogManager) {
+
+    private val ignoredRuleNames = Set(
+      "org.apache.spark.sql.catalyst.analysis.RewriteUpdateTable",
+      "org.apache.spark.sql.catalyst.analysis.RewriteMergeIntoTable")
+
     override def batches: Seq[Batch] = {
       val defaultBatches = super.batches
       defaultBatches.map { batch =>
         val filteredRules = batch.rules.filterNot { rule =>
-          rule.ruleName == "org.apache.spark.sql.catalyst.analysis.RewriteUpdateTable"
+          ignoredRuleNames.contains(rule.ruleName)
         }
         Batch(batch.name, batch.strategy, filteredRules: _*)
       }
