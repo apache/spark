@@ -585,7 +585,7 @@ def _create_converter_to_pandas(
                     return None
                 elif isinstance(value, np.ndarray):
                     # `pyarrow.Table.to_pandas` uses `np.ndarray`.
-                    if ndarray_as_list:
+                    if _ndarray_as_list:
                         # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
                         # whereas a list is expected.
                         return [_element_conv(v) for v in value]
