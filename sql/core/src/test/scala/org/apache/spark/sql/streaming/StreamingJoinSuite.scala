@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorS
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 import org.apache.spark.util.Utils
 
 abstract class StreamingJoinSuite
@@ -224,7 +224,7 @@ abstract class StreamingJoinSuite
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
   import testImplicits._
@@ -778,7 +778,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 }
 
 
-@SlowSQLTest
+@SQLTestGroupOne
 class StreamingOuterJoinSuite extends StreamingJoinSuite {
 
   import testImplicits._
@@ -1419,7 +1419,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
 
   test("windowed full outer join") {
@@ -1623,7 +1623,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
 
   import testImplicits._

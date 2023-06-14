@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 
 trait V1WriteCommandSuiteBase extends SQLTestUtils {
 
@@ -106,7 +106,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils {
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1WriteCommandSuiteBase {
 
   import testImplicits._

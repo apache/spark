@@ -35,11 +35,11 @@ import org.apache.spark.sql.functions.{window => windowFn, _}
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 import org.apache.spark.ui.SparkUICssErrorHandler
 import org.apache.spark.util.Utils
 
-@SlowSQLTest
+@SQLTestGroupOne
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
@@ -181,7 +181,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class UISeleniumWithRocksDBBackendSuite extends UISeleniumSuite {
   private val storePath = Utils.createTempDir()
 

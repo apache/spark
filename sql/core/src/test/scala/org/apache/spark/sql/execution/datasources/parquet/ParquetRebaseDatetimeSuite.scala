@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutpu
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 
 abstract class ParquetRebaseDatetimeSuite
   extends QueryTest
@@ -462,7 +462,7 @@ abstract class ParquetRebaseDatetimeSuite
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -470,7 +470,7 @@ class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
   override protected def sparkConf: SparkConf =
     super

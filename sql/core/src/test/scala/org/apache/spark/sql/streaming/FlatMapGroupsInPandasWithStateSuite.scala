@@ -28,9 +28,9 @@ import org.apache.spark.sql.functions.{lit, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 
-@SlowSQLTest
+@SQLTestGroupOne
 class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._

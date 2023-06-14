@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 import org.apache.spark.util.Utils
 
-@SlowSQLTest
+@SQLTestGroupOne
 class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -486,6 +486,6 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
   }
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class RocksDBStateStoreStreamingDeduplicationSuite
   extends StreamingDeduplicationSuite with RocksDBStateStoreTest

@@ -28,7 +28,7 @@ import org.apache.spark.sql.functions.min
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType}
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 
 /**
  * A test suite that tests aggregate push down for Parquet and ORC.
@@ -544,14 +544,14 @@ abstract class ParquetAggregatePushDownSuite
     SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
@@ -565,14 +565,14 @@ abstract class OrcAggregatePushDownSuite extends OrcTest with FileSourceAggregat
     SQLConf.ORC_AGGREGATE_PUSHDOWN_ENABLED.key
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class OrcV1AggregatePushDownSuite extends OrcAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
-@SlowSQLTest
+@SQLTestGroupOne
 class OrcV2AggregatePushDownSuite extends OrcAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =

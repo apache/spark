@@ -24,7 +24,7 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 import org.apache.spark.util.Utils
 
 /**
@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  *
  * At the end, the resulting files are loaded and the answer is checked.
  */
-@SlowSQLTest
+@SQLTestGroupOne
 class FileStreamStressSuite extends StreamTest {
   import testImplicits._
 

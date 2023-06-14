@@ -20,9 +20,9 @@ package org.apache.spark.sql.streaming.continuous
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.SQLTestGroupOne
 
-@SlowSQLTest
+@SQLTestGroupOne
 class ContinuousQueryStatusAndProgressSuite extends ContinuousSuiteBase {
   test("StreamingQueryStatus - ContinuousExecution isDataAvailable and isTriggerActive " +
       "should be false") {
