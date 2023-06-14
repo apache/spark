@@ -36,22 +36,23 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsAnyPattern(COMMAND), ruleId) {
       case t: CreateTable =>
-        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: CreateTableAsSelect =>
-        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: ReplaceTable =>
-        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
       case t: ReplaceTableAsSelect =>
-        resolveTableSpec(t, t.tableSpec, t.optionsListExpressions, s => t.copy(tableSpec = s))
+        resolveTableSpec(t, t.tableSpec, s => t.copy(tableSpec = s))
     }
   }
 
   /** Helper method to resolve the table specification within a logical plan. */
   private def resolveTableSpec(
-      input: LogicalPlan, tableSpec: TableSpec, optionsListExpressions: OptionsListExpressions,
-      withNewSpec: TableSpec => LogicalPlan): LogicalPlan = tableSpec match {
-    case u: UnresolvedTableSpec if optionsListExpressions.allOptionsResolved =>
-      val newOptions: Seq[(String, String)] = optionsListExpressions.options.map {
+      input: LogicalPlan,
+      tableSpec: TableSpecBase,
+      withNewSpec: TableSpecBase => LogicalPlan): LogicalPlan = tableSpec match {
+    case u: UnresolvedTableSpec if u.optionExpression.resolved =>
+      val newOptions: Seq[(String, String)] = u.optionExpression.options.map {
         case (key: String, null) =>
           (key, null)
         case (key: String, value: Expression) =>
@@ -75,7 +76,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
           }
           (key, newValue)
       }
-      val newTableSpec = ResolvedTableSpec(
+      val newTableSpec = TableSpec(
         properties = u.properties,
         provider = u.provider,
         options = newOptions.toMap,

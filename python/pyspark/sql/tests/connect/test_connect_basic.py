@@ -27,6 +27,7 @@ from collections import defaultdict
 
 from pyspark.errors import (
     PySparkAttributeError,
+    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
@@ -3179,6 +3180,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         row_count = 100 * 1000
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
+
+    def test_unsupported_udtf(self):
+        with self.assertRaises(PySparkNotImplementedError) as e:
+            self.connect.udtf.register()
+
+        self.check_error(
+            exception=e.exception,
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "udtf()"},
+        )
 
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.
