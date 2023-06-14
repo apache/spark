@@ -36,6 +36,7 @@ from typing import (
     overload,
 )
 import warnings
+import re
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
@@ -964,7 +965,14 @@ def spark_column_equals(left: Column, right: Column) -> bool:
                 error_class="NOT_COLUMN",
                 message_parameters={"arg_name": "right", "arg_type": type(right).__name__},
             )
-        return repr(left) == repr(right)
+        # In Spark Connect, column name is surrounded by backticks.
+        # e.g. "Column<'`name`'>" in Spark Connect whereas "Column<'name'>" in vanilla PySpark.
+        # Therefore, we need to use regular expressions to extract the actual column name
+        # excluding the backticks, in order to check if they have the same name.
+        pattern = r"['`]([^'`]+)['`]"
+        left_col_name = re.search(pattern, repr(left)).group(1)
+        right_col_name = re.search(pattern, repr(right)).group(1)
+        return left_col_name == right_col_name
     else:
         return left._jc.equals(right._jc)
 

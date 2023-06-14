@@ -34,10 +34,6 @@ class NamespaceParityTests(NamespaceTestsMixin, PandasOnSparkTestUtils, ReusedCo
     def test_concat_multiindex_sort(self):
         super().test_concat_multiindex_sort()
 
-    @unittest.skip("TODO(SPARK-43655): Enable NamespaceParityTests.test_get_index_map.")
-    def test_get_index_map(self):
-        super().test_get_index_map()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_namespace import *  # noqa: F401
