@@ -93,8 +93,8 @@ class ProtoToParsedPlanTestSuite
       .executeUpdate()
     conn.commit()
 
-    val goldenFile = goldenFilePath.toFile
     if (regenerateGoldenFiles) {
+      val goldenFile = goldenFilePath.toFile
       if (goldenFile.exists()) {
         Utils.deleteRecursively(goldenFile)
       }

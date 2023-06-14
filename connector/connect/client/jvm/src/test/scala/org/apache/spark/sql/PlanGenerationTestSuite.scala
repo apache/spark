@@ -105,8 +105,8 @@ class PlanGenerationTestSuite
     val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
-    val queryFile = queryFilePath.toFile
     if (regenerateGoldenFiles) {
+      val queryFile = queryFilePath.toFile
       if (queryFile.exists()) {
         Utils.deleteRecursively(queryFile)
       }
