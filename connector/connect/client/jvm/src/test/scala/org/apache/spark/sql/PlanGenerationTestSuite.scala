@@ -1370,6 +1370,26 @@ class PlanGenerationTestSuite
     fn.radians("b")
   }
 
+  functionTest("current_catalog") {
+    fn.current_catalog()
+  }
+
+  functionTest("current_database") {
+    fn.current_database()
+  }
+
+  functionTest("current_schema") {
+    fn.current_schema()
+  }
+
+  functionTest("current_user") {
+    fn.current_user()
+  }
+
+  functionTest("user") {
+    fn.user()
+  }
+
   functionTest("md5") {
     fn.md5(fn.col("g").cast("binary"))
   }
@@ -1659,8 +1679,16 @@ class PlanGenerationTestSuite
     fn.add_months(fn.col("d"), 2)
   }
 
+  temporalFunctionTest("curdate") {
+    fn.curdate()
+  }
+
   temporalFunctionTest("current_date") {
     fn.current_date()
+  }
+
+  temporalFunctionTest("current_timezone") {
+    fn.current_timezone()
   }
 
   temporalFunctionTest("current_timestamp") {

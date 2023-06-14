@@ -65,6 +65,12 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("function current_timezone") {
+    val df = Seq((1, 2), (3, 1)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("CURRENT_TIMEZONE()"), df.select(current_timezone()))
+  }
+
   test("function current_timestamp and now") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     checkAnswer(df1.select(count_distinct(current_timestamp())), Row(1))

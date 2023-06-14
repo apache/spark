@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+from pyspark import keyword_only
 from pyspark.mlv2.base import _PredictorParams
 
 from pyspark.ml.param.shared import HasProbabilityCol
 
-from typing import Any, Union, List, Tuple, Callable
+from typing import Any, Dict, Union, List, Tuple, Callable, Optional
 import numpy as np
 import pandas as pd
 import math
@@ -39,6 +40,7 @@ from pyspark.ml.param.shared import (
     HasMomentum,
 )
 from pyspark.mlv2.base import Predictor, PredictionModel
+from pyspark.mlv2.io_utils import ParamsReadWrite, ModelReadWrite
 from pyspark.sql.functions import lit, count, countDistinct
 
 import torch
@@ -64,18 +66,16 @@ class _LogisticRegressionParams(
     .. versionadded:: 3.0.0
     """
 
-    pass
-
-
-class _LinearNet(torch_nn.Module):
-    def __init__(self, num_features: int, num_classes: int, bias: bool) -> None:
-        super(_LinearNet, self).__init__()
-        output_dim = num_classes
-        self.fc = torch_nn.Linear(num_features, output_dim, bias=bias, dtype=torch.float32)
-
-    def forward(self, x: Any) -> Any:
-        output = self.fc(x)
-        return output
+    def __init__(self, *args: Any):
+        super(_LogisticRegressionParams, self).__init__(*args)
+        self._setDefault(
+            maxIter=100,
+            tol=1e-6,
+            batchSize=32,
+            learningRate=0.001,
+            momentum=0.9,
+            seed=0,
+        )
 
 
 def _train_logistic_regression_model_worker_fn(
@@ -101,9 +101,10 @@ def _train_logistic_regression_model_worker_fn(
     # TODO: support L1 / L2 regularization
     torch.distributed.init_process_group("gloo")
 
-    ddp_model = DDP(
-        _LinearNet(num_features=num_features, num_classes=num_classes, bias=fit_intercept)
+    linear_model = torch_nn.Linear(
+        num_features, num_classes, bias=fit_intercept, dtype=torch.float32
     )
+    ddp_model = DDP(linear_model)
 
     loss_fn = torch_nn.CrossEntropyLoss()
 
@@ -144,13 +145,18 @@ def _train_logistic_regression_model_worker_fn(
 
 
 @inherit_doc
-class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressionParams):
+class LogisticRegression(
+    Predictor["LogisticRegressionModel"], _LogisticRegressionParams, ParamsReadWrite
+):
     """
     Logistic regression estimator.
 
     .. versionadded:: 3.5.0
     """
 
+    _input_kwargs: Dict[str, Any]
+
+    @keyword_only
     def __init__(
         self,
         *,
@@ -166,20 +172,26 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
         momentum: float = 0.9,
         seed: int = 0,
     ):
-        super(_LogisticRegressionParams, self).__init__()
-        self._set(
-            featuresCol=featuresCol,
-            labelCol=labelCol,
-            predictionCol=predictionCol,
-            probabilityCol=probabilityCol,
-            maxIter=maxIter,
-            tol=tol,
-            numTrainWorkers=numTrainWorkers,
-            batchSize=batchSize,
-            learningRate=learningRate,
-            momentum=momentum,
-            seed=seed,
+        """
+        __init__(
+            self,
+            *,
+            featuresCol: str = "features",
+            labelCol: str = "label",
+            predictionCol: str = "prediction",
+            probabilityCol: str = "probability",
+            maxIter: int = 100,
+            tol: float = 1e-6,
+            numTrainWorkers: int = 1,
+            batchSize: int = 32,
+            learningRate: float = 0.001,
+            momentum: float = 0.9,
+            seed: int = 0,
         )
+        """
+        super(LogisticRegression, self).__init__()
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "LogisticRegressionModel":
         if isinstance(dataset, pd.DataFrame):
@@ -228,8 +240,8 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
 
         dataset.unpersist()
 
-        torch_model = _LinearNet(
-            num_features=num_features, num_classes=num_classes, bias=self.getFitIntercept()
+        torch_model = torch_nn.Linear(
+            num_features, num_classes, bias=self.getFitIntercept(), dtype=torch.float32
         )
         torch_model.load_state_dict(model_state_dict)
 
@@ -241,24 +253,31 @@ class LogisticRegression(Predictor["LogisticRegressionModel"], _LogisticRegressi
 
 
 @inherit_doc
-class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
+class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelReadWrite):
     """
     Model fitted by LogisticRegression.
 
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, torch_model: Any, num_features: int, num_classes: int):
+    def __init__(
+        self,
+        torch_model: Any = None,
+        num_features: Optional[int] = None,
+        num_classes: Optional[int] = None,
+    ):
         super().__init__()
         self.torch_model = torch_model
         self.num_features = num_features
         self.num_classes = num_classes
 
+    @property
     def numFeatures(self) -> int:
-        return self.num_features
+        return self.num_features  # type: ignore[return-value]
 
+    @property
     def numClasses(self) -> int:
-        return self.num_classes
+        return self.num_classes  # type: ignore[return-value]
 
     def _input_columns(self) -> List[str]:
         return [self.getOrDefault(self.featuresCol)]
@@ -277,8 +296,11 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
         fit_intercept = self.getFitIntercept()
 
         def transform_fn(input_series: Any) -> Any:
-            torch_model = _LinearNet(
-                num_features=num_features, num_classes=num_classes, bias=fit_intercept
+            torch_model = torch_nn.Linear(
+                num_features,  # type: ignore[arg-type]
+                num_classes,  # type: ignore[arg-type]
+                bias=fit_intercept,
+                dtype=torch.float32,
             )
             # TODO: Use spark broadast for `model_state_dict`,
             #  it can improve performance when model is large.
@@ -304,3 +326,25 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams):
                 return pd.Series(data=list(predictions), index=input_series.index.copy())
 
         return transform_fn
+
+    def _get_core_model_filename(self) -> str:
+        return self.__class__.__name__ + ".torch"
+
+    def _save_core_model(self, path: str) -> None:
+        torch.save(self.torch_model, path)
+
+    def _load_core_model(self, path: str) -> None:
+        self.torch_model = torch.load(path)
+
+    def _get_extra_metadata(self) -> Dict[str, Any]:
+        return {
+            "num_features": self.num_features,
+            "num_classes": self.num_classes,
+        }
+
+    def _load_extra_metadata(self, extra_metadata: Dict[str, Any]) -> None:
+        """
+        Load extra metadata attribute from extra metadata json object.
+        """
+        self.num_features = extra_metadata["num_features"]
+        self.num_classes = extra_metadata["num_classes"]
