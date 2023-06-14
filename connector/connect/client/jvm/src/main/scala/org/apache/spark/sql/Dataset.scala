@@ -1242,7 +1242,10 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+    new RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
 
   /**
@@ -1270,7 +1273,7 @@ class Dataset[T] private[sql] (
     val colNames: Seq[String] = col1 +: cols
     new RelationalGroupedDataset(
       toDF(),
-      colNames.map(colName => Column(colName)),
+      colNames.map(colName => Column(colName).expr),
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
 
@@ -1351,7 +1354,10 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def rollup(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+    new RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
   /**
@@ -1381,7 +1387,7 @@ class Dataset[T] private[sql] (
     val colNames: Seq[String] = col1 +: cols
     new RelationalGroupedDataset(
       toDF(),
-      colNames.map(colName => Column(colName)),
+      colNames.map(colName => Column(colName).expr),
       proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
   }
 
@@ -1406,7 +1412,10 @@ class Dataset[T] private[sql] (
    */
   @scala.annotation.varargs
   def cube(cols: Column*): RelationalGroupedDataset = {
-    new RelationalGroupedDataset(toDF(), cols, proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
+    new RelationalGroupedDataset(
+      toDF(),
+      cols.map(_.expr),
+      proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 
   /**
@@ -1435,7 +1444,7 @@ class Dataset[T] private[sql] (
     val colNames: Seq[String] = col1 +: cols
     new RelationalGroupedDataset(
       toDF(),
-      colNames.map(colName => Column(colName)),
+      colNames.map(colName => Column(colName).expr),
       proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
   }
 

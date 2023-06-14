@@ -37,7 +37,7 @@ import org.apache.spark.connect.proto
  */
 class RelationalGroupedDataset private[sql] (
     private[sql] val df: DataFrame,
-    private[sql] val groupingExprs: Seq[Column],
+    private[sql] val groupingExprs: Seq[proto.Expression],
     groupType: proto.Aggregate.GroupType,
     pivot: Option[proto.Aggregate.Pivot] = None) {
 
@@ -45,7 +45,7 @@ class RelationalGroupedDataset private[sql] (
     df.sparkSession.newDataFrame { builder =>
       builder.getAggregateBuilder
         .setInput(df.plan.getRoot)
-        .addAllGroupingExpressions(groupingExprs.map(_.expr).asJava)
+        .addAllGroupingExpressions(groupingExprs.asJava)
         .addAllAggregateExpressions(aggExprs.map(e => e.expr).asJava)
 
       groupType match {
