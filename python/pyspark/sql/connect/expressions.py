@@ -457,7 +457,11 @@ class ColumnReference(Expression):
     def __init__(self, unparsed_identifier: str, plan_id: Optional[int] = None) -> None:
         super().__init__()
         assert isinstance(unparsed_identifier, str)
-        self._unparsed_identifier = unparsed_identifier
+        # To ensure that only the column name without the surrounding backticks is recognized
+        # when the column name is enclosed in backticks, we need to replace the backticks here.
+        # Otherwise, Spark Connect assign wrong column name such as "Column<'`name`'>",
+        # whereas "Column<'name'>" in vanilla PySpark.
+        self._unparsed_identifier = unparsed_identifier.replace("`", "")
 
         assert plan_id is None or isinstance(plan_id, int)
         self._plan_id = plan_id
