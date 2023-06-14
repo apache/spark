@@ -200,7 +200,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         } finally {
           sc.clearJobTags() // clear for the case of thread reuse by another Future
         }
-      }
+      }(executionContext)
       val jobB = Future {
         assert(sc.getJobTags() == Set())
         sc.addJobTag("one")
@@ -213,7 +213,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         } finally {
           sc.clearJobTags() // clear for the case of thread reuse by another Future
         }
-      }
+      }(executionContext)
       val jobC = Future {
         assert(sc.getJobTags() == Set())
         sc.addJobTag("two")
@@ -223,7 +223,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         } finally {
           sc.clearJobTags() // clear for the case of thread reuse by another Future
         }
-      }
+      }(executionContext)
       val jobD = Future {
         assert(sc.getJobTags() == Set())
         sc.addJobTag("one")
@@ -237,7 +237,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         } finally {
           sc.clearJobTags() // clear for the case of thread reuse by another Future
         }
-      }
+      }(executionContext)
 
       // Block until four jobs have started.
       val acquired1 = sem.tryAcquire(4, 1, TimeUnit.MINUTES)
