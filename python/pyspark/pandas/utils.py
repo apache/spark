@@ -918,8 +918,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
-    if is_remote():
-        SparkDataFrame = get_dataframe_class()
+    SparkDataFrame = get_dataframe_class()
     assert isinstance(df, SparkDataFrame), type(df)
     assert (
         column_name not in df.columns
