@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column as PySparkColumn
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
