@@ -54,7 +54,7 @@ case class LogicalQueryStage(
   override def computeStats(): Statistics = {
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.
     val physicalStats = physicalPlan.collectFirst {
-      case a: BaseAggregateExec if a.aggregateExpressions.nonEmpty =>
+      case a: BaseAggregateExec if a.groupingExpressions.isEmpty =>
         a.collectFirst {
           case s: QueryStageExec => s.computeStats()
         }.flatten.map { stat =>
