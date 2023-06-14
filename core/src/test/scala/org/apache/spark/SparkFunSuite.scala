@@ -33,6 +33,7 @@ import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome, Tag}
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.deploy.LocalSparkCluster
@@ -69,6 +70,7 @@ abstract class SparkFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
+  with TimeLimits
   with Logging {
 // scalastyle:on
 
@@ -147,7 +149,10 @@ abstract class SparkFunSuite
     if (excluded.contains(testName)) {
       ignore(s"$testName (excluded)")(testBody)
     } else {
-      super.test(testName, testTags: _*)(testBody)
+      import org.scalatest.time.SpanSugar._
+      super.test(testName, testTags: _*)(
+        failAfter(10.minutes)(testBody)
+      )
     }
   }
 
