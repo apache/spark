@@ -18,13 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.InSubqueryExec
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.UTF8String
 
 class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
@@ -37,10 +31,10 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         |{ "id": 3, "salary": 120, "dep": 'hr' }
         |""".stripMargin)
 
-    executeDeleteAndCheckScans(
+    executeAndCheckScans(
       s"DELETE FROM $tableNameAsString WHERE salary IN (300, 400, 500)",
       primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
-      groupFilterScanSchema = "salary INT, dep STRING")
+      groupFilterScanSchema = Some("salary INT, dep STRING"))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -64,7 +58,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
       val deletedDepDF = Seq(Some("software"), None).toDF()
       deletedDepDF.createOrReplaceTempView("deleted_dep")
 
-      executeDeleteAndCheckScans(
+      executeAndCheckScans(
         s"""DELETE FROM $tableNameAsString
            |WHERE
            | id IN (SELECT * FROM deleted_id)
@@ -72,7 +66,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
            | dep IN (SELECT * FROM deleted_dep)
            |""".stripMargin,
         primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
-        groupFilterScanSchema = "id INT, dep STRING")
+        groupFilterScanSchema = Some("id INT, dep STRING"))
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -117,10 +111,10 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
       val deletedIdDF = Seq(Some(1), None).toDF()
       deletedIdDF.createOrReplaceTempView("deleted_id")
 
-      executeDeleteAndCheckScans(
+      executeAndCheckScans(
         s"DELETE FROM $tableNameAsString WHERE id IN (SELECT * FROM deleted_id)",
         primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
-        groupFilterScanSchema = "id INT, dep STRING")
+        groupFilterScanSchema = Some("id INT, dep STRING"))
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -128,41 +122,5 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
       checkReplacedPartitions(Seq("hr"))
     }
-  }
-
-  private def executeDeleteAndCheckScans(
-      query: String,
-      primaryScanSchema: String,
-      groupFilterScanSchema: String): Unit = {
-
-    val executedPlan = executeAndKeepPlan {
-      sql(query)
-    }
-
-    val primaryScan = collect(executedPlan) {
-      case s: BatchScanExec => s
-    }.head
-    assert(DataTypeUtils.sameType(primaryScan.schema, StructType.fromDDL(primaryScanSchema)))
-
-    primaryScan.runtimeFilters match {
-      case Seq(DynamicPruningExpression(child: InSubqueryExec)) =>
-        val groupFilterScan = collect(child.plan) {
-          case s: BatchScanExec => s
-        }.head
-        assert(DataTypeUtils.sameType(groupFilterScan.schema,
-          StructType.fromDDL(groupFilterScanSchema)))
-
-      case _ =>
-        fail("could not find group filter scan")
-    }
-  }
-
-  private def checkReplacedPartitions(expectedPartitions: Seq[Any]): Unit = {
-    val actualPartitions = table.replacedPartitions.map {
-      case Seq(partValue: UTF8String) => partValue.toString
-      case Seq(partValue) => partValue
-      case other => fail(s"expected only one partition value: $other" )
-    }
-    assert(actualPartitions == expectedPartitions, "replaced partitions must match")
   }
 }

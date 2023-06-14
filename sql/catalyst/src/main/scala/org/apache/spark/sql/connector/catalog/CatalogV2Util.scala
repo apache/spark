@@ -376,7 +376,8 @@ private[sql] object CatalogV2Util {
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {
     val props = convertTableProperties(
-      t.properties, t.options, t.serde, t.location, t.comment, t.provider, t.external)
+      t.properties, t.options, t.serde, t.location, t.comment,
+      t.provider, t.external)
     withDefaultOwnership(props)
   }
 

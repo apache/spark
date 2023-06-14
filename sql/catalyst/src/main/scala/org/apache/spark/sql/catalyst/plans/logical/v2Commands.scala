@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, UnaryExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
@@ -30,7 +30,8 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -212,6 +213,7 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
  * @param condition a condition that defines matching groups
  * @param query a query with records that should replace the records that were read
  * @param originalTable a plan for the original table for which the row-level command was triggered
+ * @param groupFilterCondition a condition that can be used to filter groups at runtime
  * @param write a logical write, if already constructed
  */
 case class ReplaceData(
@@ -219,6 +221,7 @@ case class ReplaceData(
     condition: Expression,
     query: LogicalPlan,
     originalTable: NamedRelation,
+    groupFilterCondition: Option[Expression] = None,
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
@@ -444,8 +447,9 @@ case class CreateTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    tableSpec: TableSpec,
-    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    tableSpec: TableSpecBase,
+    ignoreIfExists: Boolean)
+  extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
 
@@ -464,7 +468,7 @@ case class CreateTableAsSelect(
     name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
-    tableSpec: TableSpec,
+    tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
     isAnalyzed: Boolean = false)
@@ -495,8 +499,9 @@ case class ReplaceTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    tableSpec: TableSpec,
-    orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    tableSpec: TableSpecBase,
+    orCreate: Boolean)
+  extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
 
@@ -518,7 +523,7 @@ case class ReplaceTableAsSelect(
     name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
-    tableSpec: TableSpec,
+    tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     orCreate: Boolean,
     isAnalyzed: Boolean = false)
@@ -1382,6 +1387,60 @@ case class DropIndex(
     copy(table = newChild)
 }
 
+trait TableSpecBase {
+  def properties: Map[String, String]
+  def provider: Option[String]
+  def location: Option[String]
+  def comment: Option[String]
+  def serde: Option[SerdeInfo]
+  def external: Boolean
+}
+
+case class UnresolvedTableSpec(
+    properties: Map[String, String],
+    provider: Option[String],
+    optionExpression: OptionList,
+    location: Option[String],
+    comment: Option[String],
+    serde: Option[SerdeInfo],
+    external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
+
+  override def dataType: DataType =
+    throw new UnsupportedOperationException("UnresolvedTableSpec doesn't have a data type")
+
+  override def child: Expression = optionExpression
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(optionExpression = newChild.asInstanceOf[OptionList])
+
+  override def simpleString(maxFields: Int): String = {
+    this.copy(properties = Utils.redact(properties).toMap).toString
+  }
+}
+
+/**
+ * This contains the expressions in an OPTIONS list. We store it alongside anywhere the above
+ * UnresolvedTableSpec lives. We use a separate object so that tree traversals in analyzer rules can
+ * descend into the child expressions naturally without extra treatment.
+ */
+case class OptionList(options: Seq[(String, Expression)])
+  extends Expression with Unevaluable {
+  override def nullable: Boolean = true
+  override def dataType: DataType = MapType(StringType, StringType)
+  override def children: Seq[Expression] = options.map(_._2)
+  override lazy val resolved: Boolean = options.map(_._2).forall(_.resolved)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    assert(options.length == newChildren.length)
+    val newOptions = options.zip(newChildren).map {
+      case ((key: String, _), newChild: Expression) =>
+        (key, newChild)
+    }
+    OptionList(newOptions)
+  }
+}
+
 case class TableSpec(
     properties: Map[String, String],
     provider: Option[String],
@@ -1389,4 +1448,8 @@ case class TableSpec(
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean)
+    external: Boolean) extends TableSpecBase {
+  def withNewLocation(newLocation: Option[String]): TableSpec = {
+    TableSpec(properties, provider, options, newLocation, comment, serde, external)
+  }
+}

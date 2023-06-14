@@ -4020,7 +4020,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return (
             len(self._internal.column_labels) == 0
-            or self._internal.resolved_copy.spark_frame.rdd.isEmpty()
+            or self._internal.resolved_copy.spark_frame.isEmpty()
         )
 
     @property
