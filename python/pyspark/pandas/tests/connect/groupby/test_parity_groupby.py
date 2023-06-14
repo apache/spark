@@ -36,7 +36,9 @@ class GroupByParityTests(
     def test_diff(self):
         super().test_diff()
 
-    @unittest.skip("TODO(SPARK-43652): Enable GroupBy.rank with Spark Connect.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_rank(self):
         super().test_rank()
 

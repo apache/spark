@@ -3245,6 +3245,43 @@ object functions {
   def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def rlike(str: Column, regexp: Column): Column = withExpr {
+    RLike(str.expr, regexp.expr)
+  }
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp(str: Column, regexp: Column): Column = rlike(str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_like(str: Column, regexp: Column): Column = rlike(str, regexp)
+
+  /**
+   * Returns a count of the number of times that the regular expression pattern `regexp`
+   * is matched in the string `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_count(str: Column, regexp: Column): Column = withExpr {
+    RegExpCount(str.expr, regexp.expr)
+  }
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column.
    * If the regex did not match, or the specified group did not match, an empty string is returned.
    * if the specified group index exceeds the group count of regex, an IllegalArgumentException
@@ -3255,6 +3292,28 @@ object functions {
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = withExpr {
     RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and
+   * corresponding to the first regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column): Column = withExpr {
+    new RegExpExtractAll(str.expr, regexp.expr)
+  }
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and
+   * corresponding to the regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column, idx: Column): Column = withExpr {
+    RegExpExtractAll(str.expr, regexp.expr, idx.expr)
   }
 
   /**
@@ -3275,6 +3334,41 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
     RegExpReplace(e.expr, pattern.expr, replacement.expr)
+  }
+
+  /**
+   * Returns the substring that matches the regular expression `regexp` within the string `str`.
+   * If the regular expression is not found, the result is null.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_substr(str: Column, regexp: Column): Column = withExpr {
+    RegExpSubStr(str.expr, regexp.expr)
+  }
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates
+   * the beginning position of the matched substring. Positions are 1-based, not 0-based.
+   * If no match is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column): Column = withExpr {
+    new RegExpInStr(str.expr, regexp.expr)
+  }
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates
+   * the beginning position of the matched substring. Positions are 1-based, not 0-based.
+   * If no match is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column, idx: Column): Column = withExpr {
+    RegExpInStr(str.expr, regexp.expr, idx.expr)
   }
 
   /**

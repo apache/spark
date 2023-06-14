@@ -22,10 +22,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ReshapeParityTests(ReshapeTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("TODO(SPARK-43661): Enable ReshapeParityTests.test_get_dummies_date_datetime.")
-    def test_get_dummies_date_datetime(self):
-        super().test_get_dummies_date_datetime()
-
     @unittest.skip("TODO(SPARK-43662): Enable ReshapeParityTests.test_merge_asof.")
     def test_merge_asof(self):
         super().test_merge_asof()
