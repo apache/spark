@@ -995,7 +995,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("count_if") {
-    fn.count_if(fn.col("a"))
+    fn.count_if(fn.col("a").gt(0))
   }
 
   functionTest("histogram_numeric") {

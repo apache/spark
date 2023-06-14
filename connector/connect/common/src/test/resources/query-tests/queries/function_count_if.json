@@ -15,8 +15,17 @@
       "unresolvedFunction": {
         "functionName": "count_if",
         "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
+          "unresolvedFunction": {
+            "functionName": "\u003e",
+            "arguments": [{
+              "unresolvedAttribute": {
+                "unparsedIdentifier": "a"
+              }
+            }, {
+              "literal": {
+                "integer": 0
+              }
+            }]
           }
         }]
       }
