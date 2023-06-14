@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, FractionalType, IntegralType, MapType, NullType, NumericType, StructType}
 
 object DataTypeUtils {
   /**
@@ -33,7 +33,15 @@ object DataTypeUtils {
    *
    * @since 3.5.0
    */
-  private[sql] def unapply(dataType: DataType, e: Expression): Boolean = e.dataType == dataType
+  private[sql] def unapply(dataType: DataType, e: Expression): Boolean = {
+    dataType match {
+      case f: FractionalType => e.dataType.isInstanceOf[FractionalType]
+      case i: IntegralType => e.dataType.isInstanceOf[IntegralType]
+      case u: NumericType => e.dataType.isInstanceOf[NumericType]
+      case a: AtomicType => e.dataType.isInstanceOf[AtomicType]
+      case _ => e.dataType == dataType
+    }
+  }
 
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability

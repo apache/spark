@@ -129,7 +129,7 @@ object AtomicType {
    *     ...
    * }}}
    */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[AtomicType]
+//  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[AtomicType]
 }
 
 
@@ -150,7 +150,7 @@ private[spark] object NumericType extends AbstractDataType {
    *     ...
    * }}}
    */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
+//  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 
   override private[spark] def defaultConcreteType: DataType = DoubleType
 
@@ -169,7 +169,7 @@ private[sql] object IntegralType extends AbstractDataType {
    *     ...
    * }}}
    */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
+//  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[IntegralType]
 
   override private[sql] def defaultConcreteType: DataType = IntegerType
 
@@ -190,7 +190,7 @@ private[sql] object FractionalType {
    *     ...
    * }}}
    */
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
+//  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[FractionalType]
 }
 
 

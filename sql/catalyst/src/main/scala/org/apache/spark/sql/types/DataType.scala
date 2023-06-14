@@ -30,7 +30,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
@@ -57,7 +56,7 @@ abstract class DataType extends AbstractDataType {
    *     ...
    * }}}
    */
-  private[sql] def unapply(e: Expression): Boolean = DataTypeUtils.unapply(this, e)
+//  private[sql] def unapply(e: Expression): Boolean = DataTypeUtils.unapply(this, e)
 
   /**
    * The default size of a value of this data type, used internally for size estimation.
