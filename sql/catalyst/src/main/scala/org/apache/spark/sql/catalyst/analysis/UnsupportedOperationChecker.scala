@@ -509,18 +509,24 @@ object UnsupportedOperationChecker extends Logging {
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
         case Window(_, _, _, child) if child.isStreaming =>
-          val windowFuncs = subPlan.asInstanceOf[Window].windowExpressions.flatMap { e =>
+          val windowExpression = subPlan.asInstanceOf[Window].windowExpressions
+          val windowFuncs = windowExpression.flatMap { e =>
             e.collect {
-              case we: WindowExpression => s"${we.windowFunction} as column ${e.toAttribute.sql}"
+              case we: WindowExpression =>
+                s"'${we.windowFunction}' as column '${e.toAttribute.sql}'"
+            }
+          }.mkString(", ")
+          val windowSpec = windowExpression.flatMap { e =>
+            e.collect {
+              case we: WindowExpression => we.windowSpec.sql
             }
           }.mkString(", ")
           throw new AnalysisException(
-            s"Unsupported window function in '$windowFuncs'. Structured " +
-            "Streaming only supports time-window aggregation using the `window` function.",
+            s"Unsupported window function in $windowFuncs. Structured " +
+            "Streaming only supports time-window aggregation using the `window` function. " +
+            s"(window specification: '$windowSpec')",
             subPlan.origin.line,
             subPlan.origin.startPosition)
-
-
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
