@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, Timestamp, Types}
+import java.sql.{Date, Statement, Timestamp, Types}
 import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-private case object OracleDialect extends JdbcDialect {
+private case object OracleDialect extends JdbcDialect with MergeByTempTable {
   private[jdbc] val BINARY_FLOAT = 100
   private[jdbc] val BINARY_DOUBLE = 101
   private[jdbc] val TIMESTAMPTZ = -101
@@ -224,4 +224,25 @@ private case object OracleDialect extends JdbcDialect {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def createTempTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    statement.executeUpdate(s"CREATE GLOBAL TEMPORARY TABLE $tableName ($strSchema) " +
+      s"ON COMMIT DELETE ROWS")
+  }
+
+  override def getMergeQuery(
+      sourceTableName: String,
+      destinationTableName: String,
+      columns: Array[String],
+      keyColumns: Array[String]): String = {
+    // Oracle dialect does not like a few bits of the standard SQL MERGE command
+    super.getMergeQuery(sourceTableName, destinationTableName, columns, keyColumns)
+      .replace(" AS dst\n", " dst\n")
+      .replace(" AS src\n", " src\n")
+      .replace(");\n", ")\n")
+  }
 }
