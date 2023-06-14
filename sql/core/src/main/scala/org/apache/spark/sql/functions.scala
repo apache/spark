@@ -2852,6 +2852,38 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = withExpr { CurrentCatalog() }
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = withExpr { CurrentUser() }
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value
    * as a 32 character hex string.
    *
@@ -3018,6 +3050,14 @@ object functions {
   Column = {
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
   }
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def user(): Column = withExpr { CurrentUser() }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3693,9 +3733,26 @@ object functions {
    * All calls of current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column.
+   * All calls of current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 1.5.0
    */
   def current_date(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = withExpr { CurrentTimeZone() }
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column.
@@ -5866,6 +5923,286 @@ object functions {
    * @since 3.0.0
    */
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column = withExpr {
+    MakeDTInterval(days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column): Column = withExpr {
+    new MakeDTInterval(days.expr, hours.expr, mins.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column): Column = withExpr {
+    new MakeDTInterval(days.expr, hours.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column): Column = withExpr {
+    new MakeDTInterval(days.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(): Column = withExpr {
+    new MakeDTInterval()
+  }
+
+  /**
+   * Make interval from years, months, weeks, days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks, days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks, days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks and days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr)
+  }
+
+  /**
+   * Make interval from years, months and weeks.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr)
+  }
+
+  /**
+   * Make interval from years and months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr)
+  }
+
+  /**
+   * Make interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column): Column = withExpr {
+    new MakeInterval(years.expr)
+  }
+
+  /**
+   * Make interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(): Column = withExpr {
+    new MakeInterval()
+  }
+
+  /**
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr))
+  }
+
+  /**
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr), dataType = TimestampType)
+  }
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampType)
+  }
+
+  /**
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampNTZType)
+  }
+
+  /**
+   * Make year-month interval from years, months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column, months: Column): Column = withExpr {
+    MakeYMInterval(years.expr, months.expr)
+  }
+
+  /**
+   * Make year-month interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column): Column = withExpr {
+    new MakeYMInterval(years.expr)
+  }
+
+  /**
+   * Make year-month interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(): Column = withExpr {
+    new MakeYMInterval()
+  }
 
   /**
    * A transform for any type that partitions by a hash of the input column.

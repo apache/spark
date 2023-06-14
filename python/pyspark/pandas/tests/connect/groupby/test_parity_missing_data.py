@@ -42,12 +42,6 @@ class GroupbyParityMissingDataTests(
     def test_fillna(self):
         super().test_fillna()
 
-    @unittest.skip(
-        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
-    )
-    def test_dropna(self):
-        super().test_dropna()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.groupby.test_parity_missing_data import *  # noqa: F401

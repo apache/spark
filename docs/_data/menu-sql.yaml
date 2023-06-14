@@ -71,7 +71,7 @@
 - text: PySpark Usage Guide for Pandas with Apache Arrow
   url: sql-pyspark-pandas-with-arrow.html
 - text: Migration Guide
-  url: sql-migration-old.html
+  url: sql-migration-guide.html
 - text: SQL Reference
   url: sql-ref.html
   subitems:
