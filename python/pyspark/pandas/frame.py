@@ -4018,15 +4018,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> ps.DataFrame({}, index=list('abc')).empty
         True
         """
-        # RDD is not supported in Spark Connect, so we use the DataFrame.isEmpty function instead.
-        # We currently do not introduce any additional aliases since these two functions return the
-        # same result, and only have internal differences in their behavior.
-        is_empty = (
-            self._internal.resolved_copy.spark_frame.isEmpty()
-            if is_remote()
-            else self._internal.resolved_copy.spark_frame.rdd.isEmpty()
+        return (
+            len(self._internal.column_labels) == 0
+            or self._internal.resolved_copy.spark_frame.isEmpty()
         )
-        return len(self._internal.column_labels) == 0 or is_empty
 
     @property
     def style(self) -> "Styler":
