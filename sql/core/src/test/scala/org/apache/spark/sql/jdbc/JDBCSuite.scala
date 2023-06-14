@@ -1344,9 +1344,27 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(tmp2 !== tmp1)
   }
 
+  test("MergeByTempTable: Create temp table name - MsSqlServer") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    assert(msSqlServerDialect.isInstanceOf[MergeByTempTable])
+    val upsert = msSqlServerDialect.asInstanceOf[MergeByTempTable]
+
+    val tmp = upsert.createTempTableName()
+    assert(tmp.startsWith("##"))
+  }
+
   test("MergeByTempTable: Create primary index") {
     val sql = testMergeByTempTableDialect.getCreatePrimaryIndex("test", Array("id", "ts"))
     assert(sql === """ALTER TABLE test ADD PRIMARY KEY ("id", "ts")""")
+  }
+
+  test("MergeByTempTable: Create primary index - MsSqlServer") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    assert(msSqlServerDialect.isInstanceOf[MergeByTempTable])
+    val upsert = msSqlServerDialect.asInstanceOf[MergeByTempTable]
+
+    val sql = upsert.getCreatePrimaryIndex("test", Array("id", "ts"))
+    assert(sql === """ALTER TABLE test ADD PRIMARY KEY CLUSTERED ("id", "ts")""")
   }
 
   test("MergeByTempTable: MERGE table into table") {
