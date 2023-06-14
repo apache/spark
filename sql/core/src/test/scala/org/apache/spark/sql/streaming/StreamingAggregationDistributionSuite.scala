@@ -29,8 +29,10 @@ import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 import org.apache.spark.util.Utils
 
+@ExtendedStructuredStreamingTest
 class StreamingAggregationDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper with Assertions {
 

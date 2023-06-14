@@ -34,8 +34,10 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relati
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 import org.apache.spark.util.Utils
 
+@ExtendedStructuredStreamingTest
 class StreamingQueryManagerSuite extends StreamTest {
 
   import AwaitTerminationTester._

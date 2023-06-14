@@ -25,8 +25,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 import org.apache.spark.util.Utils
 
+@ExtendedStructuredStreamingTest
 class StreamingDeduplicationDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper {
 

@@ -29,8 +29,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 import org.apache.spark.ui.SparkUI
 
+@ExtendedStructuredStreamingTest
 class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
 
   test("correctly display streaming query page") {

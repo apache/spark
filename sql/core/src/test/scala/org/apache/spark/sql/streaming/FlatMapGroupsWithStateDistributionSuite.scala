@@ -26,8 +26,10 @@ import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, Mem
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout.ProcessingTimeTimeout
 import org.apache.spark.sql.streaming.util.{StatefulOpClusteredDistributionTestHelper, StreamManualClock}
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 import org.apache.spark.util.Utils
 
+@ExtendedStructuredStreamingTest
 class FlatMapGroupsWithStateDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper {
 

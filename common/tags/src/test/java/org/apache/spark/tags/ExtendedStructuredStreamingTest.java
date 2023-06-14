@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.tags;
 
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.tags.ExtendedStructuredStreamingTest
+import org.scalatest.TagAnnotation;
 
-@ExtendedStructuredStreamingTest
-class MemorySourceStressSuite extends StreamTest {
-  import testImplicits._
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-  test("memory stress test") {
-    val input = MemoryStream[Int]
-    val mapped = input.toDS().map(_ + 1)
-
-    runStressTest(mapped, AddData(input, _: _*))
-  }
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface ExtendedStructuredStreamingTest { }

@@ -22,7 +22,9 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.streaming.StreamingQueryProgress
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 
+@ExtendedStructuredStreamingTest
 class UIUtilsSuite extends SparkFunSuite with Matchers {
   test("streaming query started with no batch completed") {
     val query = mock(classOf[StreamingQueryUIData], RETURNS_SMART_NULLS)

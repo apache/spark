@@ -24,7 +24,9 @@ import org.apache.spark.api.java.Optional
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.streaming.GroupStateTimeout.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 
+@ExtendedStructuredStreamingTest
 class GroupStateSuite extends SparkFunSuite {
 
   test("SPARK-35800: ensure TestGroupState creates instances the same as prod") {

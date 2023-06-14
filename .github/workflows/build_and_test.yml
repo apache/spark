@@ -184,9 +184,9 @@ jobs:
             included-tags: >-
               ${{
                 ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedHiveTest')
-                || 'org.apache.spark.tags.ExtendedSQLCommandTest'
+                || 'org.apache.spark.tags.ExtendedSQLCommandTest,org.apache.spark.tags.ExtendedStructuredStreamingTest'
               }}
-            comment: "- command tests"
+            comment: "- command and structured streaming tests"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
@@ -194,7 +194,7 @@ jobs:
             excluded-tags: >-
               ${{
                 ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedSQLTest')
-                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.ExtendedSQLCommandTest'
+                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.ExtendedSQLCommandTest,org.apache.spark.tags.ExtendedStructuredStreamingTest'
               }}
             comment: "- other tests"
     env:

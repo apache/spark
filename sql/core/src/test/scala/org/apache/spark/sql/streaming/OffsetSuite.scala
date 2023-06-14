@@ -19,7 +19,9 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, SerializedOffset}
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 
+@ExtendedStructuredStreamingTest
 trait OffsetSuite extends SparkFunSuite {
   /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
   def compare(one: Offset, two: Offset): Unit = {
@@ -32,6 +34,7 @@ trait OffsetSuite extends SparkFunSuite {
   }
 }
 
+@ExtendedStructuredStreamingTest
 class LongOffsetSuite extends OffsetSuite {
   val one = LongOffset(1)
   val two = LongOffset(2)

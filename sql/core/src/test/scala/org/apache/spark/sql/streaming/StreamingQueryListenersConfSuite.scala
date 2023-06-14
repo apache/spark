@@ -24,8 +24,10 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 
 
+@ExtendedStructuredStreamingTest
 class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._

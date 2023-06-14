@@ -26,7 +26,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.deploy.history.{Utils => HsUtils}
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedStructuredStreamingTest
 
+@ExtendedStructuredStreamingTest
 class StreamingQueryHistorySuite extends SharedSparkSession with BeforeAndAfter {
 
   test("support streaming query events") {
