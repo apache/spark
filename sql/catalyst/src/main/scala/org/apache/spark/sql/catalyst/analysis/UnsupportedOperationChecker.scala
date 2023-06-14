@@ -511,12 +511,12 @@ object UnsupportedOperationChecker extends Logging {
         case Window(_, _, _, child) if child.isStreaming =>
           val windowFuncs = subPlan.asInstanceOf[Window].windowExpressions.flatMap { e =>
             e.collect {
-              case we: WindowExpression => s"${we.windowFunction} AS ${e.toAttribute.sql}"
+              case we: WindowExpression => s"${we.windowFunction} as column ${e.toAttribute.sql}"
             }
           }.mkString(", ")
           throw new AnalysisException(
-            s"Unsupported window function found in column '$windowFuncs'. Structured " +
-            "streaming only supports time-window aggregation using the `window` function.",
+            s"Unsupported window function in '$windowFuncs'. Structured " +
+            "Streaming only supports time-window aggregation using the `window` function.",
             subPlan.origin.line,
             subPlan.origin.startPosition)
 
