@@ -2841,8 +2841,9 @@ object SQLConf {
       .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
         "types. Regular string and binary types have a 2GiB limit for a column in a single " +
         "record batch. Large variable types remove this limitation at the cost of higher memory " +
-        "usage per value.")
+        "usage per value. Note that this only works for DataFrame.mapInArrow.")
       .version("3.5.0")
+      .internal()
       .booleanConf
       .createWithDefault(false)
 
