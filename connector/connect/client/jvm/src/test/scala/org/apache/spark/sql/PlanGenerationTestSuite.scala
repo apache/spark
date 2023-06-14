@@ -1478,12 +1478,48 @@ class PlanGenerationTestSuite
     fn.octet_length(fn.col("g"))
   }
 
+  functionTest("rlike") {
+    fn.rlike(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp") {
+    fn.regexp(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp_like") {
+    fn.regexp_like(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp_count") {
+    fn.regexp_count(fn.col("g"), lit("\\d+"))
+  }
+
   functionTest("regexp_extract") {
     fn.regexp_extract(fn.col("g"), "(\\d+)-(\\d+)", 1)
   }
 
+  functionTest("regexp_extract_all without regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"))
+  }
+
+  functionTest("regexp_extract_all with regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"), lit(1))
+  }
+
   functionTest("regexp_replace") {
     fn.regexp_replace(fn.col("g"), "(\\d+)", "XXX")
+  }
+
+  functionTest("regexp_substr") {
+    fn.regexp_substr(fn.col("g"), lit("\\d{2}(a|b|m)"))
+  }
+
+  functionTest("regexp_instr without regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"))
+  }
+
+  functionTest("regexp_instr with regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"), lit(1))
   }
 
   functionTest("unbase64") {

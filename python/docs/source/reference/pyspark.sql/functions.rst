@@ -346,8 +346,15 @@ String Functions
     lpad
     ltrim
     octet_length
+    rlike
+    regexp
+    regexp_like
+    regexp_count
     regexp_extract
+    regexp_extract_all
     regexp_replace
+    regexp_substr
+    regexp_instr
     unbase64
     rpad
     repeat
