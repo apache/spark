@@ -30,12 +30,11 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
  * create a DataFrame reference with the id. When server transforms the DataFrame reference, it
  * finds the DataFrame from the cache and replace the reference.
  *
- * Each session has a corresponding DataFrame map. A cached DataFrame can only be
- * accessed from within the same session. The DataFrame will be removed from the
- * cache by the owner (e.g. Streaming query) or when the session expires.
+ * Each session has a corresponding DataFrame map. A cached DataFrame can only be accessed from
+ * within the same session. The DataFrame will be removed from the cache by the owner (e.g.
+ * Streaming query) or when the session expires.
  */
 private[sql] class SparkConnectCachedDataFrameManager {
-
 
   // Session.sessionUUID -> Map[DF Reference ID -> DF]
   @GuardedBy("this")
@@ -53,9 +52,8 @@ private[sql] class SparkConnectCachedDataFrameManager {
       .get(sessionKey)
       .flatMap(_.get(dataFrameId))
       .getOrElse {
-        throw  InvalidPlanInput(
-          s"No DataFrame found in the server for id $dataFrameId in the session $sessionKey"
-        )
+        throw InvalidPlanInput(
+          s"No DataFrame found in the server for id $dataFrameId in the session $sessionKey")
       }
   }
 
