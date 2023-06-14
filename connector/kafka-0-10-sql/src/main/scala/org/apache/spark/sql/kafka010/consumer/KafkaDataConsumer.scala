@@ -262,6 +262,8 @@ private[kafka010] class KafkaDataConsumer(
   private var totalTimeReadNanos: Long = 0
   // Number of times we poll Kafka consumers.
   private var numPolls: Long = 0
+  // Number of times we poll Kafka consumers.
+  private var numRecordsPolled: Long = 0
   // Total number of records fetched from Kafka
   private var totalRecordsRead: Long = 0
   // Starting timestamp when the consumer is created.
@@ -385,8 +387,9 @@ private[kafka010] class KafkaDataConsumer(
     val walTime = System.nanoTime() - startTimestampNano
 
     logInfo(
-      s"From Kafka $kafkaMeta read $totalRecordsRead records through $numPolls polls, " +
-      s"taking $totalTimeReadNanos nanos, during time span of $walTime nanos."
+      s"From Kafka $kafkaMeta read $totalRecordsRead records through $numPolls polls (polled " +
+      s" out $numRecordsPolled records), taking $totalTimeReadNanos nanos, during time span of " +
+      s"$walTime nanos."
     )
 
     releaseConsumer()
@@ -576,6 +579,7 @@ private[kafka010] class KafkaDataConsumer(
       consumer.fetch(offset, pollTimeoutMs)
     }
     numPolls += 1
+    numRecordsPolled += records.size
     fetchedData.withNewPoll(records.listIterator, offsetAfterPoll, range)
   }
 
@@ -602,6 +606,7 @@ private[kafka010] class KafkaDataConsumer(
     startTimestampNano = System.nanoTime()
     totalTimeReadNanos = 0
     numPolls = 0
+    numRecordsPolled = 0
     totalRecordsRead = 0
 
     require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
