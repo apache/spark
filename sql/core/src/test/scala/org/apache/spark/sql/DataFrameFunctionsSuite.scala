@@ -5570,6 +5570,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq("b", "a", "c", null)))
     )
   }
+
+  test("function current_catalog, current_database, current_schema") {
+    val df = Seq((1, 2), (3, 1)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("CURRENT_CATALOG()"), df.select(current_catalog()))
+    checkAnswer(df.selectExpr("CURRENT_DATABASE()"), df.select(current_database()))
+    checkAnswer(df.selectExpr("CURRENT_SCHEMA()"), df.select(current_schema()))
+  }
+
+  test("function current_user, user") {
+    val df = Seq((1, 2), (3, 1)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("CURRENT_USER()"), df.select(current_user()))
+    checkAnswer(df.selectExpr("USER()"), df.select(user()))
+  }
 }
 
 object DataFrameFunctionsSuite {
