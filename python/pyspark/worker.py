@@ -513,14 +513,11 @@ def read_udtf(pickleSer, infile, eval_type):
     else:
         terminate = None
 
-    def mapper(a):
-        results = tuple(eval(*[a[o] for o in arg_offsets]))
-        return results
-
     # Return an iterator of iterators.
-    def func(_, it):
+    def mapper(_, it):
         try:
-            yield from map(mapper, it)
+            for a in it:
+                yield tuple(eval(*[a[o] for o in arg_offsets]))
         finally:
             if terminate is not None:
                 try:
@@ -531,9 +528,10 @@ def read_udtf(pickleSer, infile, eval_type):
                         f"the 'terminate' method: {str(e)}"
                     )
 
-    ser = BatchedSerializer(CPickleSerializer(), 100)
+    # Each row is a group so do not batch but send one by one.
+    ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    return func, None, ser, ser
+    return mapper, None, ser, ser
 
 
 def read_udfs(pickleSer, infile, eval_type):
