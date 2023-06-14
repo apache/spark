@@ -408,17 +408,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
         createPartitionMethod.invoke(
           hive,
           table,
-          spec,
-          location,
-          params, // partParams
-          null, // inputFormat
-          null, // outputFormat
-          -1: JInteger, // numBuckets
-          null, // cols
-          null, // serializationLib
-          null, // serdeParams
-          null, // bucketCols
-          null) // sortCols
+          spec)
       }
     }
   }
