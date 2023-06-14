@@ -116,8 +116,10 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    curdate
     current_date
     current_timestamp
+    current_timezone
     date_add
     date_format
     date_sub
@@ -389,6 +391,10 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    current_catalog
+    current_database
+    current_schema
+    current_user
     md5
     sha1
     sha2
@@ -399,6 +405,7 @@ Misc Functions
     raise_error
     hll_sketch_estimate
     hll_union
+    user
 
 Xml Functions
 --------------

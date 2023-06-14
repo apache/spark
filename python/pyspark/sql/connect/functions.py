@@ -2252,6 +2252,13 @@ to_number.__doc__ = pysparkfuncs.to_number.__doc__
 #     timestamp_seconds, current_timestamp, date_trunc
 
 
+def curdate() -> Column:
+    return _invoke_function("curdate")
+
+
+curdate.__doc__ = pysparkfuncs.curdate.__doc__
+
+
 def current_date() -> Column:
     return _invoke_function("current_date")
 
@@ -2264,6 +2271,13 @@ def current_timestamp() -> Column:
 
 
 current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
+
+
+def current_timezone() -> Column:
+    return _invoke_function("current_timezone")
+
+
+current_timezone.__doc__ = pysparkfuncs.current_timezone.__doc__
 
 
 def localtimestamp() -> Column:
@@ -2761,6 +2775,41 @@ def hours(col: "ColumnOrName") -> Column:
 hours.__doc__ = pysparkfuncs.hours.__doc__
 
 # Misc Functions
+
+
+def current_catalog() -> Column:
+    return _invoke_function("current_catalog")
+
+
+current_catalog.__doc__ = pysparkfuncs.current_catalog.__doc__
+
+
+def current_database() -> Column:
+    return _invoke_function("current_database")
+
+
+current_database.__doc__ = pysparkfuncs.current_database.__doc__
+
+
+def current_schema() -> Column:
+    return _invoke_function("current_schema")
+
+
+current_schema.__doc__ = pysparkfuncs.current_schema.__doc__
+
+
+def current_user() -> Column:
+    return _invoke_function("current_user")
+
+
+current_user.__doc__ = pysparkfuncs.current_user.__doc__
+
+
+def user() -> Column:
+    return _invoke_function("user")
+
+
+user.__doc__ = pysparkfuncs.user.__doc__
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
