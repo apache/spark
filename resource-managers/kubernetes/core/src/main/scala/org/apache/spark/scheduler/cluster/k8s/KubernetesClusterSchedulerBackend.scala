@@ -110,8 +110,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     lifecycleEventHandler.start(this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    if (!conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK) &&
-      !conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP) &&
+      !conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)) {
       // this spark app is submitted as k8s-client, the spark conf dir config map should be
       // created and mounted
       setUpExecutorConfigMap(podAllocator.driverPod)
@@ -161,8 +161,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
       podAllocator.stop(applicationId())
 
-      if (!conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK) &&
-        !conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP) &&
+        !conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)) {
         Utils.tryLogNonFatalError {
           kubernetesClient
             .configMaps()

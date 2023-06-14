@@ -33,7 +33,7 @@ import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
-import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Config.{SPARK_CONF_DIR_CONFIG_MAP_NAME, WAIT_FOR_APP_COMPLETION}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.submit.Client.submissionId
