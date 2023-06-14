@@ -27,10 +27,6 @@ class FrameParitySparkTests(FrameSparkMixin, PandasOnSparkTestUtils, ReusedConne
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip("TODO(SPARK-43619): Enable DataFrameSlowParityTests.test_udt.")
-    def test_udt(self):
-        super().test_udt()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.frame.test_parity_spark import *  # noqa: F401

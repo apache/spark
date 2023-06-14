@@ -117,15 +117,15 @@ def _compare(
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         if cast(CategoricalDtype, left.dtype).ordered:
-            return pyspark_column_op(func_name)(left, right)
+            return pyspark_column_op(func_name, left, right)
         else:
-            return pyspark_column_op(func_name)(_to_cat(left), _to_cat(right))
+            return pyspark_column_op(func_name, _to_cat(left), _to_cat(right))
     elif not is_list_like(right):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
             raise TypeError("Cannot compare a Categorical with a scalar, which is not a category.")
         right_code = categories.get_loc(right)
-        return pyspark_column_op(func_name)(left, right_code)
+        return pyspark_column_op(func_name, left, right_code)
     else:
         raise TypeError("Cannot compare a Categorical with the given type.")
 
