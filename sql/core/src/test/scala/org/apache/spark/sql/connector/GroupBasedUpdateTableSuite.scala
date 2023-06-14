@@ -27,99 +27,87 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._
 
-  test("update runtime group filtering (DPP enabled)") {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
-      checkUpdateRuntimeGroupFiltering()
-    }
-  }
-
-  test("update runtime group filtering (DPP disabled)") {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-      checkUpdateRuntimeGroupFiltering()
-    }
-  }
-
-  test("update runtime group filtering (AQE enabled)") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      checkUpdateRuntimeGroupFiltering()
-    }
-  }
-
-  test("update runtime group filtering (AQE disabled)") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      checkUpdateRuntimeGroupFiltering()
+  test("update runtime group filtering") {
+    Seq(true, false).foreach { ddpEnabled =>
+      Seq(true, false).foreach { aqeEnabled =>
+        withSQLConf(
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> ddpEnabled.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+          checkUpdateRuntimeGroupFiltering()
+        }
+      }
     }
   }
 
   private def checkUpdateRuntimeGroupFiltering(): Unit = {
-    withTempView("deleted_id") {
-      createAndInitTable("id INT, salary INT, dep STRING",
-        """{ "id": 1, "salary": 300, "dep": 'hr' }
-          |{ "id": 2, "salary": 150, "dep": 'software' }
-          |{ "id": 3, "salary": 120, "dep": 'hr' }
-          |""".stripMargin)
+    withTable(tableNameAsString) {
+      withTempView("deleted_id") {
+        createAndInitTable("id INT, salary INT, dep STRING",
+          """{ "id": 1, "salary": 300, "dep": 'hr' }
+            |{ "id": 2, "salary": 150, "dep": 'software' }
+            |{ "id": 3, "salary": 120, "dep": 'hr' }
+            |""".stripMargin)
 
-      val deletedIdDF = Seq(Some(1), None).toDF()
-      deletedIdDF.createOrReplaceTempView("deleted_id")
+        val deletedIdDF = Seq(Some(1), None).toDF()
+        deletedIdDF.createOrReplaceTempView("deleted_id")
 
-      executeAndCheckScans(
-        s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM deleted_id)",
-        primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
-        groupFilterScanSchema = Some("id INT, dep STRING"))
+        executeAndCheckScans(
+          s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM deleted_id)",
+          primaryScanSchema = "id INT, salary INT, dep STRING, _partition STRING",
+          groupFilterScanSchema = Some("id INT, dep STRING"))
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
-      checkReplacedPartitions(Seq("hr"))
+        checkReplacedPartitions(Seq("hr"))
+      }
     }
   }
 
-  test("update runtime filter subquery reuse (AQE enabled)") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      checkUpdateRuntimeFilterSubqueryReuse()
-    }
-  }
-
-  test("update runtime filter subquery reuse (AQE disabled)") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      checkUpdateRuntimeFilterSubqueryReuse()
+  test("update runtime filter subquery reuse") {
+    Seq(true, false).foreach { aqeEnabled =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+        checkUpdateRuntimeFilterSubqueryReuse()
+      }
     }
   }
 
   private def checkUpdateRuntimeFilterSubqueryReuse(): Unit = {
-    withTempView("deleted_id") {
-      createAndInitTable("id INT, salary INT, dep STRING",
-        """{ "id": 1, "salary": 300, "dep": 'hr' }
-          |{ "id": 2, "salary": 150, "dep": 'software' }
-          |{ "id": 3, "salary": 120, "dep": 'hr' }
-          |""".stripMargin)
+    withTable(tableNameAsString) {
+      withTempView("deleted_id") {
+        createAndInitTable("id INT, salary INT, dep STRING",
+          """{ "id": 1, "salary": 300, "dep": 'hr' }
+            |{ "id": 2, "salary": 150, "dep": 'software' }
+            |{ "id": 3, "salary": 120, "dep": 'hr' }
+            |""".stripMargin)
 
-      val deletedIdDF = Seq(Some(1), None).toDF()
-      deletedIdDF.createOrReplaceTempView("deleted_id")
+        val deletedIdDF = Seq(Some(1), None).toDF()
+        deletedIdDF.createOrReplaceTempView("deleted_id")
 
-      val plan = executeAndKeepPlan {
-        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM deleted_id)")
+        val plan = executeAndKeepPlan {
+          sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM deleted_id)")
+        }
+
+        val runtimePredicates = flatMap(plan) {
+          case s: BatchScanExec =>
+            val dynamicPruningExprs = s.runtimeFilters.asInstanceOf[Seq[DynamicPruningExpression]]
+            dynamicPruningExprs.map(_.child)
+          case _ =>
+            Nil
+        }
+        val isSubqueryReused = runtimePredicates.exists {
+          case InSubqueryExec(_, _: ReusedSubqueryExec, _, _, _, _) => true
+          case _ => false
+        }
+        assert(isSubqueryReused, "runtime filter subquery must be reused")
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+        checkReplacedPartitions(Seq("hr"))
       }
-
-      val runtimePredicates = flatMap(plan) {
-        case s: BatchScanExec =>
-          val dynamicPruningExprs = s.runtimeFilters.asInstanceOf[Seq[DynamicPruningExpression]]
-          dynamicPruningExprs.map(_.child)
-        case _ =>
-          Nil
-      }
-      val isSubqueryReused = runtimePredicates.exists {
-        case InSubqueryExec(_, _: ReusedSubqueryExec, _, _, _, _) => true
-        case _ => false
-      }
-      assert(isSubqueryReused, "runtime filter subquery must be reused")
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
-
-      checkReplacedPartitions(Seq("hr"))
     }
   }
 }
