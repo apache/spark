@@ -24,7 +24,6 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
-import java.util
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -67,6 +66,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
@@ -148,8 +148,6 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
-      case proto.Relation.RelTypeCase.FLAT_MAP_GROUPS_WITH_STATE =>
-        transformFlatMapGroupsWithState(rel.getFlatMapGroupsWithState)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -572,16 +570,60 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
-    val mapped = new MapGroups(
-      udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
-      udf.inputDeserializer(ds.groupingAttributes),
-      ds.valueDeserializer,
-      ds.groupingAttributes,
-      ds.dataAttributes,
-      ds.sortOrder,
-      udf.outputObjAttr,
-      ds.analyzed)
-    SerializeFromObject(udf.outputNamedExpression, mapped)
+    if (rel.hasIsMapGroupsWithState) {
+      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty
+      val initialDs = if (hasInitialState) {
+        UntypedKeyValueGroupedDataset(
+          rel.getInitialInput,
+          rel.getInitialGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+      } else {
+        UntypedKeyValueGroupedDataset(
+          rel.getInput,
+          rel.getGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+      }
+      val timeoutConf = if (!rel.hasTimeoutConf) {
+        GroupStateTimeout.NoTimeout
+      } else {
+        groupStateTimeoutFromString(rel.getTimeoutConf)
+      }
+      val outputMode = if (!rel.hasOutputMode) {
+        OutputMode.Update
+      } else {
+        InternalOutputModes(rel.getOutputMode)
+      }
+
+      val flatMapGroupsWithState = new FlatMapGroupsWithState(
+        udf.function.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+        udf.inputDeserializer(ds.groupingAttributes),
+        ds.valueDeserializer,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        udf.outputObjAttr,
+        initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+        outputMode,
+        rel.getIsMapGroupsWithState,
+        timeoutConf,
+        hasInitialState,
+        initialDs.groupingAttributes,
+        initialDs.dataAttributes,
+        initialDs.valueDeserializer,
+        initialDs.analyzed,
+        ds.analyzed)
+      SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
+    } else {
+      val mapped = new MapGroups(
+        udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
+        udf.inputDeserializer(ds.groupingAttributes),
+        ds.valueDeserializer,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        ds.sortOrder,
+        udf.outputObjAttr,
+        ds.analyzed)
+      SerializeFromObject(udf.outputNamedExpression, mapped)
+    }
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
@@ -645,60 +687,6 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       left.analyzed,
       right.analyzed)
     SerializeFromObject(udf.outputNamedExpression, mapped)
-  }
-
-  private def transformFlatMapGroupsWithState(rel: proto.FlatMapGroupsWithState): LogicalPlan = {
-    val commonUdf = rel.getFunc
-    val udf = TypedScalaUdf(commonUdf)
-    val ds = UntypedKeyValueGroupedDataset(
-      rel.getInput,
-      rel.getGroupingExpressionsList,
-      new util.ArrayList[proto.Expression]())
-
-    val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty
-
-    val initialDs = if (hasInitialState) {
-      UntypedKeyValueGroupedDataset(
-        rel.getInput,
-        rel.getInitialGroupingExpressionsList,
-        new util.ArrayList[proto.Expression]())
-    } else {
-      UntypedKeyValueGroupedDataset(
-        rel.getInput,
-        rel.getGroupingExpressionsList,
-        new util.ArrayList[proto.Expression]())
-    }
-
-    val timeoutConf = if (rel.getTimeoutConf.isEmpty) {
-      GroupStateTimeout.NoTimeout
-    } else {
-      org.apache.spark.sql.execution.streaming.GroupStateImpl
-        .groupStateTimeoutFromString(rel.getTimeoutConf)
-    }
-    val outputMode = if (rel.getOutputMode.isEmpty) {
-      OutputMode.Update
-    } else {
-      InternalOutputModes(rel.getOutputMode)
-    }
-
-    val flatMapGroupsWithState = new FlatMapGroupsWithState(
-      udf.function.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
-      udf.inputDeserializer(ds.groupingAttributes),
-      ds.valueDeserializer,
-      ds.groupingAttributes,
-      ds.dataAttributes,
-      udf.outputObjAttr,
-      ds.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
-      outputMode,
-      rel.getIsMapGroupsWithState,
-      timeoutConf,
-      hasInitialState,
-      initialDs.groupingAttributes,
-      initialDs.dataAttributes,
-      initialDs.valueDeserializer,
-      initialDs.analyzed,
-      ds.analyzed)
-    SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
   }
 
   /**

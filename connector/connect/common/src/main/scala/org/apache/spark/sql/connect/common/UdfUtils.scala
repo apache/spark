@@ -97,12 +97,17 @@ private[sql] object UdfUtils extends Serializable {
   }
 
   def mapValuesAdaptor[K, V, S, U, IV](
-      f: (K, Iterator[V], GroupState[S]) => U,
-      valueMapFunc: IV => V): (K, Iterator[IV], GroupState[S]) => U = {
-    (k: K, itr: Iterator[IV], s: GroupState[S]) =>
-    {
+      f: (K, Iterator[V], GroupState[S]) => Iterator[U],
+      valueMapFunc: IV => V): (K, Iterator[IV], GroupState[S]) => Iterator[U] = {
+    print("Used function: mapValuesAdaptor")
+    (k: K, itr: Iterator[IV], s: GroupState[S]) => {
       f(k, itr.map(v => valueMapFunc(v)), s)
     }
+  }
+
+  def mapGroupsWithStateFuncToFlatMapAdaptor[K, V, S, U](
+      f: (K, Iterator[V], GroupState[S]) => U): (K, Iterator[V], GroupState[S]) => Iterator[U] = {
+    (k: K, itr: Iterator[V], s: GroupState[S]) => Iterator(f(k, itr, s))
   }
 
   def mapGroupsWithStateFuncToScalaFunc[K, V, S, U](
@@ -112,7 +117,7 @@ private[sql] object UdfUtils extends Serializable {
 
   def flatMapGroupsWithStateFuncToScalaFunc[K, V, S, U](
       f: FlatMapGroupsWithStateFunction[K, V, S, U])
-  : (K, Iterator[V], GroupState[S]) => Iterator[U] = { (key, data, groupState) =>
+      : (K, Iterator[V], GroupState[S]) => Iterator[U] = { (key, data, groupState) =>
     f.call(key, data.asJava, groupState).asScala
   }
 
