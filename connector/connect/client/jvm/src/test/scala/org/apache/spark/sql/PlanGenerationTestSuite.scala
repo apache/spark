@@ -950,16 +950,56 @@ class PlanGenerationTestSuite
     fn.covar_samp("a", "b")
   }
 
-  functionTest("first") {
+  functionTest("first with ignore nulls") {
     fn.first("a", ignoreNulls = true)
+  }
+
+  functionTest("first with respect nulls") {
+    fn.first("a")
+  }
+
+  functionTest("first_value with ignore nulls") {
+    fn.first_value(fn.col("a"), ignoreNulls = lit(true))
+  }
+
+  functionTest("first_value with respect nulls") {
+    fn.first_value(fn.col("a"))
+  }
+
+  functionTest("any_value with ignore nulls") {
+    fn.any_value(fn.col("a"), ignoreNulls = lit(true))
+  }
+
+  functionTest("any_value with respect nulls") {
+    fn.any_value(fn.col("a"))
   }
 
   functionTest("kurtosis") {
     fn.kurtosis("a")
   }
 
-  functionTest("last") {
-    fn.last("a", ignoreNulls = false)
+  functionTest("last with ignore nulls") {
+    fn.last("a", ignoreNulls = true)
+  }
+
+  functionTest("last with respect nulls") {
+    fn.last("a")
+  }
+
+  functionTest("last_value with ignore nulls") {
+    fn.last_value(fn.col("a"), ignoreNulls = lit(true))
+  }
+
+  functionTest("last_value with respect nulls") {
+    fn.last_value(fn.col("a"))
+  }
+
+  functionTest("count_if") {
+    fn.count_if(fn.col("a"))
+  }
+
+  functionTest("histogram_numeric") {
+    fn.histogram_numeric(fn.col("a"), lit(10))
   }
 
   functionTest("mode") {
@@ -996,6 +1036,10 @@ class PlanGenerationTestSuite
 
   functionTest("percentile_approx") {
     fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
+  }
+
+  functionTest("approx_percentile") {
+    fn.approx_percentile(fn.col("a"), fn.lit(0.3), fn.lit(20))
   }
 
   functionTest("product") {
@@ -1938,6 +1982,10 @@ class PlanGenerationTestSuite
 
   functionTest("aggregate") {
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
+  }
+
+  functionTest("reduce") {
+    fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
   functionTest("zip_with") {

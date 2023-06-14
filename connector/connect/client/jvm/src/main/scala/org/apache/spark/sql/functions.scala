@@ -521,6 +521,34 @@ object functions {
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column): Column = Column.fn("first_value", e)
+
+  /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("first_value", e, ignoreNulls)
+
+  /**
    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated or
    * not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
@@ -733,6 +761,34 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column): Column = Column.fn("last_value", e)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("last_value", e, ignoreNulls)
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -848,6 +904,25 @@ object functions {
    */
   def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column =
     Column.fn("percentile_approx", e, percentage, accuracy)
+
+  /**
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
+   * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
+   * more than `percentage` of `col` values is less than the value or equal to that value.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0. If it is a single floating
+   * point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal which controls approximation accuracy at
+   * the cost of memory. Higher value of accuracy yields better accuracy, 1.0/accuracy is the
+   * relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
+    Column.fn("approx_percentile", e, percentage, accuracy)
+  }
 
   /**
    * Aggregate function: returns the product of all numerical elements in a group.
@@ -1100,6 +1175,49 @@ object functions {
    * @since 3.5.0
    */
   def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column): Column = Column.fn("any_value", e)
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows. If `isIgnoreNull` is true,
+   * returns only non-null values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("any_value", e, ignoreNulls)
+
+  /**
+   * Aggregate function: returns the number of `TRUE` values for the expression.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_if(e: Column): Column = Column.fn("count_if", e)
+
+  /**
+   * Aggregate function: computes a histogram on numeric 'expr' using nb bins. The return value is
+   * an array of (x,y) pairs representing the centers of the histogram's bins. As the value of
+   * 'nb' is increased, the histogram approximation gets finer-grained, but may yield artifacts
+   * around outliers. In practice, 20-40 histogram bins appear to work well, with more bins being
+   * required for skewed or smaller datasets. Note that this function creates a histogram with
+   * non-uniform bin widths. It offers no guarantees in terms of the mean-squared-error of the
+   * histogram, but in practice is comparable to the histograms produced by the R/S-Plus
+   * statistical computing packages. Note: the output type of the 'x' field in the return value is
+   * propagated from the input value consumed in the aggregate function.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def histogram_numeric(e: Column, nBins: Column): Column =
+    Column.fn("histogram_numeric", e, nBins)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -4928,6 +5046,55 @@ object functions {
    */
   def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
     aggregate(expr, initialValue, merge, c => c)
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array, and reduces this
+   * to a single state. The final state is converted into the final result by applying a finish
+   * function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr
+   *   the input array column
+   * @param initialValue
+   *   the initial value
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value
+   * @param finish
+   *   combined_value => final_value, the lambda function to convert the combined value of all
+   *   inputs to final result
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(
+      expr: Column,
+      initialValue: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column =
+    Column.fn("reduce", expr, initialValue, createLambda(merge), createLambda(finish))
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array, and reduces this
+   * to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
+   *
+   * @param expr
+   *   the input array column
+   * @param initialValue
+   *   the initial value
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    reduce(expr, initialValue, merge, c => c)
 
   /**
    * Merge two given arrays, element-wise, into a single array using a function. If one array is

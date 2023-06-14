@@ -3852,6 +3852,83 @@ def percentile_approx(
 
 
 @try_remote_functions
+def approx_percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    accuracy: Union[Column, float] = 10000,
+) -> Column:
+    """Returns the approximate `percentile` of the numeric column `col` which is the smallest value
+    in the ordered `col` values (sorted from least to greatest) such that no more than `percentage`
+    of `col` values is less than the value or equal to that value.
+
+
+    .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        input column.
+    percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
+        percentage in decimal (must be between 0.0 and 1.0).
+        When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
+        In this case, returns the approximate percentile array of column col
+        at the given percentage array.
+    accuracy : :class:`~pyspark.sql.Column` or float
+        is a positive numeric literal which controls approximation accuracy
+        at the cost of memory. Higher value of accuracy yields better accuracy,
+        1.0/accuracy is the relative error of the approximation. (default: 10000).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        approximate `percentile` of the numeric column.
+
+    Examples
+    --------
+    >>> key = (col("id") % 3).alias("key")
+    >>> value = (randn(42) + key * 10).alias("value")
+    >>> df = spark.range(0, 1000, 1, 1).select(key, value)
+    >>> df.select(
+    ...     approx_percentile("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
+    ... ).printSchema()
+    root
+     |-- quantiles: array (nullable = true)
+     |    |-- element: double (containsNull = false)
+
+    >>> df.groupBy("key").agg(
+    ...     approx_percentile("value", 0.5, lit(1000000)).alias("median")
+    ... ).printSchema()
+    root
+     |-- key: long (nullable = true)
+     |-- median: double (nullable = true)
+    """
+    sc = get_active_spark_context()
+
+    if isinstance(percentage, (list, tuple)):
+        # A local list
+        percentage = _invoke_function(
+            "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
+        )._jc
+    elif isinstance(percentage, Column):
+        # Already a Column
+        percentage = _to_java_column(percentage)
+    else:
+        # Probably scalar
+        percentage = _create_column_from_literal(percentage)
+
+    accuracy = (
+        _to_java_column(accuracy)
+        if isinstance(accuracy, Column)
+        else _create_column_from_literal(accuracy)
+    )
+
+    return _invoke_function("approx_percentile", _to_java_column(col), percentage, accuracy)
+
+
+@try_remote_functions
 def rand(seed: Optional[int] = None) -> Column:
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     uniformly distributed in [0.0, 1.0).
@@ -4782,6 +4859,253 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     +---+---+---------+
     """
     return _invoke_function("nth_value", _to_java_column(col), offset, ignoreNulls)
+
+
+@try_remote_functions
+def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    """Returns some value of `col` for a group of rows.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    ignorenulls : :class:`~pyspark.sql.Column` or bool
+        if first value is null then look for first non-null value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        some value of `col` for a group of rows.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None, 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +----+---+
+    |  c1| c2|
+    +----+---+
+    |NULL|  1|
+    |   a|  2|
+    |   a|  3|
+    |   b|  8|
+    |   b|  2|
+    +----+---+
+    <BLANKLINE>
+    >>> df.select(any_value('c1'), any_value('c2')).collect()
+    [Row(any_value(c1)=None, any_value(c2)=1)]
+    >>> df.select(any_value('c1', True), any_value('c2', True)).collect()
+    [Row(any_value(c1)='a', any_value(c2)=1)]
+    """
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("any_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
+
+
+@try_remote_functions
+def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    """Returns the first value of `col` for a group of rows. It will return the first non-null
+    value it sees when `ignoreNulls` is set to true. If all values are null, then null is returned.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    ignorenulls : :class:`~pyspark.sql.Column` or bool
+        if first value is null then look for first non-null value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        some value of `col` for a group of rows.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None, 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +----+---+
+    |  c1| c2|
+    +----+---+
+    |NULL|  1|
+    |   a|  2|
+    |   a|  3|
+    |   b|  8|
+    |   b|  2|
+    +----+---+
+    <BLANKLINE>
+    >>> df.select(first_value('c1').alias('a'), first_value('c2').alias('b')).collect()
+    [Row(a=None, b=1)]
+    >>> df.select(first_value('c1', True).alias('a'), first_value('c2', True).alias('b')).collect()
+    [Row(a='a', b=1)]
+    """
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("first_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
+
+
+@try_remote_functions
+def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    """Returns the last value of `col` for a group of rows. It will return the last non-null
+    value it sees when `ignoreNulls` is set to true. If all values are null, then null is returned.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    ignorenulls : :class:`~pyspark.sql.Column` or bool
+        if first value is null then look for first non-null value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        some value of `col` for a group of rows.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             (None, 2)], ["c1", "c2"])
+    >>> df.show()
+    +----+---+
+    |  c1| c2|
+    +----+---+
+    |   a|  1|
+    |   a|  2|
+    |   a|  3|
+    |   b|  8|
+    |NULL|  2|
+    +----+---+
+    <BLANKLINE>
+    >>> df.select(last_value('c1').alias('a'), last_value('c2').alias('b')).collect()
+    [Row(a=None, b=2)]
+    >>> df.select(last_value('c1', True).alias('a'), last_value('c2', True).alias('b')).collect()
+    [Row(a='b', b=2)]
+    """
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("last_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
+
+
+@try_remote_functions
+def count_if(col: "ColumnOrName") -> Column:
+    """Returns the number of `TRUE` values for the `col`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of `TRUE` values for the `col`.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  a|  1|
+    |  a|  2|
+    |  a|  3|
+    |  b|  8|
+    |  b|  2|
+    +---+---+
+    <BLANKLINE>
+    >>> df.select(count_if(col('c2') % 2 == 0)).show()
+    +------------------------+
+    |count_if(((c2 % 2) = 0))|
+    +------------------------+
+    |                       3|
+    +------------------------+
+    <BLANKLINE>
+    """
+    return _invoke_function_over_columns("count_if", col)
+
+
+@try_remote_functions
+def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+    """Computes a histogram on numeric 'col' using nb bins.
+    The return value is an array of (x,y) pairs representing the centers of the
+    histogram's bins. As the value of 'nb' is increased, the histogram approximation
+    gets finer-grained, but may yield artifacts around outliers. In practice, 20-40
+    histogram bins appear to work well, with more bins being required for skewed or
+    smaller datasets. Note that this function creates a histogram with non-uniform
+    bin widths. It offers no guarantees in terms of the mean-squared-error of the
+    histogram, but in practice is comparable to the histograms produced by the R/S-Plus
+    statistical computing packages. Note: the output type of the 'x' field in the return value is
+    propagated from the input value consumed in the aggregate function.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    nBins : :class:`~pyspark.sql.Column` or str
+        number of Histogram columns.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a histogram on numeric 'col' using nb bins.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("a", 1),
+    ...                             ("a", 2),
+    ...                             ("a", 3),
+    ...                             ("b", 8),
+    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df.show()
+    +---+---+
+    | c1| c2|
+    +---+---+
+    |  a|  1|
+    |  a|  2|
+    |  a|  3|
+    |  b|  8|
+    |  b|  2|
+    +---+---+
+    <BLANKLINE>
+    >>> df.select(histogram_numeric('c2', lit(5))).show()
+    +------------------------+
+    |histogram_numeric(c2, 5)|
+    +------------------------+
+    |    [{1, 1.0}, {2, 1....|
+    +------------------------+
+    <BLANKLINE>
+    """
+    return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
 
 @try_remote_functions
@@ -10621,6 +10945,78 @@ def aggregate(
     ...     return struct(count.alias("count"), sum.alias("sum"))
     >>> df.select(
     ...     aggregate(
+    ...         "values",
+    ...         struct(lit(0).alias("count"), lit(0.0).alias("sum")),
+    ...         merge,
+    ...         lambda acc: acc.sum / acc.count,
+    ...     ).alias("mean")
+    ... ).show()
+    +----+
+    |mean|
+    +----+
+    | 8.4|
+    +----+
+    """
+    if finish is not None:
+        return _invoke_higher_order_function("ArrayAggregate", [col, initialValue], [merge, finish])
+
+    else:
+        return _invoke_higher_order_function("ArrayAggregate", [col, initialValue], [merge])
+
+
+@try_remote_functions
+def reduce(
+    col: "ColumnOrName",
+    initialValue: "ColumnOrName",
+    merge: Callable[[Column, Column], Column],
+    finish: Optional[Callable[[Column], Column]] = None,
+) -> Column:
+    """
+    Applies a binary operator to an initial state and all elements in the array,
+    and reduces this to a single state. The final state is converted into the final result
+    by applying a finish function.
+
+    Both functions can use methods of :class:`~pyspark.sql.Column`, functions defined in
+    :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+    Python ``UserDefinedFunctions`` are not supported
+    (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    initialValue : :class:`~pyspark.sql.Column` or str
+        initial value. Name of column or expression
+    merge : function
+        a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
+        of the same type as ``zero``
+    finish : function
+        an optional unary function ``(x: Column) -> Column: ...``
+        used to convert accumulated value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        final value after aggregate function is applied.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, [20.0, 4.0, 2.0, 6.0, 10.0])], ("id", "values"))
+    >>> df.select(reduce("values", lit(0.0), lambda acc, x: acc + x).alias("sum")).show()
+    +----+
+    | sum|
+    +----+
+    |42.0|
+    +----+
+
+    >>> def merge(acc, x):
+    ...     count = acc.count + 1
+    ...     sum = acc.sum + x
+    ...     return struct(count.alias("count"), sum.alias("sum"))
+    >>> df.select(
+    ...     reduce(
     ...         "values",
     ...         struct(lit(0).alias("count"), lit(0.0).alias("sum")),
     ...         merge,

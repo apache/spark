@@ -1077,6 +1077,26 @@ def percentile_approx(
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 
 
+def approx_percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    accuracy: Union[Column, float] = 10000,
+) -> Column:
+    if isinstance(percentage, Column):
+        percentage_col = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        percentage_col = lit(list(percentage))
+    else:
+        # Probably scalar
+        percentage_col = lit(percentage)
+
+    return _invoke_function("approx_percentile", _to_col(col), percentage_col, lit(accuracy))
+
+
+approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
+
+
 def product(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("product", col)
 
@@ -1268,6 +1288,53 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = No
 nth_value.__doc__ = pysparkfuncs.nth_value.__doc__
 
 
+def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("any_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
+
+
+any_value.__doc__ = pysparkfuncs.any_value.__doc__
+
+
+def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("first_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
+
+
+first_value.__doc__ = pysparkfuncs.first_value.__doc__
+
+
+def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("last_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
+
+
+last_value.__doc__ = pysparkfuncs.last_value.__doc__
+
+
+def count_if(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("count_if", col)
+
+
+count_if.__doc__ = pysparkfuncs.count_if.__doc__
+
+
+def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("histogram_numeric", col, nBins)
+
+
+histogram_numeric.__doc__ = pysparkfuncs.histogram_numeric.__doc__
+
+
 def ntile(n: int) -> Column:
     return _invoke_function("ntile", lit(n))
 
@@ -1310,6 +1377,22 @@ def aggregate(
 
 
 aggregate.__doc__ = pysparkfuncs.aggregate.__doc__
+
+
+def reduce(
+    col: "ColumnOrName",
+    initialValue: "ColumnOrName",
+    merge: Callable[[Column, Column], Column],
+    finish: Optional[Callable[[Column], Column]] = None,
+) -> Column:
+    if finish is not None:
+        return _invoke_higher_order_function("reduce", [col, initialValue], [merge, finish])
+
+    else:
+        return _invoke_higher_order_function("reduce", [col, initialValue], [merge])
+
+
+reduce.__doc__ = pysparkfuncs.reduce.__doc__
 
 
 def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:

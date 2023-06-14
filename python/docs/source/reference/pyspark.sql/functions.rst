@@ -245,8 +245,10 @@ Aggregate Functions
 .. autosummary::
     :toctree: api/
 
+    any_value
     approxCountDistinct
     approx_count_distinct
+    approx_percentile
     avg
     collect_list
     collect_set
@@ -254,15 +256,19 @@ Aggregate Functions
     count
     count_distinct
     countDistinct
+    count_if
     covar_pop
     covar_samp
     first
+    first_value
     grouping
     grouping_id
+    histogram_numeric
     hll_sketch_agg
     hll_union_agg
     kurtosis
     last
+    last_value
     max
     max_by
     mean
@@ -273,6 +279,7 @@ Aggregate Functions
     percentile
     percentile_approx
     product
+    reduce
     regr_avgx
     regr_avgy
     regr_count
