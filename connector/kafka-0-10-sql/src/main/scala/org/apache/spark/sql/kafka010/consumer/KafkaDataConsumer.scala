@@ -601,6 +601,7 @@ private[kafka010] class KafkaDataConsumer(
     }
     startTimestampNano = System.nanoTime()
     totalTimeReadNanos = 0
+    numPolls = 0
     totalRecordsRead = 0
 
     require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
