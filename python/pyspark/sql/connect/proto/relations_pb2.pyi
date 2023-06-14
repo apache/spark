@@ -1607,27 +1607,16 @@ class CachedRemoteRelation(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    USERID_FIELD_NUMBER: builtins.int
-    SESSIONID_FIELD_NUMBER: builtins.int
-    RELATIONID_FIELD_NUMBER: builtins.int
-    userId: builtins.str
-    """(Required) An identifier of the user which cached the relation"""
-    sessionId: builtins.str
-    """(Required) An identifier of the Spark session in which the relation is cached"""
-    relationId: builtins.str
-    """(Required) A key represents the id of the cached relation"""
+    RELATION_ID_FIELD_NUMBER: builtins.int
+    relation_id: builtins.str
+    """(Required) ID of the remote related (assigned by the service)."""
     def __init__(
         self,
         *,
-        userId: builtins.str = ...,
-        sessionId: builtins.str = ...,
-        relationId: builtins.str = ...,
+        relation_id: builtins.str = ...,
     ) -> None: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "relationId", b"relationId", "sessionId", b"sessionId", "userId", b"userId"
-        ],
+        self, field_name: typing_extensions.Literal["relation_id", b"relation_id"]
     ) -> None: ...
 
 global___CachedRemoteRelation = CachedRemoteRelation
