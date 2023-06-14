@@ -30,7 +30,7 @@ import org.apache.spark.sql.streaming.GroupState;
  * {@code org.apache.spark.sql.KeyValueGroupedDataset.flatMapGroupsWithState(
  * FlatMapGroupsWithStateFunction, org.apache.spark.sql.streaming.OutputMode,
  * org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}
- * @since 2.1.1
+ * @since 3.5.0
  */
 @Experimental
 @Evolving
