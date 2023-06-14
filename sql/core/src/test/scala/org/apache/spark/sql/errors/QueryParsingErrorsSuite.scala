@@ -21,6 +21,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.test.SharedSparkSession
 
 // Turn of the length check because most of the tests check entire error messages
@@ -36,7 +37,12 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       checkError(
         exception = parseException("SELECT * FROM encode(value => 'abc', charset => 'utf-8')"),
         errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
-        parameters = Map("functionName" -> "encode", "argument" -> "value")
+        parameters = Map("functionName" -> toSQLId("encode"), "argument" -> toSQLId("value"))
+      )
+      checkError(
+        exception = parseException("SELECT explode(arr => array(10, 20))"),
+        errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
+        parameters = Map("functionName"-> toSQLId("explode"), "argument" -> toSQLId("arr"))
       )
     }
   }

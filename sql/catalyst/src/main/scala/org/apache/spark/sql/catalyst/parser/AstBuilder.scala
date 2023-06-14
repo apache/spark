@@ -1513,6 +1513,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
   }
 
+  private def extractExpression(expr: FunctionArgumentContext, funcName: String) : Expression = {
+    Option(expr.namedArgumentExpression).map { n =>
+      if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
+        NamedArgumentExpression(n.key.getText, expression(n.value))
+      } else {
+        throw QueryCompilationErrors.namedArgumentsNotEnabledError(
+          funcName, n.key.getText)
+      }
+    }.getOrElse {
+      expression(expr)
+    }
+  }
+
   private def withTimeTravel(
       ctx: TemporalClauseContext, plan: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val v = ctx.version
@@ -1545,16 +1558,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
         }
         val args = func.functionArgument.asScala.map { e =>
-          Option(e.namedArgumentExpression).map { n =>
-            if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
-              NamedArgumentExpression(n.key.getText, expression(n.value))
-            } else {
-              throw QueryCompilationErrors.namedArgumentsNotEnabledError(
-                func.functionName.getText, n.key.getText)
-            }
-          }.getOrElse {
-            expression(e)
-          }
+          extractExpression(e, func.functionName.getText)
         }.toSeq
 
         val tvf = UnresolvedTableValuedFunction(name, args)
@@ -2189,16 +2193,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
     val arguments = ctx.argument.asScala.map { e =>
-      Option(e.namedArgumentExpression).map { n =>
-        if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
-          NamedArgumentExpression(n.key.getText, expression(n.value))
-        } else {
-          throw QueryCompilationErrors.namedArgumentsNotEnabledError(
-            name, n.key.getText)
-        }
-      }.getOrElse {
-        expression(e)
-      }
+      extractExpression(e, name)
     }.toSeq match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
