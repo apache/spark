@@ -36,7 +36,6 @@ from typing import (
     overload,
 )
 import warnings
-import re
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
