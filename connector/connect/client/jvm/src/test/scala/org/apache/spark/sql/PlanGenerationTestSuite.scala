@@ -986,8 +986,12 @@ class PlanGenerationTestSuite
     fn.min_by(fn.col("a"), fn.col("b"))
   }
 
-  functionTest("percentile") {
+  functionTest("percentile without frequency") {
     fn.percentile(fn.col("a"), fn.lit(0.3))
+  }
+
+  functionTest("percentile with frequency") {
+    fn.percentile(fn.col("a"), fn.lit(0.3), fn.lit(2))
   }
 
   functionTest("percentile_approx") {
@@ -1474,12 +1478,48 @@ class PlanGenerationTestSuite
     fn.octet_length(fn.col("g"))
   }
 
+  functionTest("rlike") {
+    fn.rlike(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp") {
+    fn.regexp(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp_like") {
+    fn.regexp_like(fn.col("g"), lit("[a-z]+b"))
+  }
+
+  functionTest("regexp_count") {
+    fn.regexp_count(fn.col("g"), lit("\\d+"))
+  }
+
   functionTest("regexp_extract") {
     fn.regexp_extract(fn.col("g"), "(\\d+)-(\\d+)", 1)
   }
 
+  functionTest("regexp_extract_all without regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"))
+  }
+
+  functionTest("regexp_extract_all with regex group index") {
+    fn.regexp_extract_all(fn.col("g"), lit("(\\d+)([a-z]+)"), lit(1))
+  }
+
   functionTest("regexp_replace") {
     fn.regexp_replace(fn.col("g"), "(\\d+)", "XXX")
+  }
+
+  functionTest("regexp_substr") {
+    fn.regexp_substr(fn.col("g"), lit("\\d{2}(a|b|m)"))
+  }
+
+  functionTest("regexp_instr without regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"))
+  }
+
+  functionTest("regexp_instr with regex group index") {
+    fn.regexp_instr(fn.col("g"), lit("\\d+(a|b|m)"), lit(1))
   }
 
   functionTest("unbase64") {
@@ -2078,6 +2118,58 @@ class PlanGenerationTestSuite
 
   functionTest("to_csv") {
     fn.to_csv(fn.col("d"), Collections.singletonMap("sep", "|"))
+  }
+
+  functionTest("str_to_map") {
+    fn.str_to_map(fn.col("g"))
+  }
+
+  functionTest("str_to_map with pair delimiter") {
+    fn.str_to_map(fn.col("g"), lit(","), lit("="))
+  }
+
+  functionTest("str_to_map with pair and keyValue delimiter") {
+    fn.str_to_map(fn.col("g"), lit(","))
+  }
+
+  functionTest("to_binary") {
+    fn.to_binary(fn.col("g"))
+  }
+
+  functionTest("to_binary with format") {
+    fn.to_binary(fn.col("g"), lit("utf-8"))
+  }
+
+  functionTest("to_char") {
+    fn.to_char(fn.col("b"), lit("$99.99"))
+  }
+
+  functionTest("to_number") {
+    fn.to_char(fn.col("g"), lit("$99.99"))
+  }
+
+  functionTest("to_timestamp_ltz") {
+    fn.to_timestamp_ltz(fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ltz with format") {
+    fn.to_timestamp_ltz(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ntz") {
+    fn.to_timestamp_ntz(fn.col("g"))
+  }
+
+  functionTest("to_timestamp_ntz with format") {
+    fn.to_timestamp_ntz(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("to_unix_timestamp") {
+    fn.to_unix_timestamp(fn.col("g"))
+  }
+
+  functionTest("to_unix_timestamp with format") {
+    fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
   test("groupby agg") {

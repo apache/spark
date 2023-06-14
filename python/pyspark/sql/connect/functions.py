@@ -1688,6 +1688,20 @@ def map_zip_with(
 map_zip_with.__doc__ = pysparkfuncs.map_zip_with.__doc__
 
 
+def str_to_map(
+    text: "ColumnOrName",
+    pairDelim: Optional["ColumnOrName"] = None,
+    keyValueDelim: Optional["ColumnOrName"] = None,
+) -> Column:
+    _pairDelim = lit(",") if pairDelim is None else _to_col(pairDelim)
+    _keyValueDelim = lit(":") if keyValueDelim is None else _to_col(keyValueDelim)
+
+    return _invoke_function("str_to_map", _to_col(text), _pairDelim, _keyValueDelim)
+
+
+str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
+
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
@@ -2081,11 +2095,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 split.__doc__ = pysparkfuncs.split.__doc__
 
 
+def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("rlike", str, regexp)
+
+
+rlike.__doc__ = pysparkfuncs.rlike.__doc__
+
+
+def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp", str, regexp)
+
+
+regexp.__doc__ = pysparkfuncs.regexp.__doc__
+
+
+def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_like", str, regexp)
+
+
+regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_count", str, regexp)
+
+
+regexp_count.__doc__ = pysparkfuncs.regexp_count.__doc__
+
+
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_col(str), lit(pattern), lit(idx))
 
 
 regexp_extract.__doc__ = pysparkfuncs.regexp_extract.__doc__
+
+
+def regexp_extract_all(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+
+
+regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
@@ -2101,6 +2157,27 @@ def regexp_replace(
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
+
+
+def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_substr", str, regexp)
+
+
+regexp_substr.__doc__ = pysparkfuncs.regexp_substr.__doc__
+
+
+def regexp_instr(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_instr", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+
+
+regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
 
 
 def initcap(col: "ColumnOrName") -> Column:
@@ -2143,6 +2220,30 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 
 
 translate.__doc__ = pysparkfuncs.translate.__doc__
+
+
+def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_binary", col, format)
+    else:
+        return _invoke_function_over_columns("to_binary", col)
+
+
+to_binary.__doc__ = pysparkfuncs.to_binary.__doc__
+
+
+def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_char", col, format)
+
+
+to_char.__doc__ = pysparkfuncs.to_char.__doc__
+
+
+def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_number", col, format)
+
+
+to_number.__doc__ = pysparkfuncs.to_number.__doc__
 
 
 # Date/Timestamp functions
@@ -2568,6 +2669,45 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
 
 session_window.__doc__ = pysparkfuncs.session_window.__doc__
+
+
+def to_unix_timestamp(
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
+) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
+    else:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp)
+
+
+to_unix_timestamp.__doc__ = pysparkfuncs.to_unix_timestamp.__doc__
+
+
+def to_timestamp_ltz(
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
+) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
+
+
+to_timestamp_ltz.__doc__ = pysparkfuncs.to_timestamp_ltz.__doc__
+
+
+def to_timestamp_ntz(
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
+) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
+
+
+to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__
 
 
 # Partition Transformation Functions

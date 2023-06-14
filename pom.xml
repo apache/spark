@@ -186,7 +186,7 @@
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
-    <commons-io.version>2.12.0</commons-io.version>
+    <commons-io.version>2.13.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -276,6 +276,13 @@
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
+
+    <!-- Version used in Connect -->
+    <connect.guava.version>31.0.1-jre</connect.guava.version>
+    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
+    <io.grpc.version>1.47.0</io.grpc.version>
+    <mima.version>1.1.2</mima.version>
+    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -2889,7 +2896,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.10</version>
+                <version>1.7.13</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>

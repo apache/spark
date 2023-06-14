@@ -23,28 +23,10 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 class SeriesParityStatTests(SeriesStatMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
     @unittest.skip(
-        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_cov(self):
-        super().test_cov()
-
-    @unittest.skip(
-        "TODO(SPARK-43616): Enable pyspark.pandas.spark.functions.mode in Spark Connect."
-    )
-    def test_mode(self):
-        super().test_mode()
-
-    @unittest.skip(
         "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_pct_change(self):
         super().test_pct_change()
-
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
-    def test_product(self):
-        super().test_product()
 
     @unittest.skip("TODO(SPARK-43618): Fix pyspark.sq.column._unary_op to work with Spark Connect.")
     def test_rank(self):

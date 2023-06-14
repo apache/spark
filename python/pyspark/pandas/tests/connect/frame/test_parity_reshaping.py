@@ -33,12 +33,6 @@ class FrameParityReshapingTests(FrameReshapingMixin, PandasOnSparkTestUtils, Reu
     def test_transpose(self):
         super().test_transpose()
 
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_unstack(self):
-        super().test_unstack()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.frame.test_parity_reshaping import *  # noqa: F401

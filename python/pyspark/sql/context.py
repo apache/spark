@@ -41,6 +41,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
+from pyspark.sql.udtf import UDTFRegistration
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -227,6 +228,18 @@ class SQLContext:
         :class:`UDFRegistration`
         """
         return self.sparkSession.udf
+
+    @property
+    def udtf(self) -> UDTFRegistration:
+        """Returns a :class:`UDTFRegistration` for UDTF registration.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`UDTFRegistration`
+        """
+        return self.sparkSession.udtf
 
     def range(
         self,

@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -91,12 +92,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     rowIdAttrs
   }
 
+  protected def resolveAttrRef(name: String, plan: LogicalPlan): AttributeReference = {
+    V2ExpressionUtils.resolveRef[AttributeReference](FieldReference(name), plan)
+  }
+
   protected def deltaDeleteOutput(
       rowAttrs: Seq[Attribute],
       rowIdAttrs: Seq[Attribute],
-      metadataAttrs: Seq[Attribute]): Seq[Expression] = {
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
     val rowValues = buildDeltaDeleteRowValues(rowAttrs, rowIdAttrs)
-    Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataAttrs
+    Seq(Literal(DELETE_OPERATION)) ++ rowValues ++ metadataAttrs ++ originalRowIdValues
   }
 
   private def buildDeltaDeleteRowValues(
@@ -112,10 +118,20 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 
   protected def deltaInsertOutput(
-      rowValues: Seq[Expression],
-      metadataAttrs: Seq[Attribute]): Seq[Expression] = {
-    val metadataValues = metadataAttrs.map(attr => Literal(null, attr.dataType))
-    Seq(Literal(INSERT_OPERATION)) ++ rowValues ++ metadataValues
+      assignments: Seq[Assignment],
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression] = Seq.empty): Seq[Expression] = {
+    val rowValues = assignments.map(_.value)
+    val extraNullValues = (metadataAttrs ++ originalRowIdValues).map(e => Literal(null, e.dataType))
+    Seq(Literal(INSERT_OPERATION)) ++ rowValues ++ extraNullValues
+  }
+
+  protected def deltaUpdateOutput(
+      assignments: Seq[Assignment],
+      metadataAttrs: Seq[Attribute],
+      originalRowIdValues: Seq[Expression]): Seq[Expression] = {
+    val rowValues = assignments.map(_.value)
+    Seq(Literal(UPDATE_OPERATION)) ++ rowValues ++ metadataAttrs ++ originalRowIdValues
   }
 
   protected def buildWriteDeltaProjections(
@@ -166,5 +182,37 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
     plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+  }
+
+  protected def buildOriginalRowIdValues(
+      rowIdAttrs: Seq[Attribute],
+      assignments: Seq[Assignment]): Seq[Alias] = {
+    val rowIdAttrSet = AttributeSet(rowIdAttrs)
+    assignments.flatMap { assignment =>
+      val key = assignment.key.asInstanceOf[Attribute]
+      val value = assignment.value
+      if (rowIdAttrSet.contains(key) && !key.semanticEquals(value)) {
+        Some(Alias(key, ORIGINAL_ROW_ID_VALUE_PREFIX + key.name)())
+      } else {
+        None
+      }
+    }
+  }
+
+  // generates output attributes with fresh expr IDs and correct nullability for nodes like Expand
+  // and MergeRows where there are multiple outputs for each input row
+  protected def generateExpandOutput(
+      attrs: Seq[Attribute],
+      outputs: Seq[Seq[Expression]]): Seq[Attribute] = {
+
+    // build a correct nullability map for output attributes
+    // an attribute is nullable if at least one output may produce null
+    val nullabilityMap = attrs.indices.map { index =>
+      index -> outputs.exists(output => output(index).nullable)
+    }.toMap
+
+    attrs.zipWithIndex.map { case (attr, index) =>
+      AttributeReference(attr.name, attr.dataType, nullabilityMap(index), attr.metadata)()
+    }
   }
 }
