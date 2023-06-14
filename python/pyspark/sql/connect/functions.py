@@ -2096,11 +2096,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 split.__doc__ = pysparkfuncs.split.__doc__
 
 
+def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("rlike", str, regexp)
+
+
+rlike.__doc__ = pysparkfuncs.rlike.__doc__
+
+
+def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp", str, regexp)
+
+
+regexp.__doc__ = pysparkfuncs.regexp.__doc__
+
+
+def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_like", str, regexp)
+
+
+regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_count", str, regexp)
+
+
+regexp_count.__doc__ = pysparkfuncs.regexp_count.__doc__
+
+
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_col(str), lit(pattern), lit(idx))
 
 
 regexp_extract.__doc__ = pysparkfuncs.regexp_extract.__doc__
+
+
+def regexp_extract_all(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+
+
+regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
@@ -2116,6 +2158,27 @@ def regexp_replace(
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
+
+
+def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_substr", str, regexp)
+
+
+regexp_substr.__doc__ = pysparkfuncs.regexp_substr.__doc__
+
+
+def regexp_instr(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_instr", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+
+
+regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
 
 
 def initcap(col: "ColumnOrName") -> Column:

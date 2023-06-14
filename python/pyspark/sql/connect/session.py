@@ -592,7 +592,7 @@ class SparkSession:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
-        elif name in ["newSession", "sparkContext"]:
+        elif name in ["newSession", "sparkContext", "udtf"]:
             raise PySparkNotImplementedError(
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
