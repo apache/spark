@@ -21,9 +21,9 @@ import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
-import org.apache.spark.tags.ExtendedStructuredStreamingTest
+import org.apache.spark.tags.SlowSQLTest
 
-@ExtendedStructuredStreamingTest
+@SlowSQLTest
 class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
 
   import testImplicits._

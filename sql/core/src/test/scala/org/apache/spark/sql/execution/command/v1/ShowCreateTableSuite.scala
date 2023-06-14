@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
-import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `SHOW CREATE TABLE` command that checks V1
@@ -192,7 +191,6 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
  * The class contains tests for the `SHOW CREATE TABLE` command to check V1 In-Memory
  * table catalog.
  */
-@ExtendedSQLCommandTest
 class ShowCreateTableSuite extends ShowCreateTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
 }

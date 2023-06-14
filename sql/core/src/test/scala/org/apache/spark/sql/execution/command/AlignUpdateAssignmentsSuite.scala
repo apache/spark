@@ -23,9 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Assignment, UpdateTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.tags.ExtendedSQLCommandTest
 
-@ExtendedSQLCommandTest
 class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {

@@ -37,10 +37,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedSQLCommandTest
 import org.apache.spark.util.Utils
 
-@ExtendedSQLCommandTest
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   import testImplicits._
 

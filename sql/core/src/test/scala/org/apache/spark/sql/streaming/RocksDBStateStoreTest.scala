@@ -23,9 +23,9 @@ import org.scalatest.Tag
 import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.tags.ExtendedStructuredStreamingTest
+import org.apache.spark.tags.SlowSQLTest
 
-@ExtendedStructuredStreamingTest
+@SlowSQLTest
 trait RocksDBStateStoreTest extends SQLTestUtils {
 
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +

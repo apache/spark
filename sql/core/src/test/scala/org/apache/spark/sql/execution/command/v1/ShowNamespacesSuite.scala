@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.execution.command
-import org.apache.spark.tags.ExtendedSQLCommandTest
 import org.apache.spark.util.Utils
 
 /**
@@ -55,7 +54,6 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   }
 }
 
-@ExtendedSQLCommandTest
 class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = "V2" // There is only V2 variant of SHOW NAMESPACES.
 }

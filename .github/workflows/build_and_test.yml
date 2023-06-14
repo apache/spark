@@ -175,7 +175,7 @@ jobs:
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
-            comment: "- slow tests"
+            comment: "- extended tests"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
@@ -183,10 +183,10 @@ jobs:
             # Using a tag that will not appear in sql module for placeholder, branch-3.3 and branch-3.4 will not run any UTs.
             included-tags: >-
               ${{
-                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedHiveTest')
-                || 'org.apache.spark.tags.ExtendedSQLCommandTest,org.apache.spark.tags.ExtendedStructuredStreamingTest'
+                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.SlowHiveTest')
+                || 'org.apache.spark.tags.SlowSQLTest'
               }}
-            comment: "- command and structured streaming tests"
+            comment: "- slow tests"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
@@ -194,7 +194,7 @@ jobs:
             excluded-tags: >-
               ${{
                 ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedSQLTest')
-                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.ExtendedSQLCommandTest,org.apache.spark.tags.ExtendedStructuredStreamingTest'
+                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest'
               }}
             comment: "- other tests"
     env:

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
-import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `DROP TABLE` command that check V1
@@ -45,6 +44,5 @@ trait DropTableSuiteBase extends command.DropTableSuiteBase {
 /**
  * The class contains tests for the `DROP TABLE` command to check V1 In-Memory table catalog.
  */
-@ExtendedSQLCommandTest
 class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase
 

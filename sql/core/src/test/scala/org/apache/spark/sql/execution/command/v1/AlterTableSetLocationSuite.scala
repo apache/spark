@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. SET LOCATION`
@@ -134,7 +133,6 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
   }
 }
 
-@ExtendedSQLCommandTest
 class AlterTableSetLocationSuite extends AlterTableSetLocationSuiteBase with CommandSuiteBase {
 
   override def buildCreateTableSQL(t: String): String =

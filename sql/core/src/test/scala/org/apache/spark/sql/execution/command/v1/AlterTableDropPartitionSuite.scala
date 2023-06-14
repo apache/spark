@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedSQLCommandTest
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. DROP PARTITION` command that
@@ -73,7 +72,6 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
  * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
  * V1 In-Memory table catalog.
  */
-@ExtendedSQLCommandTest
 class AlterTableDropPartitionSuite
   extends AlterTableDropPartitionSuiteBase
   with CommandSuiteBase {
