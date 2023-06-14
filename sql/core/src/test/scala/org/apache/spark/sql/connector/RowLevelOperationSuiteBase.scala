@@ -22,15 +22,19 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, Encoders, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.unsafe.types.UTF8String
 
 abstract class RowLevelOperationSuiteBase
   extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
@@ -113,5 +117,48 @@ abstract class RowLevelOperationSuiteBase
     sparkContext.listenerBus.waitUntilEmpty()
 
     stripAQEPlan(executedPlan)
+  }
+
+  protected def executeAndCheckScans(
+      query: String,
+      primaryScanSchema: String,
+      groupFilterScanSchema: Option[String]): Unit = {
+
+    val executedPlan = executeAndKeepPlan {
+      sql(query)
+    }
+
+    val primaryScan = collect(executedPlan) {
+      case s: BatchScanExec => s
+    }.head
+    assert(DataTypeUtils.sameType(primaryScan.schema, StructType.fromDDL(primaryScanSchema)))
+
+    val groupFilterScan = primaryScan.runtimeFilters match {
+      case Seq(DynamicPruningExpression(child: InSubqueryExec)) =>
+        find(child.plan) {
+          case _: BatchScanExec => true
+          case _ => false
+        }
+      case _ =>
+        None
+    }
+
+    groupFilterScanSchema match {
+      case Some(filterSchema) =>
+        assert(groupFilterScan.isDefined, "could not find group filter scan")
+        assert(DataTypeUtils.sameType(groupFilterScan.get.schema, StructType.fromDDL(filterSchema)))
+
+      case None =>
+        assert(groupFilterScan.isEmpty, "should not be any group filter scans")
+    }
+  }
+
+  protected def checkReplacedPartitions(expectedPartitions: Seq[Any]): Unit = {
+    val actualPartitions = table.replacedPartitions.map {
+      case Seq(partValue: UTF8String) => partValue.toString
+      case Seq(partValue) => partValue
+      case other => fail(s"expected only one partition value: $other" )
+    }
+    assert(actualPartitions == expectedPartitions, "replaced partitions must match")
   }
 }

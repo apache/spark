@@ -427,16 +427,18 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
  * This class extracts the following entities:
  *  - the group-based rewrite plan;
  *  - the condition that defines matching groups;
+ *  - the group filter condition;
  *  - the read relation that can be either [[DataSourceV2Relation]] or [[DataSourceV2ScanRelation]]
  *  depending on whether the planning has already happened;
  */
 object GroupBasedRowLevelOperation {
-  type ReturnType = (ReplaceData, Expression, LogicalPlan)
+  type ReturnType = (ReplaceData, Expression, Option[Expression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _), cond, query, _, _) =>
+    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _),
+        cond, query, _, groupFilterCond, _) =>
       val readRelation = findReadRelation(table, query)
-      readRelation.map((rd, cond, _))
+      readRelation.map((rd, cond, groupFilterCond, _))
 
     case _ =>
       None

@@ -213,6 +213,7 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
  * @param condition a condition that defines matching groups
  * @param query a query with records that should replace the records that were read
  * @param originalTable a plan for the original table for which the row-level command was triggered
+ * @param groupFilterCondition a condition that can be used to filter groups at runtime
  * @param write a logical write, if already constructed
  */
 case class ReplaceData(
@@ -220,6 +221,7 @@ case class ReplaceData(
     condition: Expression,
     query: LogicalPlan,
     originalTable: NamedRelation,
+    groupFilterCondition: Option[Expression] = None,
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
