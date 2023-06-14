@@ -35,7 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
@@ -606,6 +606,57 @@ class SparkSession private(
   /* ----------------- *
    |  Everything else  |
    * ----------------- */
+
+  /**
+   * Executes a SQL query substituting positional parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText A SQL statement with positional parameters to execute.
+   * @param args A sequence of Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             A value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: Seq[Any]): DataFrame = withActive {
+    val tracker = new QueryPlanningTracker
+    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+      val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+      if (args.nonEmpty) {
+        PosParameterizedQuery(parsedPlan, args.map(lit(_).expr))
+      } else {
+        parsedPlan
+      }
+    }
+    Dataset.ofRows(self, plan, tracker)
+  }
+
+  /**
+   * Executes a SQL query substituting positional parameters by the given arguments,
+   * returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * @param sqlText A SQL statement with positional parameters to execute.
+   * @param args A list of Java/Scala objects that can be converted to
+   *             SQL literal expressions. See
+   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *             Supported Data Types</a> for supported value types in Scala/Java.
+   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
+   *             A value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def sql(sqlText: String, args: java.util.List[_]): DataFrame = {
+    sql(sqlText, args.asScala.toSeq)
+  }
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments,
