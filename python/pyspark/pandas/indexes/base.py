@@ -1822,7 +1822,7 @@ class Index(IndexOpsMixin):
         # when self._scol has name of '__index_level_0__'
         index_value_column_format = "__index_value_{}__"
 
-        sdf = self._internal._sdf  # type: ignore[has-type]
+        sdf = self._internal._sdf
         index_value_column_names = [
             verify_temp_column_name(sdf, index_value_column_format.format(i))
             for i in range(self._internal.index_level)

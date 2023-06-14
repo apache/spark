@@ -38,7 +38,7 @@ from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pa
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class
 from pyspark.errors import PySparkValueError
 
 
@@ -331,43 +331,23 @@ class BooleanOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__lt__)(left, right)  # type: ignore[arg-type]
+        Column = get_column_class()
+        return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__le__)(left, right)  # type: ignore[arg-type]
+        Column = get_column_class()
+        return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__ge__)(left, right)  # type: ignore[arg-type]
+        Column = get_column_class()
+        return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__gt__)(left, right)  # type: ignore[arg-type]
+        Column = get_column_class()
+        return column_op(Column.__gt__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(~operand.spark.column, field=operand._internal.data_fields[0])

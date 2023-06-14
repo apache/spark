@@ -30,7 +30,7 @@ from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 # For Supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -119,12 +119,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         if isinstance(self._data, MultiIndex):
             raise NotImplementedError("MultiIndex does not support spark.transform yet.")
         output = func(self._data.spark.column)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
@@ -200,12 +195,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
         from pyspark.pandas.internal import HIDDEN_COLUMNS
 
         output = func(self._data.spark.column)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
@@ -952,12 +942,7 @@ class SparkFrameMethods:
         2  3      1
         """
         output = func(self.frame(index_col))
-        if is_remote():
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            SparkDataFrame = ConnectDataFrame
-        else:
-            SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+        SparkDataFrame = get_dataframe_class()
         if not isinstance(output, SparkDataFrame):
             raise ValueError(
                 "The output of the function [%s] should be of a "

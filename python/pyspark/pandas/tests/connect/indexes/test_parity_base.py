@@ -43,6 +43,9 @@ class IndexesParityTests(
     def test_to_series(self):
         super().test_to_series()
 
+    def test_monotonic(self):
+        super().test_monotonic()
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.indexes.test_parity_base import *  # noqa: F401

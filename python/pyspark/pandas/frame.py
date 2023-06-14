@@ -149,7 +149,7 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 # For supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -527,12 +527,7 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
-        if is_remote():
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            SparkDataFrame = ConnectDataFrame
-        else:
-            SparkDataFrame = PySparkDataFrame
+        SparkDataFrame = get_dataframe_class()
         index_assigned = False
         if isinstance(data, InternalFrame):
             assert columns is None
@@ -5497,12 +5492,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.indexes import MultiIndex
         from pyspark.pandas.series import IndexOpsMixin
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         for k, v in kwargs.items():
             is_invalid_assignee = (
                 not (isinstance(v, (IndexOpsMixin, Column)) or callable(v) or is_scalar(v))
@@ -5533,7 +5523,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     scol, field = pairs[label[: len(label) - i]]
 
                     name = self._internal.spark_column_name_for(label)
-                    scol = scol.alias(name)  # type: ignore[attr-defined]
+                    scol = scol.alias(name)
                     if field is not None:
                         field = field.copy(name=name)
                     break
@@ -5547,7 +5537,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, (scol, field) in pairs.items():
             if label not in set(i[: len(label)] for i in self._internal.column_labels):
                 name = name_like_string(label)
-                scols.append(scol.alias(name))  # type: ignore[attr-defined]
+                scols.append(scol.alias(name))
                 if field is not None:
                     field = field.copy(name=name)
                 data_fields.append(field)
@@ -7488,12 +7478,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {
@@ -7502,12 +7487,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "first"): Column.desc_nulls_first,
             (False, "last"): Column.desc_nulls_last,
         }
-        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]  # type: ignore
+        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
         if keep == "last":
-            natural_order_scol = Column.desc(natural_order_scol)  # type: ignore
+            natural_order_scol = Column.desc(natural_order_scol)
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
@@ -13641,12 +13626,7 @@ def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-        SparkDataFrame = ConnectDataFrame
-    else:
-        SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+    SparkDataFrame = get_dataframe_class()
     assert isinstance(sdf, SparkDataFrame)
     sdf0 = sdf.agg(*aggs)
     lst = sdf0.limit(2).toPandas()

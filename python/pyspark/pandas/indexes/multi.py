@@ -23,7 +23,7 @@ from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defi
 
 from pyspark.sql import functions as F, Column as PySparkColumn, Window
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
@@ -515,12 +515,7 @@ class MultiIndex(Index):
 
         cond = F.lit(True)
         has_not_null = F.lit(True)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -566,12 +561,7 @@ class MultiIndex(Index):
 
         cond = F.lit(True)
         has_not_null = F.lit(True)
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)

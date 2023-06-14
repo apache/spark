@@ -70,7 +70,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
@@ -4213,12 +4213,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if ascending:
             asc_func = Column.asc
         else:
@@ -4227,8 +4222,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if method == "first":
             window = (
                 Window.orderBy(
-                    asc_func(self.spark.column),  # type: ignore[arg-type]
-                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),  # type: ignore[arg-type]
+                    asc_func(self.spark.column),
+                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
@@ -4236,7 +4231,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.row_number().over(window)
         elif method == "dense":
             window = (
-                Window.orderBy(asc_func(self.spark.column))  # type: ignore[arg-type]
+                Window.orderBy(asc_func(self.spark.column))
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -4249,7 +4244,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             elif method == "max":
                 stat_func = F.max
             window1 = (
-                Window.orderBy(asc_func(self.spark.column))  # type: ignore[arg-type]
+                Window.orderBy(asc_func(self.spark.column))
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
