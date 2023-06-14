@@ -86,6 +86,8 @@ package object expressions  {
     }
   }
 
+  val DO_NOT_RESOLVE_BY_NAME = "__do_not_resolve_by_name"
+
   /**
    * Helper functions for working with `Seq[Attribute]`.
    */
@@ -129,15 +131,20 @@ package object expressions  {
       m.mapValues(_.distinct).toMap
     }
 
+    private def visibleAttrs = attrs.filterNot { a =>
+      val m = a.metadata
+      m.contains(DO_NOT_RESOLVE_BY_NAME) && m.getBoolean(DO_NOT_RESOLVE_BY_NAME)
+    }
+
     /** Map to use for direct case insensitive attribute lookups. */
     @transient private lazy val direct: Map[String, Seq[Attribute]] = {
-      unique(attrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
+      unique(visibleAttrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
     }
 
     /** Map to use for qualified case insensitive attribute lookups with 2 part key */
     @transient private lazy val qualified: Map[(String, String), Seq[Attribute]] = {
       // key is 2 part: table/alias and name
-      val grouped = attrs.filter(_.qualifier.nonEmpty).groupBy {
+      val grouped = visibleAttrs.filter(_.qualifier.nonEmpty).groupBy {
         a => (a.qualifier.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
@@ -146,7 +153,7 @@ package object expressions  {
     /** Map to use for qualified case insensitive attribute lookups with 3 part key */
     @transient private lazy val qualified3Part: Map[(String, String, String), Seq[Attribute]] = {
       // key is 3 part: database name, table name and name
-      val grouped = attrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
+      val grouped = visibleAttrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
         .groupBy { a =>
           val qualifier = if (a.qualifier.length == 2) {
             a.qualifier
@@ -164,7 +171,7 @@ package object expressions  {
     @transient
     private lazy val qualified4Part: Map[(String, String, String, String), Seq[Attribute]] = {
       // key is 4 part: catalog name, database name, table name and name
-      val grouped = attrs.filter(_.qualifier.length == 3).groupBy { a =>
+      val grouped = visibleAttrs.filter(_.qualifier.length == 3).groupBy { a =>
         a.qualifier match {
           case Seq(catalog, db, tbl) =>
             (catalog.toLowerCase(Locale.ROOT),
@@ -178,7 +185,7 @@ package object expressions  {
 
     /** Returns true if all qualifiers in `attrs` have 3 or less parts. */
     @transient private val hasThreeOrLessQualifierParts: Boolean =
-      attrs.forall(_.qualifier.length <= 3)
+      visibleAttrs.forall(_.qualifier.length <= 3)
 
     /** Match attributes for the case where all qualifiers in `attrs` have 3 or less parts. */
     private def matchWithThreeOrLessQualifierParts(

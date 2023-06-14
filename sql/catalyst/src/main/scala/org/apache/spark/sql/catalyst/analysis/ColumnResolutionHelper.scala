@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 
 trait ColumnResolutionHelper extends Logging {
 
@@ -152,7 +153,22 @@ trait ColumnResolutionHelper extends Logging {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(_, Some(exprId)) =>
+          val candidates = getAttrCandidates()
+          val candidate = candidates.find(_.exprId == exprId).map { a =>
+            // At this point we are explicitly referencing the attribute and we should unhide it.
+            if (a.metadata.contains(DO_NOT_RESOLVE_BY_NAME)) {
+              a.withMetadata(new MetadataBuilder()
+                .withMetadata(a.metadata)
+                .remove(DO_NOT_RESOLVE_BY_NAME)
+                .build())
+            } else {
+              a
+            }
+          }
+          candidate.getOrElse(u)
+
+        case u @ UnresolvedAttribute(nameParts, _) =>
           val result = withPosition(u) {
             resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,

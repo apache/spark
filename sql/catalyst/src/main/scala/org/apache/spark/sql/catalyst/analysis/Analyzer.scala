@@ -1928,11 +1928,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
           case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
-            if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction, nullOrdering, Seq.empty)
-            } else {
-              throw QueryCompilationErrors.orderByPositionRangeError(index, child.output.size, s)
-            }
+            SortOrder(attribute(child, index, s), direction, nullOrdering, Seq.empty)
           case o => o
         }
         Sort(newOrders, global, child)
@@ -1943,6 +1939,20 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         groups.exists(containUnresolvedOrdinal) =>
         val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
         Aggregate(newGroups, aggs, child)
+
+      case p: Project =>
+        p.transformExpressions {
+          case uo @ UnresolvedOrdinal(index) =>
+            attribute(p.child, index, uo)
+        }
+    }
+
+    private def attribute(child: LogicalPlan, index: Int, e: Expression): Attribute = {
+      if (index > 0 && index <= child.output.size) {
+        child.output(index - 1)
+      } else {
+        throw QueryCompilationErrors.orderByPositionRangeError(index, child.output.size, e)
+      }
     }
 
     private def containUnresolvedOrdinal(e: Expression): Boolean = e match {

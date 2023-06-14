@@ -207,12 +207,18 @@ object UnresolvedTVFAliases {
 /**
  * Holds the name of an attribute that has yet to be resolved.
  */
-case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
+case class UnresolvedAttribute(
+    nameParts: Seq[String],
+    optionalExprId: Option[ExprId])
+  extends Attribute
+  with Unevaluable {
+
+  def this(nameParts: Seq[String]) = this(nameParts, None)
 
   def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def exprId: ExprId = optionalExprId.getOrElse(throw new UnresolvedException("exprId"))
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
@@ -223,11 +229,12 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withQualifier(newQualifier: Seq[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
-  override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
+  override def withExprId(newExprId: ExprId): UnresolvedAttribute =
+    copy(optionalExprId = Option(newExprId))
   override def withDataType(newType: DataType): Attribute = this
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ATTRIBUTE)
 
-  override def toString: String = s"'$name"
+  override def toString: String = s"'$name" + optionalExprId.map(eid => "#" + eid.id).getOrElse("")
 
   override def sql: String = nameParts.map(quoteIfNeeded(_)).mkString(".")
 
@@ -246,6 +253,11 @@ object UnresolvedAttribute {
    */
   def apply(name: String): UnresolvedAttribute =
     new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
+
+  def apply(names: Seq[String]): UnresolvedAttribute = new UnresolvedAttribute(names)
+
+  // TODO see if we can make this work with AstBuilder/ColumnResolutionHelper.
+  def unapply(ua: UnresolvedAttribute): Option[Seq[String]] = Option(ua.nameParts)
 
   /**
    * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks in

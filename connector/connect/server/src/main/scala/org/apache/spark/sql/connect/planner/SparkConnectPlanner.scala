@@ -39,7 +39,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
@@ -80,6 +80,12 @@ final case class InvalidCommandInput(
 class SparkConnectPlanner(val session: SparkSession) {
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  private val attributeIdMap = mutable.Map.empty[Long, ExprId]
+
+  private def resolveExprId(attributeId: Long): ExprId = {
+    attributeIdMap.getOrElseUpdate(attributeId, NamedExpression.newExprId)
+  }
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
@@ -1251,7 +1257,14 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformUnresolvedAttribute(
       attr: proto.Expression.UnresolvedAttribute): UnresolvedAttribute = {
-    val expr = UnresolvedAttribute.quotedString(attr.getUnparsedIdentifier)
+    val exprId = if (attr.hasAttributeId) {
+      Option(resolveExprId(attr.getAttributeId))
+    } else {
+      None
+    }
+    val expr = UnresolvedAttribute(
+      UnresolvedAttribute.parseAttributeName(attr.getUnparsedIdentifier),
+      exprId)
     if (attr.hasPlanId) {
       expr.setTagValue(LogicalPlan.PLAN_ID_TAG, attr.getPlanId)
     }
@@ -1658,6 +1671,20 @@ class SparkConnectPlanner(val session: SparkSession) {
         Some(
           CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
 
+      case "ordinal" if fun.getArgumentsCount == 1 =>
+        // TODO(hvanhovell) it might not be the best since a user can shadow these functions.
+        val ordinal = fun.getArguments(0).getLiteral.getInteger
+        Option(UnresolvedOrdinal(ordinal))
+
+      case "struct" =>
+        // We need to do this to break a tie in the analyzer, where star expansion only works on a
+        // known set of expressions, and the function resolution only works for resolved inputs.
+        // TODO(hvanhovell) we need to fix this for other star expanded expressions. That probably
+        //   requires annotating expressions are as star expandable, and a dedicated resolution code
+        //   path.
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Option(CreateStruct.create(children))
+
       case _ => None
     }
   }
@@ -1705,11 +1732,31 @@ class SparkConnectPlanner(val session: SparkSession) {
       } else {
         None
       }
-      Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = metadata)
+      val (exprId, augmentedMetadata) = if (alias.hasAttributeId) {
+        // Hide the field from by name resolution to avoid clashes.
+        val builder = new MetadataBuilder
+        metadata.foreach(builder.withMetadata)
+        builder.putBoolean(DO_NOT_RESOLVE_BY_NAME, value = true)
+        (resolveExprId(alias.getAttributeId), Option(builder.build()))
+      } else {
+        (NamedExpression.newExprId, metadata)
+      }
+      val a = Alias(
+        transformExpression(alias.getExpr),
+        alias.getName(0))(
+        exprId = exprId,
+        explicitMetadata = augmentedMetadata)
+      // scalastyle:off
+      println(s"Alias(name=${a.name}, exprId=$exprId, explicitMetadata=$augmentedMetadata)")
+      a
     } else {
       if (alias.hasMetadata) {
         throw InvalidPlanInput(
           "Alias expressions with more than 1 identifier must not use optional metadata.")
+      }
+      if (alias.hasAttributeId) {
+        throw InvalidPlanInput(
+          "Alias expressions with more than 1 identifier does not support an Attribute ID.")
       }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
     }
