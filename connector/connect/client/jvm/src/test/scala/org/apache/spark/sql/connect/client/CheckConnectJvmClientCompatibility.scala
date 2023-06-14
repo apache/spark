@@ -232,6 +232,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
 
       // RuntimeConfig
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
