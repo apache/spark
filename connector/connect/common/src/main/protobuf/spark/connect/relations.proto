@@ -399,7 +399,7 @@ message CachedLocalRelation {
 // Represents a remote relation that has been cached on server.
 message CachedRemoteRelation {
   // (Required) ID of the remote related (assigned by the service).
-  string relation_id = 3;
+  string relation_id = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.
