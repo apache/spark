@@ -19,9 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
+import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL.{jobject2assoc, pair2Assoc}
-import org.json4s.JString
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.annotation.Evolving
@@ -146,7 +146,12 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Evolving
-  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
+  class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event {
+
+    def json: String = compact(render(jsonValue))
+
+    private def jsonValue: JValue = JObject("progress" -> progress.jsonValue)
+  }
 
   /**
    * Event representing that query is idle and waiting for new data to process.
