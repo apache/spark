@@ -47,13 +47,35 @@ def product(col: Column, dropna: bool) -> Column:
 
 
 def stddev(col: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_stddev",
+            col,  # type: ignore[arg-type]
+            lit(ddof),
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
 
 def var(col: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_var",
+            col,  # type: ignore[arg-type]
+            lit(ddof),
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
 
 
 def skew(col: Column) -> Column:
