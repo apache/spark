@@ -738,7 +738,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
               messageParameters = Map(
                 "sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "),
-                "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)))
+                "operator" -> planToString(operator)))
 
           case _: UnresolvedHint => throw new IllegalStateException(
             "Logical hint operator should be removed during analysis.")
@@ -869,6 +869,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def scrubOutIds(string: String): String =
     string.replaceAll("#\\d+", "#x")
       .replaceAll("operator id = \\d+", "operator id = #x")
+      .replaceAll("rand\\(-?\\d+\\)", "rand(number)")
 
   private def planToString(plan: LogicalPlan): String = {
     if (Utils.isTesting) scrubOutIds(plan.toString) else plan.toString
