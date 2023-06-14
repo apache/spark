@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{SQLException, Statement}
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -27,12 +27,12 @@ import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-private object MsSqlServerDialect extends JdbcDialect {
+private object MsSqlServerDialect extends JdbcDialect with MergeByTempTable {
 
   // Special JDBC types in Microsoft SQL Server.
   // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
@@ -225,4 +225,21 @@ private object MsSqlServerDialect extends JdbcDialect {
     new MsSqlServerSQLQueryBuilder(this, options)
 
   override def supportsLimit: Boolean = true
+
+  override def createTempTableName(): String = "##" + super.createTempTableName()
+
+  override def createTempTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    // MsSqlServer does not have a temp table specific syntax
+    super.createTable(statement, tableName, strSchema, options)
+  }
+
+  override def getCreatePrimaryIndex(tableName: String, columns: Array[String]): String = {
+    val indexColumns = columns.map(quoteIdentifier).mkString(", ")
+    s"ALTER TABLE $tableName ADD PRIMARY KEY CLUSTERED ($indexColumns)"
+  }
+
 }
