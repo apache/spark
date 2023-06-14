@@ -439,16 +439,22 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertEqual(progress.inputRowsPerSecond, 10.0)
         self.assertEqual(progress.batchDuration, 5)
         self.assertEqual(progress.durationMs, {"getBatch": 0})
-        self.assertEqual(progress.eventTime, {
-            "min": "2016-12-05T20:54:20.827Z",
-            "avg": "2016-12-05T20:54:20.827Z",
-            "watermark": "2016-12-05T20:54:20.827Z",
-            "max": "2016-12-05T20:54:20.827Z",
-        })
-        self.assertEqual(progress.observedMetrics, {
-            "event1": Row("c1", "c2")(1, 3.0),
-            "event2": Row("rc", "min_q", "max_q")(1, "hello", "world"),
-        })
+        self.assertEqual(
+            progress.eventTime,
+            {
+                "min": "2016-12-05T20:54:20.827Z",
+                "avg": "2016-12-05T20:54:20.827Z",
+                "watermark": "2016-12-05T20:54:20.827Z",
+                "max": "2016-12-05T20:54:20.827Z",
+            },
+        )
+        self.assertEqual(
+            progress.observedMetrics,
+            {
+                "event1": Row("c1", "c2")(1, 3.0),
+                "event2": Row("rc", "min_q", "max_q")(1, "hello", "world"),
+            },
+        )
 
         # Check stateOperators list
         self.assertEqual(len(progress.stateOperators), 1)
@@ -465,11 +471,14 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertEqual(state_operator.numRowsDroppedByWatermark, 0)
         self.assertEqual(state_operator.numShufflePartitions, 2)
         self.assertEqual(state_operator.numStateStoreInstances, 2)
-        self.assertEqual(state_operator.customMetrics, {
-            "loadedMapCacheHitCount": 1,
-            "loadedMapCacheMissCount": 0,
-            "stateOnCurrentVersionSizeBytes": 2,
-        })
+        self.assertEqual(
+            state_operator.customMetrics,
+            {
+                "loadedMapCacheHitCount": 1,
+                "loadedMapCacheMissCount": 0,
+                "stateOnCurrentVersionSizeBytes": 2,
+            },
+        )
 
         # Check sources list
         self.assertEqual(len(progress.sources), 1)
