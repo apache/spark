@@ -1060,7 +1060,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   errorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
                   messageParameters = Map(
                     "name" -> name,
-                    "plan" -> plan.toString))
+                    "plan" -> planToString(plan)))
               }
             case None =>
               metricsMap.put(name, metrics)

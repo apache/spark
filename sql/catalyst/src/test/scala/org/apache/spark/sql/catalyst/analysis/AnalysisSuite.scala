@@ -830,10 +830,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "name" -> "evt1",
         "plan" ->
          """Union false, false
-           |:- CollectMetrics evt1, [count(1) AS cnt#23L]
-           |:  +- LocalRelation <empty>, [a#0]
-           |+- CollectMetrics evt1, [sum(a#25) AS sum#21L]
-           |   +- LocalRelation <empty>, [a#25]
+           |:- CollectMetrics evt1, [count(1) AS cnt#xL]
+           |:  +- LocalRelation <empty>, [a#x]
+           |+- CollectMetrics evt1, [sum(a#x) AS sum#xL]
+           |   +- LocalRelation <empty>, [a#x]
            |""".stripMargin)
     )
 
@@ -849,11 +849,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "name" -> "evt1",
         "plan" ->
           """Union false, false
-            |:- Project [cast(a#0 as string) AS a#27]
-            |:  +- CollectMetrics evt1, [count(1) AS cnt#23L]
-            |:     +- LocalRelation <empty>, [a#0]
-            |+- CollectMetrics evt1, [count(1) AS cnt#23L]
-            |   +- LocalRelation <empty>, [b#26]
+            |:- Project [cast(a#x as string) AS a#x]
+            |:  +- CollectMetrics evt1, [count(1) AS cnt#xL]
+            |:     +- LocalRelation <empty>, [a#x]
+            |+- CollectMetrics evt1, [count(1) AS cnt#xL]
+            |   +- LocalRelation <empty>, [b#x]
             |""".stripMargin)
     )
 
@@ -868,12 +868,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedMessageParameters = Map(
         "name" -> "evt1",
         "plan" ->
-          """Project [b#26, scalar-subquery#28 [] AS sum#29L]
-            |:  +- Aggregate [sum(a#0) AS sum#21L]
-            |:     +- CollectMetrics evt1, [count(1) AS cnt#23L]
-            |:        +- LocalRelation <empty>, [a#0]
-            |+- CollectMetrics evt1, [count(1) AS cnt#23L]
-            |   +- LocalRelation <empty>, [b#26]
+          """Project [b#x, scalar-subquery#x [] AS sum#xL]
+            |:  +- Aggregate [sum(a#x) AS sum#xL]
+            |:     +- CollectMetrics evt1, [count(1) AS cnt#xL]
+            |:        +- LocalRelation <empty>, [a#x]
+            |+- CollectMetrics evt1, [count(1) AS cnt#xL]
+            |   +- LocalRelation <empty>, [b#x]
             |""".stripMargin)
     )
 
