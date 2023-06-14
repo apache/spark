@@ -789,7 +789,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
       parameters = Map(
         "nodeName" -> "Join",
-        "plan" -> "'Join Cross\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n",
+        "plan" -> "'Join Cross\n:- LocalRelation <empty>, [a#x]\n+- LocalRelation <empty>, [a#x]\n",
         "conflictingAttributes" -> "\"a\""
       )
     )
@@ -806,7 +806,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       parameters = Map(
         "nodeName" -> "Intersect All",
         "plan" ->
-          "'Intersect All true\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n",
+          "'Intersect All true\n:- LocalRelation <empty>, [a#x]\n+- LocalRelation <empty>, [a#x]\n",
         "conflictingAttributes" -> "\"a\""
       )
     )
@@ -823,7 +823,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       parameters = Map(
         "nodeName" -> "Except All",
         "plan" ->
-          "'Except All true\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n",
+          "'Except All true\n:- LocalRelation <empty>, [a#x]\n+- LocalRelation <empty>, [a#x]\n",
         "conflictingAttributes" -> "\"a\""
       )
     )
@@ -837,8 +837,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(asOfJoin)
     }
-    val expectedPlan = "'AsOfJoin (a#0 >= a#0), " +
-      "Inner\n:- LocalRelation <empty>, [a#0]\n+- LocalRelation <empty>, [a#0]\n"
+    val expectedPlan = "'AsOfJoin (a#x >= a#x), " +
+      "Inner\n:- LocalRelation <empty>, [a#x]\n+- LocalRelation <empty>, [a#x]\n"
     checkError(
       exception = error,
       errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",

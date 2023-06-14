@@ -693,7 +693,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
                 "nodeName" -> j.nodeName,
-                "plan" -> plan.toString,
+                "plan" -> planToString(plan),
                 "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
 
           case i: Intersect if !i.duplicateResolved =>
@@ -702,7 +702,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
                 "nodeName" -> i.nodeName,
-                "plan" -> plan.toString,
+                "plan" -> planToString(plan),
                 "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
 
           case e: Except if !e.duplicateResolved =>
@@ -711,7 +711,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
                 "nodeName" -> e.nodeName,
-                "plan" -> plan.toString,
+                "plan" -> planToString(plan),
                 "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
 
           case j: AsOfJoin if !j.duplicateResolved =>
@@ -720,7 +720,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
               messageParameters = Map(
                 "nodeName" -> j.nodeName,
-                "plan" -> plan.toString,
+                "plan" -> planToString(plan),
                 "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(",")))
 
           // TODO: although map type is not orderable, technically map type should be able to be
