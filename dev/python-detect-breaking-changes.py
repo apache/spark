@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,16 +19,3 @@
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
-
-from aexpy.models.description import ModuleEntry
-
-from ..checkers import DiffConstraint, DiffConstraintCollection
-from . import add, remove
-
-ModuleConstraints = DiffConstraintCollection()
-
-AddModule = DiffConstraint("AddModule", add).fortype(ModuleEntry, True)
-RemoveModule = DiffConstraint("RemoveModule", remove).fortype(ModuleEntry, True)
-
-ModuleConstraints.cons(AddModule)
-ModuleConstraints.cons(RemoveModule)
