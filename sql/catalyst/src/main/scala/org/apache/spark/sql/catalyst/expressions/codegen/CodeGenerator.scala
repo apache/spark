@@ -46,7 +46,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassLoader, Utils}
+import org.apache.spark.util.{LongAccumulator, ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -1576,12 +1576,8 @@ object CodeGenerator extends Logging {
    * they are explicitly removed. A Cache on the other hand is generally configured to evict entries
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
-   *
-   * Codegen can be slow. Use a non fate sharing cache in case a query gets canceled during codegen
-   * while other queries wait on the same code, so that those other queries don't get wrongly
-   * aborted. See [[NonFateSharingCache]] for more details.
    */
-  private val cache = NonFateSharingCache(CacheBuilder.newBuilder()
+  private val cache = CacheBuilder.newBuilder()
     .maximumSize(SQLConf.get.codegenCacheMaxEntries)
     .build(
       new CacheLoader[CodeAndComment, (GeneratedClass, ByteCodeStats)]() {
@@ -1597,7 +1593,7 @@ object CodeGenerator extends Logging {
           _compileTime.add(duration)
           result
         }
-      }))
+      })
 
   /**
    * Name of Java primitive data type
