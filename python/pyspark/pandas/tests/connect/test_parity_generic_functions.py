@@ -28,12 +28,6 @@ class GenericFunctionsParityTests(
     def test_interpolate(self):
         super().test_interpolate()
 
-    @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
-    )
-    def test_stat_functions(self):
-        super().test_stat_functions()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.test_parity_generic_functions import *  # noqa: F401

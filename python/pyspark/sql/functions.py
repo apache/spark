@@ -3738,7 +3738,6 @@ def percentile(
     +--------------------+
     |[0.74419914941216...|
     +--------------------+
-    <BLANKLINE>
 
     >>> df.groupBy("key").agg(
     ...     percentile("value", 0.5, lit(1)).alias("median")
@@ -3750,7 +3749,6 @@ def percentile(
     |  1|   9.990389751837329|
     |  2|  19.967859769284075|
     +---+--------------------+
-    <BLANKLINE>
     """
     sc = get_active_spark_context()
 
@@ -4887,17 +4885,6 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     ...                             ("a", 3),
     ...                             ("b", 8),
     ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.show()
-    +----+---+
-    |  c1| c2|
-    +----+---+
-    |NULL|  1|
-    |   a|  2|
-    |   a|  3|
-    |   b|  8|
-    |   b|  2|
-    +----+---+
-    <BLANKLINE>
     >>> df.select(any_value('c1'), any_value('c2')).collect()
     [Row(any_value(c1)=None, any_value(c2)=1)]
     >>> df.select(any_value('c1', True), any_value('c2', True)).collect()
@@ -4936,17 +4923,6 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     ...                             ("a", 3),
     ...                             ("b", 8),
     ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.show()
-    +----+---+
-    |  c1| c2|
-    +----+---+
-    |NULL|  1|
-    |   a|  2|
-    |   a|  3|
-    |   b|  8|
-    |   b|  2|
-    +----+---+
-    <BLANKLINE>
     >>> df.select(first_value('c1').alias('a'), first_value('c2').alias('b')).collect()
     [Row(a=None, b=1)]
     >>> df.select(first_value('c1', True).alias('a'), first_value('c2', True).alias('b')).collect()
@@ -4985,17 +4961,6 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     ...                             ("a", 3),
     ...                             ("b", 8),
     ...                             (None, 2)], ["c1", "c2"])
-    >>> df.show()
-    +----+---+
-    |  c1| c2|
-    +----+---+
-    |   a|  1|
-    |   a|  2|
-    |   a|  3|
-    |   b|  8|
-    |NULL|  2|
-    +----+---+
-    <BLANKLINE>
     >>> df.select(last_value('c1').alias('a'), last_value('c2').alias('b')).collect()
     [Row(a=None, b=2)]
     >>> df.select(last_value('c1', True).alias('a'), last_value('c2', True).alias('b')).collect()
@@ -5031,24 +4996,12 @@ def count_if(col: "ColumnOrName") -> Column:
     ...                             ("a", 3),
     ...                             ("b", 8),
     ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.show()
-    +---+---+
-    | c1| c2|
-    +---+---+
-    |  a|  1|
-    |  a|  2|
-    |  a|  3|
-    |  b|  8|
-    |  b|  2|
-    +---+---+
-    <BLANKLINE>
     >>> df.select(count_if(col('c2') % 2 == 0)).show()
     +------------------------+
     |count_if(((c2 % 2) = 0))|
     +------------------------+
     |                       3|
     +------------------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("count_if", col)
 
@@ -5087,24 +5040,12 @@ def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
     ...                             ("a", 3),
     ...                             ("b", 8),
     ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.show()
-    +---+---+
-    | c1| c2|
-    +---+---+
-    |  a|  1|
-    |  a|  2|
-    |  a|  3|
-    |  b|  8|
-    |  b|  2|
-    +---+---+
-    <BLANKLINE>
     >>> df.select(histogram_numeric('c2', lit(5))).show()
     +------------------------+
     |histogram_numeric(c2, 5)|
     +------------------------+
     |    [{1, 1.0}, {2, 1....|
     +------------------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
