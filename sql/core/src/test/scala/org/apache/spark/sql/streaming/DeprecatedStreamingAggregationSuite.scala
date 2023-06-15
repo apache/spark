@@ -24,9 +24,9 @@ import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateM
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
-import org.apache.spark.tags.SQLTestGroupOne
+import org.apache.spark.tags.SlowSQLTest
 
-@SQLTestGroupOne
+@SlowSQLTest
 @deprecated("This test suite will be removed.", "3.0.0")
 class DeprecatedStreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 

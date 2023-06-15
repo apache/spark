@@ -50,9 +50,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.tags.SQLTestGroupOne
+import org.apache.spark.tags.SlowSQLTest
 
-@SQLTestGroupOne
+@SlowSQLTest
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
   import AwaitTerminationTester._

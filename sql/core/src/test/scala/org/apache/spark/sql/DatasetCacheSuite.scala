@@ -25,9 +25,9 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.tags.SQLTestGroupOne
+import org.apache.spark.tags.SlowSQLTest
 
-@SQLTestGroupOne
+@SlowSQLTest
 class DatasetCacheSuite extends QueryTest
   with SharedSparkSession
   with TimeLimits

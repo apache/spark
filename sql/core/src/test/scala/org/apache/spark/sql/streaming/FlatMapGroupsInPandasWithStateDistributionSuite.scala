@@ -24,9 +24,9 @@ import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.util.{StatefulOpClusteredDistributionTestHelper, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
-import org.apache.spark.tags.SQLTestGroupOne
+import org.apache.spark.tags.SlowSQLTest
 
-@SQLTestGroupOne
+@SlowSQLTest
 class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper {
 

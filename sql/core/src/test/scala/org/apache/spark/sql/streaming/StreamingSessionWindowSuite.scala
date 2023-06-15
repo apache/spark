@@ -29,9 +29,9 @@ import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvi
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.SQLTestGroupOne
+import org.apache.spark.tags.SlowSQLTest
 
-@SQLTestGroupOne
+@SlowSQLTest
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
 
