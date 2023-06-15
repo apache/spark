@@ -24,6 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.functions.{col, lit, rand, when}
+import org.apache.spark.sql.types.{DoubleType, LongType}
 
 // schema of upsert test table
 case class Upsert(id: Long, ts: Timestamp, v1: Double, v2: Option[Double])
@@ -34,6 +35,14 @@ trait UpsertTests {
   import testImplicits._
 
   def newTestTableName(): String = "upsert" + UUID.randomUUID().toString.replaceAll("-", "")
+
+  def getUpsertTestTableInserts(tableName: String): Seq[String] =
+    Seq(
+      s"INSERT INTO $tableName VALUES (1, '1996-01-01 01:23:45', 1.234, 123.456)",
+      s"INSERT INTO $tableName VALUES (1, '1996-01-01 01:23:46', 1.235, 123.457)",
+      s"INSERT INTO $tableName VALUES (2, '1996-01-01 01:23:45', 2.345, 234.567)",
+      s"INSERT INTO $tableName VALUES (2, '1996-01-01 01:23:46', 2.346, 234.568)"
+    )
 
   def createUpsertTestTable(tableName: String): Unit = {
     // get jdbc connection
@@ -49,11 +58,8 @@ trait UpsertTests {
 
     // insert test data
     try {
-      conn.prepareStatement(s"INSERT INTO $tableName VALUES " +
-        "(1, '1996-01-01 01:23:45', 1.234, 1.234567), " +
-        "(1, '1996-01-01 01:23:46', 1.235, 1.234568), " +
-        "(2, '1996-01-01 01:23:45', 2.345, 2.345678), " +
-        "(2, '1996-01-01 01:23:46', 2.346, 2.345679)").executeUpdate()
+      getUpsertTestTableInserts(tableName).foreach(sql =>
+        conn.prepareStatement(sql).executeUpdate())
     } finally {
       conn.close()
     }
@@ -81,10 +87,10 @@ trait UpsertTests {
     // either project is None, or it contains all of Seq("id", "ts")
     assert(project.forall(p => Seq("id", "ts").forall(p.contains)))
     val df = Seq(
-      (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 1.234568), // row unchanged
-      (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 2.345678), // updates v1
-      (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 2.345680), // updates v1 and v2
-      (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 3.456789) // inserts new row
+      (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, 123.457), // row unchanged
+      (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, 234.567), // updates v1
+      (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, 234.569), // updates v1 and v2
+      (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, 345.678)  // inserts new row
     ).toDF("id", "ts", "v1", "v2").repartition(10)
 
     val table = newTestTableName()
@@ -95,26 +101,29 @@ trait UpsertTests {
     project.map(columns => df.select(columns.map(col): _*)).getOrElse(df)
       .write.mode(SaveMode.Append).options(options).jdbc(jdbcUrl, table, new Properties)
 
-    val actual = spark.read.jdbc(jdbcUrl, table, new Properties).sort("id", "ts").collect()
+    val actual = spark.read.jdbc(jdbcUrl, table, new Properties).sort("id", "ts")
+      // required by OracleIntegrationSuite
+      .select($"id".cast(LongType), $"ts", $"v1".cast(DoubleType), $"v2".cast(DoubleType))
+      .collect()
     val existing = if (tableExists) {
-      Seq((1, Timestamp.valueOf("1996-01-01 01:23:45"), 1.234, Some(1.234567)))
+      Seq((1, Timestamp.valueOf("1996-01-01 01:23:45"), 1.234, Some(123.456)))
     } else {
       Seq.empty
     }
     // either project is None, or it contains all of Seq("v1", "v2")
     val upsertedRows = if (project.forall(p => Seq("v1", "v2").forall(p.contains))) {
       Seq(
-        (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, Some(1.234568)),
-        (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, Some(2.345678)),
-        (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, Some(2.345680)),
-        (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, Some(3.456789))
+        (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, Some(123.457)),
+        (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, Some(234.567)),
+        (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, Some(234.569)),
+        (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, Some(345.678))
       )
     } else if (project.exists(!_.contains("v2"))) {
       // column v2 not updated
       Seq(
-        (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, Some(1.234568)),
-        (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, Some(2.345678)),
-        (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, Some(2.345679)),
+        (1, Timestamp.valueOf("1996-01-01 01:23:46"), 1.235, Some(123.457)),
+        (2, Timestamp.valueOf("1996-01-01 01:23:45"), 2.346, Some(234.567)),
+        (2, Timestamp.valueOf("1996-01-01 01:23:46"), 2.347, Some(234.568)),
         (3, Timestamp.valueOf("1996-01-01 01:23:45"), 3.456, None)
       )
     } else {
