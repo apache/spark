@@ -1644,6 +1644,14 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
         val ddof = extractInteger(children(1), "ddof")
         Some(aggregate.PandasStddev(children(0), ddof).toAggregateExpression(false))
 
+      case "pandas_skew" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(aggregate.PandasSkewness(children(0)).toAggregateExpression(false))
+
+      case "pandas_kurt" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(aggregate.PandasKurtosis(children(0)).toAggregateExpression(false))
+
       case "pandas_var" if fun.getArgumentsCount == 2 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val ddof = extractInteger(children(1), "ddof")
