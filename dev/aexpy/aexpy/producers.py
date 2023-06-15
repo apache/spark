@@ -53,4 +53,4 @@ class Producer(ABC):
         )
         """The logger for the producer."""
         self.options = ProducerOptions()
-        self.name = "empty"
+        self.name = "aexpy"

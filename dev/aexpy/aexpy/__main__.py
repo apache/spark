@@ -140,6 +140,7 @@ def preprocess(
     output: pathlib.Path,
     view: bool,
 ):
+    """Generate a release definition."""
     assert view or (
         rootpath and modules
     ), "Please give the input file or use the view mode."
