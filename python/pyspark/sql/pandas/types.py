@@ -714,7 +714,7 @@ def _create_converter_to_pandas(
         elif isinstance(dt, UserDefinedType):
             udt: UserDefinedType = dt
 
-            conv = _converter(udt.sqlType(), _struct_in_pandas="row", _ndarray_as_list=False) or (
+            conv = _converter(udt.sqlType(), _struct_in_pandas="row", _ndarray_as_list=True) or (
                 lambda x: x
             )
 
