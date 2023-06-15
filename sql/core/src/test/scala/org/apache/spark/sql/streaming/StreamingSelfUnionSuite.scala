@@ -26,9 +26,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.test.{InMemoryStreamTable, InMemoryStreamTableCatalog}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
-import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class StreamingSelfUnionSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._

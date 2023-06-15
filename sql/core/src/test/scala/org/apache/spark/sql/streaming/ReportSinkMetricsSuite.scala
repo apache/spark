@@ -31,9 +31,7 @@ import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStr
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class ReportSinkMetricsSuite extends StreamTest {
 
   import testImplicits._

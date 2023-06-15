@@ -31,7 +31,6 @@ import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class ContinuousSuiteBase extends StreamTest {
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
   override protected def createSparkSession = new TestSparkSession(
@@ -423,7 +422,6 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
   }
 }
 
-@SQLTestGroupOne
 class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
   import testImplicits._
 

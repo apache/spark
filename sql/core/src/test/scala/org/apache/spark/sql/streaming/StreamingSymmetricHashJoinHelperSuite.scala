@@ -22,9 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   import org.apache.spark.sql.functions._
 

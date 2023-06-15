@@ -32,9 +32,7 @@ import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
 import org.apache.spark.sql.test.TestSparkSession
-import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class EpochCoordinatorSuite
   extends SparkFunSuite
     with LocalSparkSession

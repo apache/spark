@@ -31,9 +31,7 @@ import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
-import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
   case class LongPartitionOffset(offset: Long) extends PartitionOffset
 

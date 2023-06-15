@@ -33,9 +33,7 @@ import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.tags.SQLTestGroupOne
 
-@SQLTestGroupOne
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson

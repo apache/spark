@@ -32,11 +32,9 @@ import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.streaming.{SinkProgress, SourceProgress, StreamingQueryListener, StreamingQueryProgress, StreamTest}
 import org.apache.spark.sql.streaming
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
-import org.apache.spark.tags.SQLTestGroupOne
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
-@SQLTestGroupOne
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
   protected def createStore(): KVStore = new InMemoryStore()
@@ -305,7 +303,6 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 }
 
-@SQLTestGroupOne
 class StreamingQueryStatusListenerWithDiskStoreSuite extends StreamingQueryStatusListenerSuite {
   private var storePath: File = _
 
