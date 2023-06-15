@@ -1188,7 +1188,7 @@ case class ScalaUDF(
 
   private[this] val resultConverter = catalystConverter
 
-  private def functionName = udfName.map { uName => s"$uName in $funcCls" }.getOrElse(funcCls)
+  private def functionName = udfName.map { uName => s"$uName ($funcCls)" }.getOrElse(funcCls)
 
   lazy val funcCls = Utils.getSimpleName(function.getClass)
   lazy val inputTypesString = children.map(_.dataType.catalogString).mkString(", ")
