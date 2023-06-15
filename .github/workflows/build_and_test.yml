@@ -285,15 +285,15 @@ jobs:
           - hive2.3
         modules:
           - >-
-            core,repl,launcher,common/unsafe,common/kvstore,common/network-common,common/network-shuffle,common/sketch
+            core,repl,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch
           - >-
             graphx,streaming,mllib-local,mllib,hadoop-cloud
           - >-
-            sql/catalyst,sql/hive-thriftserver
+            sql#catalyst,sql#hive-thriftserver
           - >-
-            connector/kafka-0-10,connector/kafka-0-10-sql,connector/kafka-0-10-token-provider,connector/spark-ganglia-lgpl,connector/protobuf,connector/avro
+            connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro
           - >-
-            resource-managers/yarn,resource-managers/mesos,resource-managers/kubernetes
+            resource-managers#yarn,resource-managers#mesos,resource-managers#kubernetes#core
           - >-
             connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
@@ -302,26 +302,26 @@ jobs:
         comment: [ "" ]
         include:
           # Hive tests
-          - modules: sql/hive
+          - modules: sql#hive
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
-          - modules: sql/hive
+          - modules: sql#hive
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- other tests"
           # SQL tests
-          - modules: sql/core
+          - modules: sql#core
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
-          - modules: sql/core
+          - modules: sql#core
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
@@ -400,18 +400,20 @@ jobs:
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} clean install
+          # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
+          export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} clean install
           if [[ "$INCLUDED_TAGS" != "" ]]; then
-            ./build/mvn $MAVEN_CLI_OPTS -pl "$MODULES_TO_TEST" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
-            ./build/mvn $MAVEN_CLI_OPTS -pl "$MODULES_TO_TEST" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test
             # re-build assembly module to remove hive jars
             ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Djava.version=${JAVA_VERSION/-ea} install -pl assembly
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm test
           else
-            ./build/mvn $MAVEN_CLI_OPTS -pl "$MODULES_TO_TEST" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} test
           fi
           rm -rf ~/.m2/repository/org/apache/spark
       - name: Upload test results to report
