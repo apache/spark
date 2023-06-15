@@ -1462,6 +1462,38 @@ object functions {
   }
 
   /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   * Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column, keyValueDelim: Column): Column = withExpr {
+    StringToMap(text.expr, pairDelim.expr, keyValueDelim.expr)
+  }
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   * The `pairDelim` is treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column): Column = withExpr {
+    new StringToMap(text.expr, pairDelim.expr)
+  }
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column): Column = withExpr {
+    new StringToMap(text.expr)
+  }
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
@@ -2820,6 +2852,38 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = withExpr { CurrentCatalog() }
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = withExpr { CurrentUser() }
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value
    * as a 32 character hex string.
    *
@@ -2988,75 +3052,12 @@ object functions {
   }
 
   /**
-   * If `predicate` evaluates to true, then returns `trueValue`; otherwise returns `falseValue`.
+   * Returns the user name of current execution context.
    *
    * @group misc_funcs
    * @since 3.5.0
    */
-  def `if`(predicate: Column, trueValue: Column, falseValue: Column): Column = withExpr {
-    If(predicate.expr, trueValue.expr, falseValue.expr)
-  }
-
-  /**
-   * Returns `col2` if `col1` is null, or `col1` otherwise.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def ifnull(col1: Column, col2: Column): Column = withExpr {
-    new Nvl(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns true if `col` is not null, or false otherwise.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def isnotnull(col: Column): Column = withExpr {
-    IsNotNull(col.expr)
-  }
-
-  /**
-   * Returns same result as the EQUAL(=) operator for non-null operands,
-   * but returns true if both are null, false if one of the them is null.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def equal_null(col1: Column, col2: Column): Column = withExpr {
-    new EqualNull(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def nullif(col1: Column, col2: Column): Column = withExpr {
-    new NullIf(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns `col2` if `col1` is null, or `col1` otherwise.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def nvl(col1: Column, col2: Column): Column = withExpr {
-    new Nvl(col1.expr, col2.expr)
-  }
-
-  /**
-   * Returns `col2` if `col1` is not null, or `col3` otherwise.
-   *
-   * @group misc_funcs
-   * @since 3.5.0
-   */
-  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
-    new Nvl2(col1.expr, col2.expr, col3.expr)
-  }
+  def user(): Column = withExpr { CurrentUser() }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3284,6 +3285,43 @@ object functions {
   def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def rlike(str: Column, regexp: Column): Column = withExpr {
+    RLike(str.expr, regexp.expr)
+  }
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp(str: Column, regexp: Column): Column = rlike(str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_like(str: Column, regexp: Column): Column = rlike(str, regexp)
+
+  /**
+   * Returns a count of the number of times that the regular expression pattern `regexp`
+   * is matched in the string `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_count(str: Column, regexp: Column): Column = withExpr {
+    RegExpCount(str.expr, regexp.expr)
+  }
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column.
    * If the regex did not match, or the specified group did not match, an empty string is returned.
    * if the specified group index exceeds the group count of regex, an IllegalArgumentException
@@ -3294,6 +3332,28 @@ object functions {
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = withExpr {
     RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and
+   * corresponding to the first regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column): Column = withExpr {
+    new RegExpExtractAll(str.expr, regexp.expr)
+  }
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and
+   * corresponding to the regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column, idx: Column): Column = withExpr {
+    RegExpExtractAll(str.expr, regexp.expr, idx.expr)
   }
 
   /**
@@ -3314,6 +3374,41 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
     RegExpReplace(e.expr, pattern.expr, replacement.expr)
+  }
+
+  /**
+   * Returns the substring that matches the regular expression `regexp` within the string `str`.
+   * If the regular expression is not found, the result is null.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_substr(str: Column, regexp: Column): Column = withExpr {
+    RegExpSubStr(str.expr, regexp.expr)
+  }
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates
+   * the beginning position of the matched substring. Positions are 1-based, not 0-based.
+   * If no match is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column): Column = withExpr {
+    new RegExpInStr(str.expr, regexp.expr)
+  }
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates
+   * the beginning position of the matched substring. Positions are 1-based, not 0-based.
+   * If no match is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column, idx: Column): Column = withExpr {
+    RegExpInStr(str.expr, regexp.expr, idx.expr)
   }
 
   /**
@@ -3523,6 +3618,85 @@ object functions {
    */
   def upper(e: Column): Column = withExpr { Upper(e.expr) }
 
+  /**
+   * Converts the input `e` to a binary value based on the supplied `format`.
+   * The `format` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
+   * By default, the binary format for conversion is "hex" if `format` is omitted.
+   * The function returns NULL if at least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column, format: Column): Column = withExpr {
+    new ToBinary(e.expr, format.expr)
+  }
+
+  /**
+   * Converts the input `e` to a binary value based on the default format "hex".
+   * The function returns NULL if at least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column): Column = withExpr {
+    new ToBinary(e.expr)
+  }
+
+  /**
+   * Convert `e` to a string based on the `format`.
+   * Throws an exception if the conversion fails. The format can consist of the following
+   * characters, case insensitive:
+   *   '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+   *     string matches a sequence of digits in the input value, generating a result string of the
+   *     same length as the corresponding sequence in the format string. The result string is
+   *     left-padded with zeros if the 0/9 sequence comprises more digits than the matching part of
+   *     the decimal value, starts with 0, and is before the decimal point. Otherwise, it is
+   *     padded with spaces.
+   *   '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+   *   ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+   *     a 0 or 9 to the left and right of each grouping separator.
+   *   '$': Specifies the location of the $ currency sign. This character may only be specified
+   *     once.
+   *   'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+   *     the beginning or end of the format string). Note that 'S' prints '+' for positive values
+   *     but 'MI' prints a space.
+   *   'PR': Only allowed at the end of the format string; specifies that the result string will be
+   *     wrapped by angle brackets if the input value is negative.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_char(e: Column, format: Column): Column = withExpr {
+    ToCharacter(e.expr, format.expr)
+  }
+
+  /**
+   * Convert string 'e' to a number based on the string format 'format'.
+   * Throws an exception if the conversion fails. The format can consist of the following
+   * characters, case insensitive:
+   *   '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+   *     string matches a sequence of digits in the input string. If the 0/9 sequence starts with
+   *     0 and is before the decimal point, it can only match a digit sequence of the same size.
+   *     Otherwise, if the sequence starts with 9 or is after the decimal point, it can match a
+   *     digit sequence that has the same or smaller size.
+   *   '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+   *   ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+   *     a 0 or 9 to the left and right of each grouping separator. 'expr' must match the
+   *     grouping separator relevant for the size of the number.
+   *   '$': Specifies the location of the $ currency sign. This character may only be specified
+   *     once.
+   *   'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+   *     the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
+   *   'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
+   *     negative number with wrapping angled brackets.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_number(e: Column, format: Column): Column = withExpr {
+    ToNumber(e.expr, format.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3559,9 +3733,26 @@ object functions {
    * All calls of current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column.
+   * All calls of current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 1.5.0
    */
   def current_date(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = withExpr { CurrentTimeZone() }
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column.
@@ -4371,6 +4562,70 @@ object functions {
    */
   def timestamp_seconds(e: Column): Column = withExpr {
     SecondsToTimestamp(e.expr)
+  }
+
+  /**
+   * Parses the `timestamp` expression with the `format` expression
+   * to a timestamp without time zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column, format: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, Some(format.expr), TimestampType)
+  }
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, None, TimestampType)
+  }
+
+  /**
+   * Parses the `timestamp_str` expression with the `format` expression
+   * to a timestamp without time zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column, format: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, Some(format.expr), TimestampNTZType)
+  }
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, None, TimestampNTZType)
+  }
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(e: Column, format: Column): Column = withExpr {
+    new ToUnixTimestamp(e.expr, format.expr)
+  }
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(e: Column): Column = withExpr {
+    new ToUnixTimestamp(e.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -5670,6 +5925,286 @@ object functions {
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
 
   /**
+   * Make DayTimeIntervalType duration from days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column = withExpr {
+    MakeDTInterval(days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column): Column = withExpr {
+    new MakeDTInterval(days.expr, hours.expr, mins.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column): Column = withExpr {
+    new MakeDTInterval(days.expr, hours.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column): Column = withExpr {
+    new MakeDTInterval(days.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(): Column = withExpr {
+    new MakeDTInterval()
+  }
+
+  /**
+   * Make interval from years, months, weeks, days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks, days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks, days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks and days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr)
+  }
+
+  /**
+   * Make interval from years, months and weeks.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr)
+  }
+
+  /**
+   * Make interval from years and months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr)
+  }
+
+  /**
+   * Make interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column): Column = withExpr {
+    new MakeInterval(years.expr)
+  }
+
+  /**
+   * Make interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(): Column = withExpr {
+    new MakeInterval()
+  }
+
+  /**
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr))
+  }
+
+  /**
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr), dataType = TimestampType)
+  }
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampType)
+  }
+
+  /**
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampNTZType)
+  }
+
+  /**
+   * Make year-month interval from years, months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column, months: Column): Column = withExpr {
+    MakeYMInterval(years.expr, months.expr)
+  }
+
+  /**
+   * Make year-month interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column): Column = withExpr {
+    new MakeYMInterval(years.expr)
+  }
+
+  /**
+   * Make year-month interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(): Column = withExpr {
+    new MakeYMInterval()
+  }
+
+  /**
    * A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
@@ -5692,6 +6227,71 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column = withExpr {
     Bucket(Literal(numBuckets), e.expr)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = withExpr {
+    IsNotNull(col.expr)
+  }
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands,
+   * but returns true if both are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = withExpr {
+    new EqualNull(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr {
+    new NullIf(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    new Nvl2(col1.expr, col2.expr, col3.expr)
   }
 
   // scalastyle:off line.size.limit

@@ -116,8 +116,10 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    curdate
     current_date
     current_timestamp
+    current_timezone
     date_add
     date_format
     date_sub
@@ -133,6 +135,12 @@ Datetime Functions
     month
     last_day
     localtimestamp
+    make_dt_interval
+    make_interval
+    make_timestamp
+    make_timestamp_ltz
+    make_timestamp_ntz
+    make_ym_interval
     minute
     months_between
     next_day
@@ -140,7 +148,10 @@ Datetime Functions
     make_date
     from_unixtime
     unix_timestamp
+    to_unix_timestamp
     to_timestamp
+    to_timestamp_ltz
+    to_timestamp_ntz
     to_date
     trunc
     from_utc_timestamp
@@ -221,6 +232,7 @@ Collection Functions
     map_concat
     from_csv
     schema_of_csv
+    str_to_map
     to_csv
 
 
@@ -342,8 +354,15 @@ String Functions
     lpad
     ltrim
     octet_length
+    rlike
+    regexp
+    regexp_like
+    regexp_count
     regexp_extract
+    regexp_extract_all
     regexp_replace
+    regexp_substr
+    regexp_instr
     unbase64
     rpad
     repeat
@@ -354,6 +373,9 @@ String Functions
     substring_index
     overlay
     sentences
+    to_binary
+    to_char
+    to_number
     translate
     trim
     upper
@@ -367,6 +389,7 @@ UDF
     call_udf
     pandas_udf
     udf
+    udtf
     unwrap_udt
 
 Misc Functions
@@ -374,6 +397,10 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    current_catalog
+    current_database
+    current_schema
+    current_user
     md5
     sha1
     sha2
@@ -384,6 +411,7 @@ Misc Functions
     raise_error
     hll_sketch_estimate
     hll_union
+    user
 
 Xml Functions
 --------------

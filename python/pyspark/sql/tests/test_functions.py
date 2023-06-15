@@ -60,14 +60,14 @@ class FunctionsTestsMixin:
             "typedLit",  # Scala only
             "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
             "not",  # equivalent to python ~expression
-            "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "udaf", # used for creating UDAF's which are not supported in PySpark
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
 
         # For functions that are named differently in pyspark this is the mapping of their
         # python name to the JVM equivalent
-        py_equiv_jvm = {"create_map": "map", "py_if": "if"}
+        py_equiv_jvm = {"create_map": "map"}
         for py_name, jvm_name in py_equiv_jvm.items():
             if py_name in py_fn_set:
                 py_fn_set.remove(py_name)

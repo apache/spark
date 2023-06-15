@@ -43,12 +43,6 @@ class FrameParityComputeTests(FrameComputeMixin, PandasOnSparkTestUtils, ReusedC
     def test_pct_change(self):
         super().test_pct_change()
 
-    @unittest.skip(
-        "TODO(SPARK-43617): Enable pyspark.pandas.spark.functions.product in Spark Connect."
-    )
-    def test_product(self):
-        super().test_product()
-
     @unittest.skip("TODO(SPARK-43618): Fix pyspark.sq.column._unary_op to work with Spark Connect.")
     def test_rank(self):
         super().test_rank()
