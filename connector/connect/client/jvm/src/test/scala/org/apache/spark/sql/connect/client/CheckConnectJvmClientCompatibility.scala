@@ -232,6 +232,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
+      // TODO(SPARK-44068): Support positional parameters in Scala connect client
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
 
       // RuntimeConfig
