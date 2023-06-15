@@ -61,8 +61,9 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
          """.stripMargin)
 
       // replace DataSourceV2Relation with DataSourceV2ScanRelation for the row operation table
+      // there may be multiple read relations for UPDATEs that are rewritten as UNION
       rd transform {
-        case r: DataSourceV2Relation if r eq relation =>
+        case r: DataSourceV2Relation if r.table eq table =>
           DataSourceV2ScanRelation(r, scan, PushDownUtils.toOutputAttrs(scan.readSchema(), r))
       }
   }

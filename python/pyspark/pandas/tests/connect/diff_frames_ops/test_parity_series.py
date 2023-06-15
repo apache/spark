@@ -24,11 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 class DiffFramesParitySeriesTests(
     DiffFramesSeriesMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip(
-        "TODO(SPARK-43659): Enable OpsOnDiffFramesEnabledSlowParityTests.test_series_eq."
-    )
-    def test_series_eq(self):
-        super().test_series_eq()
+    pass
 
 
 if __name__ == "__main__":
