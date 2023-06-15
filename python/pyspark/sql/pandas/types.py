@@ -578,29 +578,44 @@ def _create_converter_to_pandas(
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
-            def convert_array(value: Any) -> Any:
-                if value is None:
-                    return None
-                elif isinstance(value, np.ndarray):
-                    element_list = (
-                        [_element_conv(v) for v in value]
-                        if _element_conv is not None
-                        else [v for v in value]
-                    )
+            if _ndarray_as_list:
 
-                    if _ndarray_as_list:
+                def convert_array_ndarray_as_list(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, np.ndarray):
                         # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
                         # whereas a list is expected.
-                        return element_list
+                        return (
+                            [_element_conv(v) for v in value]
+                            if _element_conv is not None
+                            else [v for v in value]
+                        )
                     else:
-                        # `pyarrow.Table.to_pandas` uses `np.ndarray`.
-                        return np.array(element_list)  # type: # ignore[misc]
-                else:
-                    assert isinstance(value, list)
-                    # otherwise, `list` should be used.
-                    return [_element_conv(v) for v in value]  # type: ignore[misc]
+                        assert isinstance(value, list)
+                        # otherwise, `list` should be used.
+                        return [_element_conv(v) for v in value]  # type: ignore[misc]
 
-            return convert_array
+                return convert_array_ndarray_as_list
+            else:
+
+                def convert_array_ndarray_as_ndarray(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, np.ndarray):
+                        # `pyarrow.Table.to_pandas` uses `np.ndarray`.
+                        element_list = (
+                            [_element_conv(v) for v in value]
+                            if _element_conv is not None
+                            else [v for v in value]
+                        )
+                        return np.array(element_list)  # type: # ignore[misc]
+                    else:
+                        assert isinstance(value, list)
+                        # otherwise, `list` should be used.
+                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+
+                return convert_array_ndarray_as_ndarray
 
         elif isinstance(dt, MapType):
             _key_conv = _converter(dt.keyType, _struct_in_pandas, _ndarray_as_list) or (lambda x: x)
