@@ -160,6 +160,7 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // if to truncate the table from the JDBC database
   val isTruncate = parameters.getOrElse(JDBC_TRUNCATE, "false").toBoolean
+
   val isCascadeTruncate: Option[Boolean] = parameters.get(JDBC_CASCADE_TRUNCATE).map(_.toBoolean)
   // if to upsert the table in the JDBC database
   val isUpsert = parameters.getOrElse(JDBC_UPSERT, "false").toBoolean
