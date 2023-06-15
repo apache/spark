@@ -1376,7 +1376,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(actual2, expected2)
   }
 
-  test("SPARK-XXXXX: bind positional parameters to literals") {
+  test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
     val actual1 = PosParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),

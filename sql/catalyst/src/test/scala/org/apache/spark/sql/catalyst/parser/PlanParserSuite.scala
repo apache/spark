@@ -1662,7 +1662,7 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
-  test("SPARK-XXXXX: parsing of positional parameters") {
+  test("SPARK-44066: parsing of positional parameters") {
     comparePlans(
       parsePlan("SELECT ?"),
       Project(UnresolvedAlias(PosParameter(7), None) :: Nil, OneRowRelation()))
