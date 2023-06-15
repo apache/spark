@@ -462,4 +462,28 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       spark.sql("SELECT ?, ?", Seq(1, "abc", 3.14f)),
       Row(1, "abc"))
   }
+
+  test("mixing of positional and named parameters") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select :param1, ?", Map("param1" -> 1))
+      },
+      errorClass = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_16"),
+      context = ExpectedContext(
+        fragment = "?",
+        start = 16,
+        stop = 16))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select :param1, ?", Seq(1))
+      },
+      errorClass = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "param1"),
+      context = ExpectedContext(
+        fragment = ":param1",
+        start = 7,
+        stop = 13))
+  }
 }
