@@ -402,11 +402,11 @@ class StreamingQueryProgress:
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         observedMetrics: Dict[str, Row],
-        jprogress: JavaObject = None,
-        jdict: Dict[str, Any] = None,
+        jprogress: Optional[JavaObject] = None,
+        jdict: Optional[Dict[str, Any]] = None,
     ):
-        self._jprogress: JavaObject = jprogress
-        self._jdict: Dict[str, Any] = jdict
+        self._jprogress: Optional[JavaObject] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
         self._id: uuid.UUID = id
         self._runId: uuid.UUID = runId
         self._name: Optional[str] = name
@@ -645,11 +645,11 @@ class StateOperatorProgress:
         numShufflePartitions: int,
         numStateStoreInstances: int,
         customMetrics: Dict[str, int],
-        jprogress: JavaObject = None,
-        jdict: Dict[str, Any] = None,
+        jprogress: Optional[JavaObject] = None,
+        jdict: Optional[Dict[str, Any]] = None,
     ):
-        self._jprogress: JavaObject = jprogress
-        self._jdict: Dict[str, Any] = jdict
+        self._jprogress: Optional[JavaObject] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
         self._operatorName: str = operatorName
         self._numRowsTotal: int = numRowsTotal
         self._numRowsUpdated: int = numRowsUpdated
@@ -792,11 +792,11 @@ class SourceProgress:
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         metrics: Dict[str, str],
-        jprogress: JavaObject = None,
-        jdict: Dict[str, Any] = None,
+        jprogress: Optional[JavaObject] = None,
+        jdict: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._jdict: Dict[str, Any] = jdict
+        self._jprogress: Optional[JavaObject] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
         self._description: str = description
         self._startOffset: str = startOffset
         self._endOffset: str = endOffset
@@ -927,11 +927,11 @@ class SinkProgress:
         description: str,
         numOutputRows: int,
         metrics: Dict[str, str],
-        jprogress: JavaObject = None,
-        jdict: Dict[str, Any] = None,
+        jprogress: Optional[JavaObject] = None,
+        jdict: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._jdict: Dict[str, Any] = jdict
+        self._jprogress: Optional[JavaObject] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
         self._description: str = description
         self._numOutputRows: int = numOutputRows
         self._metrics: Dict[str, str] = metrics
