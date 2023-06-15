@@ -38,7 +38,7 @@ trait UpsertTests {
     Seq("ts", "id", "v1", "v2"),
     Seq("ts", "v1", "id", "v2"),
     Seq("ts", "v1", "v2", "id"),
-    Seq("v2", "v1", "ts", "id"),
+    Seq("v2", "v1", "ts", "id")
   ).foreach { columns =>
     test(s"Upsert with varying column order - ${columns.mkString(",")}") {
       doTestUpsert(tableExists = true, Some(columns))
