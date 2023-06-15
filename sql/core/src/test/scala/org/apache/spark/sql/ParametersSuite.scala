@@ -456,4 +456,10 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
           .toInstant) :: Nil)
     }
   }
+
+  test("unused positional arguments") {
+    checkAnswer(
+      spark.sql("SELECT ?, ?", Seq(1, "abc", 3.14f)),
+      Row(1, "abc"))
+  }
 }
