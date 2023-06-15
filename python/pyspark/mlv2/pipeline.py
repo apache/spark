@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHE
 
 from pyspark import keyword_only, since, SparkContext
 from pyspark.mlv2.base import Estimator, Model, Transformer
+from pyspark.mlv2.io_utils import MetaAlgorithmReadWrite, CoreModelReadWrite, _get_metadata_to_save
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
@@ -31,8 +32,32 @@ if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
 
+class _PipelineReadWrite(MetaAlgorithmReadWrite):
+
+    def _save_meta_algorithm(self, root_path, node_path):
+        metadata = _get_metadata_to_save(self)
+        metadata["stages"] = []
+        for stage_index, stage in enumerate(self.getStages()):
+            stage_name = f"pipeline_stage_{stage_index}"
+            node_path.append(stage_name)
+            if isinstance(stage, MetaAlgorithmReadWrite):
+                stage_metadata = stage._save_meta_algorithm(node_path)
+            else:
+                stage_metadata = _get_metadata_to_save(
+                    stage, extra_metadata=stage._get_extra_metadata()
+                )
+                if isinstance(stage, CoreModelReadWrite):
+                    core_model_path = ".".join(node_path + [stage._get_core_model_filename()])
+                    stage._save_core_model(os.path.join(root_path, core_model_path))
+                    stage_metadata["core_model_path"] = core_model_path
+
+            metadata["stages"].append(stage_metadata)
+            node_path.pop()
+        return metadata
+
+
 @inherit_doc
-class Pipeline(Estimator["PipelineModel"]):
+class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
     of a sequence of stages, each of which is either an
@@ -152,7 +177,7 @@ class Pipeline(Estimator["PipelineModel"]):
 
 
 @inherit_doc
-class PipelineModel(Model):
+class PipelineModel(Model, _PipelineReadWrite):
     """
     Represents a compiled pipeline with transformers and fitted models.
 
@@ -172,7 +197,7 @@ class PipelineModel(Model):
         """
         Creates a copy of this instance.
 
-        .. versionadded:: 1.4.0
+        .. versionadded:: 3.5.0
 
         :param extra: extra parameters
         :returns: new instance
@@ -181,3 +206,7 @@ class PipelineModel(Model):
             extra = dict()
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
+
+    def _child_nodes_iterator(self):
+        for i, stage in enumerate(self.getStages()):
+            yield f"PipelineModel_stage_{i}", stage

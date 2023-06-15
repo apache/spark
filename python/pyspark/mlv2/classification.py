@@ -40,7 +40,7 @@ from pyspark.ml.param.shared import (
     HasMomentum,
 )
 from pyspark.mlv2.base import Predictor, PredictionModel
-from pyspark.mlv2.io_utils import ParamsReadWrite, ModelReadWrite
+from pyspark.mlv2.io_utils import ParamsReadWrite, CoreModelReadWrite
 from pyspark.sql.functions import lit, count, countDistinct
 
 import torch
@@ -253,7 +253,7 @@ class LogisticRegression(
 
 
 @inherit_doc
-class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelReadWrite):
+class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ParamsReadWrite, CoreModelReadWrite):
     """
     Model fitted by LogisticRegression.
 

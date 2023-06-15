@@ -121,12 +121,24 @@ class ParamsReadWrite:
         """
         pass
 
+    def _save_to_local(self, path: str) -> None:
+        extra_metadata = self._get_extra_metadata()
+
+        metadata = _get_metadata_to_save(self, extra_metadata=extra_metadata)
+        if isinstance(self, CoreModelReadWrite):
+            core_model_path = self._get_core_model_filename()
+            self._save_core_model(os.path.join(path, core_model_path))
+            metadata["core_model_path"] = core_model_path
+
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
+            json.dump(metadata, fp)
+
     def saveToLocal(self, path: str, *, overwrite: bool = False) -> None:
         """
-        Save model to provided local path.
-        """
-        metadata = _get_metadata_to_save(self, extra_metadata=self._get_extra_metadata())
+        Save Estimator / Transformer / Model / Evaluator to provided local path.
 
+        .. versionadded:: 3.5.0
+        """
         if os.path.exists(path):
             if overwrite:
                 if os.path.isdir(path):
@@ -137,19 +149,15 @@ class ParamsReadWrite:
                 raise ValueError(f"The path {path} already exists.")
 
         os.makedirs(path)
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
-            json.dump(metadata, fp)
+        self._save_to_local(path)
 
     @classmethod
-    def loadFromLocal(cls, path: str) -> Any:
-        """
-        Load model from provided local path.
-        """
-        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
-            metadata = json.load(fp)
-
+    def _load_from_metadata(cls, metadata):
         if "type" not in metadata or metadata["type"] != "spark_connect":
-            raise RuntimeError("The model is not saved by spark ML under spark connect mode.")
+            raise RuntimeError(
+                "The saved data is not saved by ML algorithm implemented in 'pyspark.ml.connect' "
+                "module."
+            )
 
         class_name = metadata["class"]
         instance = _get_class(class_name)()
@@ -169,7 +177,34 @@ class ParamsReadWrite:
             instance._load_extra_metadata(metadata["extra"])
         return instance
 
+    @classmethod
+    def _load_from_local(cls, path: str) -> Any:
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
+            metadata = json.load(fp)
+
+        instance = cls._load_from_metadata(metadata)
+
+        if isinstance(instance, CoreModelReadWrite):
+            core_model_path = metadata["core_model_path"]
+            instance._load_core_model(os.path.join(path, core_model_path))
+
+        return instance
+
+    @classmethod
+    def loadFromLocal(cls, path: str) -> Any:
+        """
+        Load Estimator / Transformer / Model / Evaluator from provided local path.
+
+        .. versionadded:: 3.5.0
+        """
+        return cls._load_from_local(path)
+
     def save(self, path: str, *, overwrite: bool = False) -> None:
+        """
+        Save Estimator / Transformer / Model / Evaluator to provided cloud storage path.
+
+        .. versionadded:: 3.5.0
+        """
         session = _get_active_session(is_remote())
         path_exist = True
         try:
@@ -186,13 +221,18 @@ class ParamsReadWrite:
 
         tmp_local_dir = tempfile.mkdtemp(prefix="pyspark_ml_model_")
         try:
-            self.saveToLocal(tmp_local_dir, overwrite=True)
+            self._save_to_local(tmp_local_dir)
             _copy_dir_from_local_to_fs(tmp_local_dir, path)
         finally:
             shutil.rmtree(tmp_local_dir, ignore_errors=True)
 
     @classmethod
     def load(cls, path: str) -> Any:
+        """
+        Load Estimator / Transformer / Model / Evaluator from provided cloud storage path.
+
+        .. versionadded:: 3.5.0
+        """
         session = _get_active_session(is_remote())
 
         tmp_local_dir = tempfile.mkdtemp(prefix="pyspark_ml_model_")
@@ -205,12 +245,12 @@ class ParamsReadWrite:
                 with open(os.path.join(tmp_local_dir, file_name), "wb") as f:
                     f.write(file_content)
 
-            return cls.loadFromLocal(tmp_local_dir)
+            return cls._load_from_local(tmp_local_dir)
         finally:
             shutil.rmtree(tmp_local_dir, ignore_errors=True)
 
 
-class ModelReadWrite(ParamsReadWrite):
+class CoreModelReadWrite:
     def _get_core_model_filename(self) -> str:
         """
         Returns the name of the file for saving the core model.
@@ -231,12 +271,29 @@ class ModelReadWrite(ParamsReadWrite):
         """
         raise NotImplementedError()
 
-    def saveToLocal(self, path: str, *, overwrite: bool = False) -> None:
-        super(ModelReadWrite, self).saveToLocal(path, overwrite=overwrite)
-        self._save_core_model(os.path.join(path, self._get_core_model_filename()))
+
+class MetaAlgorithmReadWrite(ParamsReadWrite):
+    """
+    Meta-algorithm such as pipeline and cross validator must implement this interface.
+    """
+
+    def _save_meta_algorithm(self, root_path, node_path):
+        raise NotImplementedError()
+
+    def _load_meta_algorithm(self, root_path, node_metadata):
+        raise NotImplementedError()
+
+    def _save_to_local(self, path: str) -> None:
+        metadata = self._save_meta_algorithm(path, [])
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "w") as fp:
+            json.dump(metadata, fp)
 
     @classmethod
-    def loadFromLocal(cls, path: str) -> Any:
-        instance = super(ModelReadWrite, cls).loadFromLocal(path)
-        instance._load_core_model(os.path.join(path, instance._get_core_model_filename()))
+    def _load_from_local(cls, path: str) -> Any:
+        with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
+            metadata = json.load(fp)
+
+        instance = cls._load_from_metadata(metadata)
+        instance._load_meta_algorithm(path, metadata)
+        
         return instance

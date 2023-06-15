@@ -24,7 +24,7 @@ from pyspark import keyword_only
 from pyspark.sql import DataFrame
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
 from pyspark.mlv2.base import Estimator, Model
-from pyspark.mlv2.io_utils import ParamsReadWrite, ModelReadWrite
+from pyspark.mlv2.io_utils import ParamsReadWrite, CoreModelReadWrite
 from pyspark.mlv2.summarizer import summarize_dataframe
 
 
@@ -61,7 +61,7 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
         return self._copyValues(model)
 
 
-class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
+class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreModelReadWrite):
     def __init__(
         self, max_abs_values: Optional["np.ndarray"] = None, n_samples_seen: Optional[int] = None
     ) -> None:
@@ -143,7 +143,7 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
         return self._copyValues(model)
 
 
-class StandardScalerModel(Model, HasInputCol, HasOutputCol, ModelReadWrite):
+class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreModelReadWrite):
     def __init__(
         self,
         mean_values: Optional["np.ndarray"] = None,
