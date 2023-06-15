@@ -24,7 +24,7 @@ import pathlib
 
 import click
 
-from aexpy.models import ProduceMode
+from aexpy.models import ProduceMode, ProduceState
 from aexpy.caching import FileProduceCache
 from aexpy.services import ServiceProvider
 
@@ -159,6 +159,8 @@ def preprocess(
     if FLAG_interact:
         code.interact(banner="", local=locals())
 
+    assert result.state == ProduceState.Success, "Failed to process."
+
 
 @main.command()
 @click.argument(
@@ -202,6 +204,8 @@ def extract(file: pathlib.Path, output: pathlib.Path, view: bool):
 
     if FLAG_interact:
         code.interact(banner="", local=locals())
+
+    assert result.state == ProduceState.Success, "Failed to process."
 
 
 @main.command()
@@ -268,6 +272,8 @@ def diff(old: pathlib.Path, new: pathlib.Path, output: pathlib.Path, view: bool)
     if FLAG_interact:
         code.interact(banner="", local=locals())
 
+    assert result.state == ProduceState.Success, "Failed to process."
+
 
 @main.command()
 @click.argument(
@@ -317,6 +323,8 @@ def report(file: pathlib.Path, output: pathlib.Path, view: bool):
 
     if FLAG_interact:
         code.interact(banner="", local=locals())
+
+    assert result.state == ProduceState.Success, "Failed to process."
 
 
 if __name__ == "__main__":

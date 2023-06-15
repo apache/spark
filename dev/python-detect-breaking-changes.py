@@ -20,6 +20,12 @@
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
 
+# Usage: compare current code base with a commit or branch
+# python dev/python-detect-breaking-changes.py a540995345bc935db3b8ccf5cb94cb7caabc4847 (branch name or commit id)
+# 
+# Cache dir (detailed result and logs): dev/aexpy/cache
+
+from io import TextIOWrapper
 from pathlib import Path
 import os
 import shutil
@@ -29,77 +35,103 @@ import sys
 import json
 
 PYTHON_EXE = "python"
-AEXPY_EXE = [PYTHON_EXE, "-m", "aexpy"]
+AEXPY_EXE = [PYTHON_EXE, "-m", "aexpy", "-vvv"]
 PYSPARK_RELPATH = "python"
 PYSPARK_TOPMODULES = ["pyspark"]
+CURRENT_CODE = "__current__"
 
+ROOT_PATH = Path(__file__).parent.parent
 AEXPY_DIR = Path(__file__).parent / "aexpy"
-
-assert AEXPY_DIR.exists()
-
 CACHE_DIR = AEXPY_DIR / "cache"
+assert AEXPY_DIR.exists()
 
 def prepare():
     if not CACHE_DIR.exists():
         os.mkdir(CACHE_DIR)
 
+def runWithLog(logFile: TextIOWrapper = None, *args, **kwargs):
+    result = subprocess.run(*args, **kwargs, capture_output=True, text=True, encoding="utf-8")
+    if logFile:
+        logFile.write(result.stdout + "\n")
+        logFile.write(result.stderr + "\n")
+        logFile.flush()
+    result.check_returncode()
+
+def runAexPy(cmd: list, logFile: TextIOWrapper = None):
+    runWithLog(logFile, AEXPY_EXE + cmd, cwd=AEXPY_DIR, env={**os.environ, "PYTHONUTF8": "1"})
+
 @contextmanager
-def checkout(branch: str):
-    srcDir = CACHE_DIR / "src" / branch
-    if srcDir.exists():
+def checkout(branch: str = CURRENT_CODE, logFile: TextIOWrapper = None):
+    if branch == CURRENT_CODE:
+        yield ROOT_PATH
+    else:
+        srcDir = CACHE_DIR / "src" / branch
+        if srcDir.exists():
+            shutil.rmtree(srcDir)
+        runWithLog(logFile, ["git", "worktree", "prune"], cwd=ROOT_PATH)
+        os.makedirs(srcDir)
+        runWithLog(logFile, ["git", "worktree", "add", str(srcDir.resolve()), branch], cwd=ROOT_PATH)
+
+        yield srcDir
+
         shutil.rmtree(srcDir)
-    subprocess.run(["git", "worktree", "prune"], check=True)
-    os.makedirs(srcDir)
-    subprocess.run(["git", "worktree", "add", str(srcDir.resolve()), branch], check=True)
+        runWithLog(logFile, ["git", "worktree", "prune"], cwd=ROOT_PATH)
 
-    yield srcDir
-
-    shutil.rmtree(srcDir)
-    subprocess.run(["git", "worktree", "prune"], check=True)
-
-def extract(branch: str, srcDir: Path):
+def extract(branch: str, srcDir: Path, logFile: TextIOWrapper = None):
     distDir = CACHE_DIR / "dist" / branch
     if not distDir.exists():
         os.makedirs(distDir)
     
     preprocess = distDir / "preprocess.json"
-    subprocess.run(AEXPY_EXE + ["preprocess", str((srcDir / PYSPARK_RELPATH).resolve())] + PYSPARK_TOPMODULES + ["-r", f"pyspark@{branch}", "-o", str(preprocess.resolve())], cwd=AEXPY_DIR, check=True, env={**os.environ, "PYTHONUTF8": "1"})
+    runAexPy(["preprocess", str((srcDir / PYSPARK_RELPATH).resolve())] + PYSPARK_TOPMODULES + ["-r", f"pyspark@{branch}", "-o", str(preprocess.resolve())], logFile)
 
     extract = distDir / "extract.json"
-    subprocess.run(AEXPY_EXE + ["extract", str(preprocess.resolve()), "-o", str(extract.resolve())], cwd=AEXPY_DIR, check=True, env={**os.environ, "PYTHONUTF8": "1"})
+    runAexPy(["extract", str(preprocess.resolve()), "-o", str(extract.resolve())], logFile)
     
     return extract
 
-def diff(old: str, new: str):
-    with checkout(old) as src1:
-        print(f"Extract API of {old}...")
-        extract1 = extract(old, src1)
-        with checkout(new) as src2:
-            print(f"Extract API of {new}...")
-            extract2 = extract(new, src2)
-            
-            print(f"Diff APIs...")
-            diff = CACHE_DIR / f"diff-{old}-{new}.json"
-            subprocess.run(AEXPY_EXE + ["diff", str(extract1.resolve()), str(extract2.resolve()), "-o", str(diff.resolve())], cwd=AEXPY_DIR, check=True, env={**os.environ, "PYTHONUTF8": "1"})
+def diff(old: str, new: str = CURRENT_CODE):
+    logPath = CACHE_DIR / f"log-{old}-{new}.log"
+    with open(logPath, "w", encoding="utf-8") as log:
+        with checkout(old, log) as src1:
+            log.write(f"Extract API of {old}...\n")
+            extract1 = extract(old, src1, log)
+            with checkout(new) as src2:
+                log.write(f"Extract API of {new}...\n")
+                extract2 = extract(new, src2, log)
+                
+                log.write(f"Diff APIs...\n")
+                diff = CACHE_DIR / f"diff-{old}-{new}.json"
+                runAexPy(["diff", str(extract1.resolve()), str(extract2.resolve()), "-o", str(diff.resolve())], log)
 
-            print(f"Generate changes...")
-            report = CACHE_DIR / f"report-{old}-{new}.json"
-            subprocess.run(AEXPY_EXE + ["report", str(diff.resolve()), "-o", str(report.resolve())], cwd=AEXPY_DIR, check=True, env={**os.environ, "PYTHONUTF8": "1"})
+                log.write(f"Generate changes...\n")
+                report = CACHE_DIR / f"report-{old}-{new}.json"
+                runAexPy(["report", str(diff.resolve()), "-o", str(report.resolve())], log)
 
-            result = json.loads(report.read_text("utf-8"))
+                result = json.loads(report.read_text("utf-8"))
 
-            return result["content"]
+                log.write(f"Result: {result}\n")
+
+                return result["content"]
 
 def main():
     prepare()
 
-    assert len(sys.argv) == 2, f"Please give the target branch name"
+    old = ""
+    outputFile = ""
 
-    old = sys.argv[1]
-    new = "master"
+    if len(sys.argv) >= 2:
+        old = sys.argv[1]
+    if len(sys.argv) >= 3:
+        outputFile = sys.argv[2]
+
+    assert old, "Please give the original branch name or commit id."
     
-    result = diff(old, new)
-    print(result)
+    result = diff(old)
+    if outputFile:
+        Path(outputFile).write_text(result, encoding="utf-8")
+    else:
+        print(result)
 
 
 if __name__ == "__main__":
