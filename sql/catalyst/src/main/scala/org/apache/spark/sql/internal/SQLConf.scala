@@ -984,11 +984,12 @@ object SQLConf {
       "`parquet.compression` is specified in the table-specific options/properties, the " +
       "precedence would be `compression`, `parquet.compression`, " +
       "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
-      "snappy, gzip, lzo, brotli, lz4, zstd.")
+      "snappy, gzip, lzo, brotli, lz4, lz4raw, zstd.")
     .version("1.1.1")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo", "lz4", "brotli", "zstd"))
+    .checkValues(
+      Set("none", "uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "lz4raw", "zstd"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -1746,6 +1747,16 @@ object SQLConf {
     .version("3.1.0")
     .intConf
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
+    .createOptional
+
+  val FILES_MAX_PARTITION_NUM = buildConf("spark.sql.files.maxPartitionNum")
+    .doc("The suggested (not guaranteed) maximum number of split file partitions. If it is set, " +
+      "Spark will rescale each partition to make the number of partitions is close to this " +
+      "value if the initial number of partitions exceeds this value. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.5.0")
+    .intConf
+    .checkValue(v => v > 0, "The maximum number of partitions must be a positive integer.")
     .createOptional
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
@@ -4507,6 +4518,8 @@ class SQLConf extends Serializable with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
+
+  def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 

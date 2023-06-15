@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.IntegerType
 
-class AlignMergeAssignmentsSuite extends AlignAssignmentsSuite {
+class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
   test("align assignments (primitive types)") {
     val (matchedActions, notMatchedActions, notMatchedBySourceActions) =

@@ -389,15 +389,16 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     }
 
     // Create a project if this INSERT has a user-specified column list.
-    val isByName = insert.userSpecifiedCols.nonEmpty
-    val query = if (isByName) {
+    val hasColumnList = insert.userSpecifiedCols.nonEmpty
+    val query = if (hasColumnList) {
       createProjectForByNameQuery(insert)
     } else {
       insert.query
     }
     val newQuery = try {
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = isByName, conf, supportColDefaultValue = true)
+        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
+        supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
           e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH" =>
@@ -425,7 +426,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
@@ -506,7 +507,8 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, _, query, _, _) =>
+      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition,
+          _, query, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
@@ -528,7 +530,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||

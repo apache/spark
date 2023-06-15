@@ -27,12 +27,6 @@ class FrameParityCovTests(FrameCovMixin, PandasOnSparkTestUtils, ReusedConnectTe
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43613): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_cov(self):
-        super().test_cov()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.computation.test_parity_cov import *  # noqa: F401

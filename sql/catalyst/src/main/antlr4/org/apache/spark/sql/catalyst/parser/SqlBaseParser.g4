@@ -318,7 +318,7 @@ query
 
 insertInto
     : INSERT OVERWRITE TABLE? identifierReference (partitionSpec (IF NOT EXISTS)?)?  identifierList?         #insertOverwriteTable
-    | INSERT INTO TABLE? identifierReference partitionSpec? (IF NOT EXISTS)? identifierList?                 #insertIntoTable
+    | INSERT INTO TABLE? identifierReference partitionSpec? (IF NOT EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
     | INSERT INTO TABLE? identifierReference REPLACE whereClause                                             #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
@@ -374,7 +374,7 @@ tableProvider
     ;
 
 createTableClauses
-    :((OPTIONS options=propertyList) |
+    :((OPTIONS options=expressionPropertyList) |
      (PARTITIONED BY partitioning=partitionFieldList) |
      skewSpec |
      bucketSpec |
@@ -403,6 +403,14 @@ propertyValue
     | DECIMAL_VALUE
     | booleanValue
     | stringLit
+    ;
+
+expressionPropertyList
+    : LEFT_PAREN expressionProperty (COMMA expressionProperty)* RIGHT_PAREN
+    ;
+
+expressionProperty
+    : key=propertyKey (EQ? value=expression)?
     ;
 
 constantList
@@ -1362,6 +1370,7 @@ ansiNonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAME
     | NAMESPACE
     | NAMESPACES
     | NANOSECOND
@@ -1683,6 +1692,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAME
     | NAMESPACE
     | NAMESPACES
     | NANOSECOND

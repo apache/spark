@@ -308,6 +308,10 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("SPARK-42290: NotEnoughMemory error can't be create") {
+    QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(new OutOfMemoryError(), Seq())
+  }
+
   test("UNSUPPORTED_FEATURE - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
@@ -375,6 +379,21 @@ class QueryExecutionErrorsSuite
       errorClass = "CANNOT_PARSE_DECIMAL",
       parameters = Map[String, String](),
       sqlState = "22018")
+  }
+
+  test("CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS: parse json arrays as structs") {
+    val jsonStr = """[{"a":1, "b":0.8}]"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"SELECT from_json('$jsonStr', 'a INT, b DOUBLE', map('mode','FAILFAST') )")
+          .collect()
+      },
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS",
+      parameters = Map(
+        "badRecord" -> jsonStr,
+        "failFastMode" -> "FAILFAST"
+      ),
+      sqlState = "22023")
   }
 
   test("FAILED_EXECUTE_UDF: execute user defined function") {

@@ -463,6 +463,19 @@ class DataFrameAggregateSuite extends QueryTest
     checkAggregatesWithTol(sparkKurtosis, Row(-1.5), absTol)
   }
 
+  test("linear regression") {
+    checkAnswer(testData2.agg(regr_avgx($"a", $"b")), testData2.selectExpr("regr_avgx(a, b)"))
+    checkAnswer(testData2.agg(regr_avgy($"a", $"b")), testData2.selectExpr("regr_avgy(a, b)"))
+    checkAnswer(testData2.agg(regr_count($"a", $"b")), testData2.selectExpr("regr_count(a, b)"))
+    checkAnswer(
+      testData2.agg(regr_intercept($"a", $"b")), testData2.selectExpr("regr_intercept(a, b)"))
+    checkAnswer(testData2.agg(regr_r2($"a", $"b")), testData2.selectExpr("regr_r2(a, b)"))
+    checkAnswer(testData2.agg(regr_slope($"a", $"b")), testData2.selectExpr("regr_slope(a, b)"))
+    checkAnswer(testData2.agg(regr_sxx($"a", $"b")), testData2.selectExpr("regr_sxx(a, b)"))
+    checkAnswer(testData2.agg(regr_sxy($"a", $"b")), testData2.selectExpr("regr_sxy(a, b)"))
+    checkAnswer(testData2.agg(regr_syy($"a", $"b")), testData2.selectExpr("regr_syy(a, b)"))
+  }
+
   test("zero moments") {
     withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val input = Seq((1, 2)).toDF("a", "b")
@@ -1004,6 +1017,29 @@ class DataFrameAggregateSuite extends QueryTest
         context = ExpectedContext(fragment = "min_by(x, y)", start = 7, stop = 18)
       )
     }
+  }
+
+  test("percentile_like") {
+    // percentile
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        percentile(col("year"), lit(0.3)),
+        percentile(col("year"), lit(Array(0.25, 0.75))),
+        percentile(col("year"), lit(0.3), lit(2)),
+        percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
+      ),
+      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+        Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
+    )
+
+    // median
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        median(col("year"))
+      ),
+      Row("Java", 2012.5) ::
+        Row("dotNET", 2012.0) :: Nil
+    )
   }
 
   test("count_if") {

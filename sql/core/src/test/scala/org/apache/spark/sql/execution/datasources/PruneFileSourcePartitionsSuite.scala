@@ -36,6 +36,11 @@ import org.apache.spark.sql.types.StructType
 
 class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SharedSparkSession {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
+  }
+
   override def format: String = "parquet"
 
   object Optimize extends RuleExecutor[LogicalPlan] {

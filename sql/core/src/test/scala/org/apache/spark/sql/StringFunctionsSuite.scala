@@ -143,6 +143,39 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
   }
 
+  test("string rlike / regexp / regexp_like") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+b"),
+      ("1a 2b 14m", "[a-z]+b")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        rlike($"a", $"b"),
+        regexp($"a", $"b"),
+        regexp_like($"a", $"b")),
+      Row(false, false, false) :: Row(true, true, true) :: Nil)
+    checkAnswer(
+      df.selectExpr(
+        "rlike(a, b)",
+        "regexp(a, b)",
+        "regexp_like(a, b)"),
+      Row(false, false, false) :: Row(true, true, true) :: Nil)
+  }
+
+  test("string regexp_count") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+"),
+      ("1a 2b 14m", "mmm")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(regexp_count($"a", $"b")),
+      Row(0) :: Row(3) :: Nil)
+
+    checkAnswer(
+      df.selectExpr("regexp_count(a, b)"),
+      Row(0) :: Row(3) :: Nil)
+  }
+
   test("string regex_replace / regex_extract") {
     val df = Seq(
       ("100-200", "(\\d+)-(\\d+)", "300"),
@@ -180,6 +213,58 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
     )
+  }
+
+  test("string regexp_extract_all") {
+    val df = Seq(("1a 2b 14m", "(\\d+)([a-z]+)")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        regexp_extract_all($"a", $"b", lit(0)),
+        regexp_extract_all($"a", $"b"),
+        regexp_extract_all($"a", $"b", lit(2))),
+      Row(Seq("1a", "2b", "14m"), Seq("1", "2", "14"), Seq("a", "b", "m")) :: Nil)
+    checkAnswer(
+      df.selectExpr(
+        "regexp_extract_all(a, b, 0)",
+        "regexp_extract_all(a, b)",
+        "regexp_extract_all(a, b, 2)"),
+      Row(Seq("1a", "2b", "14m"), Seq("1", "2", "14"), Seq("a", "b", "m")) :: Nil)
+  }
+
+  test("string regexp_substr") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+"),
+      ("1a 2b 14m", "\\d+ "),
+      ("1a 2b 14m", "\\d+(a|b|m)"),
+      ("1a 2b 14m", "\\d{2}(a|b|m)"),
+      ("1a 2b 14m", "")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(regexp_substr($"a", $"b")),
+      Row("14m") :: Row("1") :: Row("1a") :: Row(null) :: Row(null) :: Nil)
+    checkAnswer(
+      df.selectExpr("regexp_substr(a, b)"),
+      Row("14m") :: Row("1") :: Row("1a") :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("string regexp_instr") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+(a|b|m)"),
+      ("1a 2b 14m", "\\d{2}(a|b|m)")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        regexp_instr($"a", $"b"),
+        regexp_instr($"a", $"b", lit(1)),
+        regexp_instr($"a", $"b", lit(2))),
+      Row(1, 1, 1) :: Row(7, 7, 7) :: Nil)
+    checkAnswer(
+      df.selectExpr(
+        "regexp_instr(a, b)",
+        "regexp_instr(a, b, 1)",
+        "regexp_instr(a, b, 2)"),
+      Row(1, 1, 1) :: Row(7, 7, 7) :: Nil)
   }
 
   test("string ascii function") {
@@ -619,6 +704,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
       )
     )
+    checkAnswer(
+      df1.select(str_to_map(col("a"), lit(","), lit("="))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
+      )
+    )
 
     val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
 
@@ -626,9 +718,17 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
+    checkAnswer(
+      df2.select(str_to_map(col("a"))),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
 
     checkAnswer(
       df2.selectExpr("str_to_map(a, ',')"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+    checkAnswer(
+      df2.select(str_to_map(col("a"), lit(","))),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
@@ -644,6 +744,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Map("k" -> "2", "v" -> "3"))
       )
     )
+    checkAnswer(
+      df3.select(str_to_map(col("str"), col("delim1"), col("delim2"))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
 
     val df4 = Seq(
       ("a:1&b:2", "&"),
@@ -652,6 +759,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df4.selectExpr("str_to_map(str, delim1)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+    checkAnswer(
+      df4.select(str_to_map(col("str"), col("delim1"))),
       Seq(
         Row(Map("a" -> "1", "b" -> "2")),
         Row(Map("k" -> "2", "v" -> "3"))
@@ -724,6 +838,38 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("mask(a,'Q','q','d','o')"),
       Row("QqQQdddoooo") :: Row(null) :: Nil
+    )
+  }
+
+  test("to_binary") {
+    val df = Seq("abc").toDF("a")
+    checkAnswer(
+      df.selectExpr("to_binary(a, 'utf-8')"),
+      df.select(to_binary(col("a"), lit("utf-8")))
+    )
+  }
+
+  test("to_char") {
+    val df = Seq(78.12).toDF("a")
+    checkAnswer(
+      df.selectExpr("to_char(a, '$99.99')"),
+      Seq(Row("$78.12"))
+    )
+    checkAnswer(
+      df.select(to_char(col("a"), lit("$99.99"))),
+      Seq(Row("$78.12"))
+    )
+  }
+
+  test("to_number") {
+     val df = Seq("$78.12").toDF("a")
+    checkAnswer(
+      df.selectExpr("to_number(a, '$99.99')"),
+      Seq(Row(78.12))
+    )
+    checkAnswer(
+      df.select(to_number(col("a"), lit("$99.99"))),
+      Seq(Row(78.12))
     )
   }
 }

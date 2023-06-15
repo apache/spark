@@ -180,6 +180,7 @@ MINUTES	false
 MONTH	false
 MONTHS	false
 MSCK	false
+NAME	false
 NAMESPACE	false
 NAMESPACES	false
 NANOSECOND	false

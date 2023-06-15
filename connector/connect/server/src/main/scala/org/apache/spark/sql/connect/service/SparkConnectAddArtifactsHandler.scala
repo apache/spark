@@ -30,6 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.artifact.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -100,7 +101,12 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       // We do not store artifacts that fail the CRC. The failure is reported in the artifact
       // summary and it is up to the client to decide whether to retry sending the artifact.
       if (artifact.getCrcStatus.contains(true)) {
-        addStagedArtifactToArtifactManager(artifact)
+        if (artifact.path.startsWith(
+            SparkConnectArtifactManager.forwardToFSPrefix + File.separator)) {
+          artifactManager.uploadArtifactToFs(holder, artifact.path, artifact.stagedPath)
+        } else {
+          addStagedArtifactToArtifactManager(artifact)
+        }
       }
       artifact.summary()
     }.toSeq
@@ -164,7 +170,16 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       }
 
     val path: Path = Paths.get(canonicalFileName)
-    val stagedPath: Path = stagingDir.resolve(path)
+    val stagedPath: Path =
+      try {
+        ArtifactUtils.concatenatePaths(stagingDir, path)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new IllegalArgumentException(
+            s"Artifact with name: $name is invalid. The `name` " +
+              s"must be a relative path and cannot reference parent/sibling/nephew directories.")
+        case NonFatal(e) => throw e
+      }
 
     Files.createDirectories(stagedPath.getParent)
 

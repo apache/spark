@@ -4667,6 +4667,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |SELECT * FROM z
         |""".stripMargin).collect()
   }
+
+  test("SPARK-43979: CollectedMetrics should be treated as the same one for self-join") {
+    spark.range(1, 5).toDF("age")
+      .withColumn("customer_id", lit(1))
+      .createOrReplaceTempView("tmp_view")
+
+    val df1 = spark.sql(
+      """
+         WITH cte_1 AS (
+           SELECT customer_id, age FROM tmp_view
+         )
+        SELECT * from cte_1
+      """
+    ).observe("my_event", count("*"))
+    df1.crossJoin(df1)
+  }
 }
 
 case class Foo(bar: Option[String])

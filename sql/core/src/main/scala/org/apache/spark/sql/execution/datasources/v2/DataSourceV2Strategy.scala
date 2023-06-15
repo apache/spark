@@ -103,8 +103,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
-    tableSpec.copy(
-      location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
+    tableSpec.withNewLocation(tableSpec.location.map(makeQualifiedDBObjectPath(_)))
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -173,7 +172,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
-        tableSpec, ifNotExists) =>
+        tableSpec: TableSpec, ifNotExists) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
@@ -184,7 +183,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
-    case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec,
+    case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
         options, ifNotExists, true) =>
       catalog match {
         case staging: StagingTableCatalog =>
@@ -198,7 +197,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
-    case ReplaceTable(ResolvedIdentifier(catalog, ident), schema, parts, tableSpec, orCreate) =>
+    case ReplaceTable(
+        ResolvedIdentifier(catalog, ident), schema, parts, tableSpec: TableSpec, orCreate) =>
       ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
@@ -217,7 +217,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
-        parts, query, tableSpec, options, orCreate, true) =>
+        parts, query, tableSpec: TableSpec, options, orCreate, true) =>
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
@@ -318,6 +318,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Some(write)) =>
       // use the original relation to refresh the cache
       WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
+
+    case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
+        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
+      MergeRowsExec(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
+        notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality,
+        output, planLater(child)) :: Nil
 
     case WriteToContinuousDataSource(writer, query, customMetrics) =>
       WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil

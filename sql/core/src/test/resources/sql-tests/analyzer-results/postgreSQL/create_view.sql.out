@@ -574,8 +574,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 64,
-    "stopIndex" : 74,
-    "fragment" : "v10_temp t2"
+    "stopIndex" : 71,
+    "fragment" : "v10_temp"
   } ]
 }
 
