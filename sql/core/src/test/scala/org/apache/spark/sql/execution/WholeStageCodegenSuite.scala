@@ -233,8 +233,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
 
-  test("Build-side Outer ShuffledHashJoin and SortMergeJoin should be included " +
-    "in WholeStageCodegen") {
+  test("SPARK-44060 Code-gen for build side outer shuffled hash join") {
     val df1 = spark.range(0, 5).select($"id".as("k1"))
     val df2 = spark.range(1, 11).select($"id".as("k2"))
     val df3 = spark.range(2, 5).select($"id".as("k3"))

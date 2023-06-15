@@ -496,12 +496,8 @@ case class ShuffledHashJoinExec(
          |    }
          |  }
          |
-         |  if ($foundMatch) {
+         |  if ($foundMatch || $isFullOuterJoin) {
          |    $consumeFullOuterJoinRow();
-         |  } else {
-         |    if ($isFullOuterJoin) {
-         |      $consumeFullOuterJoinRow();
-         |    }
          |  }
          |
          |  if (shouldStop()) return;
