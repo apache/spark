@@ -79,7 +79,10 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) extends Logging {
+class SparkConnectPlanner private (val session: SparkSession) extends Logging {
+
+  def this(sessionHolder: SessionHolder) = this(sessionHolder.session)
+
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -146,7 +149,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
       case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
-        transformCachedRemoteRelation(session, rel.getCachedRemoteRelation)
+        transformCachedRemoteRelation(rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -790,9 +793,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       .logicalPlan
   }
 
-  private def transformCachedRemoteRelation(
-      session: SparkSession,
-      rel: proto.CachedRemoteRelation): LogicalPlan = {
+  private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
     SparkConnectService.cachedDataFrameManager
       .get(session, rel.getRelationId)
       .logicalPlan

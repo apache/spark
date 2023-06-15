@@ -561,7 +561,7 @@ class CachedRemoteRelation(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-        plan.cached_remote_relation.relationId = self._relationId
+        plan.cached_remote_relation.relation_id = self._relationId
         return plan
 
 

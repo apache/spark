@@ -49,7 +49,7 @@ private[connect] class SparkConnectAnalyzeHandler(
   def process(
       request: proto.AnalyzePlanRequest,
       session: SparkSession): proto.AnalyzePlanResponse = {
-    lazy val planner = new SparkConnectPlanner(session)
+    lazy val planner = new SparkConnectPlanner(sessionHolder)
     val builder = proto.AnalyzePlanResponse.newBuilder()
 
     request.getAnalyzeCase match {
