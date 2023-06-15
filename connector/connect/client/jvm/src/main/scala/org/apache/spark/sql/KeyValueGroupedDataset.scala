@@ -463,9 +463,9 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
   }
 
   protected def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
-      outputMode: OutputMode,
+      outputMode: Option[OutputMode],
       timeoutConf: GroupStateTimeout,
-      initialState: KeyValueGroupedDataset[K, S],
+      initialState: Option[KeyValueGroupedDataset[K, S]],
       isMapGroupWithState: Boolean)(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
     throw new UnsupportedOperationException
@@ -516,7 +516,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
-    flatMapGroupsWithStateHelper(null, timeoutConf, null, isMapGroupWithState = true)(
+    flatMapGroupsWithStateHelper(None, timeoutConf, None, isMapGroupWithState = true)(
       UdfUtils.mapGroupsWithStateFuncToFlatMapAdaptor(func))
   }
 
@@ -549,8 +549,11 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
       timeoutConf: GroupStateTimeout,
       initialState: KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
-    flatMapGroupsWithStateHelper(null, timeoutConf, initialState, isMapGroupWithState = true)(
-      UdfUtils.mapGroupsWithStateFuncToFlatMapAdaptor(func))
+    flatMapGroupsWithStateHelper(
+      None,
+      timeoutConf,
+      Some(initialState),
+      isMapGroupWithState = true)(UdfUtils.mapGroupsWithStateFuncToFlatMapAdaptor(func))
   }
 
   /**
@@ -682,7 +685,11 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
-    flatMapGroupsWithStateHelper(outputMode, timeoutConf, null, isMapGroupWithState = false)(func)
+    flatMapGroupsWithStateHelper(
+      Some(outputMode),
+      timeoutConf,
+      None,
+      isMapGroupWithState = false)(func)
   }
 
   /**
@@ -718,9 +725,9 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
       initialState: KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
     flatMapGroupsWithStateHelper(
-      outputMode,
+      Some(outputMode),
       timeoutConf,
-      initialState,
+      Some(initialState),
       isMapGroupWithState = false)(func)
   }
 
@@ -917,21 +924,22 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
-      outputMode: OutputMode,
+      outputMode: Option[OutputMode],
       timeoutConf: GroupStateTimeout,
-      initialState: KeyValueGroupedDataset[K, S],
+      initialState: Option[KeyValueGroupedDataset[K, S]],
       isMapGroupWithState: Boolean)(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
-    if (outputMode != null && outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+    if (outputMode.isDefined && outputMode.get != OutputMode.Append &&
+      outputMode.get != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")
     }
 
-    if (initialState != null) {
-      assert(initialState.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
+    if (initialState.isDefined) {
+      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
     }
 
-    val initialStateImpl = if (initialState != null) {
-      initialState.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
+    val initialStateImpl = if (initialState.isDefined) {
+      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
     } else {
       null
     }
@@ -949,8 +957,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .addAllGroupingExpressions(groupingExprs)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
         .setIsMapGroupsWithState(isMapGroupWithState)
-        .setOutputMode(if (outputMode == null) OutputMode.Update.toString
-        else outputMode.toString)
+        .setOutputMode(if (outputMode.isEmpty) OutputMode.Update.toString
+        else outputMode.get.toString)
         .setTimeoutConf(timeoutConf.toString)
         .addAllInitialGroupingExpressions(if (initialStateImpl != null) {
           initialStateImpl.groupingExprs

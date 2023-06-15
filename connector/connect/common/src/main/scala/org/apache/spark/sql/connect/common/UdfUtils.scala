@@ -99,10 +99,10 @@ private[sql] object UdfUtils extends Serializable {
   def mapValuesAdaptor[K, V, S, U, IV](
       f: (K, Iterator[V], GroupState[S]) => Iterator[U],
       valueMapFunc: IV => V): (K, Iterator[IV], GroupState[S]) => Iterator[U] = {
-    print("Used function: mapValuesAdaptor")
-    (k: K, itr: Iterator[IV], s: GroupState[S]) => {
-      f(k, itr.map(v => valueMapFunc(v)), s)
-    }
+    (k: K, itr: Iterator[IV], s: GroupState[S]) =>
+      {
+        f(k, itr.map(v => valueMapFunc(v)), s)
+      }
   }
 
   def mapGroupsWithStateFuncToFlatMapAdaptor[K, V, S, U](

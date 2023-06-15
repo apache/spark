@@ -3013,7 +3013,9 @@ class GroupMap(google.protobuf.message.Message):
         """(Optional) Expressions for sorting. Only used by Scala Sorted Group Map API."""
     @property
     def initial_input(self) -> global___Relation:
-        """(Optional) Input relation for initial State."""
+        """Below fields are only used by (Flat)MapGroupsWithState
+        (Optional) Input relation for initial State.
+        """
     @property
     def initial_grouping_expressions(
         self,

@@ -858,6 +858,7 @@ message GroupMap {
   // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
   repeated Expression sorting_expressions = 4;
 
+  // Below fields are only used by (Flat)MapGroupsWithState
   // (Optional) Input relation for initial State.
   Relation initial_input = 5;
 
