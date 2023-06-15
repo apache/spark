@@ -1431,7 +1431,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         3    1
         Name: pandas-on-Spark, dtype: int64
         """
-        from pyspark.pandas.series import first_series
+        from pyspark.pandas.series import first_series, Series
 
         if isinstance(self, Series):
             warnings.warn(
