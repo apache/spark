@@ -1137,10 +1137,6 @@ class PlanGenerationTestSuite
     boolean.select(fn.bool_and(fn.col("flag")))
   }
 
-  test("function any") {
-    boolean.select(fn.any(fn.col("flag")))
-  }
-
   test("function some") {
     boolean.select(fn.some(fn.col("flag")))
   }

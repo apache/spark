@@ -1305,14 +1305,6 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def any(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
-
-  /**
-   * Aggregate function: returns true if at least one value of `e` is true.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
   def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
 
   /**

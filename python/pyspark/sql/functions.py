@@ -2562,53 +2562,6 @@ def bool_and(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def py_any(col: "ColumnOrName") -> Column:
-    """
-    Aggregate function: returns true if at least one value of `col` is true.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        column to check if at least one value is true.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        true if at least one value of `col` is true, false otherwise.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
-    >>> df.select(py_any("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |         true|
-    +-------------+
-    <BLANKLINE>
-    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
-    >>> df.select(py_any("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |         true|
-    +-------------+
-    <BLANKLINE>
-    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
-    >>> df.select(py_any("flag")).show()
-    +-------------+
-    |bool_or(flag)|
-    +-------------+
-    |        false|
-    +-------------+
-    <BLANKLINE>
-    """
-    return _invoke_function_over_columns("any", col)
-
-
-@try_remote_functions
 def some(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns true if at least one value of `col` is true.

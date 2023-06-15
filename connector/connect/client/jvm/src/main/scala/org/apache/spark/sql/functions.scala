@@ -1241,14 +1241,6 @@ object functions {
    * @group agg_funcs
    * @since 3.5.0
    */
-  def any(e: Column): Column = Column.fn("any", e)
-
-  /**
-   * Aggregate function: returns true if at least one value of `e` is true.
-   *
-   * @group agg_funcs
-   * @since 3.5.0
-   */
   def some(e: Column): Column = Column.fn("some", e)
 
   /**
