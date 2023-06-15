@@ -132,6 +132,15 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             df.select(str_repr_func("array").alias("str_id")).collect(),
         )
 
+    def test_nested_array_input(self):
+        df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
+        self.assertEquals(
+            df.select(
+                udf(lambda x: str(x), returnType="string", useArrow=True)("nested_array")
+            ).first()[0],
+            "[[1, 2], [3, 4]]",
+        )
+
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
