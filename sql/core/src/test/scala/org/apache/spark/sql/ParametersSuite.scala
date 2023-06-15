@@ -356,27 +356,27 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = 10))
   }
 
-  ignore("non-substituted positional parameters") {
+  test("non-substituted positional parameters") {
     checkError(
       exception = intercept[AnalysisException] {
         spark.sql("select ?, ?", Seq(1))
       },
       errorClass = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "def"),
+      parameters = Map("name" -> "_10"),
       context = ExpectedContext(
-        fragment = ":def",
-        start = 13,
-        stop = 16))
+        fragment = "?",
+        start = 10,
+        stop = 10))
     checkError(
       exception = intercept[AnalysisException] {
         sql("select ?").collect()
       },
       errorClass = "UNBOUND_SQL_PARAMETER",
-      parameters = Map("name" -> "abc"),
+      parameters = Map("name" -> "_7"),
       context = ExpectedContext(
-        fragment = ":abc",
+        fragment = "?",
         start = 7,
-        stop = 10))
+        stop = 7))
   }
 
   test("literal argument of named parameter in `sql()`") {

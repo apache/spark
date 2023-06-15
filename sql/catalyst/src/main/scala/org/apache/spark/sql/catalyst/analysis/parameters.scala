@@ -136,7 +136,9 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
         val res = bind(child) {
-          case PosParameter(pos) if posToIndex.contains(pos) => args(posToIndex(pos)) }
+          case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
+            args(posToIndex(pos))
+        }
         res.copyTagsFrom(p)
         res
 
