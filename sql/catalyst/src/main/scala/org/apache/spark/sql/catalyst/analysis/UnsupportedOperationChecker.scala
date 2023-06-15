@@ -522,9 +522,9 @@ object UnsupportedOperationChecker extends Logging {
             }
           }.mkString(", ")
           throw new AnalysisException(
-            s"Unsupported window function in $windowFuncs. Structured " +
-            "Streaming only supports time-window aggregation using the `window` function. " +
-            s"(window specification: '$windowSpec')",
+            s"Window function is not supported in $windowFuncs on streaming DataFrames/Datasets. " +
+            "Structured Streaming only supports time-window aggregation using the `window` " +
+            s"function. (window specification: '$windowSpec')",
             subPlan.origin.line,
             subPlan.origin.startPosition)
 

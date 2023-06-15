@@ -738,7 +738,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
-    "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
+    "window",
+    Window(Nil, Nil, Nil, _),
+    expectedMsg =
+      "Structured Streaming only supports time-window aggregation using the `window` function")
 
   // Output modes with aggregation and non-aggregation plans
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)

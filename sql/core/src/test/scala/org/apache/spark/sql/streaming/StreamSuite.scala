@@ -703,7 +703,7 @@ class StreamSuite extends StreamTest {
         .start()
     }
   assert(e.getMessage.contains(
-    "Unsupported window function in 'row_number()' as column 'rn_col'"))
+    "Window function is not supported in 'row_number()' as column 'rn_col'"))
   }
 
 
