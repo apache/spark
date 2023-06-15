@@ -1859,7 +1859,6 @@ def bit_count(col: "ColumnOrName") -> Column:
     |           1|
     |           1|
     +------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("bit_count", col)
 
@@ -1896,7 +1895,6 @@ def bit_get(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
     |            0|
     |            1|
     +-------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("bit_get", col, pos)
 
@@ -1933,7 +1931,6 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
     |  0|
     |  1|
     +---+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("getbit", col, pos)
 
