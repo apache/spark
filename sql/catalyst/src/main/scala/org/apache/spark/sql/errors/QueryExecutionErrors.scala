@@ -480,7 +480,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def unsupportedEncoderError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2024",
+      errorClass = "UNSUPPORTED_ENCODER_ERROR",
       messageParameters = Map.empty)
   }
 
