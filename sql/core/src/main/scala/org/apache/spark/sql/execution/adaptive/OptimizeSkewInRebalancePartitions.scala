@@ -102,9 +102,9 @@ case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequireme
         stage.mapStats.isDefined && isSupported(stage.shuffle) =>
         tryOptimizeSkewedPartitions(stage)
     }
-    val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
-      ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
-    } else {
+    val requirementSatisfied = ensureRequirements.requiredDistribution.map { rd =>
+      ValidateRequirements.validate(optimized, rd)
+    }.getOrElse {
       ValidateRequirements.validate(optimized)
     }
     if (requirementSatisfied) {
@@ -121,6 +121,9 @@ case class OptimizeSkewInRebalancePartitions(ensureRequirements: EnsureRequireme
   }
 }
 
+// After optimizing skew in RebalancePartitions, we need to run EnsureRequirements again to add
+// necessary shuffles. However, this shouldn't apply to the sub-plan under the skewed shuffle
+// partitions, as it's guaranteed to satisfy distribution requirement.
 case class RebalanceChildWrapper(plan: SparkPlan) extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
   override def output: Seq[Attribute] = plan.output

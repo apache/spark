@@ -228,9 +228,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     // TODO: It's possible that only one skewed join in the query plan leads to extra shuffles and
     //       we only need to skip optimizing that join. We should make the strategy smarter here.
     val optimized = optimizeSkewJoin(plan)
-    val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
-      ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
-    } else {
+    val requirementSatisfied = ensureRequirements.requiredDistribution.map { rd =>
+      ValidateRequirements.validate(optimized, rd)
+    }.getOrElse {
       ValidateRequirements.validate(optimized)
     }
     if (requirementSatisfied) {
