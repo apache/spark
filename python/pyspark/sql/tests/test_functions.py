@@ -60,7 +60,7 @@ class FunctionsTestsMixin:
             "typedLit",  # Scala only
             "monotonicallyIncreasingId",  # depreciated, use monotonically_increasing_id
             "not",  # equivalent to python ~expression
-            "udaf", # used for creating UDAF's which are not supported in PySpark
+            "udaf",  # used for creating UDAF's which are not supported in PySpark
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)

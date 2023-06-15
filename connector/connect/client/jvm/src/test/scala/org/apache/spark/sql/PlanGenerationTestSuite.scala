@@ -2323,10 +2323,6 @@ class PlanGenerationTestSuite
     fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
-  functionTest("if") {
-    fn.`if`(lit(true), fn.col("g"), fn.col("g"))
-  }
-
   functionTest("ifnull") {
     fn.ifnull(fn.col("g"), fn.col("g"))
   }

@@ -285,24 +285,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("1100", null))
   }
 
-  test("if function") {
-    val df = Seq((1, 2)).toDF("a", "b")
-    checkAnswer(
-      df.selectExpr("if(a = 1, 'one', 'not_one')", "if(b = 1, 'one', 'not_one')"),
-      Row("one", "not_one"))
-
-    val df1 = Seq((true, false)).toDF("a", "b")
-    checkAnswer(
-      df1.selectExpr("if(a, 'one', 'not_one')", "if(b, 'one', 'not_one')"),
-      Seq(Row("one", "not_one"))
-    )
-    checkAnswer(
-      df1.select(`if`(col("a"), lit("one"), lit("not_one")),
-        `if`(col("b"), lit("one"), lit("not_one"))),
-      Seq(Row("one", "not_one"))
-    )
-  }
-
   test("ifnull function") {
     val df = Seq[Integer](null).toDF("a")
     checkAnswer(df.selectExpr("ifnull(a, 8)"), Seq(Row(8)))
