@@ -579,37 +579,28 @@ def _create_converter_to_pandas(
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
 
             if _ndarray_as_list:
+                if _element_conv is None:
+                    _element_conv = lambda x: x
 
                 def convert_array_ndarray_as_list(value: Any) -> Any:
                     if value is None:
                         return None
-                    elif isinstance(value, np.ndarray):
+                    else:
                         # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
                         # whereas a list is expected.
-                        return (
-                            [_element_conv(v) for v in value]
-                            if _element_conv is not None
-                            else [v for v in value]
-                        )
-                    else:
-                        assert isinstance(value, list)
-                        # otherwise, `list` should be used.
-                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+                        return [_element_conv(v) for v in value]
 
                 return convert_array_ndarray_as_list
             else:
+                if _element_conv is None:
+                    return None
 
                 def convert_array_ndarray_as_ndarray(value: Any) -> Any:
                     if value is None:
                         return None
                     elif isinstance(value, np.ndarray):
                         # `pyarrow.Table.to_pandas` uses `np.ndarray`.
-                        element_list = (
-                            [_element_conv(v) for v in value]
-                            if _element_conv is not None
-                            else [v for v in value]
-                        )
-                        return np.array(element_list)  # type: # ignore[misc]
+                        return np.array([_element_conv(v) for v in value])  # type: # ignore[misc]
                     else:
                         assert isinstance(value, list)
                         # otherwise, `list` should be used.
