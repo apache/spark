@@ -295,5 +295,5 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
 
         instance = cls._load_from_metadata(metadata)
         instance._load_meta_algorithm(path, metadata)
-        
+
         return instance

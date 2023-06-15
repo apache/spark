@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHE
 
 from pyspark import keyword_only, since, SparkContext
 from pyspark.mlv2.base import Estimator, Model, Transformer
-from pyspark.mlv2.io_utils import MetaAlgorithmReadWrite, CoreModelReadWrite, _get_metadata_to_save
+from pyspark.mlv2.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite, _get_metadata_to_save
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
@@ -37,7 +37,15 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
     def _save_meta_algorithm(self, root_path, node_path):
         metadata = _get_metadata_to_save(self)
         metadata["stages"] = []
-        for stage_index, stage in enumerate(self.getStages()):
+
+        if isinstance(self, Pipeline):
+            stages = self.getStages()
+        elif isinstance(self, PipelineModel):
+            stages = self.stages
+        else:
+            raise ValueError()
+
+        for stage_index, stage in enumerate(stages):
             stage_name = f"pipeline_stage_{stage_index}"
             node_path.append(stage_name)
             if isinstance(stage, MetaAlgorithmReadWrite):
@@ -54,6 +62,25 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             metadata["stages"].append(stage_metadata)
             node_path.pop()
         return metadata
+
+    def _load_meta_algorithm(self, root_path, node_metadata):
+        stages = []
+        for stage_meta in node_metadata["stages"]:
+            stage = ParamsReadWrite._load_from_metadata(stage_meta)
+
+            if isinstance(stage, MetaAlgorithmReadWrite):
+                stage._load_meta_algorithm(root_path, stage_meta)
+
+            if isinstance(stage, CoreModelReadWrite):
+                core_model_path = stage_meta["core_model_path"]
+                stage._load_core_model(os.path.join(root_path, core_model_path))
+
+        if isinstance(self, Pipeline):
+            self.setStages(stages)
+        elif isinstance(self, PipelineModel):
+            self.stages = stages
+        else:
+            raise ValueError()
 
 
 @inherit_doc
@@ -184,7 +211,7 @@ class PipelineModel(Model, _PipelineReadWrite):
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, stages: List[Transformer]):
+    def __init__(self, stages: Optional[List[Transformer]] = None):
         super(PipelineModel, self).__init__()
         self.stages = stages
 
@@ -206,7 +233,3 @@ class PipelineModel(Model, _PipelineReadWrite):
             extra = dict()
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
-
-    def _child_nodes_iterator(self):
-        for i, stage in enumerate(self.getStages()):
-            yield f"PipelineModel_stage_{i}", stage
