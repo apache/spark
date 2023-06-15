@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -437,7 +438,9 @@ object GroupBasedRowLevelOperation {
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _),
         cond, query, _, groupFilterCond, _) =>
-      val readRelation = findReadRelation(table, query)
+      // group-based UPDATEs that are rewritten as UNION read the table twice
+      val allowMultipleReads = rd.operation.command == UPDATE
+      val readRelation = findReadRelation(table, query, allowMultipleReads)
       readRelation.map((rd, cond, groupFilterCond, _))
 
     case _ =>
@@ -446,7 +449,8 @@ object GroupBasedRowLevelOperation {
 
   private def findReadRelation(
       table: Table,
-      plan: LogicalPlan): Option[LogicalPlan] = {
+      plan: LogicalPlan,
+      allowMultipleReads: Boolean): Option[LogicalPlan] = {
 
     val readRelations = plan.collect {
       case r: DataSourceV2Relation if r.table eq table => r
@@ -464,8 +468,17 @@ object GroupBasedRowLevelOperation {
       case Seq(relation) =>
         Some(relation)
 
-      case relations =>
-        throw new AnalysisException(s"Expected only one row-level read relation: $relations")
+      case Seq(relation1: DataSourceV2Relation, relation2: DataSourceV2Relation)
+          if allowMultipleReads && (relation1.table eq relation2.table) =>
+        Some(relation1)
+
+      case Seq(relation1: DataSourceV2ScanRelation, relation2: DataSourceV2ScanRelation)
+          if allowMultipleReads && (relation1.scan eq relation2.scan) =>
+        Some(relation1)
+
+      case other =>
+        throw new AnalysisException(
+          s"Unexpected row-level read relations (allow multiple = $allowMultipleReads): $other")
     }
   }
 }
