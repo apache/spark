@@ -414,7 +414,7 @@ Misc Functions
     user
 
 Predicate Functions
---------------
+-------------------
 .. autosummary::
     :toctree: api/
 
