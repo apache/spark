@@ -1900,6 +1900,11 @@ def date_range(
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
     assert tz is None, "Localized DatetimeIndex is not supported"
+    if closed is not None:
+        warnings.warn(
+            "Argument `closed` is deprecated in 3.4.0 and will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
     return cast(
         DatetimeIndex,

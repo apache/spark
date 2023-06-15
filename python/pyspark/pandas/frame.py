@@ -2070,7 +2070,10 @@ class DataFrame(Frame, Generic[T]):
             iteritems is deprecated and will be removed in a future version.
             Use .items instead.
         """
-        warnings.warn("Deprecated in 3.4.0, Use DataFrame.items instead.", FutureWarning)
+        warnings.warn(
+            "Deprecated in 3.4.0, and will be removed in 4.0.0. Use DataFrame.items instead.",
+            FutureWarning,
+        )
         return self.items()
 
     def to_clipboard(self, excel: bool = True, sep: Optional[str] = None, **kwargs: Any) -> None:
@@ -2605,6 +2608,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         \bottomrule
         \end{tabular}
         """
+        warnings.warn(
+            "Argument `col_space` will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
         args = locals()
         psdf = self
@@ -8897,7 +8904,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         warnings.warn(
             "The DataFrame.append method is deprecated "
-            "and will be removed in a future version. "
+            "and will be removed in 4.0.0. "
             "Use pyspark.pandas.concat instead.",
             FutureWarning,
         )
@@ -11218,6 +11225,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  2.5
         3  4.0
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `None` in 4.0.0.",
+            FutureWarning,
+        )
         if numeric_only:
             numeric_col_names = []
             for label in self._internal.column_labels:
@@ -12228,6 +12240,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0.50  3.0  7.0
         0.75  4.0  8.0
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
@@ -12746,7 +12763,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         dtype: float64
         """
         warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
+            "The 'mad' method is deprecated and will be removed in 4.0.0. "
             "To compute the same result, you may do `(df - df.mean()).abs().mean()`.",
             FutureWarning,
         )
@@ -12890,6 +12907,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError('axis should be either 0 or "index" currently.')
         if numeric_only is None and axis == 0:
             numeric_only = True
+
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         mode_scols: List[PySparkColumn] = []
         mode_col_names: List[str] = []
