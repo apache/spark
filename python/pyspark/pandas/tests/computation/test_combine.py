@@ -155,14 +155,14 @@ class FrameCombineMixin:
         right_psser = ps.from_pandas(right_ps)
 
         def check(op, right_psdf=right_psdf, right_pdf=right_pdf):
-            k_res = op(left_psdf, right_psdf)
-            k_res = k_res._to_pandas()
-            k_res = k_res.sort_values(by=list(k_res.columns))
-            k_res = k_res.reset_index(drop=True)
+            ps_res = op(left_psdf, right_psdf)
+            ps_res = ps_res._to_pandas()
+            ps_res = ps_res.sort_values(by=list(ps_res.columns))
+            ps_res = ps_res.reset_index(drop=True)
             p_res = op(left_pdf, right_pdf)
             p_res = p_res.sort_values(by=list(p_res.columns))
             p_res = p_res.reset_index(drop=True)
-            self.assert_eq(k_res, p_res)
+            self.assert_eq(ps_res, p_res)
 
         check(lambda left, right: left.merge(right))
         check(lambda left, right: left.merge(right, on="value"))
