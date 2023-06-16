@@ -396,7 +396,7 @@ String Functions
 
 
 Bitwise Functions
-----------------
+-----------------
 .. autosummary::
     :toctree: api/
 
