@@ -29,7 +29,6 @@ from pyspark.mlv2 import (
 __all__ = [
     "Estimator",
     "Transformer",
-    "Estimator",
     "Model",
     "feature",
     "evaluation",

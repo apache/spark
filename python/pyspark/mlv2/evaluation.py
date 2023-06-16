@@ -29,13 +29,7 @@ import torch
 import torcheval.metrics as torchmetrics
 
 
-class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
-    """
-    Evaluator for Regression, which expects input columns prediction and label.
-    Supported metrics are 'mse' and 'r2'.
-
-    .. versionadded:: 3.5.0
-    """
+class _TorchMetricEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
 
     def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
         super().__init__()
@@ -47,16 +41,6 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol, ParamsReadWr
         "metric name for the regression evaluator, valid values are 'mse' and 'r2'",
         typeConverter=TypeConverters.toString,
     )
-
-    def _get_torch_metric(self) -> Any:
-        metric_name = self.getOrDefault(self.metricName)
-
-        if metric_name == "mse":
-            return torchmetrics.MeanSquaredError()
-        if metric_name == "r2":
-            return torchmetrics.R2Score()
-
-        raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 
     def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
         prediction_col = self.getPredictionCol()
@@ -87,3 +71,42 @@ class RegressionEvaluator(Evaluator, HasLabelCol, HasPredictionCol, ParamsReadWr
             merge_agg_state,
             agg_state_to_result,
         )
+
+
+class RegressionEvaluator(_TorchMetricEvaluator, ParamsReadWrite):
+    """
+    Evaluator for Regression, which expects input columns prediction and label.
+    Supported metrics are 'mse' and 'r2'.
+
+    .. versionadded:: 3.5.0
+    """
+
+    def _get_torch_metric(self) -> Any:
+        metric_name = self.getOrDefault(self.metricName)
+
+        if metric_name == "mse":
+            return torchmetrics.MeanSquaredError()
+        if metric_name == "r2":
+            return torchmetrics.R2Score()
+
+        raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
+
+
+class BinaryClassificationEvaluator(_TorchMetricEvaluator, ParamsReadWrite):
+    """
+    Evaluator for binary classification, which expects input columns prediction and label.
+    Supported metrics are 'mse' and 'r2'.
+
+    .. versionadded:: 3.5.0
+    """
+
+    def _get_torch_metric(self) -> Any:
+        metric_name = self.getOrDefault(self.metricName)
+
+        if metric_name == "mse":
+            return torchmetrics.MeanSquaredError()
+        if metric_name == "r2":
+            return torchmetrics.R2Score()
+
+        raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
+
