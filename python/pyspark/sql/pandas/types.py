@@ -580,7 +580,7 @@ def _create_converter_to_pandas(
 
             if _ndarray_as_list:
                 if _element_conv is None:
-                    _element_conv = lambda x: x
+                    _element_conv = lambda x: x  # noqa: E731
 
                 def convert_array_ndarray_as_list(value: Any) -> Any:
                     if value is None:
@@ -600,7 +600,7 @@ def _create_converter_to_pandas(
                         return None
                     elif isinstance(value, np.ndarray):
                         # `pyarrow.Table.to_pandas` uses `np.ndarray`.
-                        return np.array([_element_conv(v) for v in value])  # type: # ignore[misc]
+                        return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
                     else:
                         assert isinstance(value, list)
                         # otherwise, `list` should be used.
