@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.{File, FileWriter}
+import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -27,12 +28,32 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
-import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
+import org.apache.spark.sql.connect.client.util.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
+import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.util.Utils
 
-class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
+case class ClickEvent(id: String, timestamp: Timestamp)
+
+case class ClickState(id: String, count: Int)
+
+class StreamingQuerySuite extends QueryTest with RemoteSparkSession with SQLHelper {
+
+  val flatMapGroupsWithStateSchema: StructType = StructType(
+    Array(StructField("id", StringType), StructField("timestamp", TimestampType)))
+
+  val flatMapGroupsWithStateData: Seq[ClickEvent] = Seq(
+    ClickEvent("a", new Timestamp(12345)),
+    ClickEvent("a", new Timestamp(12346)),
+    ClickEvent("a", new Timestamp(12347)),
+    ClickEvent("b", new Timestamp(12348)),
+    ClickEvent("b", new Timestamp(12349)),
+    ClickEvent("c", new Timestamp(12350)))
+
+  val flatMapGroupsWithStateInitialStateData: Seq[ClickState] =
+    Seq(ClickState("a", 2), ClickState("b", 1))
 
   test("Streaming API with windowed aggregate query") {
     // This verifies standard streaming API by starting a streaming query with windowed count.
@@ -270,6 +291,180 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
     q.stop()
     assert(!q1.isActive)
+  }
+
+  test("flatMapGroupsWithState - streaming") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+        Iterator(ClickState(key, values.size))
+      }
+    spark.sql("DROP TABLE IF EXISTS my_sink")
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      flatMapGroupsWithStateData.toDS().write.parquet(path)
+      val q = spark.readStream
+        .schema(flatMapGroupsWithStateSchema)
+        .parquet(path)
+        .as[ClickEvent]
+        .groupByKey(_.id)
+        .flatMapGroupsWithState(Append, GroupStateTimeout.NoTimeout)(stateFunc)
+        .writeStream
+        .format("memory")
+        .queryName("my_sink")
+        .start()
+
+      try {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
+          checkDataset(
+            spark.table("my_sink").toDF().as[ClickState],
+            ClickState("c", 1),
+            ClickState("b", 2),
+            ClickState("a", 3))
+        }
+      } finally {
+        q.stop()
+        spark.sql("DROP TABLE IF EXISTS my_sink")
+      }
+    }
+  }
+
+  test("flatMapGroupsWithState - streaming - with initial state") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        val currState = state.getOption.getOrElse(ClickState(key, 0))
+        Iterator(ClickState(key, currState.count + values.size))
+      }
+    val initialState = flatMapGroupsWithStateInitialStateData
+      .toDS()
+      .groupByKey(_.id)
+      .mapValues(x => x)
+    spark.sql("DROP TABLE IF EXISTS my_sink")
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      flatMapGroupsWithStateData.toDS().write.parquet(path)
+      val q = spark.readStream
+        .schema(flatMapGroupsWithStateSchema)
+        .parquet(path)
+        .as[ClickEvent]
+        .groupByKey(_.id)
+        .flatMapGroupsWithState(Append, GroupStateTimeout.NoTimeout, initialState)(stateFunc)
+        .writeStream
+        .format("memory")
+        .queryName("my_sink")
+        .start()
+
+      try {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
+          checkDataset(
+            spark.table("my_sink").toDF().as[ClickState],
+            ClickState("c", 1),
+            ClickState("b", 3),
+            ClickState("a", 5))
+        }
+      } finally {
+        q.stop()
+        spark.sql("DROP TABLE IF EXISTS my_sink")
+      }
+    }
+  }
+
+  test("mapGroupsWithState - streaming") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+        ClickState(key, values.size)
+      }
+    spark.sql("DROP TABLE IF EXISTS my_sink")
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      flatMapGroupsWithStateData.toDS().write.parquet(path)
+      val q = spark.readStream
+        .schema(flatMapGroupsWithStateSchema)
+        .parquet(path)
+        .as[ClickEvent]
+        .groupByKey(_.id)
+        .mapGroupsWithState(GroupStateTimeout.NoTimeout)(stateFunc)
+        .writeStream
+        .format("memory")
+        .queryName("my_sink")
+        .outputMode("update")
+        .start()
+
+      try {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
+          checkDataset(
+            spark.table("my_sink").toDF().as[ClickState],
+            ClickState("c", 1),
+            ClickState("b", 2),
+            ClickState("a", 3))
+        }
+      } finally {
+        q.stop()
+        spark.sql("DROP TABLE IF EXISTS my_sink")
+      }
+    }
+  }
+
+  test("mapGroupsWithState - streaming - with initial state") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        val currState = state.getOption.getOrElse(ClickState(key, 0))
+        ClickState(key, currState.count + values.size)
+      }
+    val initialState = flatMapGroupsWithStateInitialStateData
+      .toDS()
+      .groupByKey(_.id)
+      .mapValues(x => x)
+    spark.sql("DROP TABLE IF EXISTS my_sink")
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      flatMapGroupsWithStateData.toDS().write.parquet(path)
+      val q = spark.readStream
+        .schema(flatMapGroupsWithStateSchema)
+        .parquet(path)
+        .as[ClickEvent]
+        .groupByKey(_.id)
+        .mapGroupsWithState(GroupStateTimeout.NoTimeout, initialState)(stateFunc)
+        .writeStream
+        .format("memory")
+        .queryName("my_sink")
+        .outputMode("update")
+        .start()
+
+      try {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
+          checkDataset(
+            spark.table("my_sink").toDF().as[ClickState],
+            ClickState("c", 1),
+            ClickState("b", 3),
+            ClickState("a", 5))
+        }
+      } finally {
+        q.stop()
+        spark.sql("DROP TABLE IF EXISTS my_sink")
+      }
+    }
   }
 }
 

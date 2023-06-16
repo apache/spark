@@ -571,7 +571,7 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
       rel.getSortingExpressionsList)
 
     if (rel.hasIsMapGroupsWithState) {
-      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty
+      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
       val initialDs = if (hasInitialState) {
         UntypedKeyValueGroupedDataset(
           rel.getInitialInput,
@@ -594,23 +594,45 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
         InternalOutputModes(rel.getOutputMode)
       }
 
-      val flatMapGroupsWithState = new FlatMapGroupsWithState(
-        udf.function.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
-        udf.inputDeserializer(ds.groupingAttributes),
-        ds.valueDeserializer,
-        ds.groupingAttributes,
-        ds.dataAttributes,
-        udf.outputObjAttr,
-        initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
-        outputMode,
-        rel.getIsMapGroupsWithState,
-        timeoutConf,
-        hasInitialState,
-        initialDs.groupingAttributes,
-        initialDs.dataAttributes,
-        initialDs.valueDeserializer,
-        initialDs.analyzed,
-        ds.analyzed)
+      val flatMapGroupsWithState = if (hasInitialState) {
+        new FlatMapGroupsWithState(
+          udf.function
+            .asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+          udf.inputDeserializer(ds.groupingAttributes),
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          udf.outputObjAttr,
+          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          outputMode,
+          rel.getIsMapGroupsWithState,
+          timeoutConf,
+          hasInitialState,
+          initialDs.groupingAttributes,
+          initialDs.dataAttributes,
+          initialDs.valueDeserializer,
+          initialDs.analyzed,
+          ds.analyzed)
+      } else {
+        new FlatMapGroupsWithState(
+          udf.function
+            .asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+          udf.inputDeserializer(ds.groupingAttributes),
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          udf.outputObjAttr,
+          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          outputMode,
+          rel.getIsMapGroupsWithState,
+          timeoutConf,
+          hasInitialState,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          udf.inputDeserializer(ds.groupingAttributes),
+          LocalRelation(initialDs.vEncoder.schema.toAttributes), // empty data set
+          ds.analyzed)
+      }
       SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
     } else {
       val mapped = new MapGroups(

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Arrays, Collections}
+import java.util.Arrays
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -952,7 +952,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     }
 
     sparkSession.newDataset[U](outputEncoder) { builder =>
-      builder.getGroupMapBuilder
+      val groupMapBuilder = builder.getGroupMapBuilder
+      groupMapBuilder
         .setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
@@ -960,16 +961,12 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setOutputMode(if (outputMode.isEmpty) OutputMode.Update.toString
         else outputMode.get.toString)
         .setTimeoutConf(timeoutConf.toString)
-        .addAllInitialGroupingExpressions(if (initialStateImpl != null) {
-          initialStateImpl.groupingExprs
-        } else {
-          Collections.emptyList()
-        })
-        .setInitialInput(if (initialStateImpl != null) {
-          initialStateImpl.plan.getRoot
-        } else {
-          plan.getRoot
-        })
+
+      if (initialStateImpl != null) {
+        groupMapBuilder
+          .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
+          .setInitialInput(initialStateImpl.plan.getRoot)
+      }
     }
   }
 
