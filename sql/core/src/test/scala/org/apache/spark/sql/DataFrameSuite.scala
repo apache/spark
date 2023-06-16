@@ -3613,6 +3613,21 @@ class DataFrameSuite extends QueryTest
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
+
+  test("SPARK-44082: Generate operator does not update reference set properly") {
+    val schema = StructType(Array(
+      StructField("col1", StringType, true),
+      StructField("col2", StringType, true)
+    ))
+    val rowData = Seq(Row("100", "20000"),
+      Row("100", "100000"),
+      Row("300", "3000"))
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(rowData), schema)
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(rowData), schema)
+    df1.dropDuplicates(Seq("col1")).exceptAll(df2).collect.foreach { row =>
+      assert(row.getInt(0).toString == "300")
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
