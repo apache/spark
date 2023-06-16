@@ -9009,7 +9009,7 @@ def find_in_set(str: "ColumnOrName", str_array: "ColumnOrName") -> Column:
 
 @try_remote_functions
 def like(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["char"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
 ) -> Column:
     """
     Returns true if str matches `pattern` with `escape`,
@@ -9033,7 +9033,7 @@ def like(
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
         enabled, the pattern to match "\abc" should be "\abc".
-    escape: char
+    escape: str
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
@@ -9059,7 +9059,7 @@ def like(
 
 @try_remote_functions
 def ilike(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["char"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
 ) -> Column:
     """
     Returns true if str matches `pattern` with `escape` case-insensitively,
@@ -9083,7 +9083,7 @@ def ilike(
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
         enabled, the pattern to match "\abc" should be "\abc".
-    escape: char
+    escape: str
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.

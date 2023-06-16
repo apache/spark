@@ -2390,7 +2390,7 @@ find_in_set.__doc__ = pysparkfuncs.find_in_set.__doc__
 
 
 def like(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["char"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
 ) -> Column:
     if escapeChar is not None:
         return _invoke_function("like", _to_col(str), _to_col(pattern), lit(escapeChar))
@@ -2402,7 +2402,7 @@ like.__doc__ = pysparkfuncs.like.__doc__
 
 
 def ilike(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["char"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
 ) -> Column:
     if escapeChar is not None:
         return _invoke_function("ilike", _to_col(str), _to_col(pattern), lit(escapeChar))
