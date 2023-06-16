@@ -129,7 +129,7 @@ class ParamsReadWrite:
         pass
 
     def _save_to_local(self, path: str) -> None:
-        metadata = self._get_metadata_to_save(self)
+        metadata = self._get_metadata_to_save()
         if isinstance(self, CoreModelReadWrite):
             core_model_path = self._get_core_model_filename()
             self._save_core_model(os.path.join(path, core_model_path))
