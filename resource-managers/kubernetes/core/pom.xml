@@ -95,6 +95,22 @@
       </exclusions>
     </dependency>
 
+    <dependency>
+      <groupId>io.kubernetes</groupId>
+      <artifactId>client-java</artifactId>
+      <version>8.0.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.dataformat</groupId>
+          <artifactId>jackson-dataformat-yaml</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
     <!-- Required by kubernetes-client but we exclude it -->
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
