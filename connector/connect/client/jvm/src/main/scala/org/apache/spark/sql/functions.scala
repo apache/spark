@@ -521,6 +521,34 @@ object functions {
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column): Column = Column.fn("first_value", e)
+
+  /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("first_value", e, ignoreNulls)
+
+  /**
    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated or
    * not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
@@ -733,6 +761,34 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column): Column = Column.fn("last_value", e)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("last_value", e, ignoreNulls)
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -848,6 +904,25 @@ object functions {
    */
   def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column =
     Column.fn("percentile_approx", e, percentage, accuracy)
+
+  /**
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
+   * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
+   * more than `percentage` of `col` values is less than the value or equal to that value.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0. If it is a single floating
+   * point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal which controls approximation accuracy at
+   * the cost of memory. Higher value of accuracy yields better accuracy, 1.0/accuracy is the
+   * relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
+    Column.fn("approx_percentile", e, percentage, accuracy)
+  }
 
   /**
    * Aggregate function: returns the product of all numerical elements in a group.
@@ -1100,6 +1175,49 @@ object functions {
    * @since 3.5.0
    */
   def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column): Column = Column.fn("any_value", e)
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows. If `isIgnoreNull` is true,
+   * returns only non-null values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("any_value", e, ignoreNulls)
+
+  /**
+   * Aggregate function: returns the number of `TRUE` values for the expression.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_if(e: Column): Column = Column.fn("count_if", e)
+
+  /**
+   * Aggregate function: computes a histogram on numeric 'expr' using nb bins. The return value is
+   * an array of (x,y) pairs representing the centers of the histogram's bins. As the value of
+   * 'nb' is increased, the histogram approximation gets finer-grained, but may yield artifacts
+   * around outliers. In practice, 20-40 histogram bins appear to work well, with more bins being
+   * required for skewed or smaller datasets. Note that this function creates a histogram with
+   * non-uniform bin widths. It offers no guarantees in terms of the mean-squared-error of the
+   * histogram, but in practice is comparable to the histograms produced by the R/S-Plus
+   * statistical computing packages. Note: the output type of the 'x' field in the return value is
+   * propagated from the input value consumed in the aggregate function.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def histogram_numeric(e: Column, nBins: Column): Column =
+    Column.fn("histogram_numeric", e, nBins)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -2836,6 +2954,38 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = Column.fn("current_catalog")
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = Column.fn("current_database")
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = Column.fn("current_schema")
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = Column.fn("current_user")
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value as a 32 character hex
    * string.
    *
@@ -2988,6 +3138,14 @@ object functions {
       columnName2: String,
       allowDifferentLgConfigK: Boolean): Column =
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def user(): Column = Column.fn("user")
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3619,9 +3777,26 @@ object functions {
    * current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = Column.fn("curdate")
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column. All calls of
+   * current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 3.4.0
    */
   def current_date(): Column = Column.fn("current_date")
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = Column.fn("current_timezone")
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column. All
@@ -5013,6 +5188,55 @@ object functions {
     aggregate(expr, initialValue, merge, c => c)
 
   /**
+   * Applies a binary operator to an initial state and all elements in the array, and reduces this
+   * to a single state. The final state is converted into the final result by applying a finish
+   * function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr
+   *   the input array column
+   * @param initialValue
+   *   the initial value
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value
+   * @param finish
+   *   combined_value => final_value, the lambda function to convert the combined value of all
+   *   inputs to final result
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(
+      expr: Column,
+      initialValue: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column =
+    Column.fn("reduce", expr, initialValue, createLambda(merge), createLambda(finish))
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array, and reduces this
+   * to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
+   *
+   * @param expr
+   *   the input array column
+   * @param initialValue
+   *   the initial value
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    reduce(expr, initialValue, merge, c => c)
+
+  /**
    * Merge two given arrays, element-wise, into a single array using a function. If one array is
    * shorter, nulls are appended at the end to match the length of the longer array, before
    * applying the function.
@@ -5854,6 +6078,255 @@ object functions {
     Column.fn("hours", e)
 
   /**
+   * Make DayTimeIntervalType duration from days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column =
+    Column.fn("make_dt_interval", days, hours, mins, secs)
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column): Column =
+    Column.fn("make_dt_interval", days, hours, mins)
+
+  /**
+   * Make DayTimeIntervalType duration from days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column): Column =
+    Column.fn("make_dt_interval", days, hours)
+
+  /**
+   * Make DayTimeIntervalType duration from days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column): Column =
+    Column.fn("make_dt_interval", days)
+
+  /**
+   * Make DayTimeIntervalType duration.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(): Column =
+    Column.fn("make_dt_interval")
+
+  /**
+   * Make interval from years, months, weeks, days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * Make interval from years, months, weeks, days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours, mins)
+
+  /**
+   * Make interval from years, months, weeks, days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours)
+
+  /**
+   * Make interval from years, months, weeks and days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days)
+
+  /**
+   * Make interval from years, months and weeks.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column): Column =
+    Column.fn("make_interval", years, months, weeks)
+
+  /**
+   * Make interval from years and months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column): Column =
+    Column.fn("make_interval", years, months)
+
+  /**
+   * Make interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column): Column =
+    Column.fn("make_interval", years)
+
+  /**
+   * Make interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(): Column =
+    Column.fn("make_interval")
+
+  /**
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("make_timestamp", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs)
+
+  /**
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Make year-month interval from years, months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column, months: Column): Column =
+    Column.fn("make_ym_interval", years, months)
+
+  /**
+   * Make year-month interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column): Column = Column.fn("make_ym_interval", years)
+
+  /**
+   * Make year-month interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(): Column = Column.fn("make_ym_interval")
+
+  /**
    * A transform for any type that partitions by a hash of the input column.
    *
    * @group partition_transforms
@@ -5870,6 +6343,59 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column =
     Column.fn("bucket", lit(numBuckets), e)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
+   * are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions

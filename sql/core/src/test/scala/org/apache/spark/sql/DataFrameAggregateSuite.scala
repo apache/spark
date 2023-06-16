@@ -1042,6 +1042,29 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("any_value") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        any_value(col("year")),
+        any_value(col("year"), lit(true))
+      ),
+      Row("Java", 2012, 2012) :: Row("dotNET", 2012, 2012) :: Nil
+    )
+  }
+
+  test("approx_percentile") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        approx_percentile(col("earnings"), lit(0.3), lit(10000)),
+        approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(10000)),
+        approx_percentile(col("earnings"), lit(0.3), lit(1)),
+        approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(1))
+      ),
+      Row("Java", 20000.0, Seq(20000.0, 30000.0), 20000.0, Seq(20000.0, 20000.0)) ::
+        Row("dotNET", 5000.0, Seq(5000.0, 10000.0), 5000.0, Seq(5000.0, 5000.0)) :: Nil
+    )
+  }
+
   test("count_if") {
     withTempView("tempView") {
       Seq(("a", None), ("a", Some(1)), ("a", Some(2)), ("a", Some(3)),
@@ -1093,6 +1116,44 @@ class DataFrameAggregateSuite extends QueryTest
           context = ExpectedContext(fragment = "COUNT_IF(x)", start = 7, stop = 17))
       }
     }
+
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        count_if((col("earnings").gt(10000))),
+        count_if(col("course").equalTo("Java").and(col("earnings").gt(10000)))
+      ),
+      Row("Java", 2, 2) :: Row("dotNET", 1, 0) :: Nil
+    )
+  }
+
+  test("first_value") {
+    checkAnswer(
+      nullStrings.orderBy(col("n").desc).agg(
+        first_value(col("s")),
+        first_value(col("s"), lit(true))
+      ),
+      Row(null, "ABC") :: Nil
+    )
+  }
+
+  test("last_value") {
+    checkAnswer(
+      nullStrings.agg(
+        last_value(col("s")),
+        last_value(col("s"), lit(true))
+      ),
+      Row(null, "ABC") :: Nil
+    )
+  }
+
+  test("histogram_numeric") {
+    checkAnswer(
+      courseSales.groupBy("course").agg(
+        histogram_numeric(col("earnings"), lit(5))
+      ),
+      Row("Java", Seq(Row(20000.0, 1.0), Row(30000.0, 1.0))) ::
+        Row("dotNET", Seq(Row(5000.0, 1.0), Row(10000.0, 1.0), Row(48000.0, 1.0))) :: Nil
+    )
   }
 
   Seq(true, false).foreach { value =>
