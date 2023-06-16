@@ -646,6 +646,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  4.0  1.500000  1.000000
         """
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         return self._reduce_for_stat_function(
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
@@ -885,6 +890,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
         if numeric_only is not None and not isinstance(numeric_only, bool):
             raise TypeError("numeric_only must be None or bool")
         if not isinstance(min_count, int):
@@ -1277,6 +1287,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
+
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
 
@@ -3530,6 +3546,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
+
         def stat_function(col: Column) -> Column:
             return F.percentile_approx(col, 0.5, accuracy)
 
@@ -4256,6 +4278,10 @@ class SeriesGroupBy(GroupBy[Series]):
            NaN    1
         Name: B, dtype: int64
         """
+        warnings.warn(
+            "The resulting Series will have a fixed name of 'count' from 4.0.0.",
+            FutureWarning,
+        )
         groupkeys = self._groupkeys + self._agg_columns
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(groupkeys))]
         groupkey_cols = [s.spark.column.alias(name) for s, name in zip(groupkeys, groupkey_names)]

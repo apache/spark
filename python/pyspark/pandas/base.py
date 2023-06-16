@@ -1431,7 +1431,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         3    1
         Name: pandas-on-Spark, dtype: int64
         """
-        from pyspark.pandas.series import first_series
+        from pyspark.pandas.series import first_series, Series
+
+        if isinstance(self, Series):
+            warnings.warn(
+                "The resulting Series will have a fixed name of 'count' from 4.0.0.",
+                FutureWarning,
+            )
 
         if bins is not None:
             raise NotImplementedError("value_counts currently does not support bins")
@@ -1687,6 +1693,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         assert (na_sentinel is None) or isinstance(na_sentinel, int)
         assert sort is True
+
+        warnings.warn(
+            "Argument `na_sentinel` will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
         if isinstance(self.dtype, CategoricalDtype):
             categories = self.dtype.categories
