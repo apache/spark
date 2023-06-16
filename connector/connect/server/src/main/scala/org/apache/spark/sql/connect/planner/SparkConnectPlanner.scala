@@ -79,7 +79,10 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) extends Logging {
+class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
+
+  def session: SparkSession = sessionHolder.session
+
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
