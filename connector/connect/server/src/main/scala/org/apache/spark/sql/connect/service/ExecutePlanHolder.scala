@@ -18,18 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
-
-object ExecutePlanHolder {
-  val JOB_GROUP_ID_PATTERN = "User_([a-z0-9\\-]*)_Session_([a-z0-9\\-]*)_Request_([a-z0-9\\-]*)".r
-  def getQueryOperationId(jobGroupId: String): Option[String] = {
-    jobGroupId match {
-      case JOB_GROUP_ID_PATTERN(userId: String, sessionId: String, queryId: String) =>
-        Some(queryId)
-      case _ =>
-        None
-    }
-  }
-}
+import org.apache.spark.util.SystemClock
 
 /**
  * Object used to hold the Spark Connect execution state.
@@ -42,6 +31,7 @@ case class ExecutePlanHolder(
   val jobTag =
     "SparkConnect_" +
       s"User_${sessionHolder.userId}_Session_${sessionHolder.sessionId}_Request_${operationId}"
+  val events: RequestEvents = RequestEvents(this, new SystemClock())
 
   def interrupt(): Unit = {
     // TODO/WIP: This only interrupts active Spark jobs that are actively running.
@@ -54,4 +44,7 @@ case class ExecutePlanHolder(
     // events.postCanceled()
   }
 
+  def removeFromSessionHolder(): Unit = {
+    sessionHolder.removeExecutePlanHolder(operationId)
+  }
 }

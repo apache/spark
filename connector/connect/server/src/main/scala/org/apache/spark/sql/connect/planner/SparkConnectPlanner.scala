@@ -56,7 +56,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.{Events, SessionHolder, SparkConnectService, SparkConnectStreamHandler}
+import org.apache.spark.sql.connect.service.{ExecutePlanHolder, SessionHolder, SparkConnectService, SparkConnectStreamHandler}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -81,7 +81,7 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[Events] = None) extends Logging {
+class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   def session: SparkSession = sessionHolder.session
 
@@ -2282,45 +2282,46 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
 
   def process(
       command: proto.Command,
-      userId: String,
-      sessionId: String,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      planHolder: ExecutePlanHolder): Unit = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
-        handleRegisterUserDefinedFunction(command.getRegisterFunction)
+        handleRegisterUserDefinedFunction(command.getRegisterFunction, planHolder)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
-        handleWriteOperation(command.getWriteOperation)
+        handleWriteOperation(command.getWriteOperation, planHolder)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
-        handleCreateViewCommand(command.getCreateDataframeView)
+        handleCreateViewCommand(command.getCreateDataframeView, planHolder)
       case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
-        handleWriteOperationV2(command.getWriteOperationV2)
+        handleWriteOperationV2(command.getWriteOperationV2, planHolder)
       case proto.Command.CommandTypeCase.EXTENSION =>
-        handleCommandPlugin(command.getExtension)
+        handleCommandPlugin(command.getExtension, planHolder)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
-        handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
+        handleSqlCommand(command.getSqlCommand, responseObserver, planHolder)
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(
           command.getWriteStreamOperationStart,
-          userId,
-          sessionId,
-          responseObserver)
+          responseObserver,
+          planHolder)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
-        handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+        handleStreamingQueryCommand(
+          command.getStreamingQueryCommand,
+          responseObserver,
+          planHolder)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND =>
         handleStreamingQueryManagerCommand(
           command.getStreamingQueryManagerCommand,
-          sessionId,
-          responseObserver)
+          responseObserver,
+          planHolder)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
-        handleGetResourcesCommand(sessionId, responseObserver)
+        handleGetResourcesCommand(responseObserver, planHolder)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
 
   def handleSqlCommand(
       getSqlCommand: SqlCommand,
-      sessionId: String,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      planHolder: ExecutePlanHolder): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val args = getSqlCommand.getArgsMap
     val posArgs = getSqlCommand.getPosArgsList
@@ -2331,10 +2332,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
     } else {
       session.sql(getSqlCommand.getSql)
     }
-    events.foreach(_.postParsed(Some(df)))
+    planHolder.events.postParsed(Some(df))
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows
@@ -2393,7 +2394,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setSessionId(sessionId)
+        .setSessionId(sessionHolder.sessionId)
         .setSqlCommandResult(result)
         .build())
 
@@ -2402,7 +2403,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
   }
 
   private def handleRegisterUserDefinedFunction(
-      fun: proto.CommonInlineUserDefinedFunction): Unit = {
+      fun: proto.CommonInlineUserDefinedFunction,
+      planHolder: ExecutePlanHolder): Unit = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         handleRegisterPythonUDF(fun)
@@ -2412,7 +2414,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
-    events.foreach(_.postParsedAndFinished())
+    planHolder.events.postParsedAndFinished()
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -2442,7 +2444,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
     }
   }
 
-  private def handleCommandPlugin(extension: ProtoAny): Unit = {
+  private def handleCommandPlugin(extension: ProtoAny, planHolder: ExecutePlanHolder): Unit = {
     SparkConnectPluginRegistry.commandRegistry
       // Lazily traverse the collection.
       .view
@@ -2452,10 +2454,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
       .find(_.nonEmpty)
       .flatten
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
-    events.foreach(_.postParsedAndFinished())
+    planHolder.events.postParsedAndFinished()
   }
 
-  private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
+  private def handleCreateViewCommand(
+      createView: proto.CreateDataFrameViewCommand,
+      planHolder: ExecutePlanHolder): Unit = {
     val viewType = if (createView.getIsGlobal) GlobalTempView else LocalTempView
 
     val tableIdentifier =
@@ -2478,9 +2482,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
       viewType = viewType)
 
     val df = Dataset.ofRows(session, plan)
-    events.foreach(_.postParsed(Some(df)))
+    planHolder.events.postParsed(Some(df))
     df.queryExecution.commandExecuted
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
   }
 
   /**
@@ -2492,7 +2496,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
    *
    * @param writeOperation
    */
-  private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+  private def handleWriteOperation(
+      writeOperation: proto.WriteOperation,
+      planHolder: ExecutePlanHolder): Unit = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
@@ -2530,7 +2536,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
     if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
-    events.foreach(_.postParsed(Some(dataset)))
+    planHolder.events.postParsed(Some(dataset))
 
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.save()
@@ -2552,7 +2558,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
           "WriteOperation:SaveTypeCase not supported "
             + s"${writeOperation.getSaveTypeCase.getNumber}")
     }
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
   }
 
   /**
@@ -2564,12 +2570,14 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
    *
    * @param writeOperation
    */
-  def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+  def handleWriteOperationV2(
+      writeOperation: proto.WriteOperationV2,
+      planHolder: ExecutePlanHolder): Unit = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
-    events.foreach(_.postParsed(Some(dataset)))
+    planHolder.events.postParsed(Some(dataset))
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
 
@@ -2620,17 +2628,16 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
         throw new UnsupportedOperationException(
           s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
     }
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
   }
 
   def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
-      userId: String,
-      sessionId: String,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      planHolder: ExecutePlanHolder): Unit = {
     val plan = transformRelation(writeOp.getInput)
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
-    events.foreach(_.postParsed(Some(dataset)))
+    planHolder.events.postParsed(Some(dataset))
 
     val writer = dataset.writeStream
 
@@ -2690,7 +2697,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
       sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
       query = query)
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
 
     val result = WriteStreamOperationStartResult
       .newBuilder()
@@ -2713,8 +2720,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
 
   def handleStreamingQueryCommand(
       command: StreamingQueryCommand,
-      sessionId: String,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      planHolder: ExecutePlanHolder): Unit = {
 
     val id = command.getQueryId.getId
     val runId = command.getQueryId.getRunId
@@ -2738,7 +2745,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
       case None =>
         throw new IllegalArgumentException(s"Streaming query $id is not found")
     }
-    events.foreach(_.postParsed())
+    planHolder.events.postParsed()
 
     command.getCommandCase match {
       case StreamingQueryCommand.CommandCase.STATUS =>
@@ -2818,7 +2825,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
     }
 
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
@@ -2886,9 +2893,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
 
   def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
-      sessionId: String,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    events.foreach(_.postParsed())
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      planHolder: ExecutePlanHolder): Unit = {
+    planHolder.events.postParsed()
 
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
 
@@ -2923,7 +2930,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
         throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
     }
 
-    events.foreach(_.postFinished())
+    planHolder.events.postFinished()
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
@@ -2933,9 +2940,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
   }
 
   def handleGetResourcesCommand(
-      sessionId: String,
-      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    events.foreach(_.postParsedAndFinished())
+      responseObserver: StreamObserver[proto.ExecutePlanResponse],
+      planHolder: ExecutePlanHolder): Unit = {
+    planHolder.events.postParsedAndFinished()
     responseObserver.onNext(
       proto.ExecutePlanResponse
         .newBuilder()
@@ -3243,5 +3250,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder, val events: Option[E
     } else {
       session.catalog.listCatalogs().logicalPlan
     }
+  }
+
+  private def userId(): String = {
+    sessionHolder.userId
+  }
+
+  private def sessionId(): String = {
+    sessionHolder.sessionId
   }
 }

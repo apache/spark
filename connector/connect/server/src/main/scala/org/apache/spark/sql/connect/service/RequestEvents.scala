@@ -20,15 +20,14 @@ package org.apache.spark.sql.connect.service
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.protobuf.Message
 
-import org.apache.spark.SparkContext
 import org.apache.spark.connect.proto
-import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.util.{Clock, Utils}
 
-object Events {
+object RequestEvents {
   // TODO: Make this configurable
   val MAX_STATEMENT_TEXT_SIZE = 65535
 }
@@ -36,22 +35,18 @@ object Events {
 /**
  * Post Connect events to @link org.apache.spark.scheduler.LiveListenerBus.
  *
- * @param sessionHolder:
- *   Session for which the events are generated.
+ * @param planHolder:
+ *   Request for which the events are generated.
  * @param clock:
  *   Source of time for unit tests.
  */
-case class Events(sessionHolder: SessionHolder, clock: Clock) {
+case class RequestEvents(planHolder: ExecutePlanHolder, clock: Clock) {
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationStarted to @link
    * org.apache.spark.scheduler.LiveListenerBus.
-   *
-   * @param planHolder:
-   *   The Connect request plan to execute.
    */
-  def postStarted(planHolder: ExecutePlanHolder): Unit = {
-    val sc = sessionHolder.session.sparkContext
+  def postStarted(): Unit = {
     val request = planHolder.request
     val plan: Message =
       request.getPlan.getOpTypeCase match {
@@ -62,17 +57,17 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
             s"${request.getPlan.getOpTypeCase} not supported.")
       }
 
-    sc.listenerBus.post(
+    listenerBus.post(
       SparkListenerConnectOperationStarted(
-        planHolder.jobGroupId,
-        planHolder.operationId,
+        jobGroupId,
+        operationId,
         clock.getTimeMillis(),
         request.getSessionId,
         request.getUserContext.getUserId,
         request.getUserContext.getUserName,
         Utils.redact(
           sessionHolder.session.sessionState.conf.stringRedactionPattern,
-          ProtoUtils.abbreviate(plan, Events.MAX_STATEMENT_TEXT_SIZE).toString),
+          ProtoUtils.abbreviate(plan, RequestEvents.MAX_STATEMENT_TEXT_SIZE).toString),
         request.getClientType))
   }
 
@@ -86,26 +81,19 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
    */
   def postParsed(dataFrameOpt: Option[DataFrame] = None): Unit = {
     assertExecutedPlanPrepared(dataFrameOpt)
-    val jobGroupId = assertJobGroupId()
-    val operationId = assertOperationId(jobGroupId)
     val event =
       SparkListenerConnectOperationParsed(jobGroupId, operationId, clock.getTimeMillis())
     event.analyzedPlan = dataFrameOpt.map(_.queryExecution.analyzed)
-    sessionHolder.session.sparkContext.listenerBus.post(event)
+    listenerBus.post(event)
   }
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationCanceled to
-   * \@link org.apache.spark.scheduler.LiveListenerBus.
-   *
-   * @param jobGroupIdOpt:
-   *   jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect for
-   *   request that was canceled. None when the jobGroupId is not set as a locale
+   * @link
+   *   org.apache.spark.scheduler.LiveListenerBus.
    */
-  def postCanceled(jobGroupIdOpt: Option[String] = None): Unit = {
-    val jobGroupId = jobGroupIdOpt.getOrElse(assertJobGroupId())
-    val operationId = assertOperationId(jobGroupId)
-    sessionHolder.session.sparkContext.listenerBus
+  def postCanceled(): Unit = {
+    listenerBus
       .post(SparkListenerConnectOperationCanceled(jobGroupId, operationId, clock.getTimeMillis()))
   }
 
@@ -117,9 +105,7 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
    *   The message of the error thrown during the request.
    */
   def postFailed(errorMessage: String): Unit = {
-    val jobGroupId = assertJobGroupId()
-    val operationId = assertOperationId(jobGroupId)
-    sessionHolder.session.sparkContext.listenerBus.post(
+    listenerBus.post(
       SparkListenerConnectOperationFailed(
         jobGroupId,
         operationId,
@@ -144,12 +130,11 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
 
   /**
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationFinished to
-   * \@link org.apache.spark.scheduler.LiveListenerBus.
+   * @link
+   *   org.apache.spark.scheduler.LiveListenerBus.
    */
   def postFinished(): Unit = {
-    val jobGroupId = assertJobGroupId()
-    val operationId = assertOperationId(jobGroupId)
-    sessionHolder.session.sparkContext.listenerBus
+    listenerBus
       .post(SparkListenerConnectOperationFinished(jobGroupId, operationId, clock.getTimeMillis()))
   }
 
@@ -158,19 +143,8 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
    * org.apache.spark.scheduler.LiveListenerBus.
    */
   def postClosed(): Unit = {
-    val jobGroupId = assertJobGroupId()
-    val operationId = assertOperationId(jobGroupId)
-    sessionHolder.session.sparkContext.listenerBus
+    listenerBus
       .post(SparkListenerConnectOperationClosed(jobGroupId, operationId, clock.getTimeMillis()))
-  }
-
-  /**
-   * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionClosed to @link
-   * org.apache.spark.scheduler.LiveListenerBus.
-   */
-  def postSessionClosed(): Unit = {
-    sessionHolder.session.sparkContext.listenerBus
-      .post(SparkListenerConnectSessionClosed(sessionHolder.sessionId, clock.getTimeMillis()))
   }
 
   private def assertExecutedPlanPrepared(dataFrameOpt: Option[DataFrame]): Unit = {
@@ -187,30 +161,20 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
     }
   }
 
-  private def assertOperationId(jobGroupId: String): String = {
-    ExecutePlanHolder.getQueryOperationId(jobGroupId) match {
-      case Some(operationId) =>
-        operationId
-      case None =>
-        throw new RuntimeException(
-          s"Connect operationId cannot be resolved during sessionId: ${sessionHolder.sessionId}")
-    }
+  private def operationId(): String = {
+    planHolder.operationId
   }
 
-  private def assertJobGroupId(): String = {
-    getJobGroupId() match {
-      case Some(jobGroupId) =>
-        jobGroupId
-      case None =>
-        throw new RuntimeException(
-          s"Connect jobGroupId is not set during sessionId: ${sessionHolder.sessionId}")
-    }
+  private def jobGroupId(): String = {
+    planHolder.jobTag
   }
 
-  private def getJobGroupId(): Option[String] = {
-    Option(
-      sessionHolder.session.sparkContext
-        .getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
+  private def listenerBus(): LiveListenerBus = {
+    sessionHolder.session.sparkContext.listenerBus
+  }
+
+  private def sessionHolder(): SessionHolder = {
+    planHolder.sessionHolder
   }
 }
 
@@ -222,11 +186,11 @@ case class Events(sessionHolder: SessionHolder, clock: Clock) {
  *   Opaque Spark jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect
  *   during a request. Designed to be unique across sessions and requests.
  * @param operationId:
- *   32 characters UUID assigned by Connect during a request.
+ *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param sessionId:
- *   32 characters UUID assigned by Connect the operation was executed on.
+ *   ID assigned by the client or Connect the operation was executed on.
  * @param userId:
  *   Opaque userId set in the Connect request.
  * @param userName:
@@ -257,7 +221,7 @@ case class SparkListenerConnectOperationStarted(
  *   Opaque Spark jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect
  *   during a request. Designed to be unique across sessions and requests.
  * @param operationId:
- *   32 characters UUID assigned by Connect during a request.
+ *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param extraTags:
@@ -284,7 +248,7 @@ case class SparkListenerConnectOperationParsed(
  *   Opaque Spark jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect
  *   during a request. Designed to be unique across sessions and requests.
  * @param operationId:
- *   32 characters UUID assigned by Connect during a request.
+ *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param extraTags:
@@ -304,7 +268,7 @@ case class SparkListenerConnectOperationCanceled(
  *   Opaque Spark jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect
  *   during a request. Designed to be unique across sessions and requests.
  * @param operationId:
- *   32 characters UUID assigned by Connect during a request.
+ *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param errorMessage:
@@ -328,7 +292,7 @@ case class SparkListenerConnectOperationFailed(
  *   Opaque Spark jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect
  *   during a request. Designed to be unique across sessions and requests.
  * @param operationId:
- *   32 characters UUID assigned by Connect during a request.
+ *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param extraTags:
@@ -348,7 +312,7 @@ case class SparkListenerConnectOperationFinished(
  *   Opaque Spark jobGroupId (@link org.apache.spark.SparkContext.setJobGroup) assigned by Connect
  *   during a request. Designed to be unique across sessions and requests.
  * @param operationId:
- *   32 characters UUID assigned by Connect during a request.
+ *   36 characters UUID assigned by Connect during a request.
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param extraTags:
@@ -357,22 +321,6 @@ case class SparkListenerConnectOperationFinished(
 case class SparkListenerConnectOperationClosed(
     jobGroupId: String,
     operationId: String,
-    eventTime: Long,
-    extraTags: Map[String, String] = Map.empty)
-    extends SparkListenerEvent
-
-/**
- * Event sent after a Connect session has been closed.
- *
- * @param sessionId:
- *   32 characters UUID assigned by Connect
- * @param eventTime:
- *   The time in ms when the event was generated.
- * @param extraTags:
- *   Additional metadata (i.e. spark context locale properties).
- */
-case class SparkListenerConnectSessionClosed(
-    sessionId: String,
     eventTime: Long,
     extraTags: Map[String, String] = Map.empty)
     extends SparkListenerEvent

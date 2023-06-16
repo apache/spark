@@ -121,7 +121,7 @@ class SparkConnectService(debug: Boolean)
       observer: StreamObserver[V],
       userId: String,
       sessionId: String,
-      events: Option[Events] = None): PartialFunction[Throwable, Unit] = {
+      planHolder: Option[ExecutePlanHolder] = None): PartialFunction[Throwable, Unit] = {
     val sessionHolder = SparkConnectService
       .getOrCreateIsolatedSession(userId, sessionId)
     val session = sessionHolder.session
@@ -151,7 +151,7 @@ class SparkConnectService(debug: Boolean)
     partial
       .andThen { case (original, wrapped) =>
         logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
-        events.foreach(_.postFailed(wrapped.getMessage))
+        planHolder.foreach(_.events.postFailed(wrapped.getMessage))
         observer.onError(wrapped)
       }
   }
@@ -169,18 +169,22 @@ class SparkConnectService(debug: Boolean)
   override def executePlan(
       request: proto.ExecutePlanRequest,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    var planHolder = Option.empty[ExecutePlanHolder]
     try {
-      new SparkConnectStreamHandler(responseObserver).handle(request)
+      val sessionHolder =
+        SparkConnectService
+          .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+      planHolder = Some(sessionHolder.createExecutePlanHolder(request))
+      new SparkConnectStreamHandler(responseObserver).handle(planHolder.get)
     } catch {
       handleError(
         "execute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId,
-        Some(
-          SparkConnectService
-            .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
-            .events))
+        planHolder)
+    } finally {
+      planHolder.foreach(_.removeFromSessionHolder())
     }
   }
 

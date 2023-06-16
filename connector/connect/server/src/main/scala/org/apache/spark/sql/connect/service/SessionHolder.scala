@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
     extends Logging {
 
-  val events: Events = Events(this, new SystemClock())
+  val events: SessionEvents = SessionEvents(this, new SystemClock())
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
 

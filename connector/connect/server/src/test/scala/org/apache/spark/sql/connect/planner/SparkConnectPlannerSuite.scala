@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProj
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{ExecutePlanHolder, SessionHolder}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -57,8 +57,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(SessionHolder.forTesting(spark))
-      .process(cmd, "clientId", "sessionId", new MockObserver())
+    val planHolder = buildExecutePlanHolder(cmd)
+    new SparkConnectPlanner(planHolder.sessionHolder).process(cmd, new MockObserver(), planHolder)
   }
 
   def readRel: proto.Relation =
@@ -98,6 +98,25 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+  }
+
+  def buildExecutePlanHolder(command: proto.Command): ExecutePlanHolder = {
+    val sessionHolder = SessionHolder.forTesting(spark)
+
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId(sessionHolder.userId)
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(command)
+      .build()
+    val request = proto.ExecutePlanRequest
+      .newBuilder()
+      .setPlan(plan)
+      .setUserContext(context)
+      .build()
+    ExecutePlanHolder("requestId", sessionHolder, request)
   }
 }
 

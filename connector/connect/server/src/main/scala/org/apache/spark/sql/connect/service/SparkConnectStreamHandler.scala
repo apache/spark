@@ -26,7 +26,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
+import org.apache.spark.connect.proto.{ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,27 +44,23 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
 
-  def handle(v: ExecutePlanRequest): Unit = {
-    val sessionHolder =
-      SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
-    // available during processing.
-    sessionHolder.withSession { session =>
-      // Add debug information to the query execution so that the jobs are traceable.
+  def handle(v: ExecutePlanHolder): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
+    val request = v.request
+    val session = v.sessionHolder.session
+
+    session.withActive {
       val debugString =
         try {
           Utils.redact(
             session.sessionState.conf.stringRedactionPattern,
-            ProtoUtils.abbreviate(v).toString)
+            ProtoUtils.abbreviate(request).toString)
         } catch {
           case NonFatal(e) =>
             logWarning("Fail to extract debug information", e)
             "UNKNOWN"
         }
 
-      val executeHolder = sessionHolder.createExecutePlanHolder(v)
-      session.sparkContext.addJobTag(executeHolder.jobTag)
+      session.sparkContext.addJobTag(v.jobTag)
       session.sparkContext.setInterruptOnCancel(true)
 
       try {
@@ -81,47 +77,50 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       }
 
       try {
-        v.getPlan.getOpTypeCase match {
-          case proto.Plan.OpTypeCase.COMMAND => handleCommand(sessionHolder, v, sessionHolder.events)
-          case proto.Plan.OpTypeCase.ROOT => handlePlan(sessionHolder, v, sessionHolder.events)
+        request.getPlan.getOpTypeCase match {
+          case proto.Plan.OpTypeCase.COMMAND => handleCommand(v)
+          case proto.Plan.OpTypeCase.ROOT => handlePlan(v)
           case _ =>
-            throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+            throw new UnsupportedOperationException(
+              s"${request.getPlan.getOpTypeCase} not supported.")
         }
       } finally {
-        session.sparkContext.removeJobTag(executeHolder.jobTag)
-        sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
+        session.sparkContext.removeJobTag(v.jobTag)
+        session.sparkContext.clearJobGroup()
       }
     }
   }
 
-  private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest, events: Events): Unit = {
+  private def handlePlan(planHolder: ExecutePlanHolder): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(sessionHolder, Some(events))
+    val sessionHolder = planHolder.sessionHolder
+    val planner = new SparkConnectPlanner(sessionHolder)
+    val request = planHolder.request
     val dataframe =
       Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
-    events.postParsed(Some(dataframe))
+    planHolder.events.postParsed(Some(dataframe))
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
-    processAsArrowBatches(request.getSessionId, dataframe, responseObserver, events)
+    processAsArrowBatches(dataframe, responseObserver, planHolder)
     responseObserver.onNext(
       SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(
         SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
     }
-    events.postClosed()
+    planHolder.events.postClosed()
     responseObserver.onCompleted()
   }
 
-  private def handleCommand(sessionHolder: SessionHolder, request: ExecutePlanRequest, events: Events): Unit = {
+  private def handleCommand(planHolder: ExecutePlanHolder): Unit = {
+    val request = planHolder.request
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(sessionHolder, Some(events))
+    val planner = new SparkConnectPlanner(planHolder.sessionHolder)
     planner.process(
       command = command,
-      userId = request.getUserContext.getUserId,
-      sessionId = request.getSessionId,
-      responseObserver = responseObserver)
-    events.postClosed()
+      responseObserver = responseObserver,
+      planHolder = planHolder)
+    planHolder.events.postClosed()
     responseObserver.onCompleted()
   }
 }
@@ -146,10 +145,10 @@ object SparkConnectStreamHandler {
   }
 
   def processAsArrowBatches(
-      sessionId: String,
       dataframe: DataFrame,
       responseObserver: StreamObserver[ExecutePlanResponse],
-      events: Events): Unit = {
+      planHolder: ExecutePlanHolder): Unit = {
+    val sessionId = planHolder.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
@@ -179,14 +178,13 @@ object SparkConnectStreamHandler {
 
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows) =>
-        events.postFinished()
+        planHolder.events.postFinished()
         rowToArrowConverter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count)
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           val rows = dataframe.queryExecution.executedPlan.execute()
-          events.postFinished()
           val numPartitions = rows.getNumPartitions
 
           if (numPartitions > 0) {
@@ -218,6 +216,7 @@ object SparkConnectStreamHandler {
 
             // Collect errors and propagate them to the main thread.
             future.onComplete { result =>
+              planHolder.events.postFinished()
               result.failed.foreach { throwable =>
                 signal.synchronized {
                   error = Some(throwable)
