@@ -1091,7 +1091,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         if (assignExprIdOnly) {
           (p.child, p.output.zip(p.child.output))
         } else {
-          (p, p.output.zip(p.output))
+          (p, Nil)
         }
     }
   }
