@@ -16,6 +16,7 @@
 #
 import os
 
+import pandas as pd
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHECKING
 
 from pyspark import keyword_only, since, SparkContext
@@ -25,8 +26,6 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 
-
-PipelineStage = Union[Estimator, Transformer]
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
@@ -40,7 +39,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
         """
         return ["stages"]
 
-    def _save_meta_algorithm(self, root_path, node_path):
+    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
         metadata["stages"] = []
 
@@ -57,7 +56,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             if isinstance(stage, MetaAlgorithmReadWrite):
                 stage_metadata = stage._save_meta_algorithm(root_path, node_path)
             else:
-                stage_metadata = stage._get_metadata_to_save()
+                stage_metadata = stage._get_metadata_to_save()  # type: ignore[attr-defined]
                 if isinstance(stage, CoreModelReadWrite):
                     core_model_path = ".".join(node_path + [stage._get_core_model_filename()])
                     stage._save_core_model(os.path.join(root_path, core_model_path))
@@ -67,7 +66,7 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             node_path.pop()
         return metadata
 
-    def _load_meta_algorithm(self, root_path, node_metadata):
+    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
         stages = []
         for stage_meta in node_metadata["stages"]:
             stage = ParamsReadWrite._load_from_metadata(stage_meta)
@@ -111,14 +110,14 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     .. versionadded:: 3.5.0
     """
 
-    stages: Param[List["PipelineStage"]] = Param(
+    stages: Param[List[Params]] = Param(
         Params._dummy(), "stages", "a list of pipeline stages"
-    )
+    )  # type: ignore[assignment]
 
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(self, *, stages: Optional[List["PipelineStage"]] = None):
+    def __init__(self, *, stages: Optional[List[Params]] = None):
         """
         __init__(self, \\*, stages=None)
         """
@@ -126,7 +125,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    def setStages(self, value: List["PipelineStage"]) -> "Pipeline":
+    def setStages(self, value: List[Params]) -> "Pipeline":
         """
         Set pipeline stages.
 
@@ -146,7 +145,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         return self._set(stages=value)
 
     @since("3.5.0")
-    def getStages(self) -> List["PipelineStage"]:
+    def getStages(self) -> List[Params]:
         """
         Get pipeline stages.
         """
@@ -154,7 +153,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
 
     @keyword_only
     @since("3.5.0")
-    def setParams(self, *, stages: Optional[List["PipelineStage"]] = None) -> "Pipeline":
+    def setParams(self, *, stages: Optional[List[Params]] = None) -> "Pipeline":
         """
         setParams(self, \\*, stages=None)
         Sets params for Pipeline.
@@ -162,7 +161,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    def _fit(self, dataset: DataFrame) -> "PipelineModel":
+    def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "PipelineModel":
         stages = self.getStages()
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
@@ -178,13 +177,13 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
                     transformers.append(stage)
                     dataset = stage.transform(dataset)
                 else:  # must be an Estimator
-                    model = stage.fit(dataset)
+                    model = stage.fit(dataset)  # type: ignore[attr-defined]
                     transformers.append(model)
                     if i < indexOfLastEstimator:
                         dataset = model.transform(dataset)
             else:
                 transformers.append(cast(Transformer, stage))
-        pipeline_model = PipelineModel(transformers)
+        pipeline_model = PipelineModel(transformers)  # type: ignore[arg-type]
         pipeline_model._resetUid(self.uid)
         return pipeline_model
 
@@ -219,13 +218,13 @@ class PipelineModel(Model, _PipelineReadWrite):
     .. versionadded:: 3.5.0
     """
 
-    def __init__(self, stages: Optional[List[Transformer]] = None):
+    def __init__(self, stages: Optional[List[Params]] = None):
         super(PipelineModel, self).__init__()
-        self.stages = stages
+        self.stages = stages  # type: ignore[assignment]
 
-    def transform(self, dataset: DataFrame) -> DataFrame:
+    def transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:
         for t in self.stages:
-            dataset = t.transform(dataset)
+            dataset = t.transform(dataset)  # type: ignore[attr-defined]
         return dataset
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "PipelineModel":

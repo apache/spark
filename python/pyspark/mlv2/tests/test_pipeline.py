@@ -125,7 +125,6 @@ class PipelineTestsMixin:
             loaded_model2_transform_result = loaded_model2.transform(eval_dataset).toPandas()
             self._check_result(loaded_model2_transform_result, expected_predictions, expected_probabilities)
 
-
     @staticmethod
     def test_pipeline_copy():
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
@@ -155,83 +154,6 @@ class PipelineTestsMixin:
         # test original stage instance params are not modified after pipeline copying.
         assert scaler.getInputCol() == "features"
         assert lorv2.getOrDefault(lorv2.maxIter) == 200
-
-    @unittest.skip
-    def test_save_load(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
-            local_path = os.path.join(tmp_dir, "estimator")
-            estimator.saveToLocal(local_path)
-            loaded_estimator = LORV2.loadFromLocal(local_path)
-            assert loaded_estimator.uid == estimator.uid
-            assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
-
-            # test overwriting
-            estimator2 = estimator.copy()
-            estimator2.set(estimator2.maxIter, 10)
-            estimator2.saveToLocal(local_path, overwrite=True)
-            loaded_estimator2 = LORV2.loadFromLocal(local_path)
-            assert loaded_estimator2.getOrDefault(loaded_estimator2.maxIter) == 10
-
-            fs_path = os.path.join(tmp_dir, "fs", "estimator")
-            estimator.save(fs_path)
-            loaded_estimator = LORV2.load(fs_path)
-            assert loaded_estimator.uid == estimator.uid
-            assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
-            assert loaded_estimator.getOrDefault(loaded_estimator.learningRate) == 0.001
-
-            training_dataset = self.spark.createDataFrame(
-                [
-                    (1.0, [0.0, 5.0]),
-                    (0.0, [1.0, 2.0]),
-                    (1.0, [2.0, 1.0]),
-                    (0.0, [3.0, 3.0]),
-                ]
-                * 100,
-                ["label", "features"],
-                )
-            eval_df1 = self.spark.createDataFrame(
-                [
-                    ([0.0, 2.0],),
-                    ([3.5, 3.0],),
-                ],
-                ["features"],
-            )
-
-            model = estimator.fit(training_dataset)
-            assert model.uid == estimator.uid
-
-            local_model_path = os.path.join(tmp_dir, "model")
-            model.saveToLocal(local_model_path)
-            loaded_model = LORV2Model.loadFromLocal(local_model_path)
-            assert loaded_model.numFeatures == 2
-            assert loaded_model.numClasses == 2
-            assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
-            assert loaded_model.torch_model is not None
-            np.testing.assert_allclose(
-                loaded_model.torch_model.weight.detach().numpy(),
-                model.torch_model.weight.detach().numpy(),
-            )
-            np.testing.assert_allclose(
-                loaded_model.torch_model.bias.detach().numpy(),
-                model.torch_model.bias.detach().numpy(),
-            )
-
-            # Test loaded model transformation.
-            loaded_model.transform(eval_df1.toPandas())
-
-            fs_model_path = os.path.join(tmp_dir, "fs", "model")
-            model.save(fs_model_path)
-            loaded_model = LORV2Model.load(fs_model_path)
-            assert loaded_model.numFeatures == 2
-            assert loaded_model.numClasses == 2
-            assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
-            assert loaded_model.torch_model is not None
-            # Test loaded model transformation works.
-            loaded_model.transform(eval_df1.toPandas())
 
 
 class PipelineTests(PipelineTestsMixin, unittest.TestCase):

@@ -21,7 +21,8 @@ import os
 import tempfile
 import time
 from urllib.parse import urlparse
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List
+from pyspark.ml.base import Params
 from pyspark.ml.util import _get_active_session
 from pyspark.sql.utils import is_remote
 
@@ -66,7 +67,7 @@ def _get_class(clazz: str) -> Any:
     return getattr(m, parts[-1])
 
 
-class ParamsReadWrite:
+class ParamsReadWrite(Params):
     """
     The base interface Estimator / Transformer / Model / Evaluator needs to inherit
     for supporting saving and loading.
@@ -157,7 +158,7 @@ class ParamsReadWrite:
         self._save_to_local(path)
 
     @classmethod
-    def _load_from_metadata(cls, metadata):
+    def _load_from_metadata(cls, metadata: Dict[str, Any]) -> "Params":
         if "type" not in metadata or metadata["type"] != "spark_connect":
             raise RuntimeError(
                 "The saved data is not saved by ML algorithm implemented in 'pyspark.ml.connect' "
@@ -183,7 +184,7 @@ class ParamsReadWrite:
         return instance
 
     @classmethod
-    def _load_from_local(cls, path: str) -> Any:
+    def _load_from_local(cls, path: str) -> "Params":
         with open(os.path.join(path, _META_DATA_FILE_NAME), "r") as fp:
             metadata = json.load(fp)
 
@@ -196,7 +197,7 @@ class ParamsReadWrite:
         return instance
 
     @classmethod
-    def loadFromLocal(cls, path: str) -> Any:
+    def loadFromLocal(cls, path: str) -> "Params":
         """
         Load Estimator / Transformer / Model / Evaluator from provided local path.
 
@@ -232,7 +233,7 @@ class ParamsReadWrite:
             shutil.rmtree(tmp_local_dir, ignore_errors=True)
 
     @classmethod
-    def load(cls, path: str) -> Any:
+    def load(cls, path: str) -> "Params":
         """
         Load Estimator / Transformer / Model / Evaluator from provided cloud storage path.
 
@@ -282,10 +283,10 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
     Meta-algorithm such as pipeline and cross validator must implement this interface.
     """
 
-    def _save_meta_algorithm(self, root_path, node_path):
+    def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         raise NotImplementedError()
 
-    def _load_meta_algorithm(self, root_path, node_metadata):
+    def _load_meta_algorithm(self, root_path: str, node_metadata: Dict[str, Any]) -> None:
         raise NotImplementedError()
 
     def _save_to_local(self, path: str) -> None:
@@ -299,6 +300,6 @@ class MetaAlgorithmReadWrite(ParamsReadWrite):
             metadata = json.load(fp)
 
         instance = cls._load_from_metadata(metadata)
-        instance._load_meta_algorithm(path, metadata)
+        instance._load_meta_algorithm(path, metadata)  # type: ignore[attr-defined]
 
         return instance
