@@ -6345,6 +6345,59 @@ object functions {
     Column.fn("bucket", lit(numBuckets), e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
+   * are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 

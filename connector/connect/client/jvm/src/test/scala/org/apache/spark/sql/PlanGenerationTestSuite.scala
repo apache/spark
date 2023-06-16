@@ -2371,6 +2371,30 @@ class PlanGenerationTestSuite
     fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("ifnull") {
+    fn.ifnull(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("isnotnull") {
+    fn.isnotnull(fn.col("g"))
+  }
+
+  functionTest("equal_null") {
+    fn.equal_null(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("nullif") {
+    fn.nullif(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("nvl") {
+    fn.nvl(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("nvl2") {
+    fn.nvl2(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
   test("groupby agg") {
     simple
       .groupBy(Column("id"))

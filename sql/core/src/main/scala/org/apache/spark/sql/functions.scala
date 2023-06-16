@@ -6388,6 +6388,71 @@ object functions {
     Bucket(Literal(numBuckets), e.expr)
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = withExpr {
+    IsNotNull(col.expr)
+  }
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands,
+   * but returns true if both are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = withExpr {
+    new EqualNull(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr {
+    new NullIf(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    new Nvl2(col1.expr, col2.expr, col3.expr)
+  }
+
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
 
