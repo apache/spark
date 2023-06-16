@@ -664,8 +664,7 @@ class Index(IndexOpsMixin):
         True
         """
         warnings.warn(
-            "Index.asi8 is deprecated and will be removed in a future version. "
-            "We recommend using `{}.to_numpy()` instead.".format(type(self).__name__),
+            "Index.asi8 is deprecated and will be removed in 4.0.0. " "Use Index.astype instead.",
             FutureWarning,
         )
         if isinstance(self.spark.data_type, IntegralType):
@@ -1150,7 +1149,8 @@ class Index(IndexOpsMixin):
         True
         """
         warnings.warn(
-            "Index.is_type_compatible is deprecated and will be removed in a " "future version",
+            "Index.is_type_compatible is deprecated and will be removed in 4.0.0. "
+            "Use Index.isin instead.",
             FutureWarning,
         )
         return kind == self.inferred_type

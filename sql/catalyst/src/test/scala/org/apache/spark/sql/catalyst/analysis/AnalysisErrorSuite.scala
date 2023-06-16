@@ -95,10 +95,7 @@ case class TestFunction(
     copy(children = newChildren)
 }
 
-case class UnresolvedTestPlan() extends LeafNode {
-  override lazy val resolved = false
-  override def output: Seq[Attribute] = Nil
-}
+case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
 class AnalysisErrorSuite extends AnalysisTest {
   import TestRelations._
