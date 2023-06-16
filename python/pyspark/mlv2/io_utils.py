@@ -21,7 +21,7 @@ import os
 import tempfile
 import time
 from urllib.parse import urlparse
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from pyspark.ml.util import _get_active_session
 from pyspark.sql.utils import is_remote
 
@@ -56,43 +56,6 @@ def _copy_dir_from_local_to_fs(local_path: str, dest_path: str) -> None:
         _copy_file_from_local_to_fs(file_path, dest_file_path)
 
 
-def _get_metadata_to_save(
-    instance: Any,
-    extra_metadata: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Extract metadata of Estimator / Transformer / Model / Evaluator instance.
-    """
-    uid = instance.uid
-    cls = instance.__module__ + "." + instance.__class__.__name__
-
-    # User-supplied param values
-    params = instance._paramMap
-    json_params = {}
-    for p in params:
-        json_params[p.name] = params[p]
-
-    # Default param values
-    json_default_params = {}
-    for p in instance._defaultParamMap:
-        json_default_params[p.name] = instance._defaultParamMap[p]
-
-    metadata = {
-        "class": cls,
-        "timestamp": int(round(time.time() * 1000)),
-        "sparkVersion": pyspark_version,
-        "uid": uid,
-        "paramMap": json_params,
-        "defaultParamMap": json_default_params,
-        "type": "spark_connect",
-    }
-    if extra_metadata is not None:
-        assert isinstance(extra_metadata, dict)
-        metadata["extra"] = extra_metadata
-
-    return metadata
-
-
 def _get_class(clazz: str) -> Any:
     """
     Loads Python class from its name.
@@ -115,6 +78,50 @@ class ParamsReadWrite:
         """
         return None
 
+    def _get_skip_saving_params(self) -> List[str]:
+        """
+        Returns params to be skipped when saving metadata.
+        """
+        return []
+
+    def _get_metadata_to_save(self) -> Dict[str, Any]:
+        """
+        Extract metadata of Estimator / Transformer / Model / Evaluator instance.
+        """
+        extra_metadata = self._get_extra_metadata()
+        skipped_params = self._get_skip_saving_params()
+
+        uid = self.uid
+        cls = self.__module__ + "." + self.__class__.__name__
+
+        # User-supplied param values
+        params = self._paramMap
+        json_params = {}
+        skipped_params = skipped_params or []
+        for p in params:
+            if p.name not in skipped_params:
+                json_params[p.name] = params[p]
+
+        # Default param values
+        json_default_params = {}
+        for p in self._defaultParamMap:
+            json_default_params[p.name] = self._defaultParamMap[p]
+
+        metadata = {
+            "class": cls,
+            "timestamp": int(round(time.time() * 1000)),
+            "sparkVersion": pyspark_version,
+            "uid": uid,
+            "paramMap": json_params,
+            "defaultParamMap": json_default_params,
+            "type": "spark_connect",
+        }
+        if extra_metadata is not None:
+            assert isinstance(extra_metadata, dict)
+            metadata["extra"] = extra_metadata
+
+        return metadata
+
     def _load_extra_metadata(self, metadata: Dict[str, Any]) -> None:
         """
         Load extra metadata attribute from metadata json object.
@@ -122,9 +129,7 @@ class ParamsReadWrite:
         pass
 
     def _save_to_local(self, path: str) -> None:
-        extra_metadata = self._get_extra_metadata()
-
-        metadata = _get_metadata_to_save(self, extra_metadata=extra_metadata)
+        metadata = self._get_metadata_to_save(self)
         if isinstance(self, CoreModelReadWrite):
             core_model_path = self._get_core_model_filename()
             self._save_core_model(os.path.join(path, core_model_path))

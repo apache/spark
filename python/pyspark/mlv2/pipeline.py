@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHE
 
 from pyspark import keyword_only, since, SparkContext
 from pyspark.mlv2.base import Estimator, Model, Transformer
-from pyspark.mlv2.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite, _get_metadata_to_save
+from pyspark.mlv2.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
@@ -34,8 +34,14 @@ if TYPE_CHECKING:
 
 class _PipelineReadWrite(MetaAlgorithmReadWrite):
 
+    def _get_skip_saving_params(self) -> List[str]:
+        """
+        Returns params to be skipped when saving metadata.
+        """
+        return ["stages"]
+
     def _save_meta_algorithm(self, root_path, node_path):
-        metadata = _get_metadata_to_save(self)
+        metadata = self._get_metadata_to_save()
         metadata["stages"] = []
 
         if isinstance(self, Pipeline):
@@ -49,11 +55,9 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             stage_name = f"pipeline_stage_{stage_index}"
             node_path.append(stage_name)
             if isinstance(stage, MetaAlgorithmReadWrite):
-                stage_metadata = stage._save_meta_algorithm(node_path)
+                stage_metadata = stage._save_meta_algorithm(root_path, node_path)
             else:
-                stage_metadata = _get_metadata_to_save(
-                    stage, extra_metadata=stage._get_extra_metadata()
-                )
+                stage_metadata = stage._get_metadata_to_save()
                 if isinstance(stage, CoreModelReadWrite):
                     core_model_path = ".".join(node_path + [stage._get_core_model_filename()])
                     stage._save_core_model(os.path.join(root_path, core_model_path))
@@ -74,6 +78,8 @@ class _PipelineReadWrite(MetaAlgorithmReadWrite):
             if isinstance(stage, CoreModelReadWrite):
                 core_model_path = stage_meta["core_model_path"]
                 stage._load_core_model(os.path.join(root_path, core_model_path))
+
+            stages.append(stage)
 
         if isinstance(self, Pipeline):
             self.setStages(stages)
@@ -178,7 +184,9 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
                         dataset = model.transform(dataset)
             else:
                 transformers.append(cast(Transformer, stage))
-        return PipelineModel(transformers)
+        pipeline_model = PipelineModel(transformers)
+        pipeline_model._resetUid(self.uid)
+        return pipeline_model
 
     def copy(self, extra: Optional["ParamMap"] = None) -> "Pipeline":
         """
@@ -215,7 +223,7 @@ class PipelineModel(Model, _PipelineReadWrite):
         super(PipelineModel, self).__init__()
         self.stages = stages
 
-    def _transform(self, dataset: DataFrame) -> DataFrame:
+    def transform(self, dataset: DataFrame) -> DataFrame:
         for t in self.stages:
             dataset = t.transform(dataset)
         return dataset
