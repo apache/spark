@@ -1283,6 +1283,38 @@ object functions {
   def histogram_numeric(e: Column, nBins: Column): Column =
     withAggregateFunction { new HistogramNumeric(e.expr, nBins.expr) }
 
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////

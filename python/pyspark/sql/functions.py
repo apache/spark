@@ -2468,6 +2468,182 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def every(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if all values of `col` are true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if all values are true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if all values of `col` are true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(every("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |          true|
+    +--------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(every("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(every("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    """
+    return _invoke_function_over_columns("every", col)
+
+
+@try_remote_functions
+def bool_and(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if all values of `col` are true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if all values are true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if all values of `col` are true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(bool_and("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |          true|
+    +--------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(bool_and("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(bool_and("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    """
+    return _invoke_function_over_columns("bool_and", col)
+
+
+@try_remote_functions
+def some(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if at least one value of `col` is true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if at least one value is true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if at least one value of `col` is true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(some("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(some("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(some("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |        false|
+    +-------------+
+    """
+    return _invoke_function_over_columns("some", col)
+
+
+@try_remote_functions
+def bool_or(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if at least one value of `col` is true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if at least one value is true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if at least one value of `col` is true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(bool_or("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(bool_or("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(bool_or("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |        false|
+    +-------------+
+    """
+    return _invoke_function_over_columns("bool_or", col)
+
+
+@try_remote_functions
 def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.

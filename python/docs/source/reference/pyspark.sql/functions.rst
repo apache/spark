@@ -258,6 +258,8 @@ Aggregate Functions
     approx_count_distinct
     approx_percentile
     avg
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
@@ -267,6 +269,7 @@ Aggregate Functions
     count_if
     covar_pop
     covar_samp
+    every
     first
     first_value
     grouping
@@ -298,6 +301,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    some
     std
     stddev
     stddev_pop
