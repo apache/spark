@@ -2493,7 +2493,6 @@ def every(col: "ColumnOrName") -> Column:
     +--------------+
     |          true|
     +--------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
     >>> df.select(every("flag")).show()
     +--------------+
@@ -2501,7 +2500,6 @@ def every(col: "ColumnOrName") -> Column:
     +--------------+
     |         false|
     +--------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
     >>> df.select(every("flag")).show()
     +--------------+
@@ -2509,7 +2507,6 @@ def every(col: "ColumnOrName") -> Column:
     +--------------+
     |         false|
     +--------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("every", col)
 
@@ -2540,7 +2537,6 @@ def bool_and(col: "ColumnOrName") -> Column:
     +--------------+
     |          true|
     +--------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
     >>> df.select(bool_and("flag")).show()
     +--------------+
@@ -2548,7 +2544,6 @@ def bool_and(col: "ColumnOrName") -> Column:
     +--------------+
     |         false|
     +--------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
     >>> df.select(bool_and("flag")).show()
     +--------------+
@@ -2556,7 +2551,6 @@ def bool_and(col: "ColumnOrName") -> Column:
     +--------------+
     |         false|
     +--------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("bool_and", col)
 
@@ -2587,7 +2581,6 @@ def some(col: "ColumnOrName") -> Column:
     +-------------+
     |         true|
     +-------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
     >>> df.select(some("flag")).show()
     +-------------+
@@ -2595,7 +2588,6 @@ def some(col: "ColumnOrName") -> Column:
     +-------------+
     |         true|
     +-------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
     >>> df.select(some("flag")).show()
     +-------------+
@@ -2603,7 +2595,6 @@ def some(col: "ColumnOrName") -> Column:
     +-------------+
     |        false|
     +-------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("some", col)
 
@@ -2634,7 +2625,6 @@ def bool_or(col: "ColumnOrName") -> Column:
     +-------------+
     |         true|
     +-------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
     >>> df.select(bool_or("flag")).show()
     +-------------+
@@ -2642,7 +2632,6 @@ def bool_or(col: "ColumnOrName") -> Column:
     +-------------+
     |         true|
     +-------------+
-    <BLANKLINE>
     >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
     >>> df.select(bool_or("flag")).show()
     +-------------+
@@ -2650,7 +2639,6 @@ def bool_or(col: "ColumnOrName") -> Column:
     +-------------+
     |        false|
     +-------------+
-    <BLANKLINE>
     """
     return _invoke_function_over_columns("bool_or", col)
 
