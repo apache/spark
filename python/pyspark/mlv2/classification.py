@@ -253,7 +253,9 @@ class LogisticRegression(
 
 
 @inherit_doc
-class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ParamsReadWrite, CoreModelReadWrite):
+class LogisticRegressionModel(
+    PredictionModel, _LogisticRegressionParams, ParamsReadWrite, CoreModelReadWrite
+):
     """
     Model fitted by LogisticRegression.
 

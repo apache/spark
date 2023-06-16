@@ -36,7 +36,6 @@ except ImportError:
 
 
 class PipelineTestsMixin:
-
     @staticmethod
     def _check_result(result_dataframe, expected_predictions, expected_probabilities=None):
         np.testing.assert_array_equal(list(result_dataframe.prediction), expected_predictions)
@@ -57,7 +56,7 @@ class PipelineTestsMixin:
             ]
             * 100,
             ["label", "features"],
-            )
+        )
         eval_dataset = self.spark.createDataFrame(
             [
                 ([0.0, 2.0],),
@@ -66,7 +65,9 @@ class PipelineTestsMixin:
             ["features"],
         )
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
-        lorv2 = LORV2(maxIter=200, numTrainWorkers=2, learningRate=0.001, featuresCol="scaled_features")
+        lorv2 = LORV2(
+            maxIter=200, numTrainWorkers=2, learningRate=0.001, featuresCol="scaled_features"
+        )
 
         pipeline = Pipeline(stages=[scaler, lorv2])
         model = pipeline.fit(train_dataset)
@@ -106,7 +107,9 @@ class PipelineTestsMixin:
             assert loaded_model.stages[1].getMaxIter() == 200
 
             loaded_model_transform_result = loaded_model.transform(eval_dataset).toPandas()
-            self._check_result(loaded_model_transform_result, expected_predictions, expected_probabilities)
+            self._check_result(
+                loaded_model_transform_result, expected_predictions, expected_probabilities
+            )
 
             pipeline2_local_path = os.path.join(tmp_dir, "pipeline2")
             pipeline2.saveToLocal(pipeline2_local_path)
@@ -123,16 +126,22 @@ class PipelineTestsMixin:
             assert loaded_model2.stages[0].stages[1].getMaxIter() == 200
 
             loaded_model2_transform_result = loaded_model2.transform(eval_dataset).toPandas()
-            self._check_result(loaded_model2_transform_result, expected_predictions, expected_probabilities)
+            self._check_result(
+                loaded_model2_transform_result, expected_predictions, expected_probabilities
+            )
 
     @staticmethod
     def test_pipeline_copy():
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
-        lorv2 = LORV2(maxIter=200, numTrainWorkers=2, learningRate=0.001, featuresCol="scaled_features")
+        lorv2 = LORV2(
+            maxIter=200, numTrainWorkers=2, learningRate=0.001, featuresCol="scaled_features"
+        )
 
         pipeline = Pipeline(stages=[scaler, lorv2])
 
-        copied_pipeline = pipeline.copy({scaler.inputCol: "f1", lorv2.maxIter: 10, lorv2.numTrainWorkers: 1})
+        copied_pipeline = pipeline.copy(
+            {scaler.inputCol: "f1", lorv2.maxIter: 10, lorv2.numTrainWorkers: 1}
+        )
 
         stages = copied_pipeline.getStages()
 
@@ -142,7 +151,9 @@ class PipelineTestsMixin:
         assert stages[1].getOrDefault(stages[1].featuresCol) == "scaled_features"
 
         pipeline2 = Pipeline(stages=[pipeline])
-        copied_pipeline2 = pipeline2.copy({scaler.inputCol: "f2", lorv2.maxIter: 20, lorv2.numTrainWorkers: 20})
+        copied_pipeline2 = pipeline2.copy(
+            {scaler.inputCol: "f2", lorv2.maxIter: 20, lorv2.numTrainWorkers: 20}
+        )
 
         stages = copied_pipeline2.getStages()[0].getStages()
 

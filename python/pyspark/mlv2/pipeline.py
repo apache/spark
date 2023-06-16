@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 
 
 class _PipelineReadWrite(MetaAlgorithmReadWrite):
-
     def _get_skip_saving_params(self) -> List[str]:
         """
         Returns params to be skipped when saving metadata.
