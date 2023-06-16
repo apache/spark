@@ -1219,6 +1219,38 @@ object functions {
   def histogram_numeric(e: Column, nBins: Column): Column =
     Column.fn("histogram_numeric", e, nBins)
 
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = Column.fn("every", e)
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = Column.fn("bool_and", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = Column.fn("some", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = Column.fn("bool_or", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
