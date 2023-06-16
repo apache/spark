@@ -1526,7 +1526,7 @@
   },
   "INVALID_UDF_IMPLEMENTATION" : {
     "message" : [
-      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction."
+      "Function <funcName> does not implement ScalarFunction or AggregateFunction."
     ]
   },
   "INVALID_URL" : {
