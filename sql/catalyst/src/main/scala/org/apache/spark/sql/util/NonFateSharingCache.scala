@@ -19,7 +19,8 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.Callable
 
-import com.google.common.cache.{Cache, LoadingCache}
+import com.google.common.cache.Cache
+import com.google.common.cache.LoadingCache
 
 import org.apache.spark.util.KeyLock
 
