@@ -31,7 +31,7 @@ class RollingParityTests(
         super().test_groupby_rolling_count()
 
     @unittest.skip(
-        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_groupby_rolling_kurt(self):
         super().test_groupby_rolling_kurt()
@@ -61,7 +61,7 @@ class RollingParityTests(
         super().test_groupby_rolling_quantile()
 
     @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_groupby_rolling_skew(self):
         super().test_groupby_rolling_skew()
@@ -91,7 +91,7 @@ class RollingParityTests(
         super().test_rolling_count()
 
     @unittest.skip(
-        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_rolling_kurt(self):
         super().test_rolling_kurt()
@@ -121,7 +121,7 @@ class RollingParityTests(
         super().test_rolling_quantile()
 
     @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_rolling_skew(self):
         super().test_rolling_skew()

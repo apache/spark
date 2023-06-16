@@ -923,11 +923,19 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   test("like & ilike function") {
     val df = Seq(("Spark", "_park")).toDF("a", "b")
 
-    checkAnswer(df.selectExpr("like(a, b)"), Seq(Row(true)))
+    checkAnswer(df.selectExpr("a like b"), Seq(Row(true)))
     checkAnswer(df.select(like(col("a"), col("b"))), Seq(Row(true)))
 
-    checkAnswer(df.selectExpr("ilike(a, b)"), Seq(Row(true)))
+    checkAnswer(df.selectExpr("a ilike b"), Seq(Row(true)))
     checkAnswer(df.select(ilike(col("a"), col("b"))), Seq(Row(true)))
+
+    val df1 = Seq(("%SystemDrive%/Users/John", "/%SystemDrive/%//Users%")).toDF("a", "b")
+
+    checkAnswer(df1.selectExpr("a like b escape '/'"), Seq(Row(true)))
+    checkAnswer(df1.select(like(col("a"), col("b"), '/')), Seq(Row(true)))
+
+    checkAnswer(df.selectExpr("a ilike b escape '/'"), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"), '/')), Seq(Row(true)))
   }
 
   test("lcase & ucase function") {

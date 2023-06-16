@@ -950,16 +950,56 @@ class PlanGenerationTestSuite
     fn.covar_samp("a", "b")
   }
 
-  functionTest("first") {
+  functionTest("first with ignore nulls") {
     fn.first("a", ignoreNulls = true)
+  }
+
+  functionTest("first with respect nulls") {
+    fn.first("a")
+  }
+
+  functionTest("first_value with ignore nulls") {
+    fn.first_value(fn.col("a"), ignoreNulls = lit(true))
+  }
+
+  functionTest("first_value with respect nulls") {
+    fn.first_value(fn.col("a"))
+  }
+
+  functionTest("any_value with ignore nulls") {
+    fn.any_value(fn.col("a"), ignoreNulls = lit(true))
+  }
+
+  functionTest("any_value with respect nulls") {
+    fn.any_value(fn.col("a"))
   }
 
   functionTest("kurtosis") {
     fn.kurtosis("a")
   }
 
-  functionTest("last") {
-    fn.last("a", ignoreNulls = false)
+  functionTest("last with ignore nulls") {
+    fn.last("a", ignoreNulls = true)
+  }
+
+  functionTest("last with respect nulls") {
+    fn.last("a")
+  }
+
+  functionTest("last_value with ignore nulls") {
+    fn.last_value(fn.col("a"), ignoreNulls = lit(true))
+  }
+
+  functionTest("last_value with respect nulls") {
+    fn.last_value(fn.col("a"))
+  }
+
+  functionTest("count_if") {
+    fn.count_if(fn.col("a").gt(0))
+  }
+
+  functionTest("histogram_numeric") {
+    fn.histogram_numeric(fn.col("a"), lit(10))
   }
 
   functionTest("mode") {
@@ -996,6 +1036,10 @@ class PlanGenerationTestSuite
 
   functionTest("percentile_approx") {
     fn.percentile_approx(fn.col("a"), fn.lit(0.3), fn.lit(20))
+  }
+
+  functionTest("approx_percentile") {
+    fn.approx_percentile(fn.col("a"), fn.lit(0.3), fn.lit(20))
   }
 
   functionTest("product") {
@@ -2127,6 +2171,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("reduce") {
+    fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
+  }
+
   functionTest("zip_with") {
     fn.zip_with(fn.col("e"), fn.col("e"), (x, y) => x + y)
   }
@@ -2323,6 +2371,30 @@ class PlanGenerationTestSuite
     fn.to_unix_timestamp(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("ifnull") {
+    fn.ifnull(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("isnotnull") {
+    fn.isnotnull(fn.col("g"))
+  }
+
+  functionTest("equal_null") {
+    fn.equal_null(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("nullif") {
+    fn.nullif(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("nvl") {
+    fn.nvl(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("nvl2") {
+    fn.nvl2(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
   functionTest("char") {
     fn.char(fn.col("a"))
   }
@@ -2331,7 +2403,7 @@ class PlanGenerationTestSuite
     fn.btrim(fn.col("g"))
   }
 
-  functionTest("btrim with trim") {
+  functionTest("btrim with specified trim string") {
     fn.btrim(fn.col("g"), fn.col("g"))
   }
 
@@ -2363,8 +2435,16 @@ class PlanGenerationTestSuite
     fn.like(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("like with escape") {
+    fn.like(fn.col("g"), fn.col("g"), '/')
+  }
+
   functionTest("ilike") {
     fn.ilike(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("ilike with escape") {
+    fn.ilike(fn.col("g"), fn.col("g"), '/')
   }
 
   functionTest("lcase") {

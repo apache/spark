@@ -74,8 +74,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val excludedSqlFunctions = Set(
-      "random", "first_value", "last_value",
-      "approx_percentile", "array_agg", "char_length", "character_length",
+      "random",
+      "array_agg", "char_length", "character_length",
       "lcase", "position", "printf", "substr", "ucase", "day", "cardinality", "sha",
       "getbit",
       // aliases for existing functions
@@ -285,11 +285,52 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("1100", null))
   }
 
-  test("if function") {
-    val df = Seq((1, 2)).toDF("a", "b")
-    checkAnswer(
-      df.selectExpr("if(a = 1, 'one', 'not_one')", "if(b = 1, 'one', 'not_one')"),
-      Row("one", "not_one"))
+  test("ifnull function") {
+    val df = Seq[Integer](null).toDF("a")
+    checkAnswer(df.selectExpr("ifnull(a, 8)"), Seq(Row(8)))
+    checkAnswer(df.select(ifnull(col("a"), lit(8))), Seq(Row(8)))
+  }
+
+  test("isnotnull function") {
+    val df = Seq[Integer](null).toDF("a")
+    checkAnswer(df.selectExpr("isnotnull(a)"), Seq(Row(false)))
+    checkAnswer(df.select(isnotnull(col("a"))), Seq(Row(false)))
+  }
+
+  test("equal_null function") {
+    val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
+    checkAnswer(df.selectExpr("equal_null(a, b)"), Seq(Row(false)))
+    checkAnswer(df.select(equal_null(col("a"), col("b"))), Seq(Row(false)))
+
+    checkAnswer(df.selectExpr("equal_null(a, a)"), Seq(Row(true)))
+    checkAnswer(df.select(equal_null(col("a"), col("a"))), Seq(Row(true)))
+  }
+
+  test("nullif function") {
+    val df = Seq((5, 8)).toDF("a", "b")
+    checkAnswer(df.selectExpr("nullif(5, 8)"), Seq(Row(5)))
+    checkAnswer(df.select(nullif(lit(5), lit(8))), Seq(Row(5)))
+
+    checkAnswer(df.selectExpr("nullif(a, a)"), Seq(Row(null)))
+    checkAnswer(df.select(nullif(lit(5), lit(5))), Seq(Row(null)))
+  }
+
+  test("nvl") {
+    val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
+    checkAnswer(df.selectExpr("nvl(a, b)"), Seq(Row(8)))
+    checkAnswer(df.select(nvl(col("a"), col("b"))), Seq(Row(8)))
+
+    checkAnswer(df.selectExpr("nvl(b, a)"), Seq(Row(8)))
+    checkAnswer(df.select(nvl(col("b"), col("a"))), Seq(Row(8)))
+  }
+
+  test("nvl2") {
+    val df = Seq[(Integer, Integer, Integer)]((null, 8, 9)).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("nvl2(a, b, c)"), Seq(Row(9)))
+    checkAnswer(df.select(nvl2(col("a"), col("b"), col("c"))), Seq(Row(9)))
+
+    checkAnswer(df.selectExpr("nvl2(b, a, c)"), Seq(Row(null)))
+    checkAnswer(df.select(nvl2(col("b"), col("a"), col("c"))), Seq(Row(null)))
   }
 
   test("misc md5 function") {
@@ -4193,7 +4234,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(31),
           Row(0),
           Row(null)))
+      checkAnswer(df.select(reduce(col("i"), lit(0), (acc, x) => acc + x)),
+        Seq(
+          Row(25),
+          Row(31),
+          Row(0),
+          Row(null)))
       checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10)),
+        Seq(
+          Row(250),
+          Row(310),
+          Row(0),
+          Row(null)))
+      checkAnswer(df.select(reduce(col("i"), lit(0), (acc, x) => acc + x, _ * 10)),
         Seq(
           Row(250),
           Row(310),
@@ -4239,9 +4292,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(null),
           Row(0),
           Row(null)))
+      checkAnswer(df.select(reduce(col("i"), lit(0), (acc, x) => acc + x)),
+        Seq(
+          Row(25),
+          Row(null),
+          Row(0),
+          Row(null)))
       checkAnswer(
         df.select(
           aggregate(col("i"), lit(0), (acc, x) => acc + x, acc => coalesce(acc, lit(0)) * 10)),
+        Seq(
+          Row(250),
+          Row(0),
+          Row(0),
+          Row(null)))
+      checkAnswer(
+        df.select(
+          reduce(col("i"), lit(0), (acc, x) => acc + x, acc => coalesce(acc, lit(0)) * 10)),
         Seq(
           Row(250),
           Row(0),

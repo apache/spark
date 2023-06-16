@@ -253,8 +253,10 @@ Aggregate Functions
 .. autosummary::
     :toctree: api/
 
+    any_value
     approxCountDistinct
     approx_count_distinct
+    approx_percentile
     avg
     collect_list
     collect_set
@@ -262,15 +264,19 @@ Aggregate Functions
     count
     count_distinct
     countDistinct
+    count_if
     covar_pop
     covar_samp
     first
+    first_value
     grouping
     grouping_id
+    histogram_numeric
     hll_sketch_agg
     hll_union_agg
     kurtosis
     last
+    last_value
     max
     max_by
     mean
@@ -281,6 +287,7 @@ Aggregate Functions
     percentile
     percentile_approx
     product
+    reduce
     regr_avgx
     regr_avgy
     regr_count
@@ -340,15 +347,28 @@ String Functions
     ascii
     base64
     bit_length
+    btrim
+    char
+    character_length
+    char_length
+    chr
     concat_ws
+    contains
     decode
+    elt
     encode
+    find_in_set
     format_number
     format_string
+    ilike
     initcap
     instr
+    lcase
     length
+    like
     lower
+    left
+    len
     levenshtein
     locate
     lpad
@@ -363,6 +383,8 @@ String Functions
     regexp_replace
     regexp_substr
     regexp_instr
+    right
+    ucase
     unbase64
     rpad
     repeat
@@ -412,6 +434,18 @@ Misc Functions
     hll_sketch_estimate
     hll_union
     user
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
 
 Xml Functions
 --------------

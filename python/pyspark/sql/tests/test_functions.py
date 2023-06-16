@@ -67,7 +67,7 @@ class FunctionsTestsMixin:
 
         # For functions that are named differently in pyspark this is the mapping of their
         # python name to the JVM equivalent
-        py_equiv_jvm = {"create_map": "map"}
+        py_equiv_jvm = {"create_map": "map", "py_len": "len"}
         for py_name, jvm_name in py_equiv_jvm.items():
             if py_name in py_fn_set:
                 py_fn_set.remove(py_name)
