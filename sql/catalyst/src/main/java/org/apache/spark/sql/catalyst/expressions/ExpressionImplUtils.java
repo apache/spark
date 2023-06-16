@@ -111,14 +111,6 @@ public class ExpressionImplUtils {
     return checkSum % 10 == 0;
   }
 
-  public static byte[] aesEncrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
-    return aesEncrypt(input, key, mode, padding, null, null);
-  }
-
-  public static byte[] aesDecrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
-    return aesDecrypt(input, key, mode, padding, null);
-  }
-
   public static byte[] aesEncrypt(byte[] input,
                                   byte[] key,
                                   UTF8String mode,
@@ -192,7 +184,7 @@ public class ExpressionImplUtils {
       Cipher cipher = Cipher.getInstance(cipherMode.transformation);
       if (opmode == Cipher.ENCRYPT_MODE) {
         // This may be 0-length for ECB
-        if (iv == null) {
+        if (iv == null || iv.length == 0) {
           iv = generateIv(cipherMode);
         } else if (!cipherMode.usesSpec) {
           // If the caller passes an IV, ensure the mode actually uses it.
@@ -210,7 +202,7 @@ public class ExpressionImplUtils {
         }
 
         // If the cipher mode supports additional authenticated data and it is provided, update it
-        if (aad != null) {
+        if (aad != null && aad.length != 0) {
           if (cipherMode.supportsAad != true) {
             throw QueryExecutionErrors.aesUnsupportedAad(mode);
           }
@@ -231,7 +223,7 @@ public class ExpressionImplUtils {
         if (cipherMode.usesSpec) {
           AlgorithmParameterSpec algSpec = getParamSpec(cipherMode, input);
           cipher.init(opmode, secretKey, algSpec);
-          if (aad != null) {
+          if (aad != null && aad.length != 0) {
             if (cipherMode.supportsAad != true) {
               throw QueryExecutionErrors.aesUnsupportedAad(mode);
             }
