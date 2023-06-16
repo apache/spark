@@ -44,9 +44,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.NonFateSharingCache
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassLoader, Utils}
+import org.apache.spark.util.{LongAccumulator, ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.

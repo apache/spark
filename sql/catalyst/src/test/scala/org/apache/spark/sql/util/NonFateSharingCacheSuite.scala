@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util;
+package org.apache.spark.sql.util
 
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{ExecutionException, Semaphore}
 import java.util.concurrent.atomic.AtomicReference
 
-import com.google.common.cache.CacheBuilder
-import com.google.common.cache.CacheLoader
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.ThreadUtils
 
 object NonFateSharingCacheSuite {
   private val TEST_KEY = "key"

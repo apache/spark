@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql.util
 
 import java.util.concurrent.Callable
 
-import com.google.common.cache.Cache
-import com.google.common.cache.LoadingCache
+import com.google.common.cache.{Cache, LoadingCache}
+
+import org.apache.spark.util.KeyLock
 
 /**
  * SPARK-43300: Guava cache fate-sharing behavior might lead to unexpected cascade failure:
