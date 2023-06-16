@@ -994,13 +994,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(("Spark SQL", "Spark")).toDF("a", "b")
 
     checkAnswer(df.selectExpr("endswith(a, b)"), Row(false))
-    checkAnswer(df.select(endswith(lit("Spark SQL"), lit("Spark"))), Row(false))
+    checkAnswer(df.select(endswith(col("a"), col("b"))), Row(false))
   }
 
   test("startswith") {
     val df = Seq(("Spark SQL", "Spark")).toDF("a", "b")
 
     checkAnswer(df.selectExpr("startswith(a, b)"), Row(true))
-    checkAnswer(df.select(startswith(lit("Spark SQL"), lit("Spark"))), Row(true))
+    checkAnswer(df.select(startswith(col("a"), col("b"))), Row(true))
   }
 }

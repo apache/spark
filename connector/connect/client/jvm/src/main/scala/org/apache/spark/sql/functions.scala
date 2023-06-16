@@ -3862,8 +3862,11 @@ object functions {
 
   /**
    * Returns a boolean. The value is True if str ends with suffix. Returns NULL if either input
-   * expression is NULL. Otherwise, returns False. Both str or suffix must be of STRING or BINARY
-   * type.
+   * expression is NULL. Otherwise, returns False. Both str or suffix must be of STRING type.
+   *
+   * @note
+   *   This is different from the `startswith` method in SQL that supports both STRING and BINARY
+   *   type.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -3873,8 +3876,11 @@ object functions {
 
   /**
    * Returns a boolean. The value is True if str starts with prefix. Returns NULL if either input
-   * expression is NULL. Otherwise, returns False. Both str or prefix must be of STRING or BINARY
-   * type.
+   * expression is NULL. Otherwise, returns False. Both str or prefix must be of STRING type.
+   *
+   * @note
+   *   This is different from the `startswith` method in SQL that supports both STRING and BINARY
+   *   type.
    *
    * @group string_funcs
    * @since 3.5.0

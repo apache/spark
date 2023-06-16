@@ -350,6 +350,7 @@ String Functions
     concat_ws
     decode
     encode
+    endswith
     format_number
     format_string
     initcap
@@ -361,6 +362,9 @@ String Functions
     lpad
     ltrim
     octet_length
+    parse_url
+    position
+    printf
     rlike
     regexp
     regexp_like
@@ -370,12 +374,16 @@ String Functions
     regexp_replace
     regexp_substr
     regexp_instr
+    replace
     unbase64
     rpad
     repeat
     rtrim
     soundex
     split
+    split_part
+    startswith
+    substr
     substring
     substring_index
     overlay
@@ -386,6 +394,8 @@ String Functions
     translate
     trim
     upper
+    url_decode
+    url_encode
 
 
 UDF
