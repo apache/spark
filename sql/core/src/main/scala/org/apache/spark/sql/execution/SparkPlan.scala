@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -274,11 +275,25 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def prepare(): Unit = {
     // doPrepare() may depend on it's children, we should call prepare() on all the children first.
-    children.foreach(_.prepare())
+   val isBroadcastHashJ = this match {
+      case _: BroadcastHashJoinExec => true
+      case _ => false
+    }
+    if (isBroadcastHashJ) {
+      this.synchronized {
+        if (!prepared) {
+          doPrepare()
+        }
+      }
+    } else {
+      children.foreach(_.prepare())
+    }
     synchronized {
       if (!prepared) {
         prepareSubqueries()
-        doPrepare()
+        if (!isBroadcastHashJ) {
+          doPrepare()
+        }
         prepared = true
       }
     }

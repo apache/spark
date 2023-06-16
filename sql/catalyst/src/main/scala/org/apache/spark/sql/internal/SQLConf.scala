@@ -3608,6 +3608,43 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
+  val PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferBroadcastVarPushDownOverDPP")
+      .internal()
+      .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once," +
+        " for BuildSide")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEVEL_WAIT_FOR_DELAYED_STAGE_MATERIALIZATION =
+    buildConf("spark.sql.execution.broadcastHashJoin.levelWaitForDelayedStageMaterialization")
+    .internal()
+    .doc("For level 0, the wait is only for orphan batchscans. For Level 1, the wait is till" +
+      "all the delayed batches are scheduled for materialization. For Level 2, the wait is till" +
+      "the delayed batches are materialized")
+    .version("3.1.0")
+    .intConf
+    .createWithDefault(1)
+
+  val PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED =
+    buildConf("spark.sql.execution.broadcastHashJoin.preferAsBuildSideLegAlreadyBroadcasted")
+    .internal()
+    .doc("For BroadcastHashJoin prefer the leg whose plan has already been broadcasted once, for" +
+      " BuildSide")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN =
+    buildConf("spark.sql.execution.broadcastHashJoin.pushKeysAsFilterToScan")
+      .internal()
+      .doc("Pushes the join keys from build side of broascasted relation as In clause," +
+        " to the scan of stream side")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
@@ -4508,6 +4545,17 @@ class SQLConf extends Serializable with Logging {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def levelWaitForDelayedStageMaterialization: Int =
+    getConf(LEVEL_WAIT_FOR_DELAYED_STAGE_MATERIALIZATION)
+
+  def preferAsBuildSideLegAlreadyBroadcasted: Boolean =
+    getConf(PREFER_AS_BUILDSIDE_LEG_ALREADY_BROADCASTED)
+
+  def pushBroadcastedJoinKeysASFilterToScan: Boolean =
+    getConf(PUSH_BROADCASTED_JOIN_KEYS_AS_FILTER_TO_SCAN)
+
+  def preferBroadcastVarPushdownOverDPP: Boolean = getConf(PREFER_BROADCAST_VAR_PUSHDOWN_OVER_DPP)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 

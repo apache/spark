@@ -29,6 +29,7 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.connector.catalog.InMemoryTable.{BROADCASTED_JOIN_KEYS_WRAPPER_CLASS}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
@@ -273,7 +274,7 @@ class InMemoryTable(
       tableSchema: StructType)
     extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
         with SupportsReportPartitioning {
-
+    private var broadcastVarFilters: Seq[Filter] = Seq.empty
     override def toBatch: Batch = this
 
     override def estimateStatistics(): Statistics = {
@@ -315,20 +316,97 @@ class InMemoryTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
-        filters.foreach {
-          case In(attrName, values) if attrName == ref.toString =>
-            val matchingKeys = values.map(_.toString).toSet
-            data = data.filter(partition => {
-              val key = partition.asInstanceOf[BufferedRows].keyString
-              matchingKeys.contains(key)
-            })
+      filters.foreach { f =>
+          val colName = f.references.head
+          val partitionColNames = partitioning.flatMap(t => t.references().map(ne => ne.fieldNames()
+            .reduce(_ + "." + _)))
+          if (partitioning.length == 1 && partitionColNames.exists(_ == colName)) {
+            f match {
+              case In(attrName, valueArray) if valueArray.length == 1 && valueArray(0).
+                getClass.getName.indexOf("BroadcastedJoinKeysWrapperImpl") != -1 =>
+                // scalastyle:off classforname
+                val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
+                // scalastyle:on classforname
+                val getKeysMthd = broadcastVarClass.getMethod("getKeysAsSet")
+                import scala.collection.JavaConverters._
+                val matchingKeys = getKeysMthd.invoke(valueArray(0)).
+                  asInstanceOf[java.util.Set[Any]].asScala.map(_.toString)
+                data = data.filter(partition => {
+                  val key = partition.asInstanceOf[BufferedRows].keyString
+                  matchingKeys.contains(key)
+                })
+              case In(attrName, values) if attrName == colName =>
+                val matchingKeys = values.map(_.toString).toSet
+                data = data.filter(partition => {
+                  val key = partition.asInstanceOf[BufferedRows].keyString
+                  matchingKeys.contains(key)
+                })
 
-          case _ => // skip
+              case _ => // skip
+            }
+          } else if (partitioning.length > 1) {
+             // skip
+          }
+          else {
+            f match {
+              case In(attrName, valueArray) if valueArray.length == 1 && valueArray(0).
+                getClass.getName.indexOf("BroadcastedJoinKeysWrapperImpl") != -1 =>
+                // scalastyle:off classforname
+                val broadcastVarClass = Class.forName(BROADCASTED_JOIN_KEYS_WRAPPER_CLASS)
+                // scalastyle:on classforname
+                val getKeysMthd = broadcastVarClass.getMethod("getKeysAsSet")
+                val keys = getKeysMthd.invoke(valueArray(0)).asInstanceOf[java.util.Set[Any]]
+                data = data.map(partition => {
+                  val oldPart = partition.asInstanceOf[BufferedRows]
+                  val newPartition = new BufferedRows(oldPart.key)
+                  oldPart.rows.filter( row => {
+                    val index = schema.fieldNames.indexOf(colName)
+                    val value = row.get(index, schema(index).dataType)
+                    val convertedVal = if (schema(index).dataType == StringType) {
+                      value.asInstanceOf[UTF8String].toString
+                    } else {
+                      value
+                    }
+                    keys.contains(convertedVal)
+                  }).foreach(newPartition.withRow)
+                  newPartition
+                })
+            }
+          }
+        this.broadcastVarFilters = this.broadcastVarFilters ++ filters.filter {
+          case In(_, values) if values.length == 1 && values(0).getClass.getName.
+            indexOf("BroadcastedJoinKeysWrapperImpl") != -1 => true
+          case _ => false
         }
       }
     }
+
+    override def getPushedBroadcastFilters(): java.util.List[PushedBroadcastFilterData] = {
+     import scala.collection.JavaConverters._
+     new util.ArrayList[PushedBroadcastFilterData](
+      this.broadcastVarFilters.map(f => {
+        val inFilter = f.asInstanceOf[In]
+        val clazz = classOf[PushedBroadcastFilterData]
+        // scalastyle:off classforname
+        val constr = clazz.getConstructor(classOf[String], Class.forName(
+          BROADCASTED_JOIN_KEYS_WRAPPER_CLASS))
+        constr.newInstance(inFilter.attribute, inFilter.values(0).asInstanceOf[java.lang.Object]).
+          asInstanceOf[PushedBroadcastFilterData]
+        // scalastyle:on classforname
+      }).asJava)
+    }
+
+    override def hasPushedBroadCastFilter(): Boolean = this.broadcastVarFilters.nonEmpty
+    override def allAttributes() : Array[NamedReference] =
+      readSchema.fields.map(sf => FieldReference(sf.name))
+
+    override def getPushedBroadcastVarIds (): java.util.Set[java.lang.Long] = {
+      import scala.collection.JavaConverters._
+      this.getPushedBroadcastFilters().asScala.map(x => java.lang.Long.valueOf(x.bcVar
+        .getBroadcastVarId)).toSet.asJava
+    }
+
+    override def getPushedBroadcastFiltersCount(): Int = this.getPushedBroadcastFilters().size()
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -475,7 +553,9 @@ class InMemoryTable(
 
 object InMemoryTable {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
-
+  val BROADCASTED_JOIN_KEYS_WRAPPER_CLASS =
+    "org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper"
+  val ARRAY_WRAPPER_CLASS = "org.apache.spark.sql.catalyst.bcVar.ArrayWrapper"
   def filtersToKeys(
       keys: Iterable[Seq[Any]],
       partitionNames: Seq[String],

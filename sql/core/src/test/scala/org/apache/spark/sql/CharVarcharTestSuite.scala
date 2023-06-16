@@ -24,9 +24,10 @@ import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.joins.DisableBroadcastFilterPushdownSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.sql.types._
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
@@ -870,7 +871,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
 }
 
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
-  with SharedSparkSession {
+  with SharedSparkSession with DisableBroadcastFilterPushdownSuite {
   override def format: String = "foo"
   protected override def sparkConf = {
     super.sparkConf

@@ -41,7 +41,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       SpecialLimits ::
       Aggregation ::
       Window ::
-      JoinSelection ::
+      new JoinSelection() ::
       InMemoryScans ::
       SparkScripts ::
       BasicOperators :: Nil)

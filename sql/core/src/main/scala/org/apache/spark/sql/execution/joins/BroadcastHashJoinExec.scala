@@ -23,13 +23,15 @@ import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioning, Partitioning, PartitioningCollection, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.{DataType, NullType}
+
 
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
@@ -45,7 +47,8 @@ case class BroadcastHashJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isNullAwareAntiJoin: Boolean = false)
+    isNullAwareAntiJoin: Boolean = false,
+    bcVarPushNode: BCVarPushNodeType = PASS_THROUGH)
   extends HashJoin {
 
   if (isNullAwareAntiJoin) {
@@ -55,6 +58,7 @@ case class BroadcastHashJoinExec(
     require(buildSide == BuildRight, "buildSide must be BuildRight.")
     require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
   }
+
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -67,6 +71,41 @@ case class BroadcastHashJoinExec(
       case BuildRight =>
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
     }
+  }
+
+  @volatile @transient private var broadcastVar: Option[Broadcast[HashedRelation]] = None
+
+  def pushBroadcastVar(): Unit = if (this.bcVarPushNode == SELF_PUSH ) {
+    val pushDownData = BroadcastHashJoinUtil.getPushdownDataForBatchScansUsingJoinKeys(buildKeys,
+      this.streamedPlan, BroadcastHashJoinUtil.getLogicalPlanFor(buildPlan) ->
+        BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(buildPlan).flatMap(
+          _.proxyForPushedBroadcastVar.getOrElse(Seq.empty)))
+
+    if (pushDownData.nonEmpty) {
+      BroadcastHashJoinUtil.pushBroadcastVar(this.broadcastVar.get, buildKeys, pushDownData)
+    }
+  }
+
+  private def initBroadcastVar(): Unit = {
+    if (this.broadcastVar.isEmpty) {
+      this.synchronized {
+        if (this.broadcastVar.isEmpty) {
+          this.broadcastVar = Option(this.buildPlan.executeBroadcast[HashedRelation]())
+        }
+      }
+    }
+  }
+
+  override protected def doPrepare(): Unit = {
+    // first prepare build side
+    if (this.bcVarPushNode == SELF_PUSH) {
+      this.buildPlan.prepare()
+      this.initBroadcastVar()
+      this.pushBroadcastVar()
+    } else {
+      this.buildPlan.prepare()
+    }
+    this.streamedPlan.prepare()
   }
 
   override lazy val outputPartitioning: Partitioning = {
@@ -138,8 +177,9 @@ case class BroadcastHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-
-    val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
+    this.initBroadcastVar()
+    this.pushBroadcastVar()
+    val broadcastRelation = this.broadcastVar.get
     if (isNullAwareAntiJoin) {
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
         val hashed = broadcastRelation.value.asReadOnlyCopy()
@@ -183,7 +223,8 @@ case class BroadcastHashJoinExec(
       // For inner and outer joins, one row from the streamed side may produce multiple result rows,
       // if the build side has duplicated keys. Note that here we wait for the broadcast to be
       // finished, which is a no-op because it's already finished when we wait it in `doProduce`.
-      !buildPlan.executeBroadcast[HashedRelation]().value.keyIsUnique
+      this.initBroadcastVar()
+      !this.broadcastVar.get.value.keyIsUnique
 
     // Other joins types(semi, anti, existence) can at most produce one result row for one input
     // row from the streamed side.
@@ -200,7 +241,9 @@ case class BroadcastHashJoinExec(
    */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
     // create a name for HashedRelation
-    val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
+    this.initBroadcastVar()
+    val broadcastRelation = this.broadcastVar.get
+    this.pushBroadcastVar()
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     val clsName = broadcastRelation.value.getClass.getName
 
@@ -259,3 +302,23 @@ case class BroadcastHashJoinExec(
       newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
 }
+
+trait BCVarPushNodeType extends LeafExpression with Unevaluable {
+  override lazy val canonicalized: Expression = PASS_THROUGH
+
+  override def nullable: Boolean = false
+
+  /**
+   * Returns the [[DataType]] of the result of evaluating this expression.  It is
+   * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
+   */
+  override def dataType: DataType = NullType
+}
+
+case object PASS_THROUGH extends BCVarPushNodeType
+
+case object SELF_PUSH extends BCVarPushNodeType
+
+
+
+

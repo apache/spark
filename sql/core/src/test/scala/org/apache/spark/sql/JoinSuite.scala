@@ -68,7 +68,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = spark.sessionState.planner.JoinSelection(join)
+    val planner = spark.sessionState.planner
+    val planned = new planner.JoinSelection().apply(join)
     assert(planned.size === 1)
   }
 
@@ -176,7 +177,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = spark.sessionState.planner.JoinSelection(join)
+    val planner = spark.sessionState.planner
+    val planned = new planner.JoinSelection().apply(join)
     assert(planned.size === 1)
   }
 

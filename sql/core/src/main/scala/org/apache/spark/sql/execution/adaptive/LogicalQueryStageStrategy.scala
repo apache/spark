@@ -47,13 +47,14 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
           left, right, hint)
         if isBroadcastStage(left) || isBroadcastStage(right) =>
       val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
+
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
         planLater(right)))
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>
-      Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
+     Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
         None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
     case j @ Join(left, right, joinType, condition, _)

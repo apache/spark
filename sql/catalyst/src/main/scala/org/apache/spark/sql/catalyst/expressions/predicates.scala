@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.immutable.TreeSet
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -1218,6 +1219,82 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
       newLeft: Expression, newRight: Expression): GreaterThanOrEqual =
     copy(left = newLeft, right = newRight)
 }
+
+case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapper,
+      countCorrectionVariable: String, localInsetVarTerm: String) extends UnaryExpression with
+  Predicate  {
+
+  @transient private lazy val inset: java.util.Set[Object] = this.bcVar.getKeysAsSet()
+
+  @transient private lazy val catalystToScalaConverter: Any => Any =
+    if (CatalystTypeConverters.isPrimitive(child.dataType)) {
+      null
+    } else {
+      CatalystTypeConverters.createToScalaConverter(child.dataType)
+    }
+
+
+  override def nullable: Boolean = child.nullable
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      false
+    } else {
+      val scalaVal = if (catalystToScalaConverter.ne(null)) {
+        catalystToScalaConverter.apply(value)
+      } else {
+        value
+      }
+      this.inset.contains(scalaVal)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val converterInitCode = if (CatalystTypeConverters.isPrimitive(child.dataType)) {
+      "null;"
+    } else {
+      val dataTypeRefTerm = ctx.addReferenceObj("dataTypeTerm", this.child.dataType,
+        classOf[DataType].getName)
+      s"${CatalystTypeConverters.getClass.getName}.MODULE$$.createToScalaConverter(" +
+        s"$dataTypeRefTerm);"
+    }
+    val filterCountIncrementCode = s"++${this.countCorrectionVariable}"
+    val catalystToScalaConverterTerm = ctx.addMutableState(
+      classOf[Any => Any].getName,
+      "catalystToScalaConverter",
+      varName =>
+        s"""
+           |$varName = $converterInitCode
+           |""".stripMargin )
+    val resultTerm = ctx.freshName("resultTerm")
+    val columnTermGen = child.genCode(ctx)
+    ev.copy(code =
+      code"""
+        ${columnTermGen.code}
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = false;
+        boolean $resultTerm = false;
+        if ($catalystToScalaConverterTerm != null) {
+           if(!${columnTermGen.isNull}) {
+             $resultTerm = $localInsetVarTerm.contains($catalystToScalaConverterTerm.apply(
+             ${columnTermGen.value}));
+           }
+        } else {
+          if (!${columnTermGen.isNull}) {
+            $resultTerm = $localInsetVarTerm.contains(${columnTermGen.value});
+          }
+        }
+        if (!$resultTerm) {
+          $filterCountIncrementCode;
+        }
+        ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = $resultTerm;
+       """)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): InWithBroadcastVar =
+    copy(child = newChild)
+}
+
 
 /**
  * IS UNKNOWN and IS NOT UNKNOWN are the same as IS NULL and IS NOT NULL, respectively,

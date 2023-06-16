@@ -68,6 +68,10 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
     _value += v
   }
 
+  def subtract(v: Long): Unit = {
+    _value -= v
+  }
+
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
   def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)

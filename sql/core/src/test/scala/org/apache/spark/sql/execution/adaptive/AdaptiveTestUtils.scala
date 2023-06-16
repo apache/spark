@@ -34,9 +34,9 @@ case class DisableAdaptiveExecution(reason: String) extends Tag("DisableAdaptive
  * tests tagged with [[DisableAdaptiveExecution]] will be skipped.
  */
 trait EnableAdaptiveExecutionSuite extends SQLTestUtils {
-  protected val forceApply = true
+  private val forceApply = true
 
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+  abstract override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     if (testTags.exists(_.isInstanceOf[DisableAdaptiveExecution])) {
       // we ignore the test here but assume that another test suite which extends
@@ -58,7 +58,7 @@ trait EnableAdaptiveExecutionSuite extends SQLTestUtils {
  * Helper trait that disables AQE for all tests regardless of default config values.
  */
 trait DisableAdaptiveExecutionSuite extends SQLTestUtils {
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+  abstract override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {

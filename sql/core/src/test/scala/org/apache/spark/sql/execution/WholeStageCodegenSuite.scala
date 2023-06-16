@@ -702,9 +702,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         .join(baseTable, "idx")
       assert(distinctWithId.queryExecution.executedPlan.exists {
         case WholeStageCodegenExec(
-          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _, _))) =>
+            true
         case _ => false
       })
+
       checkAnswer(distinctWithId, Seq(Row(1, 0), Row(1, 0)))
 
       // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
@@ -714,7 +716,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         .join(baseTable, "idx")
       assert(groupByWithId.queryExecution.executedPlan.exists {
         case WholeStageCodegenExec(
-          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
+          ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _, _))) =>
+            true
         case _ => false
       })
       checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))

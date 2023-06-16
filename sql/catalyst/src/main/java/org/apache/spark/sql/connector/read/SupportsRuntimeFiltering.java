@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.sources.Filter;
@@ -57,4 +60,28 @@ public interface SupportsRuntimeFiltering extends Scan {
    * @param filters data source filters used to filter the scan at runtime
    */
   void filter(Filter[] filters);
+
+  default boolean hasPushedBroadCastFilter() {return false;}
+
+  default NamedReference[] allAttributes() { return new NamedReference[0];}
+
+  default boolean equalToIgnoreRuntimeFilters(Scan other) {
+    return this.equals(other);
+  }
+
+  default int hashCodeIgnoreRuntimeFilters() {
+    return this.hashCode();
+  }
+
+  default List<PushedBroadcastFilterData> getPushedBroadcastFilters() {
+    return Collections.emptyList();
+  }
+
+  default Set<Long> getPushedBroadcastVarIds() {
+    return Collections.emptySet();
+  }
+
+  default int getPushedBroadcastFiltersCount() {
+    return 0;
+  }
 }

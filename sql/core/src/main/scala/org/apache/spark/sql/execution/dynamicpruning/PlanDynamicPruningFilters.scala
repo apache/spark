@@ -59,9 +59,9 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
           plan.exists {
-            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
+            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _, _) =>
               left.sameResult(sparkPlan)
-            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
+            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _, _) =>
               right.sameResult(sparkPlan)
             case _ => false
           }

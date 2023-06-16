@@ -2795,7 +2795,7 @@ object SparkContext extends Logging {
    * changed to `driver` because the angle brackets caused escaping issues in URLs and XML (see
    * SPARK-6716 for more details).
    */
-  private[spark] val DRIVER_IDENTIFIER = "driver"
+  val DRIVER_IDENTIFIER = "driver"
 
 
   private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Iterable[T])

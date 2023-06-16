@@ -149,8 +149,8 @@ class AdaptiveQueryExecSuite
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
-      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
-      case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _, _) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _, _) => e
     }
   }
 

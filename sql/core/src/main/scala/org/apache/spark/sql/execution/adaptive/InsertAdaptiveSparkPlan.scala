@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.joins.BroadcastFilterPushdown
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -53,12 +54,16 @@ case class InsertAdaptiveSparkPlan(
         try {
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
-          val subqueryMap = buildSubqueryMap(plan)
+          // we apply BroadcastFilterPushdown here bcoz we want to avoid dpp rule for BHJ when
+          // we are using broadcast filter push down for partition pruning
+          val planToUse = AdaptiveSparkPlanExec.applyPhysicalRules(plan,
+            Seq(BroadcastFilterPushdown))
+
+          val subqueryMap = buildSubqueryMap(planToUse)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
-          val preprocessingRules = Seq(
-            planSubqueriesRule)
+          val preprocessingRules = Seq(planSubqueriesRule)
           // Run pre-processing rules.
-          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
+          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(planToUse, preprocessingRules)
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
@@ -101,7 +106,7 @@ case class InsertAdaptiveSparkPlan(
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
     sanityCheck(plan) &&
-      !plan.logicalLink.exists(_.isStreaming) &&
+      !plan.logicalLink.exists(_.isStreaming)  &&
     plan.children.forall(supportAdaptive)
   }
 
