@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import datetime
+import warnings
 from functools import partial
 from typing import Any, Optional, Union, cast, no_type_check
 
@@ -163,6 +164,10 @@ class DatetimeIndex(Index):
         """
         The days of the datetime.
         """
+        warnings.warn(
+            "`day` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.day)
 
     @property
@@ -170,6 +175,10 @@ class DatetimeIndex(Index):
         """
         The hours of the datetime.
         """
+        warnings.warn(
+            "`hour` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.hour)
 
     @property
@@ -177,6 +186,10 @@ class DatetimeIndex(Index):
         """
         The minutes of the datetime.
         """
+        warnings.warn(
+            "`minute` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.minute)
 
     @property
@@ -184,6 +197,10 @@ class DatetimeIndex(Index):
         """
         The seconds of the datetime.
         """
+        warnings.warn(
+            "`second` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.second)
 
     @property
@@ -191,17 +208,31 @@ class DatetimeIndex(Index):
         """
         The microseconds of the datetime.
         """
+        warnings.warn(
+            "`microsecond` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.microsecond)
 
     @property
     def week(self) -> Index:
         """
         The week ordinal of the year.
+
+        .. deprecated:: 3.5.0
         """
+        warnings.warn(
+            "`week` is deprecated in 3.5.0 and will be removed in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.week)
 
     @property
     def weekofyear(self) -> Index:
+        warnings.warn(
+            "`weekofyear` is deprecated in 3.5.0 and will be removed in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.weekofyear)
 
     weekofyear.__doc__ = week.__doc__
@@ -232,16 +263,28 @@ class DatetimeIndex(Index):
         >>> idx.dayofweek  # doctest: +SKIP
         Int64Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
         """
+        warnings.warn(
+            "`dayofweek` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.dayofweek)
 
     @property
     def day_of_week(self) -> Index:
+        warnings.warn(
+            "`day_of_week` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return self.dayofweek
 
     day_of_week.__doc__ = dayofweek.__doc__
 
     @property
     def weekday(self) -> Index:
+        warnings.warn(
+            "`weekday` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.weekday)
 
     weekday.__doc__ = dayofweek.__doc__
@@ -251,10 +294,18 @@ class DatetimeIndex(Index):
         """
         The ordinal day of the year.
         """
+        warnings.warn(
+            "`dayofyear` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.dayofyear)
 
     @property
     def day_of_year(self) -> Index:
+        warnings.warn(
+            "`day_of_year` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return self.dayofyear
 
     day_of_year.__doc__ = dayofyear.__doc__
@@ -264,6 +315,10 @@ class DatetimeIndex(Index):
         """
         The quarter of the date.
         """
+        warnings.warn(
+            "`quarter` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.quarter)
 
     @property
@@ -430,10 +485,18 @@ class DatetimeIndex(Index):
         """
         The number of days in the month.
         """
+        warnings.warn(
+            "`daysinmonth` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.daysinmonth)
 
     @property
     def days_in_month(self) -> Index:
+        warnings.warn(
+            "`days_in_month` will return int32 index instead of int 64 index in 4.0.0.",
+            FutureWarning,
+        )
         return Index(self.to_series().dt.days_in_month)
 
     days_in_month.__doc__ = daysinmonth.__doc__
