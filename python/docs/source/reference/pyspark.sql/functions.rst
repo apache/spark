@@ -258,6 +258,9 @@ Aggregate Functions
     approx_count_distinct
     approx_percentile
     avg
+    bit_and
+    bit_or
+    bit_xor
     bool_and
     bool_or
     collect_list
@@ -390,6 +393,16 @@ String Functions
     translate
     trim
     upper
+
+
+Bitwise Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    bit_count
+    bit_get
+    getbit
 
 
 UDF
