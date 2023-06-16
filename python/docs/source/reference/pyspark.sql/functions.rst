@@ -368,7 +368,6 @@ String Functions
     like
     lower
     left
-    len
     levenshtein
     locate
     lpad

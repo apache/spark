@@ -2427,13 +2427,6 @@ def ucase(str: "ColumnOrName") -> Column:
 ucase.__doc__ = pysparkfuncs.ucase.__doc__
 
 
-def py_len(str: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("len", str)
-
-
-py_len.__doc__ = pysparkfuncs.py_len.__doc__
-
-
 def left(str: "ColumnOrName", len: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("left", str, len)
 

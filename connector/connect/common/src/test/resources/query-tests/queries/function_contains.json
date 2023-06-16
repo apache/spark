@@ -15,12 +15,12 @@
       "unresolvedFunction": {
         "functionName": "contains",
         "arguments": [{
-          "literal": {
-            "string": "Spark SQL"
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }, {
-          "literal": {
-            "string": "Spark"
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }

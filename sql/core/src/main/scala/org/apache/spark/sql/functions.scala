@@ -3884,13 +3884,17 @@ object functions {
   /**
    * Returns a boolean. The value is True if right is found inside left.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both left or right must be of STRING or BINARY type.
+   * Both left or right must be of STRING type.
+   *
+   * @note
+   *   This is different from the `contains` method in SQL that supports both STRING and BINARY
+   *   type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def contains(left: Column, right: Column): Column = withExpr {
-    ContainsExpressionBuilder.build("contains", Seq(left.expr, right.expr))
+    Contains(left.expr, right.expr)
   }
 
   /**
@@ -3981,18 +3985,6 @@ object functions {
    */
   def ucase(str: Column): Column = withExpr {
     Upper(str.expr)
-  }
-
-  /**
-   * Returns the character length of string data or number of bytes of binary data.
-   * The length of string data includes the trailing spaces.
-   * The length of binary data includes binary zeros.
-   *
-   * @group string_funcs
-   * @since 3.5.0
-   */
-  def len(str: Column): Column = withExpr {
-    Length(str.expr)
   }
 
   /**

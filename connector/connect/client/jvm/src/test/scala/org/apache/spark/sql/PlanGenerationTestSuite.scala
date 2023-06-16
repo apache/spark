@@ -2420,7 +2420,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("contains") {
-    fn.contains(fn.lit("Spark SQL"), fn.lit("Spark"))
+    fn.contains(fn.col("g"), fn.col("g"))
   }
 
   functionTest("elt") {
@@ -2453,10 +2453,6 @@ class PlanGenerationTestSuite
 
   functionTest("ucase") {
     fn.ucase(fn.col("g"))
-  }
-
-  functionTest("len") {
-    fn.len(fn.col("g"))
   }
 
   functionTest("left") {

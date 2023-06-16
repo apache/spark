@@ -9150,29 +9150,6 @@ def ucase(str: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def py_len(str: "ColumnOrName") -> Column:
-    """
-    Returns the character length of string data or number of bytes of binary data.
-    The length of string data includes the trailing spaces.
-    The length of binary data includes binary zeros.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    str : :class:`~pyspark.sql.Column` or str
-        Input column or strings.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([("Spark",)], ['a'])
-    >>> df.select(py_len(df.a).alias('r')).collect()
-    [Row(r=5)]
-    """
-    return _invoke_function_over_columns("len", str)
-
-
-@try_remote_functions
 def left(str: "ColumnOrName", len: "ColumnOrName") -> Column:
     """
     Returns the leftmost `len`(`len` can be string type) characters from the string `str`,

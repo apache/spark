@@ -902,10 +902,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("contains function") {
-    // TODO
     val df = Seq(("Spark SQL", "Spark")).toDF("a", "b")
     checkAnswer(df.selectExpr("contains(a, b)"), Seq(Row(true)))
-    checkAnswer(df.select(contains(lit("Spark SQL"), lit("Spark"))), Seq(Row(true)))
+    checkAnswer(df.select(contains(col("a"), col("b"))), Seq(Row(true)))
   }
 
   test("elt function") {
@@ -946,12 +945,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("ucase(a)"), Seq(Row("SPARK")))
     checkAnswer(df.select(ucase(col("a"))), Seq(Row("SPARK")))
-  }
-
-  test("len function") {
-    val df = Seq("Spark").toDF("a")
-    checkAnswer(df.selectExpr("len(a)"), Seq(Row(5)))
-    checkAnswer(df.select(len(col("a"))), Seq(Row(5)))
   }
 
   test("left & right function") {
