@@ -837,7 +837,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       }.getCause
       checkError(
         exception = exception1.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null,null,{\"a\" 1, \"b\": 11}]",
           "failFastMode" -> "FAILFAST")
@@ -872,7 +872,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
       checkError(
         exception = exception.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null,11,{\"a\": \"1\", \"b\": 11}]",
           "failFastMode" -> "FAILFAST")
@@ -1205,7 +1205,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception1.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null,null]",
             "failFastMode" -> "FAILFAST")
@@ -1216,7 +1216,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception2.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null,null]",
             "failFastMode" -> "FAILFAST")
@@ -1239,7 +1239,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception1.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null]",
             "failFastMode" -> "FAILFAST")
@@ -1250,7 +1250,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }.getCause
         checkError(
           exception = exception2.asInstanceOf[SparkException],
-          errorClass = "MALFORMED_RECORD_IN_PARSING",
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
           parameters = Map(
             "badRecord" -> "[null]",
             "failFastMode" -> "FAILFAST")

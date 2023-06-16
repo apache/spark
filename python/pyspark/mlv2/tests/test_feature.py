@@ -16,20 +16,22 @@
 # limitations under the License.
 #
 
-import unittest
-from distutils.version import LooseVersion
+import os
+import pickle
 import numpy as np
-import pandas as pd
+import tempfile
+import unittest
 
-from pyspark.mlv2.feature import MaxAbsScaler, StandardScaler
+from pyspark.mlv2.feature import (
+    MaxAbsScaler,
+    MaxAbsScalerModel,
+    StandardScaler,
+    StandardScalerModel,
+)
 from pyspark.sql import SparkSession
 
 
 class FeatureTestsMixin:
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43784): Enable FeatureTests.test_max_abs_scaler for pandas 2.0.0.",
-    )
     def test_max_abs_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -40,8 +42,11 @@ class FeatureTestsMixin:
         )
 
         scaler = MaxAbsScaler(inputCol="features", outputCol="scaled_features")
+
         model = scaler.fit(df1)
+        assert model.uid == scaler.uid
         result = model.transform(df1).toPandas()
+        assert list(result.columns) == ["features", "scaled_features"]
 
         expected_result = [[2.0 / 3, 1.0, 0.6], [-1.0, -1.0 / 7, -1.0]]
 
@@ -50,13 +55,32 @@ class FeatureTestsMixin:
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
+        assert id(local_transform_result) == id(local_df1)
+        assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 
-    @unittest.skipIf(
-        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-43783): Enable FeatureTests.test_standard_scaler for pandas 2.0.0.",
-    )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            estimator_path = os.path.join(tmp_dir, "estimator")
+            scaler.saveToLocal(estimator_path)
+            loaded_scaler = MaxAbsScaler.loadFromLocal(estimator_path)
+            assert loaded_scaler.getInputCol() == "features"
+            assert loaded_scaler.getOutputCol() == "scaled_features"
+
+            model_path = os.path.join(tmp_dir, "model")
+            model.saveToLocal(model_path)
+            loaded_model = MaxAbsScalerModel.loadFromLocal(model_path)
+
+            np.testing.assert_allclose(model.scale_values, loaded_model.scale_values)
+            np.testing.assert_allclose(model.max_abs_values, loaded_model.max_abs_values)
+            assert model.n_samples_seen == loaded_model.n_samples_seen
+
+            # Test loading core model as scikit-learn model
+            with open(os.path.join(model_path, "MaxAbsScalerModel.sklearn.pkl"), "rb") as f:
+                sk_model = pickle.load(f)
+                sk_result = sk_model.transform(np.stack(list(local_df1.features)))
+                np.testing.assert_allclose(sk_result, expected_result)
+
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -69,7 +93,9 @@ class FeatureTestsMixin:
 
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
         model = scaler.fit(df1)
+        assert model.uid == scaler.uid
         result = model.transform(df1).toPandas()
+        assert list(result.columns) == ["features", "scaled_features"]
 
         expected_result = [
             [0.7559289460184544, 1.1338934190276817, 0.8006407690254358],
@@ -82,8 +108,32 @@ class FeatureTestsMixin:
         local_df1 = df1.toPandas()
         local_fit_model = scaler.fit(local_df1)
         local_transform_result = local_fit_model.transform(local_df1)
+        assert id(local_transform_result) == id(local_df1)
+        assert list(local_transform_result.columns) == ["features", "scaled_features"]
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            estimator_path = os.path.join(tmp_dir, "estimator")
+            scaler.saveToLocal(estimator_path)
+            loaded_scaler = StandardScaler.loadFromLocal(estimator_path)
+            assert loaded_scaler.getInputCol() == "features"
+            assert loaded_scaler.getOutputCol() == "scaled_features"
+
+            model_path = os.path.join(tmp_dir, "model")
+            model.saveToLocal(model_path)
+            loaded_model = StandardScalerModel.loadFromLocal(model_path)
+
+            np.testing.assert_allclose(model.std_values, loaded_model.std_values)
+            np.testing.assert_allclose(model.mean_values, loaded_model.mean_values)
+            np.testing.assert_allclose(model.scale_values, loaded_model.scale_values)
+            assert model.n_samples_seen == loaded_model.n_samples_seen
+
+            # Test loading core model as scikit-learn model
+            with open(os.path.join(model_path, "StandardScalerModel.sklearn.pkl"), "rb") as f:
+                sk_model = pickle.load(f)
+                sk_result = sk_model.transform(np.stack(list(local_df1.features)))
+                np.testing.assert_allclose(sk_result, expected_result)
 
 
 class FeatureTests(FeatureTestsMixin, unittest.TestCase):

@@ -70,6 +70,8 @@ class SummarizerAggState:
                     )
                     * (self.count / (self.count - 1))
                 )
+            if metric == "count":
+                result["count"] = self.count  # type: ignore[assignment]
 
         return result
 
@@ -90,7 +92,7 @@ def summarize_dataframe(
         and all values in the column must have the same length.
     metrics:
         The metrics to be summarized, available metrics are:
-        "min", "max",  "sum", "mean"
+        "min", "max",  "sum", "mean", "count"
 
     Returns
     -------
@@ -99,7 +101,7 @@ def summarize_dataframe(
 
     def local_agg_fn(pandas_df: "pd.DataFrame") -> Any:
         state = None
-        for _, value_array in pandas_df[column].iteritems():
+        for _, value_array in pandas_df[column].items():
             if state is None:
                 state = SummarizerAggState(value_array)
             else:

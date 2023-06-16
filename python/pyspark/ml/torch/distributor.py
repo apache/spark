@@ -48,19 +48,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-
-
-def _get_active_session(is_remote: bool) -> SparkSession:
-    if not is_remote:
-        spark = SparkSession.getActiveSession()
-    else:
-        import pyspark.sql.connect.session
-
-        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
-
-    if spark is None:
-        raise RuntimeError("An active SparkSession is required for the distributor.")
-    return spark
+from pyspark.ml.util import _get_active_session
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -968,7 +956,9 @@ class TorchDistributor(Distributor):
         )
 
 
-def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch: int = 2) -> Any:
+def _get_spark_partition_data_loader(
+    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: Optional[int] = 2
+) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
     is the input argument of `TorchDistributor.train_on_dataframe`.
@@ -985,8 +975,11 @@ def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch
         it wraps round back to the first row.
     batch_size:
         How many samples per batch to load.
-    prefetch:
-        Number of batches loaded in advance.
+    num_workers:
+        How many subprocesses to use for data loading.
+        0 means that the data will be loaded in the main process.
+    prefetch_factor:
+        Number of batches loaded in advance by each worker
     """
     from pyspark.sql.types import StructType
     from pyspark.ml.torch.data import _SparkPartitionTorchDataset
@@ -1000,4 +993,4 @@ def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    return DataLoader(dataset, batch_size, num_workers=1, prefetch_factor=prefetch)
+    return DataLoader(dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor)

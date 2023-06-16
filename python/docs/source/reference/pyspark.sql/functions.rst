@@ -64,11 +64,13 @@ Math Functions
     bin
     cbrt
     ceil
+    ceiling
     conv
     cos
     cosh
     cot
     csc
+    e
     exp
     expm1
     factorial
@@ -76,12 +78,18 @@ Math Functions
     hex
     unhex
     hypot
+    ln
     log
     log10
     log1p
     log2
+    negate
+    negative
+    pi
     pmod
+    positive
     pow
+    power
     rint
     round
     bround
@@ -89,6 +97,7 @@ Math Functions
     shiftleft
     shiftright
     shiftrightunsigned
+    sign
     signum
     sin
     sinh
@@ -98,6 +107,7 @@ Math Functions
     degrees
     toRadians
     radians
+    width_bucket
 
 
 Datetime Functions
@@ -106,8 +116,10 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    curdate
     current_date
     current_timestamp
+    current_timezone
     date_add
     date_format
     date_sub
@@ -123,6 +135,12 @@ Datetime Functions
     month
     last_day
     localtimestamp
+    make_dt_interval
+    make_interval
+    make_timestamp
+    make_timestamp_ltz
+    make_timestamp_ntz
+    make_ym_interval
     minute
     months_between
     next_day
@@ -130,7 +148,10 @@ Datetime Functions
     make_date
     from_unixtime
     unix_timestamp
+    to_unix_timestamp
     to_timestamp
+    to_timestamp_ltz
+    to_timestamp_ntz
     to_date
     trunc
     from_utc_timestamp
@@ -138,6 +159,10 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    unix_date
+    unix_micros
+    unix_millis
+    unix_seconds
     window_time
 
 
@@ -207,6 +232,7 @@ Collection Functions
     map_concat
     from_csv
     schema_of_csv
+    str_to_map
     to_csv
 
 
@@ -227,24 +253,33 @@ Aggregate Functions
 .. autosummary::
     :toctree: api/
 
+    any_value
     approxCountDistinct
     approx_count_distinct
+    approx_percentile
     avg
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
     count
     count_distinct
     countDistinct
+    count_if
     covar_pop
     covar_samp
+    every
     first
+    first_value
     grouping
     grouping_id
+    histogram_numeric
     hll_sketch_agg
     hll_union_agg
     kurtosis
     last
+    last_value
     max
     max_by
     mean
@@ -252,9 +287,22 @@ Aggregate Functions
     min
     min_by
     mode
+    percentile
     percentile_approx
     product
+    reduce
+    regr_avgx
+    regr_avgy
+    regr_count
+    regr_intercept
+    regr_r2
+    regr_slope
+    regr_sxx
+    regr_sxy
+    regr_syy
     skewness
+    some
+    std
     stddev
     stddev_pop
     stddev_samp
@@ -317,8 +365,15 @@ String Functions
     lpad
     ltrim
     octet_length
+    rlike
+    regexp
+    regexp_like
+    regexp_count
     regexp_extract
+    regexp_extract_all
     regexp_replace
+    regexp_substr
+    regexp_instr
     unbase64
     rpad
     repeat
@@ -329,6 +384,9 @@ String Functions
     substring_index
     overlay
     sentences
+    to_binary
+    to_char
+    to_number
     translate
     trim
     upper
@@ -342,6 +400,7 @@ UDF
     call_udf
     pandas_udf
     udf
+    udtf
     unwrap_udt
 
 Misc Functions
@@ -349,6 +408,10 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    current_catalog
+    current_database
+    current_schema
+    current_user
     md5
     sha1
     sha2
@@ -359,4 +422,32 @@ Misc Functions
     raise_error
     hll_sketch_estimate
     hll_union
+    user
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
+
+Xml Functions
+--------------
+.. autosummary::
+    :toctree: api/
+
+    xpath
+    xpath_boolean
+    xpath_double
+    xpath_float
+    xpath_int
+    xpath_long
+    xpath_number
+    xpath_short
+    xpath_string
 

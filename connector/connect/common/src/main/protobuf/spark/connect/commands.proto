@@ -217,6 +217,7 @@ message WriteStreamOperationStart {
 message StreamingForeachWriter {
   oneof writer {
     PythonUDF python_writer = 1;
+    ScalarScalaUDF scala_writer = 2;
   }
 }
 

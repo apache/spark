@@ -29,18 +29,6 @@ class FrameParityReindexingTests(
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_at_time(self):
-        super().test_at_time()
-
-    @unittest.skip(
-        "TODO(SPARK-43610): Enable `InternalFrame.attach_distributed_column` in Spark Connect."
-    )
-    def test_between_time(self):
-        super().test_between_time()
-
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.connect.frame.test_parity_reindexing import *  # noqa: F401

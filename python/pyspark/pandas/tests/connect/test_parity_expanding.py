@@ -31,7 +31,7 @@ class ExpandingParityTests(
         super().test_expanding_count()
 
     @unittest.skip(
-        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_expanding_kurt(self):
         super().test_expanding_kurt()
@@ -61,7 +61,7 @@ class ExpandingParityTests(
         super().test_expanding_quantile()
 
     @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_expanding_skew(self):
         super().test_expanding_skew()
@@ -91,7 +91,7 @@ class ExpandingParityTests(
         super().test_groupby_expanding_count()
 
     @unittest.skip(
-        "TODO(SPARK-43626): Enable pyspark.pandas.spark.functions.kurt in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_groupby_expanding_kurt(self):
         super().test_groupby_expanding_kurt()
@@ -121,7 +121,7 @@ class ExpandingParityTests(
         super().test_groupby_expanding_quantile()
 
     @unittest.skip(
-        "TODO(SPARK-43627): Enable pyspark.pandas.spark.functions.skew in Spark Connect."
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
     )
     def test_groupby_expanding_skew(self):
         super().test_groupby_expanding_skew()

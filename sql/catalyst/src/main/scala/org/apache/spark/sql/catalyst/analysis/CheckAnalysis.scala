@@ -166,7 +166,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -474,9 +474,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 // This is just a sanity check, our analysis rule PullOutNondeterministic should
                 // already pull out those nondeterministic expressions and evaluate them in
                 // a Project node.
-                expr.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2426",
-                  messageParameters = Map("sqlExpr" -> expr.sql))
+                throw SparkException.internalError(
+                  msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
+                    "grouping expression.",
+                  context = expr.origin.getQueryContext,
+                  summary = expr.origin.context.summary)
               }
             }
 
@@ -545,8 +547,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 order.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2427",
-                  messageParameters = Map("type" -> order.dataType.catalogString))
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map("exprType" -> toSQLType(order.dataType)))
               }
             }
 
@@ -560,7 +562,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 val offset = offsetExpr.eval().asInstanceOf[Int]
                 if (Int.MaxValue - limit < offset) {
                   child.failAnalysis(
-                    errorClass = "_LEGACY_ERROR_TEMP_2428",
+                    errorClass = "SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT",
                     messageParameters = Map(
                       "limit" -> limit.toString,
                       "offset" -> offset.toString))
@@ -624,8 +626,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
             if (badReferences.nonEmpty) {
               create.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2431",
-                messageParameters = Map("cols" -> badReferences.mkString(", ")))
+                errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+                messageParameters = Map(
+                  "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -641,27 +644,33 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.mkString(",")
-            val input = o.inputSet.mkString(",")
-            val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
-              s"from $input in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}."
+            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(", ")
+            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(", ")
 
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
 
-            val msg = if (attrsWithSameName.nonEmpty) {
-              val sameNames = attrsWithSameName.map(_.name).mkString(",")
-              s"$msgForMissingAttributes Attribute(s) with the same name appear in the " +
-                s"operation: $sameNames. Please check if the right attribute(s) are used."
+            if (attrsWithSameName.nonEmpty) {
+              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(", ")
+              o.failAnalysis(
+                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+                messageParameters = Map(
+                  "missingAttributes" -> missingAttributes,
+                  "input" -> input,
+                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
+                  "operation" -> sameNames
+                ))
             } else {
-              msgForMissingAttributes
+              o.failAnalysis(
+                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+                messageParameters = Map(
+                  "missingAttributes" -> missingAttributes,
+                  "input" -> input,
+                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
+                ))
             }
-
-            o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2432",
-              messageParameters = Map("msg" -> msg))
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             p.failAnalysis(
@@ -1039,11 +1048,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     def check(plan: LogicalPlan): Unit = plan.foreach { node =>
       node match {
         case metrics @ CollectMetrics(name, _, _) =>
+          val simplifiedMetrics = simplifyPlanForCollectedMetrics(metrics)
           metricsMap.get(name) match {
             case Some(other) =>
+              val simplifiedOther = simplifyPlanForCollectedMetrics(other)
               // Exact duplicates are allowed. They can be the result
               // of a CTE that is used multiple times or a self join.
-              if (!metrics.sameResult(other)) {
+              if (!simplifiedMetrics.sameResult(simplifiedOther)) {
                 failAnalysis(
                   errorClass = "_LEGACY_ERROR_TEMP_2443",
                   messageParameters = Map(
@@ -1062,6 +1073,27 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       })
     }
     check(plan)
+  }
+
+  /**
+   * This method is only used for checking collected metrics. This method tries to
+   * remove extra project which only re-assign expr ids from the plan so that we can identify exact
+   * duplicates metric definition.
+   */
+  private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsDown {
+      case p: Project if p.projectList.size == p.child.output.size =>
+        val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
+          case (left: Alias, right: Attribute) =>
+            left.child.semanticEquals(right) && right.name == left.name
+          case _ => false
+        }
+        if (assignExprIdOnly) {
+          p.child
+        } else {
+          p
+        }
+    }
   }
 
   /**

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -549,6 +550,33 @@ object functions {
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column): Column = first(e)
+
+  /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column, ignoreNulls: Column): Column = withAggregateFunction {
+    new First(e.expr, ignoreNulls.expr)
+  }
+
+  /**
    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
@@ -723,7 +751,7 @@ object functions {
    * @since 2.0.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
-    new Last(e.expr, ignoreNulls)
+    Last(e.expr, ignoreNulls)
   }
 
   /**
@@ -769,6 +797,33 @@ object functions {
    * @since 1.3.0
    */
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column): Column = last(e)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column, ignoreNulls: Column): Column = withAggregateFunction {
+    new Last(e.expr, ignoreNulls.expr)
+  }
 
   /**
    * Aggregate function: returns the most frequent value in a group.
@@ -853,6 +908,35 @@ object functions {
   def min_by(e: Column, ord: Column): Column = withAggregateFunction { MinBy(e.expr, ord.expr) }
 
   /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(e: Column, percentage: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr)
+    }
+  }
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of numeric column `expr` at the
+   * given percentage(s) with value range in [0.0, 1.0].
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def percentile(
+      e: Column,
+      percentage: Column,
+      frequency: Column): Column = {
+    withAggregateFunction {
+      new Percentile(e.expr, percentage.expr, frequency.expr)
+    }
+  }
+
+  /**
    * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
    * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
    * no more than `percentage` of `col` values is less than the value or equal to that value.
@@ -874,6 +958,26 @@ object functions {
         e.expr, percentage.expr, accuracy.expr
       )
     }
+  }
+
+  /**
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
+   * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
+   * no more than `percentage` of `col` values is less than the value or equal to that value.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0.
+   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal
+   * which controls approximation accuracy at the cost of memory.
+   * Higher value of accuracy yields better accuracy, 1.0/accuracy
+   * is the relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
+    percentile_approx(e, percentage, accuracy)
   }
 
   /**
@@ -900,6 +1004,14 @@ object functions {
    * @since 1.6.0
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
+   * Aggregate function: alias for `stddev_samp`.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def std(e: Column): Column = stddev(e)
 
   /**
    * Aggregate function: alias for `stddev_samp`.
@@ -1043,6 +1155,165 @@ object functions {
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgx(y: Column, x: Column): Column = withAggregateFunction { RegrAvgX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the average of the independent variable for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_avgy(y: Column, x: Column): Column = withAggregateFunction { RegrAvgY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the number of non-null number pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_count(y: Column, x: Column): Column = withAggregateFunction { RegrCount(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the intercept of the univariate linear regression line
+   * for non-null pairs in a group, where `y` is the dependent variable and
+   * `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_intercept(y: Column, x: Column): Column =
+    withAggregateFunction { RegrIntercept(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the coefficient of determination for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_r2(y: Column, x: Column): Column = withAggregateFunction { RegrR2(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns the slope of the linear regression line for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_slope(y: Column, x: Column): Column =
+    withAggregateFunction { RegrSlope(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxx(y: Column, x: Column): Column = withAggregateFunction { RegrSXX(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_sxy(y: Column, x: Column): Column = withAggregateFunction { RegrSXY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs
+   * in a group, where `y` is the dependent variable and `x` is the independent variable.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def regr_syy(y: Column, x: Column): Column = withAggregateFunction { RegrSYY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column): Column = withAggregateFunction { new AnyValue(e.expr) }
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   * If `isIgnoreNull` is true, returns only non-null values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column, ignoreNulls: Column): Column =
+    withAggregateFunction { new AnyValue(e.expr, ignoreNulls.expr) }
+
+  /**
+   * Aggregate function: returns the number of `TRUE` values for the expression.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_if(e: Column): Column = withAggregateFunction { CountIf(e.expr) }
+
+  /**
+   * Aggregate function: computes a histogram on numeric 'expr' using nb bins.
+   * The return value is an array of (x,y) pairs representing the centers of the
+   * histogram's bins. As the value of 'nb' is increased, the histogram approximation
+   * gets finer-grained, but may yield artifacts around outliers. In practice, 20-40
+   * histogram bins appear to work well, with more bins being required for skewed or
+   * smaller datasets. Note that this function creates a histogram with non-uniform
+   * bin widths. It offers no guarantees in terms of the mean-squared-error of the
+   * histogram, but in practice is comparable to the histograms produced by the R/S-Plus
+   * statistical computing packages. Note: the output type of the 'x' field in the return value is
+   * propagated from the input value consumed in the aggregate function.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def histogram_numeric(e: Column, nBins: Column): Column =
+    withAggregateFunction { new HistogramNumeric(e.expr, nBins.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1338,6 +1609,38 @@ object functions {
    */
   def map_from_arrays(keys: Column, values: Column): Column = withExpr {
     MapFromArrays(keys.expr, values.expr)
+  }
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   * Both `pairDelim` and `keyValueDelim` are treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column, keyValueDelim: Column): Column = withExpr {
+    StringToMap(text.expr, pairDelim.expr, keyValueDelim.expr)
+  }
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   * The `pairDelim` is treated as regular expressions.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column, pairDelim: Column): Column = withExpr {
+    new StringToMap(text.expr, pairDelim.expr)
+  }
+
+  /**
+   * Creates a map after splitting the text into key/value pairs using delimiters.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def str_to_map(text: Column): Column = withExpr {
+    new StringToMap(text.expr)
   }
 
   /**
@@ -1912,6 +2215,22 @@ object functions {
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
   /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column, scale: Column): Column = ceil(e, scale)
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def ceiling(e: Column): Column = ceil(e)
+
+  /**
    * Convert a number in a string column from one base to another.
    *
    * @group math_funcs
@@ -1974,6 +2293,14 @@ object functions {
    * @since 3.3.0
    */
   def csc(e: Column): Column = withExpr { Csc(e.expr) }
+
+  /**
+   * Returns Euler's number.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def e(): Column = withExpr { EulerNumber() }
 
   /**
    * Computes the exponential of the given value.
@@ -2173,6 +2500,14 @@ object functions {
    * Computes the natural logarithm of the given value.
    *
    * @group math_funcs
+   * @since 3.5.0
+   */
+  def ln(e: Column): Column = log(e)
+
+  /**
+   * Computes the natural logarithm of the given value.
+   *
+   * @group math_funcs
    * @since 1.4.0
    */
   def log(e: Column): Column = withExpr { Log(e.expr) }
@@ -2250,6 +2585,30 @@ object functions {
   def log2(columnName: String): Column = log2(Column(columnName))
 
   /**
+   * Returns the negated value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def negative(e: Column): Column = withExpr { UnaryMinus(e.expr) }
+
+  /**
+   * Returns Pi.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def pi(): Column = withExpr { Pi() }
+
+  /**
+   * Returns the value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def positive(e: Column): Column = withExpr { UnaryPositive(e.expr) }
+
+  /**
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @group math_funcs
@@ -2312,6 +2671,14 @@ object functions {
    * @since 1.4.0
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+
+  /**
+   * Returns the value of the first argument raised to the power of the second argument.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def power(l: Column, r: Column): Column = pow(l, r)
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2444,6 +2811,14 @@ object functions {
   def shiftrightunsigned(e: Column, numBits: Int): Column = withExpr {
     ShiftRightUnsigned(e.expr, lit(numBits).expr)
   }
+
+  /**
+   * Computes the signum of the given value.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def sign(e: Column): Column = signum(e)
 
   /**
    * Computes the signum of the given value.
@@ -2605,9 +2980,58 @@ object functions {
    */
   def radians(columnName: String): Column = radians(Column(columnName))
 
+  /**
+   * Returns the bucket number into which the value of this expression would fall
+   * after being evaluated. Note that input arguments must follow conditions listed below;
+   * otherwise, the method will return null.
+   *
+   * @param v value to compute a bucket number in the histogram
+   * @param min minimum value of the histogram
+   * @param max maximum value of the histogram
+   * @param numBucket the number of buckets
+   * @return the bucket number into which the value would fall after being evaluated
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column = withExpr {
+    WidthBucket(v.expr, min.expr, max.expr, numBucket.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = withExpr { CurrentCatalog() }
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = withExpr { CurrentDatabase() }
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = withExpr { CurrentUser() }
 
   /**
    * Calculates the MD5 digest of a binary column and returns the value
@@ -2776,6 +3200,14 @@ object functions {
   Column = {
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
   }
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def user(): Column = withExpr { CurrentUser() }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3003,6 +3435,43 @@ object functions {
   def octet_length(e: Column): Column = withExpr { OctetLength(e.expr) }
 
   /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def rlike(str: Column, regexp: Column): Column = withExpr {
+    RLike(str.expr, regexp.expr)
+  }
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp(str: Column, regexp: Column): Column = rlike(str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_like(str: Column, regexp: Column): Column = rlike(str, regexp)
+
+  /**
+   * Returns a count of the number of times that the regular expression pattern `regexp`
+   * is matched in the string `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_count(str: Column, regexp: Column): Column = withExpr {
+    RegExpCount(str.expr, regexp.expr)
+  }
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column.
    * If the regex did not match, or the specified group did not match, an empty string is returned.
    * if the specified group index exceeds the group count of regex, an IllegalArgumentException
@@ -3013,6 +3482,28 @@ object functions {
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = withExpr {
     RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and
+   * corresponding to the first regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column): Column = withExpr {
+    new RegExpExtractAll(str.expr, regexp.expr)
+  }
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and
+   * corresponding to the regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column, idx: Column): Column = withExpr {
+    RegExpExtractAll(str.expr, regexp.expr, idx.expr)
   }
 
   /**
@@ -3033,6 +3524,41 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
     RegExpReplace(e.expr, pattern.expr, replacement.expr)
+  }
+
+  /**
+   * Returns the substring that matches the regular expression `regexp` within the string `str`.
+   * If the regular expression is not found, the result is null.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_substr(str: Column, regexp: Column): Column = withExpr {
+    RegExpSubStr(str.expr, regexp.expr)
+  }
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates
+   * the beginning position of the matched substring. Positions are 1-based, not 0-based.
+   * If no match is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column): Column = withExpr {
+    new RegExpInStr(str.expr, regexp.expr)
+  }
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates
+   * the beginning position of the matched substring. Positions are 1-based, not 0-based.
+   * If no match is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column, idx: Column): Column = withExpr {
+    RegExpInStr(str.expr, regexp.expr, idx.expr)
   }
 
   /**
@@ -3242,6 +3768,85 @@ object functions {
    */
   def upper(e: Column): Column = withExpr { Upper(e.expr) }
 
+  /**
+   * Converts the input `e` to a binary value based on the supplied `format`.
+   * The `format` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
+   * By default, the binary format for conversion is "hex" if `format` is omitted.
+   * The function returns NULL if at least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column, format: Column): Column = withExpr {
+    new ToBinary(e.expr, format.expr)
+  }
+
+  /**
+   * Converts the input `e` to a binary value based on the default format "hex".
+   * The function returns NULL if at least one of the input parameters is NULL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_binary(e: Column): Column = withExpr {
+    new ToBinary(e.expr)
+  }
+
+  /**
+   * Convert `e` to a string based on the `format`.
+   * Throws an exception if the conversion fails. The format can consist of the following
+   * characters, case insensitive:
+   *   '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+   *     string matches a sequence of digits in the input value, generating a result string of the
+   *     same length as the corresponding sequence in the format string. The result string is
+   *     left-padded with zeros if the 0/9 sequence comprises more digits than the matching part of
+   *     the decimal value, starts with 0, and is before the decimal point. Otherwise, it is
+   *     padded with spaces.
+   *   '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+   *   ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+   *     a 0 or 9 to the left and right of each grouping separator.
+   *   '$': Specifies the location of the $ currency sign. This character may only be specified
+   *     once.
+   *   'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+   *     the beginning or end of the format string). Note that 'S' prints '+' for positive values
+   *     but 'MI' prints a space.
+   *   'PR': Only allowed at the end of the format string; specifies that the result string will be
+   *     wrapped by angle brackets if the input value is negative.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_char(e: Column, format: Column): Column = withExpr {
+    ToCharacter(e.expr, format.expr)
+  }
+
+  /**
+   * Convert string 'e' to a number based on the string format 'format'.
+   * Throws an exception if the conversion fails. The format can consist of the following
+   * characters, case insensitive:
+   *   '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+   *     string matches a sequence of digits in the input string. If the 0/9 sequence starts with
+   *     0 and is before the decimal point, it can only match a digit sequence of the same size.
+   *     Otherwise, if the sequence starts with 9 or is after the decimal point, it can match a
+   *     digit sequence that has the same or smaller size.
+   *   '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+   *   ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+   *     a 0 or 9 to the left and right of each grouping separator. 'expr' must match the
+   *     grouping separator relevant for the size of the number.
+   *   '$': Specifies the location of the $ currency sign. This character may only be specified
+   *     once.
+   *   'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+   *     the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
+   *   'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
+   *     negative number with wrapping angled brackets.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def to_number(e: Column, format: Column): Column = withExpr {
+    ToNumber(e.expr, format.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3278,9 +3883,26 @@ object functions {
    * All calls of current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column.
+   * All calls of current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 1.5.0
    */
   def current_date(): Column = withExpr { CurrentDate() }
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = withExpr { CurrentTimeZone() }
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column.
@@ -3712,6 +4334,48 @@ object functions {
   }
 
   /**
+   * Returns the number of days since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_date(e: Column): Column = withExpr {
+    UnixDate(e.expr)
+  }
+
+  /**
+   * Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_micros(e: Column): Column = withExpr {
+    UnixMicros(e.expr)
+  }
+
+  /**
+   * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_millis(e: Column): Column = withExpr {
+    UnixMillis(e.expr)
+  }
+
+  /**
+   * Returns the number of seconds since 1970-01-01 00:00:00 UTC.
+   * Truncates higher levels of precision.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def unix_seconds(e: Column): Column = withExpr {
+    UnixSeconds(e.expr)
+  }
+
+  /**
    * Returns date truncated to the unit specified by the format.
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
@@ -4048,6 +4712,70 @@ object functions {
    */
   def timestamp_seconds(e: Column): Column = withExpr {
     SecondsToTimestamp(e.expr)
+  }
+
+  /**
+   * Parses the `timestamp` expression with the `format` expression
+   * to a timestamp without time zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column, format: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, Some(format.expr), TimestampType)
+  }
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ltz(timestamp: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, None, TimestampType)
+  }
+
+  /**
+   * Parses the `timestamp_str` expression with the `format` expression
+   * to a timestamp without time zone. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column, format: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, Some(format.expr), TimestampNTZType)
+  }
+
+  /**
+   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
+   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_timestamp_ntz(timestamp: Column): Column = withExpr {
+    ParseToTimestamp(timestamp.expr, None, TimestampNTZType)
+  }
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(e: Column, format: Column): Column = withExpr {
+    new ToUnixTimestamp(e.expr, format.expr)
+  }
+
+  /**
+   * Returns the UNIX timestamp of the given time.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def to_unix_timestamp(e: Column): Column = withExpr {
+    new ToUnixTimestamp(e.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4450,6 +5178,47 @@ object functions {
    * @since 3.0.0
    */
   def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, initialValue, merge, c => c)
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state. The final state is converted into the final result
+   * by applying a finish function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *               of all inputs to final result
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(
+      expr: Column,
+      initialValue: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column = aggregate(expr, initialValue, merge, finish)
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
+   *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
     aggregate(expr, initialValue, merge, c => c)
 
   /**
@@ -5243,12 +6012,388 @@ object functions {
   def days(e: Column): Column = withExpr { Days(e.expr) }
 
   /**
+   * Returns a string array of values within the nodes of xml that match the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath(x: Column, p: Column): Column = withExpr {
+    XPathList(x.expr, p.expr)
+  }
+
+  /**
+   * Returns true if the XPath expression evaluates to true, or if a matching node is found.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_boolean(x: Column, p: Column): Column = withExpr {
+    XPathBoolean(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_double(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a double value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_number(x: Column, p: Column): Column = withExpr {
+    XPathDouble(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a float value, the value zero if no match is found,
+   * or NaN if a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_float(x: Column, p: Column): Column = withExpr {
+    XPathFloat(x.expr, p.expr)
+  }
+
+  /**
+   * Returns an integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_int(x: Column, p: Column): Column = withExpr {
+    XPathInt(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a long integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_long(x: Column, p: Column): Column = withExpr {
+    XPathLong(x.expr, p.expr)
+  }
+
+  /**
+   * Returns a short integer value, or the value zero if no match is found,
+   * or a match is found but the value is non-numeric.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_short(x: Column, p: Column): Column = withExpr {
+    XPathShort(x.expr, p.expr)
+  }
+
+  /**
+   * Returns the text contents of the first xml node that matches the XPath expression.
+   *
+   * @group "xml_funcs"
+   * @since 3.5.0
+   */
+  def xpath_string(x: Column, p: Column): Column = withExpr {
+    XPathString(x.expr, p.expr)
+  }
+
+    /**
    * A transform for timestamps to partition data into hours.
    *
    * @group partition_transforms
    * @since 3.0.0
    */
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column = withExpr {
+    MakeDTInterval(days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column): Column = withExpr {
+    new MakeDTInterval(days.expr, hours.expr, mins.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column): Column = withExpr {
+    new MakeDTInterval(days.expr, hours.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration from days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column): Column = withExpr {
+    new MakeDTInterval(days.expr)
+  }
+
+  /**
+   * Make DayTimeIntervalType duration.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(): Column = withExpr {
+    new MakeDTInterval()
+  }
+
+  /**
+   * Make interval from years, months, weeks, days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks, days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks, days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr)
+  }
+
+  /**
+   * Make interval from years, months, weeks and days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr, days.expr)
+  }
+
+  /**
+   * Make interval from years, months and weeks.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr, weeks.expr)
+  }
+
+  /**
+   * Make interval from years and months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column): Column = withExpr {
+    new MakeInterval(years.expr, months.expr)
+  }
+
+  /**
+   * Make interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column): Column = withExpr {
+    new MakeInterval(years.expr)
+  }
+
+  /**
+   * Make interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(): Column = withExpr {
+    new MakeInterval()
+  }
+
+  /**
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr))
+  }
+
+  /**
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, Some(timezone.expr), dataType = TimestampType)
+  }
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampType)
+  }
+
+  /**
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column = withExpr {
+    MakeTimestamp(years.expr, months.expr, days.expr, hours.expr,
+      mins.expr, secs.expr, dataType = TimestampNTZType)
+  }
+
+  /**
+   * Make year-month interval from years, months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column, months: Column): Column = withExpr {
+    MakeYMInterval(years.expr, months.expr)
+  }
+
+  /**
+   * Make year-month interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column): Column = withExpr {
+    new MakeYMInterval(years.expr)
+  }
+
+  /**
+   * Make year-month interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(): Column = withExpr {
+    new MakeYMInterval()
+  }
 
   /**
    * A transform for any type that partitions by a hash of the input column.
@@ -5273,6 +6418,71 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column = withExpr {
     Bucket(Literal(numBuckets), e.expr)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = withExpr {
+    IsNotNull(col.expr)
+  }
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands,
+   * but returns true if both are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = withExpr {
+    new EqualNull(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr {
+    new NullIf(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    new Nvl2(col1.expr, col2.expr, col3.expr)
   }
 
   // scalastyle:off line.size.limit

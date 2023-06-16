@@ -18,6 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import decimal
 import inspect
 import warnings
 import functools
@@ -532,6 +533,9 @@ def ceil(col: "ColumnOrName") -> Column:
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
 
 
+ceiling = ceil
+
+
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     return _invoke_function("conv", _to_col(col), lit(fromBase), lit(toBase))
 
@@ -572,6 +576,13 @@ def degrees(col: "ColumnOrName") -> Column:
 
 
 degrees.__doc__ = pysparkfuncs.degrees.__doc__
+
+
+def e() -> Column:
+    return _invoke_function("e")
+
+
+e.__doc__ = pysparkfuncs.e.__doc__
 
 
 def exp(col: "ColumnOrName") -> Column:
@@ -642,6 +653,13 @@ def log1p(col: "ColumnOrName") -> Column:
 log1p.__doc__ = pysparkfuncs.log1p.__doc__
 
 
+def ln(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ln", col)
+
+
+ln.__doc__ = pysparkfuncs.ln.__doc__
+
+
 def log2(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("log2", col)
 
@@ -649,11 +667,48 @@ def log2(col: "ColumnOrName") -> Column:
 log2.__doc__ = pysparkfuncs.log2.__doc__
 
 
+def negative(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("negative", col)
+
+
+negative.__doc__ = pysparkfuncs.negative.__doc__
+
+
+negate = negative
+
+
+def pi() -> Column:
+    return _invoke_function("pi")
+
+
+pi.__doc__ = pysparkfuncs.pi.__doc__
+
+
+def positive(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("positive", col)
+
+
+positive.__doc__ = pysparkfuncs.positive.__doc__
+
+
 def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", float]) -> Column:
     return _invoke_binary_math_function("pmod", dividend, divisor)
 
 
 pmod.__doc__ = pysparkfuncs.pmod.__doc__
+
+
+def width_bucket(
+    v: "ColumnOrName",
+    min: "ColumnOrName",
+    max: "ColumnOrName",
+    numBucket: Union["ColumnOrName", int],
+) -> Column:
+    numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
+    return _invoke_function_over_columns("width_bucket", v, min, max, numBucket)
+
+
+width_bucket.__doc__ = pysparkfuncs.width_bucket.__doc__
 
 
 def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) -> Column:
@@ -741,6 +796,9 @@ def signum(col: "ColumnOrName") -> Column:
 
 
 signum.__doc__ = pysparkfuncs.signum.__doc__
+
+
+sigh = signum
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -967,6 +1025,39 @@ def mode(col: "ColumnOrName") -> Column:
 mode.__doc__ = pysparkfuncs.mode.__doc__
 
 
+def percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    frequency: Union[Column, int] = 1,
+) -> Column:
+    if isinstance(percentage, Column):
+        _percentage = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        _percentage = lit(list(percentage))
+    else:
+        # Probably scalar
+        _percentage = lit(percentage)
+
+    if isinstance(frequency, int):
+        _frequency = lit(frequency)
+    elif isinstance(frequency, Column):
+        _frequency = frequency
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_INT",
+            message_parameters={
+                "arg_name": "frequency",
+                "arg_type": type(frequency).__name__,
+            },
+        )
+
+    return _invoke_function("percentile", _to_col(col), _percentage, _frequency)
+
+
+percentile.__doc__ = pysparkfuncs.percentile.__doc__
+
+
 def percentile_approx(
     col: "ColumnOrName",
     percentage: Union[Column, float, List[float], Tuple[float]],
@@ -985,6 +1076,26 @@ def percentile_approx(
 
 
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
+
+
+def approx_percentile(
+    col: "ColumnOrName",
+    percentage: Union[Column, float, List[float], Tuple[float]],
+    accuracy: Union[Column, float] = 10000,
+) -> Column:
+    if isinstance(percentage, Column):
+        percentage_col = percentage
+    elif isinstance(percentage, (list, tuple)):
+        # Convert tuple to list
+        percentage_col = lit(list(percentage))
+    else:
+        # Probably scalar
+        percentage_col = lit(percentage)
+
+    return _invoke_function("approx_percentile", _to_col(col), percentage_col, lit(accuracy))
+
+
+approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
 
 
 def product(col: "ColumnOrName") -> Column:
@@ -1006,6 +1117,9 @@ def stddev(col: "ColumnOrName") -> Column:
 
 
 stddev.__doc__ = pysparkfuncs.stddev.__doc__
+
+
+std = stddev
 
 
 def stddev_samp(col: "ColumnOrName") -> Column:
@@ -1051,6 +1165,69 @@ def var_pop(col: "ColumnOrName") -> Column:
 var_pop.__doc__ = pysparkfuncs.var_pop.__doc__
 
 
+def regr_avgx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_avgx", y, x)
+
+
+regr_avgx.__doc__ = pysparkfuncs.regr_avgx.__doc__
+
+
+def regr_avgy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_avgy", y, x)
+
+
+regr_avgy.__doc__ = pysparkfuncs.regr_avgy.__doc__
+
+
+def regr_count(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_count", y, x)
+
+
+regr_count.__doc__ = pysparkfuncs.regr_count.__doc__
+
+
+def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_intercept", y, x)
+
+
+regr_intercept.__doc__ = pysparkfuncs.regr_intercept.__doc__
+
+
+def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_r2", y, x)
+
+
+regr_r2.__doc__ = pysparkfuncs.regr_r2.__doc__
+
+
+def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_slope", y, x)
+
+
+regr_slope.__doc__ = pysparkfuncs.regr_slope.__doc__
+
+
+def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_sxx", y, x)
+
+
+regr_sxx.__doc__ = pysparkfuncs.regr_sxx.__doc__
+
+
+def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_sxy", y, x)
+
+
+regr_sxy.__doc__ = pysparkfuncs.regr_sxy.__doc__
+
+
+def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regr_syy", y, x)
+
+
+regr_syy.__doc__ = pysparkfuncs.regr_syy.__doc__
+
+
 def var_samp(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("var_samp", col)
 
@@ -1063,6 +1240,34 @@ def variance(col: "ColumnOrName") -> Column:
 
 
 variance.__doc__ = pysparkfuncs.variance.__doc__
+
+
+def every(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_and", col)
+
+
+every.__doc__ = pysparkfuncs.every.__doc__
+
+
+def bool_and(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_and", col)
+
+
+bool_and.__doc__ = pysparkfuncs.bool_and.__doc__
+
+
+def some(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_or", col)
+
+
+some.__doc__ = pysparkfuncs.some.__doc__
+
+
+def bool_or(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bool_or", col)
+
+
+bool_or.__doc__ = pysparkfuncs.bool_or.__doc__
 
 
 # Window Functions
@@ -1112,6 +1317,53 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = No
 nth_value.__doc__ = pysparkfuncs.nth_value.__doc__
 
 
+def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("any_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
+
+
+any_value.__doc__ = pysparkfuncs.any_value.__doc__
+
+
+def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("first_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
+
+
+first_value.__doc__ = pysparkfuncs.first_value.__doc__
+
+
+def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("last_value", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
+
+
+last_value.__doc__ = pysparkfuncs.last_value.__doc__
+
+
+def count_if(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("count_if", col)
+
+
+count_if.__doc__ = pysparkfuncs.count_if.__doc__
+
+
+def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("histogram_numeric", col, nBins)
+
+
+histogram_numeric.__doc__ = pysparkfuncs.histogram_numeric.__doc__
+
+
 def ntile(n: int) -> Column:
     return _invoke_function("ntile", lit(n))
 
@@ -1154,6 +1406,22 @@ def aggregate(
 
 
 aggregate.__doc__ = pysparkfuncs.aggregate.__doc__
+
+
+def reduce(
+    col: "ColumnOrName",
+    initialValue: "ColumnOrName",
+    merge: Callable[[Column, Column], Column],
+    finish: Optional[Callable[[Column], Column]] = None,
+) -> Column:
+    if finish is not None:
+        return _invoke_higher_order_function("reduce", [col, initialValue], [merge, finish])
+
+    else:
+        return _invoke_higher_order_function("reduce", [col, initialValue], [merge])
+
+
+reduce.__doc__ = pysparkfuncs.reduce.__doc__
 
 
 def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
@@ -1530,6 +1798,20 @@ def map_zip_with(
 
 
 map_zip_with.__doc__ = pysparkfuncs.map_zip_with.__doc__
+
+
+def str_to_map(
+    text: "ColumnOrName",
+    pairDelim: Optional["ColumnOrName"] = None,
+    keyValueDelim: Optional["ColumnOrName"] = None,
+) -> Column:
+    _pairDelim = lit(",") if pairDelim is None else _to_col(pairDelim)
+    _keyValueDelim = lit(":") if keyValueDelim is None else _to_col(keyValueDelim)
+
+    return _invoke_function("str_to_map", _to_col(text), _pairDelim, _keyValueDelim)
+
+
+str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
 
 
 def posexplode(col: "ColumnOrName") -> Column:
@@ -1925,11 +2207,53 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
 split.__doc__ = pysparkfuncs.split.__doc__
 
 
+def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("rlike", str, regexp)
+
+
+rlike.__doc__ = pysparkfuncs.rlike.__doc__
+
+
+def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp", str, regexp)
+
+
+regexp.__doc__ = pysparkfuncs.regexp.__doc__
+
+
+def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_like", str, regexp)
+
+
+regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
+
+
+def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_count", str, regexp)
+
+
+regexp_count.__doc__ = pysparkfuncs.regexp_count.__doc__
+
+
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     return _invoke_function("regexp_extract", _to_col(str), lit(pattern), lit(idx))
 
 
 regexp_extract.__doc__ = pysparkfuncs.regexp_extract.__doc__
+
+
+def regexp_extract_all(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+
+
+regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
@@ -1945,6 +2269,27 @@ def regexp_replace(
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
+
+
+def regexp_substr(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("regexp_substr", str, regexp)
+
+
+regexp_substr.__doc__ = pysparkfuncs.regexp_substr.__doc__
+
+
+def regexp_instr(
+    str: "ColumnOrName", regexp: "ColumnOrName", idx: Optional[Union[int, Column]] = None
+) -> Column:
+    if idx is None:
+        return _invoke_function_over_columns("regexp_instr", str, regexp)
+    else:
+        if isinstance(idx, int):
+            idx = lit(idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+
+
+regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
 
 
 def initcap(col: "ColumnOrName") -> Column:
@@ -1989,10 +2334,41 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 translate.__doc__ = pysparkfuncs.translate.__doc__
 
 
+def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_binary", col, format)
+    else:
+        return _invoke_function_over_columns("to_binary", col)
+
+
+to_binary.__doc__ = pysparkfuncs.to_binary.__doc__
+
+
+def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_char", col, format)
+
+
+to_char.__doc__ = pysparkfuncs.to_char.__doc__
+
+
+def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_number", col, format)
+
+
+to_number.__doc__ = pysparkfuncs.to_number.__doc__
+
+
 # Date/Timestamp functions
 # TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,
 #     timestamp_seconds, current_timestamp, date_trunc
+
+
+def curdate() -> Column:
+    return _invoke_function("curdate")
+
+
+curdate.__doc__ = pysparkfuncs.curdate.__doc__
 
 
 def current_date() -> Column:
@@ -2007,6 +2383,13 @@ def current_timestamp() -> Column:
 
 
 current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
+
+
+def current_timezone() -> Column:
+    return _invoke_function("current_timezone")
+
+
+current_timezone.__doc__ = pysparkfuncs.current_timezone.__doc__
 
 
 def localtimestamp() -> Column:
@@ -2148,6 +2531,34 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
 
 
+def unix_date(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_date", col)
+
+
+unix_date.__doc__ = pysparkfuncs.unix_date.__doc__
+
+
+def unix_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_micros", col)
+
+
+unix_micros.__doc__ = pysparkfuncs.unix_micros.__doc__
+
+
+def unix_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_millis", col)
+
+
+unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
+
+
+def unix_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_seconds", col)
+
+
+unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
+
+
 @overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...
@@ -2166,6 +2577,69 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath", xml, path)
+
+
+xpath.__doc__ = pysparkfuncs.xpath.__doc__
+
+
+def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_boolean", xml, path)
+
+
+xpath_boolean.__doc__ = pysparkfuncs.xpath_boolean.__doc__
+
+
+def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_double", xml, path)
+
+
+xpath_double.__doc__ = pysparkfuncs.xpath_double.__doc__
+
+
+def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_number", xml, path)
+
+
+xpath_number.__doc__ = pysparkfuncs.xpath_number.__doc__
+
+
+def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_float", xml, path)
+
+
+xpath_float.__doc__ = pysparkfuncs.xpath_float.__doc__
+
+
+def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_int", xml, path)
+
+
+xpath_int.__doc__ = pysparkfuncs.xpath_int.__doc__
+
+
+def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_long", xml, path)
+
+
+xpath_long.__doc__ = pysparkfuncs.xpath_long.__doc__
+
+
+def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_short", xml, path)
+
+
+xpath_short.__doc__ = pysparkfuncs.xpath_short.__doc__
+
+
+def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("xpath_string", xml, path)
+
+
+xpath_string.__doc__ = pysparkfuncs.xpath_string.__doc__
 
 
 def trunc(date: "ColumnOrName", format: str) -> Column:
@@ -2323,6 +2797,45 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 session_window.__doc__ = pysparkfuncs.session_window.__doc__
 
 
+def to_unix_timestamp(
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
+) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp, format)
+    else:
+        return _invoke_function_over_columns("to_unix_timestamp", timestamp)
+
+
+to_unix_timestamp.__doc__ = pysparkfuncs.to_unix_timestamp.__doc__
+
+
+def to_timestamp_ltz(
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
+) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ltz", timestamp)
+
+
+to_timestamp_ltz.__doc__ = pysparkfuncs.to_timestamp_ltz.__doc__
+
+
+def to_timestamp_ntz(
+    timestamp: "ColumnOrName",
+    format: Optional["ColumnOrName"] = None,
+) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
+    else:
+        return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
+
+
+to_timestamp_ntz.__doc__ = pysparkfuncs.to_timestamp_ntz.__doc__
+
+
 # Partition Transformation Functions
 
 
@@ -2373,7 +2886,156 @@ def hours(col: "ColumnOrName") -> Column:
 
 hours.__doc__ = pysparkfuncs.hours.__doc__
 
+
+def make_dt_interval(
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns("make_dt_interval", _days, _hours, _mins, _secs)
+
+
+make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
+
+
+def make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    _weeks = lit(0) if weeks is None else _to_col(weeks)
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns(
+        "make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
+
+
+make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
+
+
+def make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "make_timestamp", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "make_timestamp", years, months, days, hours, mins, secs
+        )
+
+
+make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
+
+
+def make_timestamp_ltz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "make_timestamp_ltz", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "make_timestamp_ltz", years, months, days, hours, mins, secs
+        )
+
+
+make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
+
+
+def make_timestamp_ntz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns(
+        "make_timestamp_ntz", years, months, days, hours, mins, secs
+    )
+
+
+make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
+
+
+def make_ym_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    return _invoke_function_over_columns("make_ym_interval", _years, _months)
+
+
+make_ym_interval.__doc__ = pysparkfuncs.make_ym_interval.__doc__
+
 # Misc Functions
+
+
+def current_catalog() -> Column:
+    return _invoke_function("current_catalog")
+
+
+current_catalog.__doc__ = pysparkfuncs.current_catalog.__doc__
+
+
+def current_database() -> Column:
+    return _invoke_function("current_database")
+
+
+current_database.__doc__ = pysparkfuncs.current_database.__doc__
+
+
+def current_schema() -> Column:
+    return _invoke_function("current_schema")
+
+
+current_schema.__doc__ = pysparkfuncs.current_schema.__doc__
+
+
+def current_user() -> Column:
+    return _invoke_function("current_user")
+
+
+current_user.__doc__ = pysparkfuncs.current_user.__doc__
+
+
+def user() -> Column:
+    return _invoke_function("user")
+
+
+user.__doc__ = pysparkfuncs.user.__doc__
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
@@ -2485,6 +3147,51 @@ def hll_union(
 
 
 hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
+
+
+# Predicates Function
+
+
+def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("ifnull", col1, col2)
+
+
+ifnull.__doc__ = pysparkfuncs.ifnull.__doc__
+
+
+def isnotnull(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("isnotnull", col)
+
+
+isnotnull.__doc__ = pysparkfuncs.isnotnull.__doc__
+
+
+def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("equal_null", col1, col2)
+
+
+equal_null.__doc__ = pysparkfuncs.equal_null.__doc__
+
+
+def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nullif", col1, col2)
+
+
+nullif.__doc__ = pysparkfuncs.nullif.__doc__
+
+
+def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nvl", col1, col2)
+
+
+nvl.__doc__ = pysparkfuncs.nvl.__doc__
+
+
+def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nvl2", col1, col2, col3)
+
+
+nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
 # User Defined Function
