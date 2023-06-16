@@ -1682,6 +1682,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
+        warnings.warn(
+            "Argument `col_space` will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
         args = locals()
         psseries = self
@@ -3638,7 +3642,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         warnings.warn(
             "The Series.append method is deprecated "
-            "and will be removed in a future version. "
+            "and will be removed in 4.0.0. "
             "Use pyspark.pandas.concat instead.",
             FutureWarning,
         )
@@ -4193,6 +4197,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.rank(numeric_only=True)
         Series([], Name: A, dtype: float64)
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `None` in 4.0.0.",
+            FutureWarning,
+        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
             return ps.Series([], dtype="float64", name=self.name)
@@ -5956,7 +5965,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1.0
         """
         warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
+            "The 'mad' method is deprecated and will be removed in 4.0.0. "
             "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
             FutureWarning,
         )
@@ -6128,7 +6137,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             iteritems is deprecated and will be removed in a future version.
             Use .items instead.
         """
-        warnings.warn("Deprecated in 3.4, Use Series.items instead.", FutureWarning)
+        warnings.warn(
+            "Deprecated in 3.4, and will be removed in 4.0.0. Use Series.items instead.",
+            FutureWarning,
+        )
         return self.items()
 
     def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Series":
