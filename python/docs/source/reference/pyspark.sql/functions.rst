@@ -420,6 +420,18 @@ Misc Functions
     hll_union
     user
 
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
+
 Xml Functions
 --------------
 .. autosummary::
