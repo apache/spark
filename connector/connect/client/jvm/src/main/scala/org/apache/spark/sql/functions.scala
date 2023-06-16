@@ -1251,7 +1251,7 @@ object functions {
    */
   def bool_or(e: Column): Column = Column.fn("bool_or", e)
 
-    /**
+  /**
    * Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
    *
    * @group agg_funcs
