@@ -1396,10 +1396,7 @@ class SparkSession(SparkConversionMixin):
         return df
 
     def sql(
-        self,
-        sqlQuery: str,
-        args: Optional[Union[Dict[str, Any], List]] = None,
-        **kwargs: Any
+        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
     ) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
@@ -1527,9 +1524,9 @@ class SparkSession(SparkConversionMixin):
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
             if isinstance(args, Dict):
-              litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
+                litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
             else:
-              litArgs = [_to_java_column(lit(v)) for v in (args or [])]
+                litArgs = [_to_java_column(lit(v)) for v in (args or [])]
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
             if len(kwargs) > 0:
