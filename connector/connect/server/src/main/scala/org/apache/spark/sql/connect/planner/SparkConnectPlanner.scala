@@ -79,7 +79,10 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) extends Logging {
+class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
+
+  def session: SparkSession = sessionHolder.session
+
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -406,15 +409,15 @@ class SparkConnectPlanner(val session: SparkSession) extends Logging {
 
   private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
     val df = Dataset.ofRows(session, transformRelation(rel.getInput))
-    val corr = if (rel.hasMethod) {
-      df.stat.corr(rel.getCol1, rel.getCol2, rel.getMethod)
+    if (rel.hasMethod) {
+      StatFunctions
+        .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2), rel.getMethod)
+        .logicalPlan
     } else {
-      df.stat.corr(rel.getCol1, rel.getCol2)
+      StatFunctions
+        .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2))
+        .logicalPlan
     }
-
-    LocalRelation.fromProduct(
-      output = AttributeReference("corr", DoubleType, false)() :: Nil,
-      data = Tuple1.apply(corr) :: Nil)
   }
 
   private def transformStatApproxQuantile(rel: proto.StatApproxQuantile): LogicalPlan = {

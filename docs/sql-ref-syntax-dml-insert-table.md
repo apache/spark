@@ -419,7 +419,7 @@ SELECT * FROM students;
 |    Amy Smith|   123 Park Ave, San Jose| 2019-01-02|
 +-------------+-------------------------+-----------+
 
-INSERT INTO students PARTITION (birthday = date'2019-01-02')
+INSERT OVERWRITE students PARTITION (birthday = date'2019-01-02')
     VALUES('Jason Wang', '908 Bird St, Saratoga');
 
 SELECT * FROM students;

@@ -1283,6 +1283,62 @@ object functions {
   def histogram_numeric(e: Column, nBins: Column): Column =
     withAggregateFunction { new HistogramNumeric(e.expr, nBins.expr) }
 
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_and(e: Column): Column = withAggregateFunction { BitAndAgg(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise OR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_or(e: Column): Column = withAggregateFunction { BitOrAgg(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise XOR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_xor(e: Column): Column = withAggregateFunction { BitXorAgg(e.expr) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1881,6 +1937,35 @@ object functions {
    * @since 3.2.0
    */
   def bitwise_not(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+
+  /**
+   * Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+   * or NULL if the argument is NULL.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_count(e: Column): Column = withExpr { BitwiseCount(e.expr) }
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_get(e: Column, pos: Column): Column = withExpr { BitwiseGet(e.expr, pos.expr) }
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def getbit(e: Column, pos: Column): Column = bit_get(e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to

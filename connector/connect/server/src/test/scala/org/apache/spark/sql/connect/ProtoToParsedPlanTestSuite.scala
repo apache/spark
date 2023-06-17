@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
@@ -162,7 +163,7 @@ class ProtoToParsedPlanTestSuite
     val name = fileName.stripSuffix(".proto.bin")
     test(name) {
       val relation = readRelation(file)
-      val planner = new SparkConnectPlanner(spark)
+      val planner = new SparkConnectPlanner(SessionHolder.forTesting(spark))
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
       val actual =

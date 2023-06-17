@@ -1830,6 +1830,112 @@ def bitwise_not(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def bit_count(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+    or NULL if the argument is NULL.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+        or NULL if the argument is NULL.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(bit_count("c")).show()
+    +------------+
+    |bit_count(c)|
+    +------------+
+    |           1|
+    |           1|
+    |           1|
+    +------------+
+    """
+    return _invoke_function_over_columns("bit_count", col)
+
+
+@try_remote_functions
+def bit_get(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
+    """
+    Returns the value of the bit (0 or 1) at the specified position.
+    The positions are numbered from right to left, starting at zero.
+    The position argument cannot be negative.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    pos : :class:`~pyspark.sql.Column` or str
+        The positions are numbered from right to left, starting at zero.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the value of the bit (0 or 1) at the specified position.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(bit_get("c", lit(1))).show()
+    +-------------+
+    |bit_get(c, 1)|
+    +-------------+
+    |            0|
+    |            0|
+    |            1|
+    +-------------+
+    """
+    return _invoke_function_over_columns("bit_get", col, pos)
+
+
+@try_remote_functions
+def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
+    """
+    Returns the value of the bit (0 or 1) at the specified position.
+    The positions are numbered from right to left, starting at zero.
+    The position argument cannot be negative.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    pos : :class:`~pyspark.sql.Column` or str
+        The positions are numbered from right to left, starting at zero.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the value of the bit (0 or 1) at the specified position.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(getbit("c", lit(1)).alias("d")).show()
+    +---+
+    |  d|
+    +---+
+    |  0|
+    |  0|
+    |  1|
+    +---+
+    """
+    return _invoke_function_over_columns("getbit", col, pos)
+
+
+@try_remote_functions
 def asc_nulls_first(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression based on the ascending order of the given
@@ -2465,6 +2571,260 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     Row(regr_syy(y, x)=68250.53503811295)
     """
     return _invoke_function_over_columns("regr_syy", y, x)
+
+
+@try_remote_functions
+def every(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if all values of `col` are true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if all values are true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if all values of `col` are true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(every("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |          true|
+    +--------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(every("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(every("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    """
+    return _invoke_function_over_columns("every", col)
+
+
+@try_remote_functions
+def bool_and(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if all values of `col` are true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if all values are true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if all values of `col` are true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(bool_and("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |          true|
+    +--------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(bool_and("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(bool_and("flag")).show()
+    +--------------+
+    |bool_and(flag)|
+    +--------------+
+    |         false|
+    +--------------+
+    """
+    return _invoke_function_over_columns("bool_and", col)
+
+
+@try_remote_functions
+def some(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if at least one value of `col` is true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if at least one value is true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if at least one value of `col` is true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(some("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(some("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(some("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |        false|
+    +-------------+
+    """
+    return _invoke_function_over_columns("some", col)
+
+
+@try_remote_functions
+def bool_or(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns true if at least one value of `col` is true.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column to check if at least one value is true.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        true if at least one value of `col` is true, false otherwise.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[True], [True], [True]], ["flag"])
+    >>> df.select(bool_or("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[True], [False], [True]], ["flag"])
+    >>> df.select(bool_or("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |         true|
+    +-------------+
+    >>> df = spark.createDataFrame([[False], [False], [False]], ["flag"])
+    >>> df.select(bool_or("flag")).show()
+    +-------------+
+    |bool_or(flag)|
+    +-------------+
+    |        false|
+    +-------------+
+    """
+    return _invoke_function_over_columns("bool_or", col)
+
+
+@try_remote_functions
+def bit_and(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the bitwise AND of all non-null input values, or null if none.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(bit_and("c")).first()
+    Row(bit_and(c)=0)
+    """
+    return _invoke_function_over_columns("bit_and", col)
+
+
+@try_remote_functions
+def bit_or(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the bitwise OR of all non-null input values, or null if none.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the bitwise OR of all non-null input values, or null if none.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(bit_or("c")).first()
+    Row(bit_or(c)=3)
+    """
+    return _invoke_function_over_columns("bit_or", col)
+
+
+@try_remote_functions
+def bit_xor(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns the bitwise XOR of all non-null input values, or null if none.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the bitwise XOR of all non-null input values, or null if none.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.select(bit_xor("c")).first()
+    Row(bit_xor(c)=2)
+    """
+    return _invoke_function_over_columns("bit_xor", col)
 
 
 @try_remote_functions
