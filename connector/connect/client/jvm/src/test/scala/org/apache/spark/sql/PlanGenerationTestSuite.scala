@@ -1009,6 +1009,18 @@ class PlanGenerationTestSuite
     fn.histogram_numeric(fn.col("a"), lit(10))
   }
 
+  functionTest("bit_and") {
+    fn.bit_and(fn.col("a"))
+  }
+
+  functionTest("bit_or") {
+    fn.bit_or(fn.col("a"))
+  }
+
+  functionTest("bit_xor") {
+    fn.bit_xor(fn.col("a"))
+  }
+
   functionTest("mode") {
     fn.mode(fn.col("a"))
   }
@@ -1207,6 +1219,18 @@ class PlanGenerationTestSuite
 
   functionTest("bitwise_not") {
     fn.bitwise_not(fn.col("a"))
+  }
+
+  functionTest("bit_count") {
+    fn.bit_count(fn.col("a"))
+  }
+
+  functionTest("bit_get") {
+    fn.bit_get(fn.col("a"), lit(0))
+  }
+
+  functionTest("getbit") {
+    fn.getbit(fn.col("a"), lit(0))
   }
 
   functionTest("expr") {
