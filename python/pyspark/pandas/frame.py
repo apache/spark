@@ -149,7 +149,7 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 # For supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -527,12 +527,7 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
-        if is_remote():
-            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-            SparkDataFrame = ConnectDataFrame
-        else:
-            SparkDataFrame = PySparkDataFrame
+        SparkDataFrame = get_dataframe_class()
         index_assigned = False
         if isinstance(data, InternalFrame):
             assert columns is None
@@ -2070,7 +2065,10 @@ class DataFrame(Frame, Generic[T]):
             iteritems is deprecated and will be removed in a future version.
             Use .items instead.
         """
-        warnings.warn("Deprecated in 3.4.0, Use DataFrame.items instead.", FutureWarning)
+        warnings.warn(
+            "Deprecated in 3.4.0, and will be removed in 4.0.0. Use DataFrame.items instead.",
+            FutureWarning,
+        )
         return self.items()
 
     def to_clipboard(self, excel: bool = True, sep: Optional[str] = None, **kwargs: Any) -> None:
@@ -2605,6 +2603,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         \bottomrule
         \end{tabular}
         """
+        warnings.warn(
+            "Argument `col_space` will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
         args = locals()
         psdf = self
@@ -5497,12 +5499,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.indexes import MultiIndex
         from pyspark.pandas.series import IndexOpsMixin
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         for k, v in kwargs.items():
             is_invalid_assignee = (
                 not (isinstance(v, (IndexOpsMixin, Column)) or callable(v) or is_scalar(v))
@@ -5533,7 +5530,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     scol, field = pairs[label[: len(label) - i]]
 
                     name = self._internal.spark_column_name_for(label)
-                    scol = scol.alias(name)  # type: ignore[attr-defined]
+                    scol = scol.alias(name)
                     if field is not None:
                         field = field.copy(name=name)
                     break
@@ -5547,7 +5544,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, (scol, field) in pairs.items():
             if label not in set(i[: len(label)] for i in self._internal.column_labels):
                 name = name_like_string(label)
-                scols.append(scol.alias(name))  # type: ignore[attr-defined]
+                scols.append(scol.alias(name))
                 if field is not None:
                     field = field.copy(name=name)
                 data_fields.append(field)
@@ -7488,12 +7485,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {
@@ -7502,12 +7494,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "first"): Column.desc_nulls_first,
             (False, "last"): Column.desc_nulls_last,
         }
-        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]  # type: ignore
+        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
         if keep == "last":
-            natural_order_scol = Column.desc(natural_order_scol)  # type: ignore
+            natural_order_scol = Column.desc(natural_order_scol)
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
@@ -8897,7 +8889,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         warnings.warn(
             "The DataFrame.append method is deprecated "
-            "and will be removed in a future version. "
+            "and will be removed in 4.0.0. "
             "Use pyspark.pandas.concat instead.",
             FutureWarning,
         )
@@ -11218,6 +11210,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  2.5
         3  4.0
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `None` in 4.0.0.",
+            FutureWarning,
+        )
         if numeric_only:
             numeric_col_names = []
             for label in self._internal.column_labels:
@@ -12228,6 +12225,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0.50  3.0  7.0
         0.75  4.0  8.0
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
         axis = validate_axis(axis)
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
@@ -12746,7 +12748,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         dtype: float64
         """
         warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
+            "The 'mad' method is deprecated and will be removed in 4.0.0. "
             "To compute the same result, you may do `(df - df.mean()).abs().mean()`.",
             FutureWarning,
         )
@@ -12890,6 +12892,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError('axis should be either 0 or "index" currently.')
         if numeric_only is None and axis == 0:
             numeric_only = True
+
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         mode_scols: List[PySparkColumn] = []
         mode_col_names: List[str] = []
@@ -13641,12 +13649,7 @@ def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-        SparkDataFrame = ConnectDataFrame
-    else:
-        SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+    SparkDataFrame = get_dataframe_class()
     assert isinstance(sdf, SparkDataFrame)
     sdf0 = sdf.agg(*aggs)
     lst = sdf0.limit(2).toPandas()
