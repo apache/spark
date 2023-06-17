@@ -480,7 +480,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "LateralJoin lateral-subquery#x [c1#x && c2#x], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(0)) AS c3#x]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+    "treeNode" : "LateralJoin lateral-subquery#x [c1#x && c2#x], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [(cast((outer(c1#x) + outer(c2#x)) as double) + rand(number)) AS c3#x]\n:        +- OneRowRelation\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -500,7 +500,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(0) AS rand(0)#x]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:                 +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+    "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- SubqueryAlias __auto_generated_subquery_name\n:     +- Project [rand(number) AS rand(number)#x]\n:        +- SubqueryAlias spark_catalog.default.t2\n:           +- View (`spark_catalog`.`default`.`t2`, [c1#x,c2#x])\n:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:                 +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t1\n   +- View (`spark_catalog`.`default`.`t1`, [c1#x,c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",
