@@ -271,6 +271,27 @@ def bitwise_not(col: "ColumnOrName") -> Column:
 bitwise_not.__doc__ = pysparkfuncs.bitwise_not.__doc__
 
 
+def bit_count(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bit_count", col)
+
+
+bit_count.__doc__ = pysparkfuncs.bit_count.__doc__
+
+
+def bit_get(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bit_get", col, pos)
+
+
+bit_get.__doc__ = pysparkfuncs.bit_get.__doc__
+
+
+def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("getbit", col, pos)
+
+
+getbit.__doc__ = pysparkfuncs.getbit.__doc__
+
+
 def broadcast(df: "DataFrame") -> "DataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
@@ -1268,6 +1289,27 @@ def bool_or(col: "ColumnOrName") -> Column:
 
 
 bool_or.__doc__ = pysparkfuncs.bool_or.__doc__
+
+
+def bit_and(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bit_and", col)
+
+
+bit_and.__doc__ = pysparkfuncs.bit_and.__doc__
+
+
+def bit_or(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bit_or", col)
+
+
+bit_or.__doc__ = pysparkfuncs.bit_or.__doc__
+
+
+def bit_xor(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bit_xor", col)
+
+
+bit_xor.__doc__ = pysparkfuncs.bit_xor.__doc__
 
 
 # Window Functions
