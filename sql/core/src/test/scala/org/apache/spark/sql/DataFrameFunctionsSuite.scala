@@ -275,6 +275,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       testData2.collect().toSeq.map(r => Row(~r.getInt(0), ~r.getInt(0))))
   }
 
+  test("bit_count") {
+    checkAnswer(testData2.select(bit_count($"a")), testData2.selectExpr("bit_count(a)"))
+  }
+
+  test("bit_get") {
+    checkAnswer(
+      testData2.select(bit_get($"a", lit(0)), bit_get($"a", lit(1)), bit_get($"a", lit(2))),
+      testData2.selectExpr("bit_get(a, 0)", "bit_get(a, 1)", "bit_get(a, 2)"))
+  }
+
+  test("getbit") {
+    checkAnswer(
+      testData2.select(getbit($"a", lit(0)), getbit($"a", lit(1)), getbit($"a", lit(2))),
+      testData2.selectExpr("getbit(a, 0)", "getbit(a, 1)", "getbit(a, 2)"))
+  }
+
   test("bin") {
     val df = Seq[(Integer, Integer)]((12, null)).toDF("a", "b")
     checkAnswer(
