@@ -61,3 +61,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     }
   }
 }
+
+object SessionHolder {
+
+  /** Creates a dummy session holder for use in tests. */
+  def forTesting(session: SparkSession): SessionHolder = {
+    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = session)
+  }
+}
