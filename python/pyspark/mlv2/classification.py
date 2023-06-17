@@ -331,10 +331,15 @@ class LogisticRegressionModel(PredictionModel, _LogisticRegressionParams, ModelR
         return self.__class__.__name__ + ".torch"
 
     def _save_core_model(self, path: str) -> None:
-        torch.save(self.torch_model, path)
+        lor_torch_model = torch_nn.Sequential(
+            self.torch_model,
+            torch_nn.Softmax(dim=1),
+        )
+        torch.save(lor_torch_model, path)
 
     def _load_core_model(self, path: str) -> None:
-        self.torch_model = torch.load(path)
+        lor_torch_model = torch.load(path)
+        self.torch_model = lor_torch_model[0]
 
     def _get_extra_metadata(self) -> Dict[str, Any]:
         return {

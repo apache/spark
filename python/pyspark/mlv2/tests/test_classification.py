@@ -167,10 +167,29 @@ class ClassificationTestsMixin:
             )
 
             model = estimator.fit(training_dataset)
+            model_predictions = model.transform(eval_df1.toPandas())
+
             assert model.uid == estimator.uid
 
             local_model_path = os.path.join(tmp_dir, "model")
             model.saveToLocal(local_model_path)
+
+            # test saved torch model can be loaded by pytorch solely
+            lor_torch_model = torch.load(
+                os.path.join(local_model_path, "LogisticRegressionModel.torch")
+            )
+
+            with torch.inference_mode():
+                torch_infer_result = lor_torch_model(
+                    torch.tensor(np.stack(list(eval_df1.toPandas().features)), dtype=torch.float32)
+                ).numpy()
+
+            np.testing.assert_allclose(
+                np.stack(list(model_predictions.probability)),
+                torch_infer_result,
+                rtol=1e-4,
+            )
+
             loaded_model = LORV2Model.loadFromLocal(local_model_path)
             assert loaded_model.numFeatures == 2
             assert loaded_model.numClasses == 2
