@@ -39,7 +39,7 @@ import warnings
 
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import is_remote, get_dataframe_class
 from pyspark.errors import PySparkTypeError
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
@@ -918,12 +918,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
-    if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-        SparkDataFrame = ConnectDataFrame
-    else:
-        SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
+    SparkDataFrame = get_dataframe_class()
     assert isinstance(df, SparkDataFrame), type(df)
     assert (
         column_name not in df.columns
