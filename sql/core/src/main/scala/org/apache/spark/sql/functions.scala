@@ -3964,8 +3964,9 @@ object functions {
    * Both str or suffix must be of STRING type.
    *
    * @note
-   *   This is different from the `endswith` method in SQL that supports both STRING and BINARY
-   *   type.
+   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
+   *   STRING and BINARY.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
@@ -3979,8 +3980,8 @@ object functions {
    * Both str or prefix must be of STRING type.
    *
    * @note
-   *   This is different from the `endswith` method in SQL that supports both STRING and BINARY
-   *   type.
+   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
+   *   STRING and BINARY.
    *
    * @group string_funcs
    * @since 3.5.0

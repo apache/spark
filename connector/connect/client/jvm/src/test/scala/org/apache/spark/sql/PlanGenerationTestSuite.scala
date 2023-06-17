@@ -2351,7 +2351,7 @@ class PlanGenerationTestSuite
     fn.replace(fn.col("g"), fn.col("g"))
   }
 
-  functionTest("replace with replace") {
+  functionTest("replace with specified string") {
     fn.replace(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 

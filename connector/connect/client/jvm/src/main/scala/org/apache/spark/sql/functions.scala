@@ -3865,8 +3865,8 @@ object functions {
    * expression is NULL. Otherwise, returns False. Both str or suffix must be of STRING type.
    *
    * @note
-   *   This is different from the `startswith` method in SQL that supports both STRING and BINARY
-   *   type.
+   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
+   *   STRING and BINARY.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -3879,8 +3879,8 @@ object functions {
    * expression is NULL. Otherwise, returns False. Both str or prefix must be of STRING type.
    *
    * @note
-   *   This is different from the `startswith` method in SQL that supports both STRING and BINARY
-   *   type.
+   *   Only STRING type is supported in this function, while `startswith` in SQL supports both
+   *   STRING and BINARY.
    *
    * @group string_funcs
    * @since 3.5.0

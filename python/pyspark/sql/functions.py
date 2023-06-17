@@ -9056,6 +9056,11 @@ def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Notes
+    -----
+    Only STRING type is supported in this function,
+    while `startswith` in SQL supports both STRING and BINARY.
+
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
@@ -9080,6 +9085,11 @@ def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
     Both str or prefix must be of STRING or BINARY type.
 
     .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    Only STRING type is supported in this function,
+    while `startswith` in SQL supports both STRING and BINARY.
 
     Parameters
     ----------
