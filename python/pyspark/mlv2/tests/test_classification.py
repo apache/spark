@@ -44,7 +44,6 @@ class ClassificationTestsMixin:
                 rtol=1e-2,
             )
 
-    @unittest.skip
     def test_binary_classes_logistic_regression(self):
         df1 = self.spark.createDataFrame(
             [
@@ -88,7 +87,6 @@ class ClassificationTestsMixin:
         assert "probability" not in result_without_prob.columns
         self._check_result(result_without_prob, expected_predictions, None)
 
-    @unittest.skip
     def test_multi_classes_logistic_regression(self):
         df1 = self.spark.createDataFrame(
             [
