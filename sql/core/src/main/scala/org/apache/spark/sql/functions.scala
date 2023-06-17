@@ -3887,8 +3887,8 @@ object functions {
    * Both left or right must be of STRING type.
    *
    * @note
-   *   This is different from the `contains` method in SQL that supports both STRING and BINARY
-   *   type.
+   *   Only STRING type is supported in this function, while `contains` in SQL supports both
+   *   STRING and BINARY.
    *
    * @group string_funcs
    * @since 3.5.0

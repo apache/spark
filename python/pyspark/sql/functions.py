@@ -8937,9 +8937,14 @@ def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns a boolean. The value is True if right is found inside left.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
-    Both left or right must be of STRING or BINARY type.
+    Both left or right must be of STRING.
 
     .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    Only STRING type is supported in this function,
+    while `contains` in SQL supports both STRING and BINARY.
 
     Parameters
     ----------
