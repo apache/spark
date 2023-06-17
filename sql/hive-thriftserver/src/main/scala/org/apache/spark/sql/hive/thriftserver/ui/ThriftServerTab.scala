@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.JettyUtils.createServletHandler
 
 /**
  * Spark Web UI tab that shows statistics of jobs running in the thrift server.
@@ -37,6 +41,36 @@ private[thriftserver] class ThriftServerTab(
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
   parent.attachTab(this)
+  parent.attachHandler(createServletHandler("/sqlserver/updatesqlconf", new HttpServlet {
+    override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      val key = req.getParameter("key")
+      val value = req.getParameter("value")
+      try {
+        SQLConf.get.setConfString(key, value) // Used to check if the value is valid.
+        parent.conf.set(key, value)
+        logInfo(s"Successfully updated ${key} to ${value}.")
+        resp.sendRedirect("/sqlserver/")
+      } catch {
+        case e: Throwable =>
+          resp.setContentType("text/html; charset=UTF-8");
+          val msg = s"Failed to update SQL config: ${e.getMessage}."
+          logWarning(msg)
+          // scalastyle:off println
+          resp.getWriter.println(
+            s"""
+              |<script>
+              |  alert('$msg');
+              |  window.location.replace('/sqlserver/');
+              |</script>
+              |""".stripMargin)
+          // scalastyle:on println
+      }
+    }
+
+    override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+      doPost(req, resp)
+    }
+  }, ""))
   def detach(): Unit = {
     sparkUI.detachTab(this)
   }

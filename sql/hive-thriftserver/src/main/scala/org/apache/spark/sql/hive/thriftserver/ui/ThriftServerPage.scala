@@ -47,7 +47,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           SQL statement(s)
         </h4> ++
         generateSessionStatsTable(request) ++
-        generateSQLStatsTable(request)
+        generateSQLStatsTable(request) ++
+        generateUpdateSQLConf()
     }
     UIUtils.headerSparkPage(request, "JDBC/ODBC Server", content, parent)
   }
@@ -158,6 +159,30 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       </div>
 
     content
+  }
+
+  private def generateUpdateSQLConf(): Seq[Node] = {
+    <h4>
+      <span class="collapse-table-arrow arrow-open"></span>
+      <a>Update Spark SQL configuration default values for new connections</a>
+    </h4>
+    <span>
+      <div style="width:50%">
+        <form action="/sqlserver/updatesqlconf/" method="POST">
+          <div class="form-group">
+            <label>SQL Conf key:</label>
+            <input type="text" class="form-control" id="key" name="key" required="true"
+                   maxlength="200" pattern="spark.sql.+" placeholder="Enter SQL Conf key"/>
+          </div>
+          <div class="form-group">
+            <label>SQL Conf value:</label>
+            <input type="text" class="form-control" id="value"  name="value" required="true"
+                   maxlength="200" placeholder="Enter SQL Conf value"/>
+          </div>
+          <button type="submit" class="btn btn-primary">Update</button>
+        </form>
+      </div>
+    </span>
   }
 }
 
