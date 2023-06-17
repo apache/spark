@@ -286,12 +286,13 @@ abstract class KafkaSinkStreamingSuiteBase extends KafkaSinkSuiteBase {
 class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
   import testImplicits._
 
-  override val streamingTimeout = 30.seconds
+  override val streamingTimeout = 10.milliseconds
 
   override protected def createMemoryStream(): MemoryStreamBase[String] = MemoryStream[String]
 
   override protected def verifyResult(writer: StreamingQuery)(verifyFn: => Unit): Unit = {
     failAfter(streamingTimeout) {
+      Thread.sleep(20)
       writer.processAllAvailable()
     }
     verifyFn
