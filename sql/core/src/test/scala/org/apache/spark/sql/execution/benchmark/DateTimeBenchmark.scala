@@ -246,6 +246,11 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           }
           benchmark.run()
         }
+        runBenchmark("Comparison of year in predicates") {
+          val n = 1000000
+          val compareExpr = "year(date_from_unix_date(id)) == date '2001-01-01'"
+          run(n, "Comparison of year", compareExpr)
+        }
       }
     }
   }
