@@ -4110,10 +4110,13 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
-   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days
+   *   A column of the number of days to add to `start`, can be negative to subtract days
+   * @return
+   *   A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -4182,12 +4185,15 @@ object functions {
    * // returns 1
    * }}}
    *
-   * @param end A date, timestamp or string. If a string, the data must be in a format that
-   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start A date, timestamp or string. If a string, the data must be in a format that
-   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
-   *         a date. Negative if `end` is before `start`
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   An integer, or null if either `end` or `start` were strings that could not be cast to a
+   *   date. Negative if `end` is before `start`
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -4249,7 +4255,8 @@ object functions {
 
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
-   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 3.5.0
    */
