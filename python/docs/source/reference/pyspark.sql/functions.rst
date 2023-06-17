@@ -258,6 +258,8 @@ Aggregate Functions
     approx_count_distinct
     approx_percentile
     avg
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
@@ -267,6 +269,7 @@ Aggregate Functions
     count_if
     covar_pop
     covar_samp
+    every
     first
     first_value
     grouping
@@ -298,6 +301,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    some
     std
     stddev
     stddev_pop
@@ -419,6 +423,18 @@ Misc Functions
     hll_sketch_estimate
     hll_union
     user
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
 
 Xml Functions
 --------------
