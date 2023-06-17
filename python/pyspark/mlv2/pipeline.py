@@ -17,9 +17,9 @@
 import os
 
 import pandas as pd
-from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since
 from pyspark.mlv2.base import Estimator, Model, Transformer
 from pyspark.mlv2.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite
 from pyspark.ml.param import Param, Params

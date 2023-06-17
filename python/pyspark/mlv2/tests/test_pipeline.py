@@ -20,10 +20,7 @@ import tempfile
 import unittest
 import numpy as np
 from pyspark.mlv2.feature import StandardScaler
-from pyspark.mlv2.classification import (
-    LogisticRegression as LORV2,
-    LogisticRegressionModel as LORV2Model,
-)
+from pyspark.mlv2.classification import LogisticRegression as LORV2
 from pyspark.mlv2.pipeline import Pipeline
 from pyspark.sql import SparkSession
 
