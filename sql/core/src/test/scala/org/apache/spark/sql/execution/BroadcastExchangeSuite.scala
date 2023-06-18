@@ -100,6 +100,7 @@ class BroadcastExchangeSuite extends SparkPlanTest
 }
 
 // Additional tests run in 'local-cluster' mode.
+@ExtendedSQLTest
 class BroadcastExchangeExecSparkSuite
   extends SparkFunSuite with LocalSparkContext with AdaptiveSparkPlanHelper {
 
