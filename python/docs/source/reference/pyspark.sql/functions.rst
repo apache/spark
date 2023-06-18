@@ -116,6 +116,7 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    convert_timezone
     curdate
     current_date
     current_timestamp
@@ -150,6 +151,7 @@ Datetime Functions
     next_day
     hour
     make_date
+    now
     from_unixtime
     unix_timestamp
     to_unix_timestamp
@@ -160,8 +162,11 @@ Datetime Functions
     trunc
     from_utc_timestamp
     to_utc_timestamp
+    weekday
     window
     session_window
+    timestamp_micros
+    timestamp_millis
     timestamp_seconds
     unix_date
     unix_micros

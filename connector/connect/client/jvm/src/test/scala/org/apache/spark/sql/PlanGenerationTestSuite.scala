@@ -1717,6 +1717,14 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
+  temporalFunctionTest("convert_timezone with source time zone") {
+    fn.convert_timezone(lit("\"Africa/Dakar\""), lit("\"Asia/Urumqi\""), fn.col("t"))
+  }
+
+  temporalFunctionTest("convert_timezone without source time zone") {
+    fn.convert_timezone(lit("\"Asia/Urumqi\""), fn.col("t"))
+  }
+
   functionTest("make_dt_interval days hours mins secs") {
     fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("b"))
   }
@@ -1909,6 +1917,10 @@ class PlanGenerationTestSuite
     fn.current_timestamp()
   }
 
+  temporalFunctionTest("now") {
+    fn.now()
+  }
+
   temporalFunctionTest("localtimestamp") {
     fn.localtimestamp()
   }
@@ -1979,6 +1991,10 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("minute") {
     fn.minute(fn.col("t"))
+  }
+
+  temporalFunctionTest("weekday") {
+    fn.weekday(fn.col("d"))
   }
 
   temporalFunctionTest("make_date") {
@@ -2118,6 +2134,14 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("timestamp_seconds") {
     fn.timestamp_seconds(fn.col("x"))
+  }
+
+  temporalFunctionTest("timestamp_millis") {
+    fn.timestamp_millis(fn.col("x"))
+  }
+
+  temporalFunctionTest("timestamp_micros") {
+    fn.timestamp_micros(fn.col("x"))
   }
 
   // Array of Long

@@ -2628,6 +2628,13 @@ def current_timestamp() -> Column:
 current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
 
 
+def now() -> Column:
+    return _invoke_function("current_timestamp")
+
+
+now.__doc__ = pysparkfuncs.now.__doc__
+
+
 def current_timezone() -> Column:
     return _invoke_function("current_timezone")
 
@@ -2724,6 +2731,13 @@ def weekofyear(col: "ColumnOrName") -> Column:
 
 
 weekofyear.__doc__ = pysparkfuncs.weekofyear.__doc__
+
+
+def weekday(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("weekday", col)
+
+
+weekday.__doc__ = pysparkfuncs.weekday.__doc__
 
 
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
@@ -2993,6 +3007,20 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
+
+
+def timestamp_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_millis", col)
+
+
+timestamp_millis.__doc__ = pysparkfuncs.timestamp_millis.__doc__
+
+
+def timestamp_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_micros", col)
+
+
+timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
 
 
 def window(

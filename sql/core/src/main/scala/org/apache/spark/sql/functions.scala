@@ -4346,6 +4346,14 @@ object functions {
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
   /**
+   * Returns the current timestamp at the start of query evaluation.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def now(): Column = withExpr { Now() }
+
+  /**
    * Returns the current timestamp without time zone at the start of query evaluation
    * as a timestamp without time zone column.
    * All calls of localtimestamp within the same query return the same value.
@@ -4571,6 +4579,14 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def weekday(e: Column): Column = withExpr { WeekDay(e.expr) }
 
   /**
    * @return A date created from year, month and day fields.
@@ -5192,6 +5208,26 @@ object functions {
    */
   def timestamp_seconds(e: Column): Column = withExpr {
     SecondsToTimestamp(e.expr)
+  }
+
+  /**
+   * Creates timestamp from the number of milliseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_millis(e: Column): Column = withExpr {
+    MillisToTimestamp(e.expr)
+  }
+
+  /**
+   * Creates timestamp from the number of microseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_micros(e: Column): Column = withExpr {
+    MicrosToTimestamp(e.expr)
   }
 
   /**
@@ -6594,6 +6630,34 @@ object functions {
    * @since 3.0.0
    */
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the `sourceTz` time zone to `targetTz`.
+   *
+   * @param sourceTz the time zone for the input timestamp. If it is missed,
+   *                 the current session time zone is used as the source time zone.
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column = withExpr {
+    ConvertTimezone(sourceTz.expr, targetTz.expr, sourceTs.expr)
+  }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the current time zone to `targetTz`.
+   *
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(targetTz: Column, sourceTs: Column): Column = withExpr {
+    new ConvertTimezone(targetTz.expr, sourceTs.expr)
+  }
 
   /**
    * Make DayTimeIntervalType duration from days, hours, mins and secs.

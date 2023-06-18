@@ -4203,6 +4203,14 @@ object functions {
   def current_timestamp(): Column = Column.fn("current_timestamp")
 
   /**
+   * Returns the current timestamp at the start of query evaluation.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def now(): Column = Column.fn("now")
+
+  /**
    * Returns the current timestamp without time zone at the start of query evaluation as a
    * timestamp without time zone column. All calls of localtimestamp within the same query return
    * the same value.
@@ -4462,6 +4470,14 @@ object functions {
    * @since 3.4.0
    */
   def minute(e: Column): Column = Column.fn("minute", e)
+
+  /**
+   * Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def weekday(e: Column): Column = Column.fn("weekday", e)
 
   /**
    * @return
@@ -5075,6 +5091,22 @@ object functions {
    * @since 3.4.0
    */
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
+
+  /**
+   * Creates timestamp from the number of milliseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_millis(e: Column): Column = Column.fn("timestamp_millis", e)
+
+  /**
+   * Creates timestamp from the number of microseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
   /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
@@ -6497,8 +6529,7 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def years(e: Column): Column =
-    Column.fn("years", e)
+  def years(e: Column): Column = Column.fn("years", e)
 
   /**
    * A transform for timestamps and dates to partition data into months.
@@ -6506,8 +6537,7 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def months(e: Column): Column =
-    Column.fn("months", e)
+  def months(e: Column): Column = Column.fn("months", e)
 
   /**
    * A transform for timestamps and dates to partition data into days.
@@ -6515,8 +6545,7 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def days(e: Column): Column =
-    Column.fn("days", e)
+  def days(e: Column): Column = Column.fn("days", e)
 
   /**
    * A transform for timestamps to partition data into hours.
@@ -6524,8 +6553,37 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def hours(e: Column): Column =
-    Column.fn("hours", e)
+  def hours(e: Column): Column = Column.fn("hours", e)
+
+  /**
+   * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
+   * `targetTz`.
+   *
+   * @param sourceTz
+   *   the time zone for the input timestamp. If it is missed, the current session time zone is
+   *   used as the source time zone.
+   * @param targetTz
+   *   the time zone to which the input timestamp should be converted.
+   * @param sourceTs
+   *   a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column =
+    Column.fn("convert_timezone", sourceTz, targetTz, sourceTs)
+
+  /**
+   * Converts the timestamp without time zone `sourceTs` from the current time zone to `targetTz`.
+   *
+   * @param targetTz
+   *   the time zone to which the input timestamp should be converted.
+   * @param sourceTs
+   *   a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(targetTz: Column, sourceTs: Column): Column =
+    Column.fn("convert_timezone", targetTz, sourceTs)
 
   /**
    * Make DayTimeIntervalType duration from days, hours, mins and secs.
