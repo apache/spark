@@ -34,7 +34,9 @@ import org.apache.spark.sql.functions.{col, max, min}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
