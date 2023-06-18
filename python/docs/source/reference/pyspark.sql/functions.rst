@@ -364,6 +364,7 @@ String Functions
     decode
     elt
     encode
+    endswith
     find_in_set
     format_number
     format_string
@@ -380,6 +381,9 @@ String Functions
     lpad
     ltrim
     octet_length
+    parse_url
+    position
+    printf
     rlike
     regexp
     regexp_like
@@ -389,6 +393,7 @@ String Functions
     regexp_replace
     regexp_substr
     regexp_instr
+    replace
     right
     ucase
     unbase64
@@ -397,6 +402,9 @@ String Functions
     rtrim
     soundex
     split
+    split_part
+    startswith
+    substr
     substring
     substring_index
     overlay
@@ -407,6 +415,8 @@ String Functions
     translate
     trim
     upper
+    url_decode
+    url_encode
 
 
 Bitwise Functions

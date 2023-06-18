@@ -13,14 +13,18 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "to_number",
+        "functionName": "format_string",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }
         }, {
-          "literal": {
-            "string": "$99.99"
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }

@@ -36,10 +36,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
+@ExtendedSQLTest
 class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -74,8 +76,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val excludedSqlFunctions = Set(
-      "random", "array_agg", "position", "printf",
-      "substr", "day", "cardinality", "sha",
+      "random", "array_agg", "day", "cardinality", "sha",
       // aliases for existing functions
       "reflect", "java_method" // Only needed in SQL
     )

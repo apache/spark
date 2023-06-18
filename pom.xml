@@ -168,13 +168,13 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.17</scala.version>
+    <scala.version>2.12.18</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <!-- dont update scala-maven-plugin to version 4.8.1 SPARK-42809 and SPARK-43595 -->   
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
-    <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.16.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -2921,7 +2921,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.2</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -3040,7 +3040,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>3.2.1</version>
+          <version>3.3.0</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -3167,7 +3167,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>3.6.0</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -3556,7 +3556,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly.
         -->
-        <scala.version>2.12.17</scala.version>
+        <scala.version>2.12.18</scala.version>
       </properties>
       <build>
         <pluginManagement>
