@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 8
       branch:
         description: Branch to run the build against
         required: false
@@ -190,9 +190,6 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      SCALA_PROFILE: scala2.13
-      SKIP_MIMA: true
-      SKIP_UNIDOC: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -445,7 +442,6 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
-      SKIP_UNIDOC: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -890,7 +886,6 @@ jobs:
       SPARK_LOCAL_IP: localhost
       ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
-      SKIP_UNIDOC: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
