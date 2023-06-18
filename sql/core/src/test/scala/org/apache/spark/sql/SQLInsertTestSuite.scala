@@ -223,13 +223,14 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         exception = intercept[AnalysisException] {
           processInsert("t1", df2, overwrite = false, byName = true)
         },
-        v1ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH",
-        v2ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH",
+        v1ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        v2ErrorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         v1Parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`",
-          "reason" -> "too many data columns", "tableColumns" -> "'c1', 'c2', 'c3'",
-          "dataColumns" -> "'c3', 'c2', 'c1', 'c0'"),
-        v2Parameters = Map("tableName" -> "testcat.t1", "reason" -> "too many data columns",
-          "tableColumns" -> "'c1', 'c2', 'c3'", "dataColumns" -> "'c3', 'c2', 'c1', 'c0'")
+          "tableColumns" -> "`c1`, `c2`, `c3`",
+          "dataColumns" -> "`c3`, `c2`, `c1`, `c0`"),
+        v2Parameters = Map("tableName" -> "`testcat`.`t1`",
+          "tableColumns" -> "`c1`, `c2`, `c3`",
+          "dataColumns" -> "`c3`, `c2`, `c1`, `c0`")
       )
     }
   }
