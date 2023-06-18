@@ -168,16 +168,16 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     </h4>
     <span>
       <div style="width:50%">
-        <form action="/sqlserver/updatesqlconf/" method="POST">
+        <form action="updatesqlconf/" method="GET"> <!-- Use GET method to support YARN proxy -->
           <div class="form-group">
-            <label>SQL Conf key:</label>
+            <label>SQL configuration key:</label>
             <input type="text" class="form-control" id="key" name="key" required="true"
-                   maxlength="200" pattern="spark.sql.+" placeholder="Enter SQL Conf key"/>
+                   maxlength="200" pattern="spark.sql.+" placeholder="Enter spark.sql.+"/>
           </div>
           <div class="form-group">
-            <label>SQL Conf value:</label>
-            <input type="text" class="form-control" id="value"  name="value" required="true"
-                   maxlength="200" placeholder="Enter SQL Conf value"/>
+            <label>SQL configuration value:</label>
+            <input type="text" class="form-control" id="value" name="value" required="true"
+                   maxlength="200" placeholder="Enter boolean, number or string"/>
           </div>
           <button type="submit" class="btn btn-primary">Update</button>
         </form>

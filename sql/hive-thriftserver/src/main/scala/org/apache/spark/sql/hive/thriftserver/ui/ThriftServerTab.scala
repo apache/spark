@@ -49,20 +49,19 @@ private[thriftserver] class ThriftServerTab(
         SQLConf.get.setConfString(key, value) // Used to check if the value is valid.
         parent.conf.set(key, value)
         logInfo(s"Successfully updated ${key} to ${value}.")
-        resp.sendRedirect("/sqlserver/")
+        resp.setContentType("text/html; charset=UTF-8");
+        // scalastyle:off println
+        resp.getWriter
+          .println("<script>window.location.replace(document.referrer);</script>")
+        // scalastyle:on println
       } catch {
         case e: Throwable =>
           resp.setContentType("text/html; charset=UTF-8");
-          val msg = s"Failed to update SQL config: ${e.getMessage}."
+          val msg = s"Failed to update SQL configuration: ${e.getMessage}."
           logWarning(msg)
           // scalastyle:off println
-          resp.getWriter.println(
-            s"""
-              |<script>
-              |  alert('$msg');
-              |  window.location.replace('/sqlserver/');
-              |</script>
-              |""".stripMargin)
+          resp.getWriter
+            .println(s"<script>alert('$msg');window.location.replace(document.referrer);</script>")
           // scalastyle:on println
       }
     }
