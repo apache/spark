@@ -4192,8 +4192,8 @@ object functions {
    */
   def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
     escapeChar.expr match {
-      case escape @ Literal(_, StringType) =>
-        Like(str.expr, pattern.expr, escape.eval().toString.charAt(0))
+      case StringLiteral(v) if v.length == 1 =>
+        Like(str.expr, pattern.expr, v.charAt(0))
       case _ =>
         throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
     }
@@ -4219,8 +4219,8 @@ object functions {
    */
   def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
     escapeChar.expr match {
-      case escape @ Literal(_, StringType) =>
-        ILike(str.expr, pattern.expr, escape.eval().toString.charAt(0))
+      case StringLiteral(v) if v.length == 1 =>
+        ILike(str.expr, pattern.expr, v.charAt(0))
       case _ =>
         throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
     }

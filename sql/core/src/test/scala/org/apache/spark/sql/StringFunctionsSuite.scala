@@ -951,6 +951,22 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
       parameters = Map("sqlExpr" -> "\"618\"")
     )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(like(col("a"), col("b"), lit("中国"))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      parameters = Map("sqlExpr" -> "\"中国\"")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(ilike(col("a"), col("b"), lit("中国"))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      parameters = Map("sqlExpr" -> "\"中国\"")
+    )
   }
 
   test("lcase & ucase function") {

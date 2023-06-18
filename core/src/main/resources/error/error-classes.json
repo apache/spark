@@ -397,7 +397,7 @@
       },
       "ESCAPE_CHAR_WRONG_TYPE" : {
         "message" : [
-          "EscapeChar should be a string literal."
+          "`EscapeChar` should be a string literal of length one."
         ]
       },
       "FILTER_NOT_BOOLEAN" : {
