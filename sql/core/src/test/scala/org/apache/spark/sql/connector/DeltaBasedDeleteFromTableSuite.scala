@@ -39,11 +39,7 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")),
       errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
       parameters = Map(
-        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\"",
-        "operator" ->
-          """
-            |WriteDelta RelationV2[pk#2810, id#2811, dep#2812] cat.ns1.test_table cat.ns1.test_table
-            |""".stripMargin.replaceAll("\n", "")),
+        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(
         fragment = "DELETE FROM cat.ns1.test_table WHERE id <= 1 AND rand() > 0.5",
         start = 0,

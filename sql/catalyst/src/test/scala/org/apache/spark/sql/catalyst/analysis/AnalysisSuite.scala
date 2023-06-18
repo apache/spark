@@ -825,16 +825,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Union(
         CollectMetrics("evt1", count :: Nil, testRelation) ::
           CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
-      expectedErrorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
-      expectedMessageParameters = Map(
-        "name" -> "evt1",
-        "plan" ->
-         """Union false, false
-           |:- CollectMetrics evt1, [count(1) AS cnt#xL]
-           |:  +- LocalRelation <empty>, [a#x]
-           |+- CollectMetrics evt1, [sum(a#x) AS sum#xL]
-           |   +- LocalRelation <empty>, [a#x]
-           |""".stripMargin)
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
     // Different children, same metrics - fail
@@ -844,17 +836,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Union(
         CollectMetrics("evt1", count :: Nil, testRelation) ::
           CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
-      expectedErrorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
-      expectedMessageParameters = Map(
-        "name" -> "evt1",
-        "plan" ->
-          """Union false, false
-            |:- Project [cast(a#x as string) AS a#x]
-            |:  +- CollectMetrics evt1, [count(1) AS cnt#xL]
-            |:     +- LocalRelation <empty>, [a#x]
-            |+- CollectMetrics evt1, [count(1) AS cnt#xL]
-            |   +- LocalRelation <empty>, [b#x]
-            |""".stripMargin)
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
     // Subquery different tree - fail
@@ -864,17 +847,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("evt1", count :: Nil, tblB))
     assertAnalysisErrorClass(
       query,
-      expectedErrorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
-      expectedMessageParameters = Map(
-        "name" -> "evt1",
-        "plan" ->
-          """Project [b#x, scalar-subquery#x [] AS sum#xL]
-            |:  +- Aggregate [sum(a#x) AS sum#xL]
-            |:     +- CollectMetrics evt1, [count(1) AS cnt#xL]
-            |:        +- LocalRelation <empty>, [a#x]
-            |+- CollectMetrics evt1, [count(1) AS cnt#xL]
-            |   +- LocalRelation <empty>, [b#x]
-            |""".stripMargin)
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
     )
 
     // Aggregate with filter predicate - fail

@@ -643,9 +643,9 @@
     ],
     "sqlState" : "23505"
   },
-  "DUPLICATED_OBSERVED_METRICS_NAME" : {
+  "DUPLICATED_METRICS_NAME" : {
     "message" : [
-      "Multiple definitions of observed metrics named '<name>': <plan>."
+      "The metric name is not unique: <metricName>. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins)."
     ]
   },
   "DUPLICATE_CLAUSES" : {
@@ -1244,9 +1244,7 @@
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
-      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
-      "<sqlExprs>",
-      "in operator <operator>."
+      "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
     ]
   },
   "INVALID_NUMERIC_LITERAL_RANGE" : {
@@ -2033,11 +2031,6 @@
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
     ]
   },
-  "SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED" : {
-    "message" : [
-      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
-    ]
-  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -2472,6 +2465,11 @@
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."
+        ]
+      },
+      "SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED" : {
+        "message" : [
+          "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {

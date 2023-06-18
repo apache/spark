@@ -31,20 +31,12 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         |{ "pk": 3, "id": 3, "dep": "hr" }
         |""".stripMargin)
 
-    // scalastyle:off line.size.limit
-    val expectedOperator =
-      """ReplaceData RelationV2[pk#x, id#x, dep#x] cat.ns1.test_table cat.ns1.test_table
-        |+- Filter NOT (((id#x <= 1) AND (rand(number) > cast(0.5 as double))) <=> true)
-        |   +- RelationV2[pk#x, id#x, dep#x, _partition#x] cat.ns1.test_table cat.ns1.test_table
-        |""".stripMargin
-    // scalastyle:on line.size.limit
     checkError(
       exception = intercept[AnalysisException](
         sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")),
       errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
       parameters = Map(
-        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\", \"((id <= 1) AND (rand() > 0.5))\"",
-        "operator" -> expectedOperator),
+        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\", \"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(
         fragment = "DELETE FROM cat.ns1.test_table WHERE id <= 1 AND rand() > 0.5",
         start = 0,

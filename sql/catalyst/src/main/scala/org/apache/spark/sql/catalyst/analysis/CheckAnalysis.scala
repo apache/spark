@@ -722,7 +722,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
             o.failAnalysis(
-              errorClass = "SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
+              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
               messageParameters = Map(
                 "colName" -> toSQLExpr(mapCol),
                 "dataType" -> toSQLType(mapCol.dataType)))
@@ -736,9 +736,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             // The rule above is used to check Aggregate operator.
             o.failAnalysis(
               errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
-              messageParameters = Map(
-                "sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "),
-                "operator" -> planToString(operator)))
+              messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
+            )
 
           case _: UnresolvedHint => throw new IllegalStateException(
             "Logical hint operator should be removed during analysis.")
@@ -1058,10 +1057,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               // of a CTE that is used multiple times or a self join.
               if (!simplifiedMetrics.sameResult(simplifiedOther)) {
                 failAnalysis(
-                  errorClass = "DUPLICATED_OBSERVED_METRICS_NAME",
-                  messageParameters = Map(
-                    "name" -> name,
-                    "plan" -> planToString(plan)))
+                  errorClass = "DUPLICATED_METRICS_NAME",
+                  messageParameters = Map("metricName" -> name))
               }
             case None =>
               metricsMap.put(name, metrics)
