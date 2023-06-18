@@ -550,6 +550,33 @@ object functions {
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column): Column = first(e)
+
+  /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column, ignoreNulls: Column): Column = withAggregateFunction {
+    new First(e.expr, ignoreNulls.expr)
+  }
+
+  /**
    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
@@ -724,7 +751,7 @@ object functions {
    * @since 2.0.0
    */
   def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
-    new Last(e.expr, ignoreNulls)
+    Last(e.expr, ignoreNulls)
   }
 
   /**
@@ -770,6 +797,33 @@ object functions {
    * @since 1.3.0
    */
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column): Column = last(e)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note The function is non-deterministic because its results depends on the order of the rows
+   * which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column, ignoreNulls: Column): Column = withAggregateFunction {
+    new Last(e.expr, ignoreNulls.expr)
+  }
 
   /**
    * Aggregate function: returns the most frequent value in a group.
@@ -904,6 +958,26 @@ object functions {
         e.expr, percentage.expr, accuracy.expr
       )
     }
+  }
+
+  /**
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which
+   * is the smallest value in the ordered `col` values (sorted from least to greatest) such that
+   * no more than `percentage` of `col` values is less than the value or equal to that value.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0.
+   * If it is a single floating point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal
+   * which controls approximation accuracy at the cost of memory.
+   * Higher value of accuracy yields better accuracy, 1.0/accuracy
+   * is the relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
+    percentile_approx(e, percentage, accuracy)
   }
 
   /**
@@ -1164,6 +1238,106 @@ object functions {
    * @since 3.5.0
    */
   def regr_syy(y: Column, x: Column): Column = withAggregateFunction { RegrSYY(y.expr, x.expr) }
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column): Column = withAggregateFunction { new AnyValue(e.expr) }
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   * If `isIgnoreNull` is true, returns only non-null values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column, ignoreNulls: Column): Column =
+    withAggregateFunction { new AnyValue(e.expr, ignoreNulls.expr) }
+
+  /**
+   * Aggregate function: returns the number of `TRUE` values for the expression.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_if(e: Column): Column = withAggregateFunction { CountIf(e.expr) }
+
+  /**
+   * Aggregate function: computes a histogram on numeric 'expr' using nb bins.
+   * The return value is an array of (x,y) pairs representing the centers of the
+   * histogram's bins. As the value of 'nb' is increased, the histogram approximation
+   * gets finer-grained, but may yield artifacts around outliers. In practice, 20-40
+   * histogram bins appear to work well, with more bins being required for skewed or
+   * smaller datasets. Note that this function creates a histogram with non-uniform
+   * bin widths. It offers no guarantees in terms of the mean-squared-error of the
+   * histogram, but in practice is comparable to the histograms produced by the R/S-Plus
+   * statistical computing packages. Note: the output type of the 'x' field in the return value is
+   * propagated from the input value consumed in the aggregate function.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def histogram_numeric(e: Column, nBins: Column): Column =
+    withAggregateFunction { new HistogramNumeric(e.expr, nBins.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = withAggregateFunction { BoolAnd(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = withAggregateFunction { BoolOr(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_and(e: Column): Column = withAggregateFunction { BitAndAgg(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise OR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_or(e: Column): Column = withAggregateFunction { BitOrAgg(e.expr) }
+
+  /**
+   * Aggregate function: returns the bitwise XOR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_xor(e: Column): Column = withAggregateFunction { BitXorAgg(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1763,6 +1937,35 @@ object functions {
    * @since 3.2.0
    */
   def bitwise_not(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+
+  /**
+   * Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+   * or NULL if the argument is NULL.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_count(e: Column): Column = withExpr { BitwiseCount(e.expr) }
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_get(e: Column, pos: Column): Column = withExpr { BitwiseGet(e.expr, pos.expr) }
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def getbit(e: Column, pos: Column): Column = bit_get(e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -3697,6 +3900,181 @@ object functions {
     ToNumber(e.expr, format.expr)
   }
 
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column, replace: Column): Column = withExpr {
+    StringReplace(src.expr, search.expr, replace.expr)
+  }
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column): Column = withExpr {
+    new StringReplace(src.expr, search.expr)
+  }
+
+  /**
+   * Splits `str` by delimiter and return requested part of the split (1-based).
+   * If any input is null, returns null. if `partNum` is out of range of split parts,
+   * returns empty string. If `partNum` is 0, throws an error. If `partNum` is negative,
+   * the parts are counted backward from the end of the string.
+   * If the `delimiter` is an empty string, the `str` is not split.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def split_part(str: Column, delimiter: Column, partNum: Column): Column = withExpr {
+    SplitPart(str.expr, delimiter.expr, partNum.expr)
+  }
+
+  /**
+   * Returns the substring of `str` that starts at `pos` and is of length `len`,
+   * or the slice of byte array that starts at `pos` and is of length `len`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column, len: Column): Column = withExpr {
+    Substring(str.expr, pos.expr, len.expr)
+  }
+
+  /**
+   * Returns the substring of `str` that starts at `pos`,
+   * or the slice of byte array that starts at `pos`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column): Column = withExpr {
+    new Substring(str.expr, pos.expr)
+  }
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column, key: Column): Column = withExpr {
+    ParseUrl(Seq(url.expr, partToExtract.expr, key.expr))
+  }
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column): Column = withExpr {
+    ParseUrl(Seq(url.expr, partToExtract.expr))
+  }
+
+  /**
+   * Formats the arguments in printf-style and returns the result as a string column.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def printf(format: Column, arguments: Column*): Column = withExpr {
+    FormatString((lit(format) +: arguments).map(_.expr): _*)
+  }
+
+  /**
+   * Decodes a `str` in 'application/x-www-form-urlencoded' format
+   * using a specific encoding scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_decode(str: Column): Column = withExpr {
+    UrlDecode(str.expr)
+  }
+
+  /**
+   * Translates a string into 'application/x-www-form-urlencoded' format
+   * using a specific encoding scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_encode(str: Column): Column = withExpr {
+    UrlEncode(str.expr)
+  }
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `start`.
+   * The given `start` and return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column, start: Column): Column = withExpr {
+    StringLocate(substr.expr, str.expr, start.expr)
+  }
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `1`.
+   * The return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column): Column = withExpr {
+    new StringLocate(substr.expr, str.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if str ends with suffix.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both str or suffix must be of STRING type.
+   *
+   * @note
+   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
+   *   STRING and BINARY.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def endswith(str: Column, suffix: Column): Column = withExpr {
+    EndsWith(str.expr, suffix.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if str starts with prefix.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both str or prefix must be of STRING type.
+   *
+   * @note
+   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
+   *   STRING and BINARY.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def startswith(str: Column, prefix: Column): Column = withExpr {
+    StartsWith(str.expr, prefix.expr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -5031,6 +5409,47 @@ object functions {
     aggregate(expr, initialValue, merge, c => c)
 
   /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state. The final state is converted into the final result
+   * by applying a finish function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *               of all inputs to final result
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(
+      expr: Column,
+      initialValue: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column = aggregate(expr, initialValue, merge, finish)
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array,
+   * and reduces this to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
+   *
+   * @param expr the input array column
+   * @param initialValue the initial value
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge
+   *              an input value to the combined_value
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    aggregate(expr, initialValue, merge, c => c)
+
+  /**
    * Merge two given arrays, element-wise, into a single array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
@@ -6227,6 +6646,71 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column = withExpr {
     Bucket(Literal(numBuckets), e.expr)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = withExpr {
+    IsNotNull(col.expr)
+  }
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands,
+   * but returns true if both are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = withExpr {
+    new EqualNull(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr {
+    new NullIf(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = withExpr {
+    new Nvl(col1.expr, col2.expr)
+  }
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    new Nvl2(col1.expr, col2.expr, col3.expr)
   }
 
   // scalastyle:off line.size.limit

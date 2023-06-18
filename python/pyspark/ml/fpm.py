@@ -313,7 +313,7 @@ class PrefixSpan(JavaParams):
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
     Efficiently by Prefix-Projected Pattern Growth
-    (see `here <https://doi.org/10.1109/ICDE.2001.914830">`_).
+    (see `here <https://doi.org/10.1109/ICDE.2001.914830>`_).
     This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
     method to run the PrefixSpan algorithm.
 

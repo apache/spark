@@ -79,13 +79,33 @@ def var(col: Column, ddof: int) -> Column:
 
 
 def skew(col: Column) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_skew",
+            col,  # type: ignore[arg-type]
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
 
 
 def kurt(col: Column) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_kurt",
+            col,  # type: ignore[arg-type]
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
 
 
 def mode(col: Column, dropna: bool) -> Column:

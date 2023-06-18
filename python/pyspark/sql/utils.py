@@ -16,7 +16,7 @@
 #
 import functools
 import os
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union
+from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
 
 from py4j.java_collections import JavaArray
 from py4j.java_gateway import (
@@ -45,6 +45,7 @@ from pyspark.find_spark_home import _find_spark_home
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.column import Column
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy = False
@@ -259,3 +260,25 @@ def pyspark_column_op(
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
+
+
+def get_column_class() -> Type["Column"]:
+    from pyspark.sql.column import Column as PySparkColumn
+
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn  # type: ignore[return-value]
+    else:
+        return PySparkColumn
+
+
+def get_dataframe_class() -> Type["DataFrame"]:
+    from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+
+    if is_remote():
+        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
+        return ConnectDataFrame  # type: ignore[return-value]
+    else:
+        return PySparkDataFrame
