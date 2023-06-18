@@ -931,10 +931,26 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq(("%SystemDrive%/Users/John", "/%SystemDrive/%//Users%")).toDF("a", "b")
 
     checkAnswer(df1.selectExpr("a like b escape '/'"), Seq(Row(true)))
-    checkAnswer(df1.select(like(col("a"), col("b"), '/')), Seq(Row(true)))
+    checkAnswer(df1.select(like(col("a"), col("b"), lit('/'))), Seq(Row(true)))
 
     checkAnswer(df.selectExpr("a ilike b escape '/'"), Seq(Row(true)))
-    checkAnswer(df.select(ilike(col("a"), col("b"), '/')), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"), lit('/'))), Seq(Row(true)))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(like(col("a"), col("b"), lit(618))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      parameters = Map("sqlExpr" -> "\"618\"")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(ilike(col("a"), col("b"), lit(618))).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      parameters = Map("sqlExpr" -> "\"618\"")
+    )
   }
 
   test("lcase & ucase function") {

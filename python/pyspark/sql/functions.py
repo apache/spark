@@ -9374,7 +9374,7 @@ def find_in_set(str: "ColumnOrName", str_array: "ColumnOrName") -> Column:
 
 @try_remote_functions
 def like(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
 ) -> Column:
     """
     Returns true if str matches `pattern` with `escape`,
@@ -9398,7 +9398,7 @@ def like(
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
         enabled, the pattern to match "\abc" should be "\abc".
-    escape: str
+    escape : :class:`~pyspark.sql.Column`
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
@@ -9413,18 +9413,18 @@ def like(
     ...     [("%SystemDrive%/Users/John", "/%SystemDrive/%//Users%")],
     ...     ['a', 'b']
     ... )
-    >>> df.select(like(df.a, df.b, '/').alias('r')).collect()
+    >>> df.select(like(df.a, df.b, lit('/')).alias('r')).collect()
     [Row(r=True)]
     """
     if escapeChar is not None:
-        return _invoke_function("like", _to_java_column(str), _to_java_column(pattern), escapeChar)
+        return _invoke_function_over_columns("like", str, pattern, escapeChar)
     else:
-        return _invoke_function("like", _to_java_column(str), _to_java_column(pattern))
+        return _invoke_function_over_columns("like", str, pattern)
 
 
 @try_remote_functions
 def ilike(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
 ) -> Column:
     """
     Returns true if str matches `pattern` with `escape` case-insensitively,
@@ -9448,7 +9448,7 @@ def ilike(
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
         enabled, the pattern to match "\abc" should be "\abc".
-    escape: str
+    escape : :class:`~pyspark.sql.Column`
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
@@ -9463,13 +9463,13 @@ def ilike(
     ...     [("%SystemDrive%/Users/John", "/%SystemDrive/%//Users%")],
     ...     ['a', 'b']
     ... )
-    >>> df.select(ilike(df.a, df.b, '/').alias('r')).collect()
+    >>> df.select(ilike(df.a, df.b, lit('/')).alias('r')).collect()
     [Row(r=True)]
     """
     if escapeChar is not None:
-        return _invoke_function("ilike", _to_java_column(str), _to_java_column(pattern), escapeChar)
+        return _invoke_function_over_columns("ilike", str, pattern, escapeChar)
     else:
-        return _invoke_function("ilike", _to_java_column(str), _to_java_column(pattern))
+        return _invoke_function_over_columns("ilike", str, pattern)
 
 
 @try_remote_functions

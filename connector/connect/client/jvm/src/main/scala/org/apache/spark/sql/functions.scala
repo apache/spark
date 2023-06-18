@@ -3908,17 +3908,17 @@ object functions {
   def find_in_set(str: Column, strArray: Column): Column = Column.fn("find_in_set", str, strArray)
 
   /**
-   * Returns true if str matches `pattern` with `escape`, null if any arguments are null, false
-   * otherwise.
+   * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
+   * false otherwise.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  def like(str: Column, pattern: Column, escapeChar: Char): Column =
-    Column.fn("like", str, pattern, lit(escapeChar))
+  def like(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("like", str, pattern, escapeChar)
 
   /**
-   * Returns true if str matches `pattern` with `escape`('\'), null if any arguments are null,
+   * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
    * false otherwise.
    *
    * @group string_funcs
@@ -3927,17 +3927,17 @@ object functions {
   def like(str: Column, pattern: Column): Column = Column.fn("like", str, pattern)
 
   /**
-   * Returns true if str matches `pattern` with `escape` case-insensitively, null if any arguments
-   * are null, false otherwise.
+   * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
+   * arguments are null, false otherwise.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  def ilike(str: Column, pattern: Column, escapeChar: Char): Column =
-    Column.fn("ilike", str, pattern, lit(escapeChar))
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("ilike", str, pattern, escapeChar)
 
   /**
-   * Returns true if str matches `pattern` with `escape`('\') case-insensitively, null if any
+   * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
    * arguments are null, false otherwise.
    *
    * @group string_funcs

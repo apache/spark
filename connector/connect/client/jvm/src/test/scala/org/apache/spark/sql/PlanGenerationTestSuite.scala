@@ -2483,7 +2483,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("like with escape") {
-    fn.like(fn.col("g"), fn.col("g"), '/')
+    fn.like(fn.col("g"), fn.col("g"), lit('/'))
   }
 
   functionTest("ilike") {
@@ -2491,7 +2491,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("ilike with escape") {
-    fn.ilike(fn.col("g"), fn.col("g"), '/')
+    fn.ilike(fn.col("g"), fn.col("g"), lit('/'))
   }
 
   functionTest("lcase") {

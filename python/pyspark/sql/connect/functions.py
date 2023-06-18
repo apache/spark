@@ -2460,24 +2460,24 @@ find_in_set.__doc__ = pysparkfuncs.find_in_set.__doc__
 
 
 def like(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
 ) -> Column:
     if escapeChar is not None:
-        return _invoke_function("like", _to_col(str), _to_col(pattern), lit(escapeChar))
+        return _invoke_function_over_columns("like", str, pattern, escapeChar)
     else:
-        return _invoke_function("like", _to_col(str), _to_col(pattern))
+        return _invoke_function_over_columns("like", str, pattern)
 
 
 like.__doc__ = pysparkfuncs.like.__doc__
 
 
 def ilike(
-    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["str"] = None
+    str: "ColumnOrName", pattern: "ColumnOrName", escapeChar: Optional["Column"] = None
 ) -> Column:
     if escapeChar is not None:
-        return _invoke_function("ilike", _to_col(str), _to_col(pattern), lit(escapeChar))
+        return _invoke_function_over_columns("ilike", str, pattern, escapeChar)
     else:
-        return _invoke_function("ilike", _to_col(str), _to_col(pattern))
+        return _invoke_function_over_columns("ilike", str, pattern)
 
 
 ilike.__doc__ = pysparkfuncs.ilike.__doc__

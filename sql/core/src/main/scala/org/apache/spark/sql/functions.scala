@@ -4009,47 +4009,47 @@ object functions {
   }
 
   /**
-   * Returns true if str matches `pattern` with `escape`,
-   * null if any arguments are null, false otherwise.
+   * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
+   * false otherwise.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  def like(str: Column, pattern: Column, escapeChar: Char): Column = withExpr {
-    Like(str.expr, pattern.expr, escapeChar)
+  def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    new Like(str.expr, pattern.expr, escapeChar.expr)
   }
 
   /**
-   * Returns true if str matches `pattern` with `escape`('\'),
-   * null if any arguments are null, false otherwise.
+   * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
+   * false otherwise.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def like(str: Column, pattern: Column): Column = withExpr {
-    Like(str.expr, pattern.expr, '\\')
+    new Like(str.expr, pattern.expr)
   }
 
   /**
-   * Returns true if str matches `pattern` with `escape` case-insensitively,
-   * null if any arguments are null, false otherwise.
+   * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
+   * arguments are null, false otherwise.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  def ilike(str: Column, pattern: Column, escapeChar: Char): Column = withExpr {
-    ILike(str.expr, pattern.expr, escapeChar)
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    new ILike(str.expr, pattern.expr, escapeChar.expr)
   }
 
   /**
-   * Returns true if str matches `pattern` with `escape`('\') case-insensitively,
-   * null if any arguments are null, false otherwise.
+   * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
+   * arguments are null, false otherwise.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def ilike(str: Column, pattern: Column): Column = withExpr {
-    ILike(str.expr, pattern.expr, '\\')
+    new ILike(str.expr, pattern.expr)
   }
 
   /**

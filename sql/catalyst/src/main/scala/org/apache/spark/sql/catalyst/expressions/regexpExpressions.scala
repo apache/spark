@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -124,6 +124,13 @@ abstract class StringRegexExpression extends BinaryExpression
 // scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
+
+  def this(left: Expression, right: Expression, escapeChar: Expression) = {
+    this(left, right, escapeChar match {
+      case Literal(v, StringType) => v.toString.charAt(0)
+      case _ => throw QueryCompilationErrors.invalidEscapeChar(escapeChar)
+    })
+  }
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
@@ -241,6 +248,13 @@ case class ILike(
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
   override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
+
+  def this(left: Expression, right: Expression, escapeChar: Expression) = {
+    this(left, right, escapeChar match {
+      case Literal(v, StringType) => v.toString.charAt(0)
+      case _ => throw QueryCompilationErrors.invalidEscapeChar(escapeChar)
+    })
+  }
 
   def this(left: Expression, right: Expression) =
     this(left, right, '\\')

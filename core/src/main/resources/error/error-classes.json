@@ -395,6 +395,11 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
+      "ESCAPE_CHAR_WRONG_TYPE" : {
+        "message" : [
+          "EscapeChar should be a string literal."
+        ]
+      },
       "FILTER_NOT_BOOLEAN" : {
         "message" : [
           "Filter expression <filter> of type <type> is not a boolean."
