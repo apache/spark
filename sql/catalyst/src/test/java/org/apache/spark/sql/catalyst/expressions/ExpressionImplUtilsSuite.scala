@@ -288,7 +288,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
   }
 
   // JDK-8267125 changes tag error message at Java 18
-  val msg_tag_mismatch = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+  val msgTagMismatch = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
     "Tag mismatch!"
   } else {
     "Tag mismatch"
@@ -318,7 +318,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> msg_tag_mismatch
+        "detailMessage" -> msgTagMismatch
       )
     ),
     // Valid ciphertext, wrong AAD
@@ -332,7 +332,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> msg_tag_mismatch
+        "detailMessage" -> msgTagMismatch
       )
     )
   )
