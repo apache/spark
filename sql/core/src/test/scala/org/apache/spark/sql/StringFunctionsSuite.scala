@@ -952,6 +952,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map("sqlExpr" -> "\"618\"")
     )
 
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkError(
       exception = intercept[AnalysisException] {
         df1.select(like(col("a"), col("b"), lit("中国"))).collect()
@@ -967,6 +969,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
       parameters = Map("sqlExpr" -> "\"中国\"")
     )
+    // scalastyle:on
   }
 
   test("lcase & ucase function") {
