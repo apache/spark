@@ -13070,7 +13070,9 @@ def hours(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: "ColumnOrName") -> Column:
+def convert_timezone(
+    sourceTz: Optional[Column], targetTz: Column, sourceTs: "ColumnOrName"
+) -> Column:
     """
     Converts the timestamp without time zone `sourceTs`
     from the `sourceTz` time zone to `targetTz`.
@@ -13095,6 +13097,12 @@ def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: "ColumnOrName
     Examples
     --------
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(convert_timezone(None, lit('Asia/Hong_Kong'), 'dt').alias('ts')).show()
+    +-------------------+
+    |                 ts|
+    +-------------------+
+    |2015-04-08 00:00:00|
+    +-------------------+
     >>> df.select(convert_timezone(lit('America/Los_Angeles'), lit('Asia/Hong_Kong'), 'dt').alias('ts')).show()
     +-------------------+
     |                 ts|
@@ -13102,40 +13110,10 @@ def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: "ColumnOrName
     |2015-04-08 15:00:00|
     +-------------------+
     """
-    return _invoke_function_over_columns("convert_timezone", sourceTz, targetTz, sourceTs)
-
-
-@try_remote_functions
-def convert_timezone(targetTz: Column, sourceTs: "ColumnOrName") -> Column:
-    """
-    Converts the timestamp without time zone `sourceTs`
-    from the current time zone to `targetTz`.
-
-    .. versionadded:: 3.5.0
-
-    Parameters
-    ----------
-    targetTz : :class:`~pyspark.sql.Column`
-        the time zone to which the input timestamp should be converted.
-    sourceTs : :class:`~pyspark.sql.Column`
-        a timestamp without time zone.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        timestamp for converted time zone.
-
-    Examples
-    --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(convert_timezone(lit('Asia/Hong_Kong'), 'dt').alias('ts')).show()
-    +-------------------+
-    |                 ts|
-    +-------------------+
-    |2015-04-08 00:00:00|
-    +-------------------+
-    """
-    return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
+    if sourceTz is None:
+        return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
+    else:
+        return _invoke_function_over_columns("convert_timezone", sourceTz, targetTz, sourceTs)
 
 
 @try_remote_functions

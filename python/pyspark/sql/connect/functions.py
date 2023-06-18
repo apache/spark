@@ -3187,6 +3187,18 @@ def hours(col: "ColumnOrName") -> Column:
 hours.__doc__ = pysparkfuncs.hours.__doc__
 
 
+def convert_timezone(
+    sourceTz: Optional[Column], targetTz: Column, sourceTs: "ColumnOrName"
+) -> Column:
+    if sourceTz is None:
+        return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
+    else:
+        return _invoke_function_over_columns("convert_timezone", sourceTz, targetTz, sourceTs)
+
+
+convert_timezone.__doc__ = pysparkfuncs.convert_timezone.__doc__
+
+
 def make_dt_interval(
     days: Optional["ColumnOrName"] = None,
     hours: Optional["ColumnOrName"] = None,
