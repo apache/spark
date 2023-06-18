@@ -688,40 +688,48 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             })
 
           case j: Join if !j.duplicateResolved =>
-            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
-            j.failAnalysis(
-              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
-              messageParameters = Map(
-                "nodeName" -> j.nodeName,
-                "plan" -> planToString(plan),
-                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${plan.toString}
+                       |Conflicting attributes: $conflictingAttributes.""",
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           case i: Intersect if !i.duplicateResolved =>
-            val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
-            i.failAnalysis(
-              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
-              messageParameters = Map(
-                "nodeName" -> i.nodeName,
-                "plan" -> planToString(plan),
-                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
+            val conflictingAttributes =
+              i.left.outputSet.intersect(i.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${i.nodeName}:
+                       |${plan.toString}
+                       |Conflicting attributes: $conflictingAttributes.""",
+              context = i.origin.getQueryContext,
+              summary = i.origin.context.summary)
 
           case e: Except if !e.duplicateResolved =>
-            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
-            e.failAnalysis(
-              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
-              messageParameters = Map(
-                "nodeName" -> e.nodeName,
-                "plan" -> planToString(plan),
-                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(", ")))
+            val conflictingAttributes =
+              e.left.outputSet.intersect(e.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${e.nodeName}:
+                       |${plan.toString}
+                       |Conflicting attributes: $conflictingAttributes.""",
+              context = e.origin.getQueryContext,
+              summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
-            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
-            j.failAnalysis(
-              errorClass = "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS",
-              messageParameters = Map(
-                "nodeName" -> j.nodeName,
-                "plan" -> planToString(plan),
-                "conflictingAttributes" -> conflictingAttributes.map(toSQLExpr(_)).mkString(",")))
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${plan.toString}
+                       |Conflicting attributes: $conflictingAttributes.""",
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.

@@ -1978,13 +1978,6 @@
     ],
     "sqlState" : "42K05"
   },
-  "RESOLVED_PLAN_HAVE_CONFLICTING_ATTRS" : {
-    "message" : [
-      "Failure when resolving conflicting references in <nodeName>:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the function <routineName> because it already exists.",
