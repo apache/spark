@@ -76,7 +76,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val excludedSqlFunctions = Set(
-      "random", "array_agg", "day", "cardinality", "sha",
+      "random", "array_agg", "cardinality", "sha",
       // aliases for existing functions
       "reflect", "java_method" // Only needed in SQL
     )

@@ -2684,6 +2684,13 @@ def dayofmonth(col: "ColumnOrName") -> Column:
 dayofmonth.__doc__ = pysparkfuncs.dayofmonth.__doc__
 
 
+def day(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("day", col)
+
+
+day.__doc__ = pysparkfuncs.day.__doc__
+
+
 def dayofyear(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("dayofyear", col)
 
@@ -2734,6 +2741,14 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 date_add.__doc__ = pysparkfuncs.date_add.__doc__
 
 
+def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
+    days = lit(days) if isinstance(days, int) else days
+    return _invoke_function_over_columns("dateadd", start, days)
+
+
+dateadd.__doc__ = pysparkfuncs.dateadd.__doc__
+
+
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_sub", start, days)
@@ -2747,6 +2762,20 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
 
 
 datediff.__doc__ = pysparkfuncs.datediff.__doc__
+
+
+def date_diff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("date_diff", end, start)
+
+
+date_diff.__doc__ = pysparkfuncs.date_diff.__doc__
+
+
+def date_from_unix_date(days: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("date_from_unix_date", days)
+
+
+date_from_unix_date.__doc__ = pysparkfuncs.date_from_unix_date.__doc__
 
 
 def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:

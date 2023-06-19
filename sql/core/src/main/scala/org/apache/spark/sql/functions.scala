@@ -4402,6 +4402,18 @@ object functions {
   def date_add(start: Column, days: Column): Column = withExpr { DateAdd(start.expr, days.expr) }
 
   /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def dateadd(start: Column, days: Column): Column = date_add(start, days)
+
+  /**
    * Returns the date that is `days` days before `start`
    *
    * @param start A date, timestamp or string. If a string, the data must be in a format that
@@ -4447,6 +4459,34 @@ object functions {
   def datediff(end: Column, start: Column): Column = withExpr { DateDiff(end.expr, start.expr) }
 
   /**
+   * Returns the number of days from `start` to `end`.
+   *
+   * Only considers the date part of the input. For example:
+   * {{{
+   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * // returns 1
+   * }}}
+   *
+   * @param end A date, timestamp or string. If a string, the data must be in a format that
+   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
+   *         a date. Negative if `end` is before `start`
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_diff(end: Column, start: Column): Column = datediff(end, start)
+
+  /**
+   * Create date from the number of `days` since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_from_unix_date(days: Column): Column = withExpr { DateFromUnixDate(days.expr) }
+
+  /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -4486,6 +4526,14 @@ object functions {
    * @since 1.5.0
    */
   def dayofmonth(e: Column): Column = withExpr { DayOfMonth(e.expr) }
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def day(e: Column): Column = dayofmonth(e)
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.

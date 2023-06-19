@@ -5799,6 +5799,32 @@ def dayofmonth(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def day(col: "ColumnOrName") -> Column:
+    """
+    Extract the day of the month of a given date/timestamp as integer.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        day of the month for given date/timestamp as integer.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(day('dt').alias('day')).collect()
+    [Row(day=8)]
+    """
+    return _invoke_function_over_columns("day", col)
+
+
+@try_remote_functions
 def dayofyear(col: "ColumnOrName") -> Column:
     """
     Extract the day of the year of a given date/timestamp as integer.
@@ -6020,6 +6046,41 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
 
 @try_remote_functions
+def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
+    """
+    Returns the date that is `days` days after `start`. If `days` is a negative value
+    then these amount of days will be deducted from `start`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    start : :class:`~pyspark.sql.Column` or str
+        date column to work on.
+    days : :class:`~pyspark.sql.Column` or str or int
+        how many days after the given date to calculate.
+        Accepts negative value as well to calculate backwards in time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a date after/before given number of days.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'add'])
+    >>> df.select(dateadd(df.dt, 1).alias('next_date')).collect()
+    [Row(next_date=datetime.date(2015, 4, 9))]
+    >>> df.select(dateadd(df.dt, df.add.cast('integer')).alias('next_date')).collect()
+    [Row(next_date=datetime.date(2015, 4, 10))]
+    >>> df.select(dateadd('dt', -1).alias('prev_date')).collect()
+    [Row(prev_date=datetime.date(2015, 4, 7))]
+    """
+    days = lit(days) if isinstance(days, int) else days
+    return _invoke_function_over_columns("dateadd", start, days)
+
+
+@try_remote_functions
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days before `start`. If `days` is a negative value
@@ -6086,6 +6147,64 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     [Row(diff=32)]
     """
     return _invoke_function_over_columns("datediff", end, start)
+
+
+@try_remote_functions
+def date_diff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
+    """
+    Returns the number of days from `start` to `end`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    end : :class:`~pyspark.sql.Column` or str
+        to date column to work on.
+    start : :class:`~pyspark.sql.Column` or str
+        from date column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        difference in days between two dates.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08','2015-05-10')], ['d1', 'd2'])
+    >>> df.select(date_diff(df.d2, df.d1).alias('diff')).collect()
+    [Row(diff=32)]
+    """
+    return _invoke_function_over_columns("date_diff", end, start)
+
+
+@try_remote_functions
+def date_from_unix_date(days: "ColumnOrName") -> Column:
+    """
+    Create date from the number of `days` since 1970-01-01.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    days : :class:`~pyspark.sql.Column` or str
+        the target column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the date from the number of days since 1970-01-01.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(date_from_unix_date(lit(1))).show()
+    +----------------------+
+    |date_from_unix_date(1)|
+    +----------------------+
+    |            1970-01-02|
+    +----------------------+
+    """
+    return _invoke_function_over_columns("date_from_unix_date", days)
 
 
 @try_remote_functions
