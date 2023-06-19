@@ -1523,6 +1523,18 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         val ignoreNulls = extractBoolean(children(2), "ignoreNulls")
         Some(NthValue(children(0), children(1), ignoreNulls))
 
+      case "like" if fun.getArgumentsCount == 3 =>
+        // Like does not have a constructor which accepts Expression typed 'escapeChar'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val escapeChar = extractString(children(2), "escapeChar")
+        Some(Like(children(0), children(1), escapeChar.charAt(0)))
+
+      case "ilike" if fun.getArgumentsCount == 3 =>
+        // ILike does not have a constructor which accepts Expression typed 'escapeChar'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val escapeChar = extractString(children(2), "escapeChar")
+        Some(ILike(children(0), children(1), escapeChar.charAt(0)))
+
       case "lag" if fun.getArgumentsCount == 4 =>
         // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
         val children = fun.getArgumentsList.asScala.map(transformExpression)
