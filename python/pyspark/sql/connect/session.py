@@ -51,7 +51,14 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
+from pyspark.sql.connect.plan import (
+    SQL,
+    Range,
+    LocalRelation,
+    LogicalPlan,
+    CachedLocalRelation,
+    CachedRelation,
+)
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -466,10 +473,16 @@ class SparkSession:
             )
 
         if _schema is not None:
-            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
+            local_relation = LocalRelation(_table, schema=_schema.json())
         else:
-            df = DataFrame.withPlan(LocalRelation(_table), self)
+            local_relation = LocalRelation(_table)
 
+        cache_threshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
+        plan: LogicalPlan = local_relation
+        if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
+            plan = CachedLocalRelation(self._cache_local_relation(local_relation))
+
+        df = DataFrame.withPlan(plan, self)
         if _cols is not None and len(_cols) > 0:
             df = df.toDF(*_cols)
         return df
@@ -579,7 +592,7 @@ class SparkSession:
             raise PySparkAttributeError(
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
-        elif name in ["newSession", "sparkContext"]:
+        elif name in ["newSession", "sparkContext", "udtf"]:
             raise PySparkNotImplementedError(
                 error_class="NOT_IMPLEMENTED", message_parameters={"feature": f"{name}()"}
             )
@@ -642,6 +655,13 @@ class SparkSession:
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
 
     addArtifact = addArtifacts
+
+    def _cache_local_relation(self, local_relation: LocalRelation) -> str:
+        """
+        Cache the local relation at the server side if it has not been cached yet.
+        """
+        serialized = local_relation.serialize(self._client)
+        return self._client.cache_artifact(serialized)
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """

@@ -57,8 +57,6 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   def udfDeterministic: Boolean
   def resultId: ExprId
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
-
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
@@ -88,6 +86,8 @@ case class PythonUDF(
     // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
     this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
     copy(children = newChildren)
@@ -138,7 +138,42 @@ case class PythonUDAF(
     this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDAF =
+    copy(children = newChildren)
+}
+
+abstract class UnevaluableGenerator extends Generator {
+  final override def eval(input: InternalRow): TraversableOnce[InternalRow] =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+}
+
+/**
+ * A serialized version of a Python table-valued function. This is a special expression,
+ * which needs a dedicated physical operator to execute it.
+ */
+case class PythonUDTF(
+    name: String,
+    func: PythonFunction,
+    override val elementSchema: StructType,
+    children: Seq[Expression],
+    udfDeterministic: Boolean,
+    resultId: ExprId = NamedExpression.newExprId)
+  extends UnevaluableGenerator with PythonFuncExpression {
+
+  override def evalType: Int = PythonEvalType.SQL_TABLE_UDF
+
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    // `resultId` can be seen as cosmetic variation in PythonUDTF, as it doesn't affect the result.
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
     copy(children = newChildren)
 }
 

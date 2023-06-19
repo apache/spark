@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDAF, PythonUDF}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDAF, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A user-defined Python function. This is used by the Python API.
@@ -53,5 +54,38 @@ case class UserDefinedPythonFunction(
       case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
       case _ => Column(expr)
     }
+  }
+}
+
+/**
+ * A user-defined Python table function. This is used by the Python API.
+ */
+case class UserDefinedPythonTableFunction(
+    name: String,
+    func: PythonFunction,
+    returnType: StructType,
+    udfDeterministic: Boolean) {
+
+  def builder(e: Seq[Expression]): LogicalPlan = {
+    val udtf = PythonUDTF(
+      name = name,
+      func = func,
+      elementSchema = returnType,
+      children = e,
+      udfDeterministic = udfDeterministic)
+    Generate(
+      udtf,
+      unrequiredChildIndex = Nil,
+      outer = false,
+      qualifier = None,
+      generatorOutput = Nil,
+      child = OneRowRelation()
+    )
+  }
+
+  /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
+  def apply(session: SparkSession, exprs: Column*): DataFrame = {
+    val udtf = builder(exprs.map(_.expr))
+    Dataset.ofRows(session, udtf)
   }
 }
