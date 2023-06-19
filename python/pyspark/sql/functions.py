@@ -11828,6 +11828,7 @@ def transform(
 
     >>> def alternate(x, i):
     ...     return when(i % 2 == 0, x).otherwise(-x)
+    ...
     >>> df.select(transform("values", alternate).alias("alternated")).show()
     +--------------+
     |    alternated|
@@ -11978,6 +11979,7 @@ def filter(
     ... )
     >>> def after_second_quarter(x):
     ...     return month(to_date(x)) > 6
+    ...
     >>> df.select(
     ...     filter("values", after_second_quarter).alias("after_second_quarter")
     ... ).show(truncate=False)
@@ -12044,6 +12046,7 @@ def aggregate(
     ...     count = acc.count + 1
     ...     sum = acc.sum + x
     ...     return struct(count.alias("count"), sum.alias("sum"))
+    ...
     >>> df.select(
     ...     aggregate(
     ...         "values",
@@ -12116,6 +12119,7 @@ def reduce(
     ...     count = acc.count + 1
     ...     sum = acc.sum + x
     ...     return struct(count.alias("count"), sum.alias("sum"))
+    ...
     >>> df.select(
     ...     reduce(
     ...         "values",
