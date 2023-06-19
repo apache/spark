@@ -50,6 +50,14 @@ private[spark] object NonFateSharingCache {
   def apply[K, V](loadingCache: LoadingCache[K, V]): NonFateSharingLoadingCache[K, V] =
     new NonFateSharingLoadingCache(loadingCache)
 
+  /**
+   * SPARK-44064 add this `apply` function to break non-core modules code directly using
+   * Guava Cache related types as input parameter to invoke other `NonFateSharingCache#apply`
+   * function, which can avoid non-core modules Maven test failures caused by using
+   * shaded core module.
+   * We should refactor this function to be more general when there are other requirements,
+   * or remove this function when Maven testing is no longer supported.
+   */
   def apply[K, V](loadingFunc: K => V, maximumSize: Long = 0L): NonFateSharingLoadingCache[K, V] = {
     require(loadingFunc != null)
     val builder = CacheBuilder.newBuilder().asInstanceOf[CacheBuilder[K, V]]
