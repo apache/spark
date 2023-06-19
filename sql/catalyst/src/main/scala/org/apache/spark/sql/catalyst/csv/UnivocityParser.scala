@@ -319,7 +319,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
-        QueryExecutionErrors.malformedCSVRecordError(""))
+        cause = QueryExecutionErrors.malformedCSVRecordError(""))
     }
 
     val currentInput = getCurrentInput
@@ -362,7 +362,7 @@ class UnivocityParser(
     } else {
       if (badRecordException.isDefined) {
         throw BadRecordException(
-          () => currentInput, () => requiredRow.headOption, badRecordException.get)
+          () => currentInput, () => requiredRow.headOption, cause = badRecordException.get)
       } else {
         requiredRow
       }

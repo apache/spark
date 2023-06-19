@@ -61,7 +61,12 @@ class FailureSafeParser[IN](
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>
-          Iterator(toResultRow(e.partialResult(), e.record))
+          val partialResults = e.partialResults()
+          if (partialResults.nonEmpty) {
+            partialResults.iterator.map(row => toResultRow(Some(row), e.record))
+          } else {
+            Iterator(toResultRow(e.partialResult(), e.record))
+          }
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>

@@ -3225,6 +3225,21 @@ abstract class JsonSuite
       Row(null) :: Nil)
   }
 
+  test("SPARK-44079: fix incorrect result when parse array as struct " +
+    "using PERMISSIVE mode with corrupt record") {
+    val data = """[{"a": "incorrect", "b": "correct"}, {"a": "incorrect", "b": "correct"}]"""
+    val schema = new StructType(Array(StructField("a", IntegerType),
+      StructField("b", StringType), StructField("_corrupt_record", StringType)))
+
+    val result = spark.read.option("mode", "PERMISSIVE").option("multiline", "true").schema(schema)
+      .json(Seq(data).toDS()).collect()
+
+    assert(result.length == 2)
+    assert(result(0).getString(0) == null)
+    assert(result(0).getString(1) == "correct")
+    assert(result(0).getString(2) == data)
+  }
+
   test("SPARK-36536: use casting when datetime pattern is not set") {
     withSQLConf(
       SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
