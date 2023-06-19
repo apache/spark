@@ -38,8 +38,10 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

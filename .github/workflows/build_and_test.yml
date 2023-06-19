@@ -175,12 +175,27 @@ jobs:
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
+            comment: "- extended tests"
+          - modules: sql
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            # Using a tag that will not appear in sql module for placeholder, branch-3.3 and branch-3.4 will not run any UTs.
+            included-tags: >-
+              ${{
+                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.SlowHiveTest')
+                || 'org.apache.spark.tags.SlowSQLTest'
+              }}
             comment: "- slow tests"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest
+            excluded-tags: >-
+              ${{
+                ((inputs.branch == 'branch-3.3' || inputs.branch == 'branch-3.4') && 'org.apache.spark.tags.ExtendedSQLTest')
+                || 'org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest'
+              }}
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
