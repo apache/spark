@@ -538,7 +538,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     val e = intercept[AnalysisException] {
       sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
     }
-    assert(e.message.contains("nondeterministic expressions are only allowed"))
+    assert(e.message.contains("The operator expects a deterministic expression"))
   }
 
   test("update with default values") {
