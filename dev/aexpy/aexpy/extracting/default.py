@@ -21,6 +21,7 @@
 import subprocess
 
 from aexpy import json
+from aexpy import getPythonExe
 from aexpy.extracting.enriching.callgraph import Callgraph
 from aexpy.extracting.third.mypyserver import PackageMypyServer
 from aexpy.models.description import TRANSFER_BEGIN, FunctionEntry
@@ -36,7 +37,7 @@ class DefaultExtractor(Extractor):
     def base(self, dist: "Distribution", product: "ApiDescription"):
         assert dist
         subres = subprocess.run(
-            f"python -m aexpy.extracting.main.base",
+            f"{getPythonExe()} -m aexpy.extracting.main.base",
             cwd=getAppDirectory().parent,
             text=True,
             capture_output=True,

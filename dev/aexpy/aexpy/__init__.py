@@ -57,3 +57,6 @@ def getBuildDate() -> datetime:
         return datetime.fromisoformat(os.getenv("BUILD_DATE", "unknown"))
     except:
         return datetime.now()
+
+def getPythonExe() -> str:
+    return os.getenv("AEXPY_PYTHON_EXE", "python")

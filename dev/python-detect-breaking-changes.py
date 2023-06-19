@@ -50,6 +50,8 @@ def prepare():
         os.mkdir(CACHE_DIR)
 
 def runWithLog(logFile: TextIOWrapper = None, *args, **kwargs):
+    if logFile:
+        logFile.write(f"\nsubprocess.run({args=}, {kwargs=})\n\n")
     result = subprocess.run(*args, **kwargs, capture_output=True, text=True, encoding="utf-8")
     if logFile:
         logFile.write(result.stdout + "\n")
@@ -58,7 +60,7 @@ def runWithLog(logFile: TextIOWrapper = None, *args, **kwargs):
     result.check_returncode()
 
 def runAexPy(cmd: list, logFile: TextIOWrapper = None):
-    runWithLog(logFile, AEXPY_EXE + cmd, cwd=AEXPY_DIR, env={**os.environ, "PYTHONUTF8": "1"})
+    runWithLog(logFile, AEXPY_EXE + cmd, cwd=AEXPY_DIR, env={**os.environ, "PYTHONUTF8": "1", "AEXPY_PYTHON_EXE": "python3"})
 
 @contextmanager
 def checkout(branch: str = CURRENT_CODE, logFile: TextIOWrapper = None):
