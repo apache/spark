@@ -3124,7 +3124,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_VIEW_TEXT",
       messageParameters = Map(
         "viewText" -> viewText,
-        "viewName" -> viewName))
+        "viewName" -> toSQLId(viewName)))
   }
 
   def invalidTimeTravelSpecError(): Throwable = {
