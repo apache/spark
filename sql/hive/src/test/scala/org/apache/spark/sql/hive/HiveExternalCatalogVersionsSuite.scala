@@ -203,7 +203,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
       if (PROCESS_TABLES.isPythonVersionAvailable) {
-        logError("Fail to get the latest Spark versions to test.")
+        if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+          logError("Fail to get the latest Spark versions to test.")
+        } else {
+          logInfo("Skip tests because old Spark versions don't support Java 21.")
+        }
       } else {
         logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
           "the running environment is unavailable.")
@@ -259,8 +263,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
-  // Tests the latest version of every release line.
-  val testingVersions: Seq[String] = if (isPythonVersionAvailable) {
+  // Tests the latest version of every release line if Java version is at most 17.
+  val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
+      SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
     import scala.io.Source
     try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
