@@ -1219,6 +1219,62 @@ object functions {
   def histogram_numeric(e: Column, nBins: Column): Column =
     Column.fn("histogram_numeric", e, nBins)
 
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = Column.fn("every", e)
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = Column.fn("bool_and", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = Column.fn("some", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = Column.fn("bool_or", e)
+
+  /**
+   * Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_and(e: Column): Column = Column.fn("bit_and", e)
+
+  /**
+   * Aggregate function: returns the bitwise OR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_or(e: Column): Column = Column.fn("bit_or", e)
+
+  /**
+   * Aggregate function: returns the bitwise XOR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_xor(e: Column): Column = Column.fn("bit_xor", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1818,6 +1874,33 @@ object functions {
    * @since 3.4.0
    */
   def bitwise_not(e: Column): Column = Column.fn("~", e)
+
+  /**
+   * Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+   * or NULL if the argument is NULL.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_count(e: Column): Column = Column.fn("bit_count", e)
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position. The positions are numbered
+   * from right to left, starting at zero. The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_get(e: Column, pos: Column): Column = Column.fn("bit_get", e, pos)
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position. The positions are numbered
+   * from right to left, starting at zero. The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def getbit(e: Column, pos: Column): Column = Column.fn("getbit", e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -3735,6 +3818,158 @@ object functions {
    * @since 3.5.0
    */
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column, replace: Column): Column =
+    Column.fn("replace", src, search, replace)
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column): Column = Column.fn("replace", src, search)
+
+  /**
+   * Splits `str` by delimiter and return requested part of the split (1-based). If any input is
+   * null, returns null. if `partNum` is out of range of split parts, returns empty string. If
+   * `partNum` is 0, throws an error. If `partNum` is negative, the parts are counted backward
+   * from the end of the string. If the `delimiter` is an empty string, the `str` is not split.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def split_part(str: Column, delimiter: Column, partNum: Column): Column =
+    Column.fn("split_part", str, delimiter, partNum)
+
+  /**
+   * Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of
+   * byte array that starts at `pos` and is of length `len`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column, len: Column): Column =
+    Column.fn("substr", str, pos, len)
+
+  /**
+   * Returns the substring of `str` that starts at `pos`, or the slice of byte array that starts
+   * at `pos`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("parse_url", url, partToExtract)
+
+  /**
+   * Formats the arguments in printf-style and returns the result as a string column.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def printf(format: Column, arguments: Column*): Column =
+    Column.fn("format_string", lit(format) +: arguments: _*)
+
+  /**
+   * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
+   * scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_decode(str: Column): Column = Column.fn("url_decode", str)
+
+  /**
+   * Translates a string into 'application/x-www-form-urlencoded' format using a specific encoding
+   * scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_encode(str: Column): Column = Column.fn("url_encode", str)
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `start`. The
+   * given `start` and return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column, start: Column): Column =
+    Column.fn("position", substr, str, start)
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `1`. The
+   * return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column): Column =
+    Column.fn("position", substr, str)
+
+  /**
+   * Returns a boolean. The value is True if str ends with suffix. Returns NULL if either input
+   * expression is NULL. Otherwise, returns False. Both str or suffix must be of STRING type.
+   *
+   * @note
+   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
+   *   STRING and BINARY.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def endswith(str: Column, suffix: Column): Column =
+    Column.fn("endswith", str, suffix)
+
+  /**
+   * Returns a boolean. The value is True if str starts with prefix. Returns NULL if either input
+   * expression is NULL. Otherwise, returns False. Both str or prefix must be of STRING type.
+   *
+   * @note
+   *   Only STRING type is supported in this function, while `startswith` in SQL supports both
+   *   STRING and BINARY.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def startswith(str: Column, prefix: Column): Column =
+    Column.fn("startswith", str, prefix)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions

@@ -258,6 +258,11 @@ Aggregate Functions
     approx_count_distinct
     approx_percentile
     avg
+    bit_and
+    bit_or
+    bit_xor
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
@@ -267,6 +272,7 @@ Aggregate Functions
     count_if
     covar_pop
     covar_samp
+    every
     first
     first_value
     grouping
@@ -298,6 +304,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    some
     std
     stddev
     stddev_pop
@@ -350,6 +357,7 @@ String Functions
     concat_ws
     decode
     encode
+    endswith
     format_number
     format_string
     initcap
@@ -361,6 +369,9 @@ String Functions
     lpad
     ltrim
     octet_length
+    parse_url
+    position
+    printf
     rlike
     regexp
     regexp_like
@@ -370,12 +381,16 @@ String Functions
     regexp_replace
     regexp_substr
     regexp_instr
+    replace
     unbase64
     rpad
     repeat
     rtrim
     soundex
     split
+    split_part
+    startswith
+    substr
     substring
     substring_index
     overlay
@@ -386,6 +401,18 @@ String Functions
     translate
     trim
     upper
+    url_decode
+    url_encode
+
+
+Bitwise Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    bit_count
+    bit_get
+    getbit
 
 
 UDF
