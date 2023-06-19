@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -35,7 +35,9 @@ from .checkers import DiffConstraint
 class ConstraintDiffer(Differ):
     """Diff based on diff constraints."""
 
-    def __init__(self, logger: "Logger | None" = None, constraints: "list[DiffConstraint] | None" = None) -> None:
+    def __init__(
+        self, logger: "Logger | None" = None, constraints: "list[DiffConstraint] | None" = None
+    ) -> None:
         super().__init__(logger)
         self.constraints: "list[DiffConstraint]" = constraints or []
 
@@ -47,24 +49,27 @@ class ConstraintDiffer(Differ):
             newentry = new.entries.get(k)
             if newentry is not None and islocal(newentry.id):
                 continue
-            product.entries.update(
-                {e.id: e for e in self._processEntry(v, newentry, old, new)})
+            product.entries.update({e.id: e for e in self._processEntry(v, newentry, old, new)})
 
         for k, v in new.entries.items():
             if islocal(v.id):
                 # ignore unaccessable local elements
                 continue
             if k not in old.entries:
-                product.entries.update(
-                    {e.id: e for e in self._processEntry(None, v, old, new)})
+                product.entries.update({e.id: e for e in self._processEntry(None, v, old, new)})
 
-    def _processEntry(self, old: "ApiEntry | None", new: "ApiEntry | None", oldDescription: "ApiDescription", newDescription: "ApiDescription") -> "list[DiffEntry]":
+    def _processEntry(
+        self,
+        old: "ApiEntry | None",
+        new: "ApiEntry | None",
+        oldDescription: "ApiDescription",
+        newDescription: "ApiDescription",
+    ) -> "list[DiffEntry]":
         self.logger.debug(f"Diff {old} and {new}.")
         result = []
         for constraint in self.constraints:
             try:
-                done: "list[DiffEntry]" = constraint(
-                    old, new, oldDescription, newDescription)
+                done: "list[DiffEntry]" = constraint(old, new, oldDescription, newDescription)
                 if done:
                     for item in done:
                         if not item.id:
@@ -72,16 +77,29 @@ class ConstraintDiffer(Differ):
                         result.append(item)
             except Exception as ex:
                 self.logger.error(
-                    f"Failed to diff {old} and {new} by constraints {constraint.kind} ({constraint.checker}).", exc_info=ex)
+                    f"Failed to diff {old} and {new} by constraints {constraint.kind} ({constraint.checker}).",
+                    exc_info=ex,
+                )
         return result
 
 
 class DefaultDiffer(ConstraintDiffer):
-    def __init__(self, logger: "Logger | None" = None, constraints: "list[DiffConstraint] | None" = None) -> None:
+    def __init__(
+        self, logger: "Logger | None" = None, constraints: "list[DiffConstraint] | None" = None
+    ) -> None:
         constraints = constraints or []
 
-        from .contraints import (aliases, attributes, classes, externals, functions,
-                                 modules, parameters, types)
+        from .contraints import (
+            aliases,
+            attributes,
+            classes,
+            externals,
+            functions,
+            modules,
+            parameters,
+            types,
+        )
+
         constraints.extend(modules.ModuleConstraints.constraints)
         constraints.extend(classes.ClassConstraints.constraints)
         constraints.extend(functions.FunctionConstraints.constraints)
@@ -93,7 +111,13 @@ class DefaultDiffer(ConstraintDiffer):
 
         super().__init__(logger, constraints)
 
-    def _processEntry(self, old: "ApiEntry | None", new: "ApiEntry | None", oldDescription: "ApiDescription", newDescription: "ApiDescription") -> "list[DiffEntry]":
+    def _processEntry(
+        self,
+        old: "ApiEntry | None",
+        new: "ApiEntry | None",
+        oldDescription: "ApiDescription",
+        newDescription: "ApiDescription",
+    ) -> "list[DiffEntry]":
         # ignore sub-class overidden method removing, alias by name resolving
         if old is None and new is not None:
             told = oldDescription.resolveName(new.id)

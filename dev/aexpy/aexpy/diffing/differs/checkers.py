@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -37,12 +37,20 @@ class DiffConstraint:
     checker: def checker(a: ApiEntry | None, b: ApiEntry | None, old=oldApiDescription, new=newApiDescription) -> RuleCheckResult | bool: pass
     """
 
-    def __init__(self, kind: "str" = "", checker: "Callable[[T_ApiEntry | None, T_ApiEntry | None, ApiDescription, ApiDescription], list[DiffEntry]] | None" = None) -> None:
+    def __init__(
+        self,
+        kind: "str" = "",
+        checker: "Callable[[T_ApiEntry | None, T_ApiEntry | None, ApiDescription, ApiDescription], list[DiffEntry]] | None" = None,
+    ) -> None:
         if checker is None:
+
             def tchecker(a: Any, b: Any, old: Any, new: Any):
                 return []
+
             checker = tchecker
-        self.checker: "Callable[[T_ApiEntry | None, T_ApiEntry | None, ApiDescription, ApiDescription], list[DiffEntry]]" = checker
+        self.checker: "Callable[[T_ApiEntry | None, T_ApiEntry | None, ApiDescription, ApiDescription], list[DiffEntry]]" = (
+            checker
+        )
         self.kind = kind
 
     def askind(self, kind: "str"):
@@ -75,10 +83,11 @@ class DiffConstraint:
         return self
 
     def __call__(self, old, new, oldCollection, newCollection) -> "list[DiffEntry]":
-        result = self.checker(
-            old, new, old=oldCollection, new=newCollection)  # type: ignore
+        result = self.checker(old, new, old=oldCollection, new=newCollection)  # type: ignore
         if result:
-            return [dataclasses.replace(entry, kind=self.kind, old=old, new=new) for entry in result]
+            return [
+                dataclasses.replace(entry, kind=self.kind, old=old, new=new) for entry in result
+            ]
         else:
             return []
 
@@ -94,7 +103,9 @@ class DiffConstraintCollection:
         return constraint
 
 
-def diffcons(checker: "Callable[[T_ApiEntry, T_ApiEntry, ApiDescription, ApiDescription], list[DiffEntry]]") -> "DiffConstraint":
+def diffcons(
+    checker: "Callable[[T_ApiEntry, T_ApiEntry, ApiDescription, ApiDescription], list[DiffEntry]]",
+) -> "DiffConstraint":
     """Create a DiffConstraint on a function."""
 
     return DiffConstraint(checker.__name__, checker)  # type: ignore

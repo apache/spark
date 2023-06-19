@@ -15,14 +15,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
 
 # Usage: compare current code base with a commit or branch
 # python dev/python-detect-breaking-changes.py a540995345bc935db3b8ccf5cb94cb7caabc4847 (branch name or commit id)
-# 
+#
 # Cache dir (detailed result and logs): dev/aexpy/cache
 
 from io import TextIOWrapper
@@ -45,9 +45,11 @@ AEXPY_DIR = Path(__file__).parent / "aexpy"
 CACHE_DIR = AEXPY_DIR / "cache"
 assert AEXPY_DIR.exists()
 
+
 def prepare():
     if not CACHE_DIR.exists():
         os.mkdir(CACHE_DIR)
+
 
 def runWithLog(logFile: TextIOWrapper = None, *args, **kwargs):
     if logFile:
@@ -59,8 +61,15 @@ def runWithLog(logFile: TextIOWrapper = None, *args, **kwargs):
         logFile.flush()
     result.check_returncode()
 
+
 def runAexPy(cmd: list, logFile: TextIOWrapper = None):
-    runWithLog(logFile, AEXPY_EXE + cmd, cwd=AEXPY_DIR, env={**os.environ, "PYTHONUTF8": "1", "AEXPY_PYTHON_EXE": "python3"})
+    runWithLog(
+        logFile,
+        AEXPY_EXE + cmd,
+        cwd=AEXPY_DIR,
+        env={**os.environ, "PYTHONUTF8": "1", "AEXPY_PYTHON_EXE": "python3"},
+    )
+
 
 @contextmanager
 def checkout(branch: str = CURRENT_CODE, logFile: TextIOWrapper = None):
@@ -72,25 +81,34 @@ def checkout(branch: str = CURRENT_CODE, logFile: TextIOWrapper = None):
             shutil.rmtree(srcDir)
         runWithLog(logFile, ["git", "worktree", "prune"], cwd=ROOT_PATH)
         os.makedirs(srcDir)
-        runWithLog(logFile, ["git", "worktree", "add", str(srcDir.resolve()), branch], cwd=ROOT_PATH)
+        runWithLog(
+            logFile, ["git", "worktree", "add", str(srcDir.resolve()), branch], cwd=ROOT_PATH
+        )
 
         yield srcDir
 
         shutil.rmtree(srcDir)
         runWithLog(logFile, ["git", "worktree", "prune"], cwd=ROOT_PATH)
 
+
 def extract(branch: str, srcDir: Path, logFile: TextIOWrapper = None):
     distDir = CACHE_DIR / "dist" / branch
     if not distDir.exists():
         os.makedirs(distDir)
-    
+
     preprocess = distDir / "preprocess.json"
-    runAexPy(["preprocess", str((srcDir / PYSPARK_RELPATH).resolve())] + PYSPARK_TOPMODULES + ["-r", f"pyspark@{branch}", "-o", str(preprocess.resolve())], logFile)
+    runAexPy(
+        ["preprocess", str((srcDir / PYSPARK_RELPATH).resolve())]
+        + PYSPARK_TOPMODULES
+        + ["-r", f"pyspark@{branch}", "-o", str(preprocess.resolve())],
+        logFile,
+    )
 
     extract = distDir / "extract.json"
     runAexPy(["extract", str(preprocess.resolve()), "-o", str(extract.resolve())], logFile)
-    
+
     return extract
+
 
 def diff(old: str, new: str = CURRENT_CODE):
     logPath = CACHE_DIR / f"log-{old}-{new}.log"
@@ -101,10 +119,19 @@ def diff(old: str, new: str = CURRENT_CODE):
             with checkout(new) as src2:
                 log.write(f"Extract API of {new}...\n")
                 extract2 = extract(new, src2, log)
-                
+
                 log.write(f"Diff APIs...\n")
                 diff = CACHE_DIR / f"diff-{old}-{new}.json"
-                runAexPy(["diff", str(extract1.resolve()), str(extract2.resolve()), "-o", str(diff.resolve())], log)
+                runAexPy(
+                    [
+                        "diff",
+                        str(extract1.resolve()),
+                        str(extract2.resolve()),
+                        "-o",
+                        str(diff.resolve()),
+                    ],
+                    log,
+                )
 
                 log.write(f"Generate changes...\n")
                 report = CACHE_DIR / f"report-{old}-{new}.json"
@@ -115,6 +142,7 @@ def diff(old: str, new: str = CURRENT_CODE):
                 log.write(f"Result: {result}\n")
 
                 return result["content"]
+
 
 def main():
     prepare()
@@ -128,7 +156,7 @@ def main():
         outputFile = sys.argv[2]
 
     assert old, "Please give the original branch name or commit id."
-    
+
     result = diff(old)
     if outputFile:
         Path(outputFile).write_text(result, encoding="utf-8")

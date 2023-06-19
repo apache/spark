@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -128,9 +128,7 @@ def elapsedTimer():
 
 
 @contextmanager
-def logWithStream(
-    logger: "logging.Logger", stream: "IO", level: "int" = logging.NOTSET
-):
+def logWithStream(logger: "logging.Logger", stream: "IO", level: "int" = logging.NOTSET):
     """Provide a context with the logger writing to a file."""
     from . import LOGGING_DATEFMT, LOGGING_FORMAT
 

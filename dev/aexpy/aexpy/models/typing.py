@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -131,12 +131,8 @@ class TypeFactory:
         return cls.generic(cls.fromType(list), type or cls.unknown())
 
     @classmethod
-    def dict(
-        cls, key: "Type | None" = None, value: "Type | None" = None
-    ) -> "GenericType":
-        return cls.generic(
-            cls.fromType(dict), key or cls.unknown(), value or cls.unknown()
-        )
+    def dict(cls, key: "Type | None" = None, value: "Type | None" = None) -> "GenericType":
+        return cls.generic(cls.fromType(dict), key or cls.unknown(), value or cls.unknown())
 
     @classmethod
     def set(cls, type: "Type | None" = None) -> "GenericType":
@@ -236,8 +232,6 @@ def copyType(type: "Type") -> "Type":
     elif isinstance(type, CallableType):
         return CallableType(args=copyType(type.args), ret=copyType(type.ret))
     elif isinstance(type, GenericType):
-        return GenericType(
-            base=copyType(type.base), vars=[copyType(v) for v in type.vars]
-        )
+        return GenericType(base=copyType(type.base), vars=[copyType(v) for v in type.vars])
     else:
         raise TypeError(f"Unknown type {type}")

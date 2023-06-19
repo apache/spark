@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -34,12 +34,20 @@ class EvalRule:
     checker: def checker(entry, difference) -> list[DiffEntry]: pass
     """
 
-    def __init__(self, kind: "str" = "", checker: "Callable[[DiffEntry, ApiDifference, ApiDescription, ApiDescription], None] | None" = None) -> None:
+    def __init__(
+        self,
+        kind: "str" = "",
+        checker: "Callable[[DiffEntry, ApiDifference, ApiDescription, ApiDescription], None] | None" = None,
+    ) -> None:
         if checker is None:
+
             def tchecker(a: Any, b: Any, old: Any, new: Any):
                 pass
+
             checker = tchecker
-        self.checker: "Callable[[DiffEntry, ApiDifference, ApiDescription, ApiDescription], None]" = checker
+        self.checker: "Callable[[DiffEntry, ApiDifference, ApiDescription, ApiDescription], None]" = (
+            checker
+        )
         self.kind = kind
 
     def forkind(self, kind: "str"):
@@ -48,7 +56,13 @@ class EvalRule:
         self.kind = kind
         return self
 
-    def __call__(self, entry: "DiffEntry", diff: "ApiDifference", old: "ApiDescription", new: "ApiDescription") -> None:
+    def __call__(
+        self,
+        entry: "DiffEntry",
+        diff: "ApiDifference",
+        old: "ApiDescription",
+        new: "ApiDescription",
+    ) -> None:
         if self.kind and entry.kind != self.kind:
             return
         return self.checker(entry, diff, old, new)
@@ -65,7 +79,9 @@ class EvalRuleCollection:
         return rule
 
 
-def evalrule(checker: "Callable[[DiffEntry, ApiDifference, ApiDescription, ApiDescription], None]") -> "EvalRule":
+def evalrule(
+    checker: "Callable[[DiffEntry, ApiDifference, ApiDescription, ApiDescription], None]",
+) -> "EvalRule":
     """Create a rule evaluator on a function."""
 
     return EvalRule(checker.__name__, checker)
@@ -89,7 +105,9 @@ def forkind(kind: str):
 def rankAt(kind: str, rank: "BreakingRank", privateRank: "BreakingRank | None" = None):
     """Create a rule evaluator that ranks a kind of DiffEntry."""
 
-    def checker(entry: "DiffEntry", diff: "ApiDifference", old: "ApiDescription", new: "ApiDescription") -> "None":
+    def checker(
+        entry: "DiffEntry", diff: "ApiDifference", old: "ApiDescription", new: "ApiDescription"
+    ) -> "None":
         eold = entry.old
         enew = entry.new
         if (eold and eold.private) or (enew and enew.private):

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -67,9 +67,7 @@ class DefaultExtractor(Extractor):
 
         product.clearCache()
         if server:
-            attributes.InstanceAttributeMypyEnricher(server, self.logger).enrich(
-                product
-            )
+            attributes.InstanceAttributeMypyEnricher(server, self.logger).enrich(product)
         else:
             attributes.InstanceAttributeAstEnricher(self.logger).enrich(product)
 

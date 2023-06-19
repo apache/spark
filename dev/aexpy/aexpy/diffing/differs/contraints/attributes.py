@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -25,10 +25,8 @@ from . import add, remove
 
 AttributeConstraints = DiffConstraintCollection()
 
-AddAttribute = DiffConstraint(
-    "AddAttribute", add).fortype(AttributeEntry, True)
-RemoveAttribute = DiffConstraint(
-    "RemoveAttribute", remove).fortype(AttributeEntry, True)
+AddAttribute = DiffConstraint("AddAttribute", add).fortype(AttributeEntry, True)
+RemoveAttribute = DiffConstraint("RemoveAttribute", remove).fortype(AttributeEntry, True)
 
 AttributeConstraints.cons(AddAttribute)
 AttributeConstraints.cons(RemoveAttribute)

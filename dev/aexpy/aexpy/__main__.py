@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -141,9 +141,7 @@ def preprocess(
     view: bool,
 ):
     """Generate a release definition."""
-    assert view or (
-        rootpath and modules
-    ), "Please give the input file or use the view mode."
+    assert view or (rootpath and modules), "Please give the input file or use the view mode."
 
     mode = ProduceMode.Read if view else ProduceMode.Write
 
@@ -252,16 +250,12 @@ def diff(old: pathlib.Path, new: pathlib.Path, output: pathlib.Path, view: bool)
     mode = ProduceMode.Read if view else ProduceMode.Write
 
     oldData = (
-        services.extract(
-            FileProduceCache("", old), getUnknownDistribution(), ProduceMode.Read
-        )
+        services.extract(FileProduceCache("", old), getUnknownDistribution(), ProduceMode.Read)
         if not view
         else ApiDescription(distribution=getUnknownDistribution())
     )
     newData = (
-        services.extract(
-            FileProduceCache("", new), getUnknownDistribution(), ProduceMode.Read
-        )
+        services.extract(FileProduceCache("", new), getUnknownDistribution(), ProduceMode.Read)
         if not view
         else ApiDescription(distribution=getUnknownDistribution())
     )

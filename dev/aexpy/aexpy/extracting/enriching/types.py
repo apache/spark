@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -29,31 +29,81 @@ import mypy
 from mypy import find_sources
 from mypy.dmypy_server import Server
 from mypy.infer import infer_function_type_arguments
-from mypy.nodes import (ARG_NAMED, ARG_NAMED_OPT, ARG_POS, ARG_STAR, ARG_STAR2,
-                        AssignmentStmt, CallExpr, Context, Expression,
-                        FuncBase, FuncDef, MemberExpr, MypyFile, NameExpr,
-                        Node, RefExpr, ReturnStmt, SymbolNode, SymbolTable,
-                        SymbolTableNode, TypeInfo, Var)
+from mypy.nodes import (
+    ARG_NAMED,
+    ARG_NAMED_OPT,
+    ARG_POS,
+    ARG_STAR,
+    ARG_STAR2,
+    AssignmentStmt,
+    CallExpr,
+    Context,
+    Expression,
+    FuncBase,
+    FuncDef,
+    MemberExpr,
+    MypyFile,
+    NameExpr,
+    Node,
+    RefExpr,
+    ReturnStmt,
+    SymbolNode,
+    SymbolTable,
+    SymbolTableNode,
+    TypeInfo,
+    Var,
+)
 from mypy.options import Options
 from mypy.traverser import TraverserVisitor
-from mypy.types import (AnyType, CallableArgument, CallableType, DeletedType,
-                        EllipsisType, ErasedType, Instance, LiteralType,
-                        NoneTyp, NoneType, Overloaded, ParamSpecType,
-                        PartialType, PlaceholderType, RawExpressionType,
-                        StarType, SyntheticTypeVisitor, TupleType, Type,
-                        TypeAliasType, TypedDictType, TypeList, TypeOfAny,
-                        TypeStrVisitor, TypeType, TypeVarType, UnboundType,
-                        UninhabitedType, UnionType, deserialize_type,
-                        get_proper_type, is_optional)
+from mypy.types import (
+    AnyType,
+    CallableArgument,
+    CallableType,
+    DeletedType,
+    EllipsisType,
+    ErasedType,
+    Instance,
+    LiteralType,
+    NoneTyp,
+    NoneType,
+    Overloaded,
+    ParamSpecType,
+    PartialType,
+    PlaceholderType,
+    RawExpressionType,
+    StarType,
+    SyntheticTypeVisitor,
+    TupleType,
+    Type,
+    TypeAliasType,
+    TypedDictType,
+    TypeList,
+    TypeOfAny,
+    TypeStrVisitor,
+    TypeType,
+    TypeVarType,
+    UnboundType,
+    UninhabitedType,
+    UnionType,
+    deserialize_type,
+    get_proper_type,
+    is_optional,
+)
 from mypy.util import IdMapper
 from mypy.version import __version__
 
 from aexpy import json
 from aexpy.models import ApiDescription
 from aexpy.models import typing as mtyping
-from aexpy.models.description import (ApiEntry, AttributeEntry, ClassEntry,
-                                      FunctionEntry, ModuleEntry, Parameter,
-                                      ParameterKind)
+from aexpy.models.description import (
+    ApiEntry,
+    AttributeEntry,
+    ClassEntry,
+    FunctionEntry,
+    ModuleEntry,
+    Parameter,
+    ParameterKind,
+)
 from aexpy.models.description import TypeInfo as MTypeInfo
 from aexpy.models.typing import Type as MType
 from aexpy.models.typing import TypeFactory
@@ -115,9 +165,9 @@ class TypeTranslateVisitor:
 
     def visit_unbound_type(self, t: UnboundType) -> MType:
         return TypeFactory.unknown(str(t))
-        s = t.name + '?'
+        s = t.name + "?"
         if t.args:
-            s += '[{}]'.format(self.list_str(t.args))
+            s += "[{}]".format(self.list_str(t.args))
         return s
 
     def visit_type_list(self, t: TypeList) -> MType:
@@ -151,7 +201,7 @@ class TypeTranslateVisitor:
             # Instances with a literal fallback should never be generic. If they are,
             # something went wrong so we fall back to showing the full Instance repr.
             return TypeFactory.unknown(str(t))
-            s = '{}?'.format(t.last_known_value)
+            s = "{}?".format(t.last_known_value)
         else:
             name = t.type.fullname or t.type.name
 
@@ -168,22 +218,22 @@ class TypeTranslateVisitor:
         return TypeFactory.any()
         if t.name is None:
             # Anonymous type variable type (only numeric id).
-            s = '`{}'.format(t.id)
+            s = "`{}".format(t.id)
         else:
             # Named type variable type.
-            s = '{}`{}'.format(t.name, t.id)
+            s = "{}`{}".format(t.name, t.id)
         if self.id_mapper and t.upper_bound:
-            s += '(upper_bound={})'.format(t.upper_bound.accept(self))
+            s += "(upper_bound={})".format(t.upper_bound.accept(self))
         return s
 
     def visit_param_spec(self, t: ParamSpecType) -> MType:
         return TypeFactory.any()
         if t.name is None:
             # Anonymous type variable type (only numeric id).
-            s = f'`{t.id}'
+            s = f"`{t.id}"
         else:
             # Named type variable type.
-            s = f'{t.name_with_suffix()}`{t.id}'
+            s = f"{t.name_with_suffix()}`{t.id}"
         return s
 
     def visit_callable_type(self, t: CallableType) -> MType:
@@ -199,37 +249,37 @@ class TypeTranslateVisitor:
         else:
             num_skip = 0
 
-        s = ''
+        s = ""
         bare_asterisk = False
         for i in range(len(t.arg_types) - num_skip):
-            if s != '':
-                s += ', '
+            if s != "":
+                s += ", "
             if t.arg_kinds[i].is_named() and not bare_asterisk:
-                s += '*, '
+                s += "*, "
                 bare_asterisk = True
             if t.arg_kinds[i] == ARG_STAR:
-                s += '*'
+                s += "*"
             if t.arg_kinds[i] == ARG_STAR2:
-                s += '**'
+                s += "**"
             name = t.arg_names[i]
             if name:
-                s += name + ': '
+                s += name + ": "
             if t.arg_kinds[i].is_optional():
-                s += ' ='
+                s += " ="
 
         if param_spec is not None:
             n = param_spec.name
             if s:
-                s += ', '
-            s += f'*{n}.args, **{n}.kwargs'
+                s += ", "
+            s += f"*{n}.args, **{n}.kwargs"
 
-        s = '({})'.format(s)
+        s = "({})".format(s)
 
         if not isinstance(get_proper_type(t.ret_type), NoneType):
             if t.type_guard is not None:
-                s += ' -> TypeGuard[{}]'.format(t.type_guard.accept(self))
+                s += " -> TypeGuard[{}]".format(t.type_guard.accept(self))
             else:
-                s += ' -> {}'.format(t.ret_type.accept(self))
+                s += " -> {}".format(t.ret_type.accept(self))
 
         if t.variables:
             vs = []
@@ -237,53 +287,50 @@ class TypeTranslateVisitor:
                 if isinstance(var, TypeVarType):
                     # We reimplement TypeVarType.__repr__ here in order to support id_mapper.
                     if var.values:
-                        vals = '({})'.format(', '.join(val.accept(self)
-                                                       for val in var.values))
-                        vs.append('{} in {}'.format(var.name, vals))
-                    elif not is_named_instance(var.upper_bound, 'builtins.object'):
-                        vs.append('{} <: {}'.format(
-                            var.name, var.upper_bound.accept(self)))
+                        vals = "({})".format(", ".join(val.accept(self) for val in var.values))
+                        vs.append("{} in {}".format(var.name, vals))
+                    elif not is_named_instance(var.upper_bound, "builtins.object"):
+                        vs.append("{} <: {}".format(var.name, var.upper_bound.accept(self)))
                     else:
                         vs.append(var.name)
                 else:
                     # For other TypeVarLikeTypes, just use the name
                     vs.append(var.name)
-            s = '{} {}'.format('[{}]'.format(', '.join(vs)), s)
+            s = "{} {}".format("[{}]".format(", ".join(vs)), s)
 
-        return 'def {}'.format(s)
+        return "def {}".format(s)
 
     def visit_overloaded(self, t: Overloaded) -> MType:
         return TypeFactory.unknown(str(t))
         a = []
         for i in t.items:
             a.append(i.accept(self))
-        return 'Overload({})'.format(', '.join(a))
+        return "Overload({})".format(", ".join(a))
 
     def visit_tuple_type(self, t: TupleType) -> MType:
         return TypeFactory.product(*self.list_types(t.items))
         s = self.list_str(t.items)
         if t.partial_fallback and t.partial_fallback.type:
             fallback_name = t.partial_fallback.type.fullname
-            if fallback_name != 'builtins.tuple':
-                return 'Tuple[{}, fallback={}]'.format(s, t.partial_fallback.accept(self))
-        return 'Tuple[{}]'.format(s)
+            if fallback_name != "builtins.tuple":
+                return "Tuple[{}, fallback={}]".format(s, t.partial_fallback.accept(self))
+        return "Tuple[{}]".format(s)
 
     def visit_typeddict_type(self, t: TypedDictType) -> MType:
         return TypeFactory.unknown(str(t))
 
         def item_str(name: str, typ: str) -> MType:
             if name in t.required_keys:
-                return '{!r}: {}'.format(name, typ)
+                return "{!r}: {}".format(name, typ)
             else:
-                return '{!r}?: {}'.format(name, typ)
+                return "{!r}?: {}".format(name, typ)
 
-        s = '{' + ', '.join(item_str(name, typ.accept(self))
-                            for name, typ in t.items.items()) + '}'
-        prefix = ''
+        s = "{" + ", ".join(item_str(name, typ.accept(self)) for name, typ in t.items.items()) + "}"
+        prefix = ""
         if t.fallback and t.fallback.type:
             if t.fallback.type.fullname not in TPDICT_FB_NAMES:
-                prefix = repr(t.fallback.type.fullname) + ', '
-        return 'TypedDict({}{})'.format(prefix, s)
+                prefix = repr(t.fallback.type.fullname) + ", "
+        return "TypedDict({}{})".format(prefix, s)
 
     def visit_raw_expression_type(self, t: RawExpressionType) -> MType:
         return TypeFactory.literal(repr(t.literal_value))
@@ -294,7 +341,7 @@ class TypeTranslateVisitor:
     def visit_star_type(self, t: StarType) -> MType:
         return TypeFactory.unknown(str(t))
         s = t.type.accept(self)
-        return '*{}'.format(s)
+        return "*{}".format(s)
 
     def visit_union_type(self, t: UnionType) -> MType:
         return TypeFactory.sum(*self.list_types(t.items))
@@ -302,22 +349,21 @@ class TypeTranslateVisitor:
     def visit_partial_type(self, t: PartialType) -> MType:
         if t.type is None:
             return TypeFactory.none()
-            return '<partial None>'
+            return "<partial None>"
         else:
             return TypeFactory.unknown(str(t))
-            return '<partial {}[{}]>'.format(t.type.name,
-                                             ', '.join(['?'] * len(t.type.type_vars)))
+            return "<partial {}[{}]>".format(t.type.name, ", ".join(["?"] * len(t.type.type_vars)))
 
     def visit_ellipsis_type(self, t: EllipsisType) -> MType:
         return TypeFactory.any()
 
     def visit_type_type(self, t: TypeType) -> MType:
         return TypeFactory.callable(TypeFactory.any(), self.visit_all(t.item))
-        return 'Type[{}]'.format(t.item.accept(self))
+        return "Type[{}]".format(t.item.accept(self))
 
     def visit_placeholder_type(self, t: PlaceholderType) -> MType:
         return TypeFactory.unknown(str(t))
-        return '<placeholder {}>'.format(t.fullname)
+        return "<placeholder {}>".format(t.fullname)
 
     def visit_type_alias_type(self, t: TypeAliasType) -> MType:
         if t.alias is not None:
@@ -341,7 +387,9 @@ def encodeType(type: Type | None, logger: "logging.Logger") -> MTypeInfo | None:
         if isinstance(result, str):
             return MTypeInfo(raw=result, data=result, type=typed, id=str(typed))
         else:
-            return MTypeInfo(raw=str(type), data=json.loads(json.dumps(result)), type=typed, id=str(typed))
+            return MTypeInfo(
+                raw=str(type), data=json.loads(json.dumps(result)), type=typed, id=str(typed)
+            )
     except Exception as ex:
         logger.error(f"Failed to encode type {type}.", exc_info=ex)
         return None
@@ -351,8 +399,11 @@ class TypeEnricher(Enricher):
     def __init__(self, server: "PackageMypyServer", logger: "logging.Logger | None" = None) -> None:
         super().__init__()
         self.server = server
-        self.logger = logger.getChild("type-enrich") if logger is not None else logging.getLogger(
-            "type-enrich")
+        self.logger = (
+            logger.getChild("type-enrich")
+            if logger is not None
+            else logging.getLogger("type-enrich")
+        )
 
     def enrich(self, api: "ApiDescription") -> None:
         for entry in api.entries.values():
@@ -368,14 +419,12 @@ class TypeEnricher(Enricher):
                             type = item[0].type
                             func.type = encodeType(type, self.logger)
                             if isinstance(type, CallableType):
-                                func.returnType = encodeType(
-                                    type.ret_type, self.logger)
+                                func.returnType = encodeType(type.ret_type, self.logger)
                                 for para in func.parameters:
                                     if para.name not in type.arg_names:
                                         continue
                                     typara = type.argument_by_name(para.name)
-                                    para.type = encodeType(
-                                        typara.typ, self.logger)
+                                    para.type = encodeType(typara.typ, self.logger)
                     case AttributeEntry() as attr:
                         item = self.server.element(attr)
                         if item:
@@ -383,10 +432,7 @@ class TypeEnricher(Enricher):
                             if attr.property:
                                 type = item[0].type
                                 if isinstance(type, CallableType):
-                                    attrType = encodeType(
-                                        type.ret_type, self.logger)
-                            attr.type = attrType or encodeType(
-                                item[0].type, self.logger)
+                                    attrType = encodeType(type.ret_type, self.logger)
+                            attr.type = attrType or encodeType(item[0].type, self.logger)
             except Exception as ex:
-                self.logger.error(
-                    f"Failed to enrich entry {entry.id}.", exc_info=ex)
+                self.logger.error(f"Failed to enrich entry {entry.id}.", exc_info=ex)

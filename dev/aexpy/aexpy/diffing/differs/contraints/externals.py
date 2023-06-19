@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -30,7 +30,9 @@ ExternalConstraints = DiffConstraintCollection()
 @ExternalConstraints.cons
 @fortype(SpecialEntry, True)
 @diffcons
-def AddExternal(a: SpecialEntry | None, b: SpecialEntry | None, old: "ApiDescription", new: "ApiDescription"):
+def AddExternal(
+    a: SpecialEntry | None, b: SpecialEntry | None, old: "ApiDescription", new: "ApiDescription"
+):
     if a is None and b is not None:
         if b.kind == SpecialKind.External:
             return [DiffEntry(message=f"Add external: {b.id}.")]
@@ -40,7 +42,9 @@ def AddExternal(a: SpecialEntry | None, b: SpecialEntry | None, old: "ApiDescrip
 @ExternalConstraints.cons
 @fortype(SpecialEntry, True)
 @diffcons
-def RemoveExternal(a: SpecialEntry | None, b: SpecialEntry | None, old: "ApiDescription", new: "ApiDescription"):
+def RemoveExternal(
+    a: SpecialEntry | None, b: SpecialEntry | None, old: "ApiDescription", new: "ApiDescription"
+):
     if b is None and a is not None:
         if a.kind == SpecialKind.External:
             return [DiffEntry(message=f"Remove external: {a.id}.")]

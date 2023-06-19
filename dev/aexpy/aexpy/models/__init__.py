@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -204,9 +204,7 @@ class Product:
 
         if needProcess:
             if mode == ProduceMode.Read:
-                raise Exception(
-                    f"{self.__class__.__qualname__} is not cached, cannot produce."
-                )
+                raise Exception(f"{self.__class__.__qualname__} is not cached, cannot produce.")
 
             self.state = ProduceState.Pending
 
@@ -412,36 +410,28 @@ class ApiDescription(SingleProduct):
     def modules(self) -> "dict[str, ModuleEntry]":
         if hasattr(self, "_modules"):
             return self._modules
-        self._modules = {
-            k: v for k, v in self.entries.items() if isinstance(v, ModuleEntry)
-        }
+        self._modules = {k: v for k, v in self.entries.items() if isinstance(v, ModuleEntry)}
         return self._modules
 
     @property
     def classes(self) -> "dict[str, ClassEntry]":
         if hasattr(self, "_classes"):
             return self._classes
-        self._classes = {
-            k: v for k, v in self.entries.items() if isinstance(v, ClassEntry)
-        }
+        self._classes = {k: v for k, v in self.entries.items() if isinstance(v, ClassEntry)}
         return self._classes
 
     @property
     def funcs(self) -> "dict[str, FunctionEntry]":
         if hasattr(self, "_funcs"):
             return self._funcs
-        self._funcs = {
-            k: v for k, v in self.entries.items() if isinstance(v, FunctionEntry)
-        }
+        self._funcs = {k: v for k, v in self.entries.items() if isinstance(v, FunctionEntry)}
         return self._funcs
 
     @property
     def attrs(self) -> "dict[str, AttributeEntry]":
         if hasattr(self, "_attrs"):
             return self._attrs
-        self._attrs = {
-            k: v for k, v in self.entries.items() if isinstance(v, AttributeEntry)
-        }
+        self._attrs = {k: v for k, v in self.entries.items() if isinstance(v, AttributeEntry)}
         return self._attrs
 
 
@@ -491,11 +481,7 @@ class ApiDifference(PairProduct):
             for key, value in data.pop("entries").items():
                 old = loadEntry(value.pop("old")) if "old" in value else None
                 new = loadEntry(value.pop("new")) if "new" in value else None
-                rank = (
-                    BreakingRank(value.pop("rank"))
-                    if "rank" in value
-                    else BreakingRank.Unknown
-                )
+                rank = BreakingRank(value.pop("rank")) if "rank" in value else BreakingRank.Unknown
                 if "verify" in value:
                     rawVerify = value.pop("verify")
                     state = (
@@ -506,9 +492,7 @@ class ApiDifference(PairProduct):
                     verify = VerifyData(state=state, **rawVerify)
                 else:
                     verify = VerifyData()
-                self.entries[key] = DiffEntry(
-                    **value, old=old, new=new, rank=rank, verify=verify
-                )
+                self.entries[key] = DiffEntry(**value, old=old, new=new, rank=rank, verify=verify)
 
     def kind(self, name: "str"):
         return [x for x in self.entries.values() if x.kind == name]

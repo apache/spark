@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -25,14 +25,28 @@ from ast import Call, NodeVisitor, expr, parse
 from dataclasses import dataclass, field
 
 import mypy
-from mypy.nodes import (ARG_STAR2, CallExpr, ComplexExpr, Decorator, DictExpr,
-                        Expression, FloatExpr, FuncDef, IntExpr, ListExpr,
-                        MemberExpr, NameExpr, SetExpr, StrExpr, TupleExpr,
-                        TypeInfo, Var)
+from mypy.nodes import (
+    ARG_STAR2,
+    CallExpr,
+    ComplexExpr,
+    Decorator,
+    DictExpr,
+    Expression,
+    FloatExpr,
+    FuncDef,
+    IntExpr,
+    ListExpr,
+    MemberExpr,
+    NameExpr,
+    SetExpr,
+    StrExpr,
+    TupleExpr,
+    TypeInfo,
+    Var,
+)
 from mypy.subtypes import is_subtype
 from mypy.traverser import TraverserVisitor
-from mypy.types import (AnyType, CallableType, Instance, NoneType, Type,
-                        UnionType)
+from mypy.types import AnyType, CallableType, Instance, NoneType, Type, UnionType
 
 from aexpy.extracting.third.mypyserver import PackageMypyServer
 from aexpy.models import ApiDescription, ClassEntry, FunctionEntry
@@ -98,7 +112,13 @@ def resolvePossibleTypes(o: "Expression") -> "list[Type]":
 
 
 class CallsiteGetter(TraverserVisitor):
-    def __init__(self, api: "ApiDescription", result: "Caller", resolver: "FunctionResolver", logger: "logging.Logger") -> None:
+    def __init__(
+        self,
+        api: "ApiDescription",
+        result: "Caller",
+        resolver: "FunctionResolver",
+        logger: "logging.Logger",
+    ) -> None:
         super().__init__()
         self.api = api
         self.resolver = resolver
@@ -111,7 +131,8 @@ class CallsiteGetter(TraverserVisitor):
 
         for i, a in enumerate(o.args):
             argu = Argument(
-                value=a, name=o.arg_names[i] or '', iskwargs=o.arg_kinds[i] == ARG_STAR2)
+                value=a, name=o.arg_names[i] or "", iskwargs=o.arg_kinds[i] == ARG_STAR2
+            )
             site.arguments.append(argu)
 
         try:
@@ -127,7 +148,9 @@ class CallsiteGetter(TraverserVisitor):
                         if member.fullname:
                             site.targets = [member.fullname]
                         else:
-                            site.targets = self.resolver.resolveTargetByName(member.name, site.arguments)
+                            site.targets = self.resolver.resolveTargetByName(
+                                member.name, site.arguments
+                            )
                     else:
                         targets = []
                         for tp in exprTypes:
@@ -138,13 +161,11 @@ class CallsiteGetter(TraverserVisitor):
                                 targets.append(tg.fullname)
                             cls = self.api.entries.get(tp.type.fullname)
                             if cls:
-                                targets.extend(
-                                    self.resolver.resolveMethods(cls, member.name))
+                                targets.extend(self.resolver.resolveMethods(cls, member.name))
 
                         site.targets = targets
         except Exception as ex:
-            self.logger.error(
-                f"Failed to resolve target for {o}.", exc_info=ex)
+            self.logger.error(f"Failed to resolve target for {o}.", exc_info=ex)
 
         for i in range(len(site.targets)):
             entry = self.api.entries.get(site.targets[i])
@@ -160,8 +181,11 @@ class TypeCallgraphBuilder(CallgraphBuilder):
     def __init__(self, server: "PackageMypyServer", logger: "logging.Logger | None" = None) -> None:
         super().__init__()
         self.server = server
-        self.logger = logger.getChild("callgraph-type") if logger is not None else logging.getLogger(
-            "callgraph-type")
+        self.logger = (
+            logger.getChild("callgraph-type")
+            if logger is not None
+            else logging.getLogger("callgraph-type")
+        )
 
     def build(self, api: "ApiDescription") -> Callgraph:
         result = Callgraph()
@@ -173,21 +197,18 @@ class TypeCallgraphBuilder(CallgraphBuilder):
             element = self.server.element(func)
 
             if element is None:
-                self.logger.error(
-                    f"Failed to load element {func.id} @ {func.location}.")
+                self.logger.error(f"Failed to load element {func.id} @ {func.location}.")
                 continue
 
             symbolNode = element[0]
             node = symbolNode.node
 
             if isinstance(node, Decorator):
-                self.logger.info(
-                    f"Detect decorators for {func.id}, use inner function.")
+                self.logger.info(f"Detect decorators for {func.id}, use inner function.")
                 node = node.func
 
             if not isinstance(node, FuncDef):
-                self.logger.error(
-                    f"Node {node} is not a function definition.")
+                self.logger.error(f"Node {node} is not a function definition.")
                 continue
 
             self.logger.debug(f"Visit AST of {func.id}")

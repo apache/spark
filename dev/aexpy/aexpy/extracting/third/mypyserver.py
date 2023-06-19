@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -30,15 +30,42 @@ from mypy.build import State
 from mypy.dmypy_server import Server
 from mypy.dmypy_util import DEFAULT_STATUS_FILE
 from mypy.infer import infer_function_type_arguments
-from mypy.nodes import (ARG_NAMED, ARG_NAMED_OPT, ARG_POS, ARG_STAR, ARG_STAR2,
-                        AssignmentStmt, CallExpr, Context, Expression,
-                        FuncBase, FuncDef, MemberExpr, MypyFile, NameExpr,
-                        Node, RefExpr, ReturnStmt, SymbolNode, SymbolTable,
-                        SymbolTableNode, TypeInfo, Var)
+from mypy.nodes import (
+    ARG_NAMED,
+    ARG_NAMED_OPT,
+    ARG_POS,
+    ARG_STAR,
+    ARG_STAR2,
+    AssignmentStmt,
+    CallExpr,
+    Context,
+    Expression,
+    FuncBase,
+    FuncDef,
+    MemberExpr,
+    MypyFile,
+    NameExpr,
+    Node,
+    RefExpr,
+    ReturnStmt,
+    SymbolNode,
+    SymbolTable,
+    SymbolTableNode,
+    TypeInfo,
+    Var,
+)
 from mypy.options import Options
 from mypy.traverser import TraverserVisitor
-from mypy.types import (AnyType, CallableType, Instance, NoneTyp, Type,
-                        TypeOfAny, UnionType, is_optional)
+from mypy.types import (
+    AnyType,
+    CallableType,
+    Instance,
+    NoneTyp,
+    Type,
+    TypeOfAny,
+    UnionType,
+    is_optional,
+)
 from mypy.version import __version__
 
 from aexpy.extracting import Extractor
@@ -47,12 +74,12 @@ from aexpy.models.description import ApiEntry, ClassEntry, ModuleEntry
 
 
 class MypyServer:
-    def __init__(self, sources: "list[pathlib.Path]", logger: "logging.Logger | None" = None) -> None:
+    def __init__(
+        self, sources: "list[pathlib.Path]", logger: "logging.Logger | None" = None
+    ) -> None:
         self.options = Options()
-        self.logger = logger.getChild(
-            "mypy") if logger else logging.getLogger("mypy")
-        self.files = find_sources.create_source_list(
-            [str(s) for s in sources], self.options)
+        self.logger = logger.getChild("mypy") if logger else logging.getLogger("mypy")
+        self.files = find_sources.create_source_list([str(s) for s in sources], self.options)
         self.logger.debug(f"Mypy sources: {self.files}")
         self.server = Server(self.options, DEFAULT_STATUS_FILE)
         self.prepared = False
@@ -89,8 +116,7 @@ class MypyServer:
             #             pass
             #     result = self.server.check(self.files, False, 0)
 
-            self.logger.info(
-                f"Finish mypy checking {datetime.now()}: {result}")
+            self.logger.info(f"Finish mypy checking {datetime.now()}: {result}")
             assert self.server.fine_grained_manager
             self.graph = self.server.fine_grained_manager.graph
         except Exception as ex:
@@ -109,8 +135,7 @@ class MypyServer:
 
     def locals(self, module: "State") -> "dict[str, tuple[SymbolTableNode, TypeInfo | None]]":
         assert module.tree
-        return {k: (node, typeInfo)
-                for k, node, typeInfo in module.tree.local_definitions()}
+        return {k: (node, typeInfo) for k, node, typeInfo in module.tree.local_definitions()}
 
 
 _cached: "dict[str, MypyServer]" = {}
@@ -149,7 +174,12 @@ def getMypyServer(sources: "list[pathlib.Path]", id: "str" = "") -> MypyServer:
 
 
 class PackageMypyServer:
-    def __init__(self, unpacked: "pathlib.Path", paths: "list[pathlib.Path]", logger: "logging.Logger | None" = None) -> None:
+    def __init__(
+        self,
+        unpacked: "pathlib.Path",
+        paths: "list[pathlib.Path]",
+        logger: "logging.Logger | None" = None,
+    ) -> None:
         self.unpacked = unpacked
         self.proxy = MypyServer(paths, logger)
         self.logger = self.proxy.logger
@@ -164,7 +194,8 @@ class PackageMypyServer:
         assert entry.location
         if entry.location.file not in self.cacheFile:
             self.cacheFile[entry.location.file] = self.proxy.module(
-                self.unpacked.joinpath(entry.location.file))
+                self.unpacked.joinpath(entry.location.file)
+            )
         return self.cacheFile[entry.location.file]
 
     def members(self, entry: "ClassEntry") -> "dict[str, SymbolTableNode]":
@@ -180,13 +211,14 @@ class PackageMypyServer:
                     if node.fullname is None:
                         continue
                     if node.fullname.startswith(entry.id) and info.fullname == entry.id:
-                        result[node.fullname.replace(
-                            entry.id, "", 1).lstrip(".")] = node
+                        result[node.fullname.replace(entry.id, "", 1).lstrip(".")] = node
 
             self.cacheMembers[entry.id] = result
         return self.cacheMembers[entry.id]
 
-    def element(self, entry: "ApiEntry") -> "State | tuple[SymbolTableNode, TypeInfo | None] | None":
+    def element(
+        self, entry: "ApiEntry"
+    ) -> "State | tuple[SymbolTableNode, TypeInfo | None] | None":
         if entry.id not in self.cacheElement:
             result = None
             mod = self.file(entry)
@@ -199,7 +231,9 @@ class PackageMypyServer:
 
 
 class MypyBasedIncrementalExtractor(Extractor):
-    def processWithMypy(self, server: "PackageMypyServer", product: "ApiDescription", dist: "Distribution"):
+    def processWithMypy(
+        self, server: "PackageMypyServer", product: "ApiDescription", dist: "Distribution"
+    ):
         pass
 
     def processWithFallback(self, product: "ApiDescription", dist: "Distribution"):
@@ -222,7 +256,8 @@ class MypyBasedIncrementalExtractor(Extractor):
             server.prepare()
         except Exception as ex:
             self.logger.error(
-                f"Failed to run mypy server at {dist.wheelDir}: {dist.src}.", exc_info=ex)
+                f"Failed to run mypy server at {dist.wheelDir}: {dist.src}.", exc_info=ex
+            )
             server = None
 
         if server:

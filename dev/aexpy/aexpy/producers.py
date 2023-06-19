@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -48,9 +48,7 @@ class Producer(ABC):
         self._name = value
 
     def __init__(self, logger: "Logger | None" = None) -> None:
-        self.logger = (
-            logger.getChild(self.name) if logger else logging.getLogger(self.name)
-        )
+        self.logger = logger.getChild(self.name) if logger else logging.getLogger(self.name)
         """The logger for the producer."""
         self.options = ProducerOptions()
         self.name = "aexpy"

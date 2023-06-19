@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -26,7 +26,9 @@ import pathlib
 __version__ = "0.2.0"
 
 
-LOGGING_FORMAT = "%(levelname)s %(asctime)s %(name)s [%(pathname)s:%(lineno)d:%(funcName)s]\n%(message)s\n"
+LOGGING_FORMAT = (
+    "%(levelname)s %(asctime)s %(name)s [%(pathname)s:%(lineno)d:%(funcName)s]\n%(message)s\n"
+)
 LOGGING_DATEFMT = "%Y-%m-%d,%H:%M:%S"
 
 
@@ -57,6 +59,7 @@ def getBuildDate() -> datetime:
         return datetime.fromisoformat(os.getenv("BUILD_DATE", "unknown"))
     except:
         return datetime.now()
+
 
 def getPythonExe() -> str:
     return os.getenv("AEXPY_PYTHON_EXE", "python")

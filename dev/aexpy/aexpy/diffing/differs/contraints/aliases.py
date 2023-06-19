@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -33,24 +33,47 @@ AliasConstraints = DiffConstraintCollection()
 @diffcons
 def AddAlias(a: CollectionEntry, b: CollectionEntry, old: "ApiDescription", new: "ApiDescription"):
     sub = (b.members.keys() - a.members.keys()) & b.aliasMembers.keys()
-    return [DiffEntry(message=f"Add alias ({a.id}): {name} => {b.members[name]}", data={"name": name, "target": b.members[name]}) for name in sub]
+    return [
+        DiffEntry(
+            message=f"Add alias ({a.id}): {name} => {b.members[name]}",
+            data={"name": name, "target": b.members[name]},
+        )
+        for name in sub
+    ]
 
 
 @AliasConstraints.cons
 @fortype(CollectionEntry)
 @diffcons
-def RemoveAlias(a: CollectionEntry, b: CollectionEntry, old: "ApiDescription", new: "ApiDescription"):
+def RemoveAlias(
+    a: CollectionEntry, b: CollectionEntry, old: "ApiDescription", new: "ApiDescription"
+):
     sub = (a.members.keys() - b.members.keys()) & a.aliasMembers.keys()
-    return [DiffEntry(message=f"Remove alias ({a.id}): {name} => {a.members[name]}", data={"name": name, "target": a.members[name]}) for name in sub if new.resolveName(f"{a.id}.{name}") is None]
+    return [
+        DiffEntry(
+            message=f"Remove alias ({a.id}): {name} => {a.members[name]}",
+            data={"name": name, "target": a.members[name]},
+        )
+        for name in sub
+        if new.resolveName(f"{a.id}.{name}") is None
+    ]
 
 
 @AliasConstraints.cons
 @fortype(CollectionEntry)
 @diffcons
-def ChangeAlias(a: CollectionEntry, b: CollectionEntry, old: "ApiDescription", new: "ApiDescription"):
+def ChangeAlias(
+    a: CollectionEntry, b: CollectionEntry, old: "ApiDescription", new: "ApiDescription"
+):
     inter = a.members.keys() & b.members.keys()
     changed = {}
     for k in inter:
         if a.members[k] != b.members[k]:
             changed[k] = (a.members[k], b.members[k])
-    return [DiffEntry(message=f"Change alias ({a.id}): {name}: {old} => {new}", data={"name": name, "old": old, "new": new}) for name, (old, new) in changed.items()]
+    return [
+        DiffEntry(
+            message=f"Change alias ({a.id}): {name}: {old} => {new}",
+            data={"name": name, "old": old, "new": new},
+        )
+        for name, (old, new) in changed.items()
+    ]

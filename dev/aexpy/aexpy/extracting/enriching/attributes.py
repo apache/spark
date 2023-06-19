@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -25,16 +25,29 @@ from dataclasses import Field, asdict
 from aexpy.extracting.main.base import isprivate
 
 from aexpy.models import ApiDescription, Distribution
-from aexpy.models.description import (ApiEntry, AttributeEntry, ClassEntry,
-                                      FunctionEntry, ItemScope, Location, Parameter,
-                                      ParameterKind)
+from aexpy.models.description import (
+    ApiEntry,
+    AttributeEntry,
+    ClassEntry,
+    FunctionEntry,
+    ItemScope,
+    Location,
+    Parameter,
+    ParameterKind,
+)
 
 from ..third.mypyserver import PackageMypyServer
 from . import Enricher, clearSrc
 
 
 class InstanceAttributeAstAssignGetter(NodeVisitor):
-    def __init__(self, target: "FunctionEntry", logger: "logging.Logger", parent: "ClassEntry", api: "ApiDescription") -> None:
+    def __init__(
+        self,
+        target: "FunctionEntry",
+        logger: "logging.Logger",
+        parent: "ClassEntry",
+        api: "ApiDescription",
+    ) -> None:
         super().__init__()
         self.logger = logger
         self.target = target
@@ -50,7 +63,12 @@ class InstanceAttributeAstAssignGetter(NodeVisitor):
             entry = self.api.entries[id]
         else:
             entry = AttributeEntry(
-                name=name, id=id, scope=ItemScope.Instance, location=self.parent.location, parent=self.parent.id)
+                name=name,
+                id=id,
+                scope=ItemScope.Instance,
+                location=self.parent.location,
+                parent=self.parent.id,
+            )
             entry.private = isprivate(entry)
             self.api.addEntry(entry)
         self.parent.members[name] = id
@@ -94,8 +112,11 @@ class InstanceAttributeAstAssignGetter(NodeVisitor):
 class InstanceAttributeAstEnricher(Enricher):
     def __init__(self, logger: "logging.Logger | None" = None):
         super().__init__()
-        self.logger = logger.getChild("instance-attr-ast-enrich") if logger is not None else logging.getLogger(
-            "instance-attr-ast-enrich")
+        self.logger = (
+            logger.getChild("instance-attr-ast-enrich")
+            if logger is not None
+            else logging.getLogger("instance-attr-ast-enrich")
+        )
 
     def enrich(self, api: "ApiDescription") -> None:
         for cls in api.classes.values():
@@ -115,19 +136,20 @@ class InstanceAttributeAstEnricher(Enricher):
             try:
                 astree = ast.parse(src)
             except Exception as ex:
-                self.logger.error(
-                    f"Failed to parse code from {target.id}:\n{src}", exc_info=ex)
+                self.logger.error(f"Failed to parse code from {target.id}:\n{src}", exc_info=ex)
                 continue
-            InstanceAttributeAstAssignGetter(
-                target, self.logger, cls, api).visit(astree)
+            InstanceAttributeAstAssignGetter(target, self.logger, cls, api).visit(astree)
 
 
 class InstanceAttributeMypyEnricher(Enricher):
     def __init__(self, server: "PackageMypyServer", logger: "logging.Logger | None" = None) -> None:
         super().__init__()
         self.server = server
-        self.logger = logger.getChild("instance-attr-mypy-enrich") if logger is not None else logging.getLogger(
-            "instance-attr-mypy-enrich")
+        self.logger = (
+            logger.getChild("instance-attr-mypy-enrich")
+            if logger is not None
+            else logging.getLogger("instance-attr-mypy-enrich")
+        )
 
     def enrich(self, api: "ApiDescription") -> None:
         for cls in api.classes.values():
@@ -144,7 +166,8 @@ class InstanceAttributeMypyEnricher(Enricher):
                 entry = api.entries[id]
             else:
                 entry = AttributeEntry(
-                    name=name, id=id, scope=ItemScope.Instance, location=cls.location, parent=cls.id)
+                    name=name, id=id, scope=ItemScope.Instance, location=cls.location, parent=cls.id
+                )
                 entry.private = isprivate(entry)
                 api.addEntry(entry)
             cls.members[name] = id

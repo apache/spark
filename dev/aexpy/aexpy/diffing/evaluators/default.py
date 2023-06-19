@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -33,7 +33,9 @@ from .checkers import EvalRule
 class RuleEvaluator(Differ):
     """Evaluator based on rules."""
 
-    def __init__(self, logger: "Logger | None" = None, rules: "list[EvalRule] | None" = None) -> None:
+    def __init__(
+        self, logger: "Logger | None" = None, rules: "list[EvalRule] | None" = None
+    ) -> None:
         super().__init__(logger)
         self.rules: "list[EvalRule]" = rules or []
 
@@ -46,14 +48,19 @@ class RuleEvaluator(Differ):
                     rule(entry, product, old, new)
                 except Exception as ex:
                     self.logger.error(
-                        f"Failed to evaluate entry {entry.id} ({entry.message}) by rule {rule.kind} ({rule.checker}).", exc_info=ex)
+                        f"Failed to evaluate entry {entry.id} ({entry.message}) by rule {rule.kind} ({rule.checker}).",
+                        exc_info=ex,
+                    )
             product.entries.update({entry.id: entry})
 
 
 class DefaultEvaluator(RuleEvaluator):
-    def __init__(self, logger: "Logger | None" = None, rules: "list[EvalRule] | None" = None) -> None:
+    def __init__(
+        self, logger: "Logger | None" = None, rules: "list[EvalRule] | None" = None
+    ) -> None:
         rules = rules or []
         from .evals import RuleEvals
+
         rules.extend(RuleEvals.rules)
 
         super().__init__(logger, rules)

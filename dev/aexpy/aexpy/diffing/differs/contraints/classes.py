@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# 
+#
 # Original repository: https://github.com/StardustDL/aexpy
 # Copyright 2022 StardustDL <stardustdl@163.com>
 #
@@ -43,7 +43,11 @@ def AddBaseClass(a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiD
     sb = set(b.bases)
     plus = sb - sa - {getObjectId(object)}
 
-    return [DiffEntry(message=f"Add base class ({a.id}): {name}", data={"name": name}) for name in plus if name not in a.mro]
+    return [
+        DiffEntry(message=f"Add base class ({a.id}): {name}", data={"name": name})
+        for name in plus
+        if name not in a.mro
+    ]
 
 
 @ClassConstraints.cons
@@ -54,35 +58,51 @@ def RemoveBaseClass(a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "A
     sb = set(b.bases)
     minus = sa - sb - {getObjectId(object)}
 
-    return [DiffEntry(message=f"Remove base class ({a.id}): {name}", data={"name": name}) for name in minus if name not in b.mro]
+    return [
+        DiffEntry(message=f"Remove base class ({a.id}): {name}", data={"name": name})
+        for name in minus
+        if name not in b.mro
+    ]
 
 
 @ClassConstraints.cons
 @fortype(ClassEntry)
 @diffcons
-def ImplementAbstractBaseClass(a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiDescription"):
+def ImplementAbstractBaseClass(
+    a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiDescription"
+):
     sa = set(a.abcs)
     sb = set(b.abcs)
     plus = sb - sa
 
-    return [DiffEntry(message=f"Implement abstract base class ({a.id}): {name}", data={"name": name}) for name in plus]
+    return [
+        DiffEntry(message=f"Implement abstract base class ({a.id}): {name}", data={"name": name})
+        for name in plus
+    ]
 
 
 @ClassConstraints.cons
 @fortype(ClassEntry)
 @diffcons
-def DeimplementAbstractBaseClass(a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiDescription"):
+def DeimplementAbstractBaseClass(
+    a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiDescription"
+):
     sa = set(a.abcs)
     sb = set(b.abcs)
 
     minus = sa - sb
-    return [DiffEntry(message=f"Deimplement abstract base class ({a.id}): {name}", data={"name": name}) for name in minus]
+    return [
+        DiffEntry(message=f"Deimplement abstract base class ({a.id}): {name}", data={"name": name})
+        for name in minus
+    ]
 
 
 @ClassConstraints.cons
 @fortype(ClassEntry)
 @diffcons
-def ChangeMethodResolutionOrder(a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiDescription"):
+def ChangeMethodResolutionOrder(
+    a: ClassEntry, b: ClassEntry, old: "ApiDescription", new: "ApiDescription"
+):
     sa = a.mro
     sb = a.mro
 
@@ -96,5 +116,10 @@ def ChangeMethodResolutionOrder(a: ClassEntry, b: ClassEntry, old: "ApiDescripti
             changed = True
 
     if changed:
-        return [DiffEntry(message=f"Change method resolution order ({a.id}): {sa} -> {sb}", data={"oldmro": sa, "newmro": sb})]
+        return [
+            DiffEntry(
+                message=f"Change method resolution order ({a.id}): {sa} -> {sb}",
+                data={"oldmro": sa, "newmro": sb},
+            )
+        ]
     return []
