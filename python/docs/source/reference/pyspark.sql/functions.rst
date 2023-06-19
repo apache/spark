@@ -121,10 +121,14 @@ Datetime Functions
     current_timestamp
     current_timezone
     date_add
+    date_diff
     date_format
+    date_from_unix_date
     date_sub
     date_trunc
+    dateadd
     datediff
+    day
     dayofmonth
     dayofweek
     dayofyear
