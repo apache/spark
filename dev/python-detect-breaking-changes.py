@@ -34,7 +34,7 @@ import subprocess
 import sys
 import json
 
-PYTHON_EXE = "python"
+PYTHON_EXE = sys.executable
 AEXPY_EXE = [PYTHON_EXE, "-m", "aexpy", "-vvv"]
 PYSPARK_RELPATH = "python"
 PYSPARK_TOPMODULES = ["pyspark"]
@@ -67,7 +67,7 @@ def runAexPy(cmd: list, logFile: TextIOWrapper = None):
         logFile,
         AEXPY_EXE + cmd,
         cwd=AEXPY_DIR,
-        env={**os.environ, "PYTHONUTF8": "1", "AEXPY_PYTHON_EXE": "python3"},
+        env={**os.environ, "PYTHONUTF8": "1", "AEXPY_PYTHON_EXE": sys.executable},
     )
 
 

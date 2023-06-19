@@ -99,10 +99,7 @@ class MypyServer:
         try:
             self.logger.info(f"Start mypy checking {datetime.now()}.")
 
-            # Mypy 0.920 does not support 'export_types' parameter (introduced in 0.981)
-            # result = self.server.check(self.files, True, False, 0)
-
-            result = self.server.check(self.files, False, 0)
+            result = self.server.check(self.files, True, False, 0)
 
             # if self.server.fine_grained_manager is None and result["status"] == 2: # Compile Error
             #     for line in result["out"].splitlines():
