@@ -694,7 +694,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               msg = s"""
                        |Failure when resolving conflicting references in ${j.nodeName}:
                        |${plan.toString}
-                       |Conflicting attributes: $conflictingAttributes.""",
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
               context = j.origin.getQueryContext,
               summary = j.origin.context.summary)
 
@@ -705,7 +705,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               msg = s"""
                        |Failure when resolving conflicting references in ${i.nodeName}:
                        |${plan.toString}
-                       |Conflicting attributes: $conflictingAttributes.""",
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
               context = i.origin.getQueryContext,
               summary = i.origin.context.summary)
 
@@ -716,7 +716,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               msg = s"""
                        |Failure when resolving conflicting references in ${e.nodeName}:
                        |${plan.toString}
-                       |Conflicting attributes: $conflictingAttributes.""",
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
               context = e.origin.getQueryContext,
               summary = e.origin.context.summary)
 
@@ -727,7 +727,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               msg = s"""
                        |Failure when resolving conflicting references in ${j.nodeName}:
                        |${plan.toString}
-                       |Conflicting attributes: $conflictingAttributes.""",
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
               context = j.origin.getQueryContext,
               summary = j.origin.context.summary)
 

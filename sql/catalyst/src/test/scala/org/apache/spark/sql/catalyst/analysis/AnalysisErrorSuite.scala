@@ -781,31 +781,53 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("error test for self-join") {
     val join = Join(testRelation, testRelation, Cross, None, JoinHint.NONE)
-    val error = intercept[SparkException] {
-      SimpleAnalyzer.checkAnalysis(join)
-    }
-    assert(error.getMessage.contains("Failure when resolving conflicting references in Join"))
-    assert(error.getMessage.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(join)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Join:
+          |'Join Cross
+          |:- LocalRelation <empty>, [a#0]
+          |+- LocalRelation <empty>, [a#0]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("error test for self-intersect") {
     val intersect = Intersect(testRelation, testRelation, true)
-    val error = intercept[SparkException] {
-      SimpleAnalyzer.checkAnalysis(intersect)
-    }
-    assert(error.getMessage.contains(
-      "Failure when resolving conflicting references in Intersect All"))
-    assert(error.getMessage.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(intersect)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Intersect All:
+          |'Intersect All true
+          |:- LocalRelation <empty>, [a#0]
+          |+- LocalRelation <empty>, [a#0]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("error test for self-except") {
     val except = Except(testRelation, testRelation, true)
-    val error = intercept[SparkException] {
-      SimpleAnalyzer.checkAnalysis(except)
-    }
-    assert(error.getMessage.contains(
-      "Failure when resolving conflicting references in Except All"))
-    assert(error.getMessage.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(except)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Except All:
+          |'Except All true
+          |:- LocalRelation <empty>, [a#0]
+          |+- LocalRelation <empty>, [a#0]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("error test for self-asOfJoin") {
@@ -813,11 +835,19 @@ class AnalysisErrorSuite extends AnalysisTest {
       AsOfJoin(testRelation, testRelation, testRelation.output(0), testRelation.output(0),
       None, Inner, tolerance = None, allowExactMatches = true,
       direction = AsOfJoinDirection("backward"))
-    val error = intercept[SparkException] {
-      SimpleAnalyzer.checkAnalysis(asOfJoin)
-    }
-    assert(error.getMessage.contains("Failure when resolving conflicting references in AsOfJoin"))
-    assert(error.getMessage.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(asOfJoin)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in AsOfJoin:
+          |'AsOfJoin (a#0 >= a#0), Inner
+          |:- LocalRelation <empty>, [a#0]
+          |+- LocalRelation <empty>, [a#0]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("check grouping expression data types") {
