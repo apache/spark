@@ -49,11 +49,6 @@ object CharVarcharUtils extends Logging {
     })
   }
 
-  def removeCharVarcharTypeStringMetadataKey(schema: StructType): StructType = {
-    StructType.removeMetadata(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY,
-      schema).asInstanceOf[StructType]
-  }
-
   /**
    * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
    */

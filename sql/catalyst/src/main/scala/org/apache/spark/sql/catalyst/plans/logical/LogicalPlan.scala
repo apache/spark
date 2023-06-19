@@ -116,7 +116,7 @@ abstract class LogicalPlan
   def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
-        case a: AttributeReference => a
+        case a: AttributeReference => a.withMetadata(field.metadata)
         case _ => throw QueryExecutionErrors.resolveCannotHandleNestedSchema(this)
       }.getOrElse {
         throw QueryCompilationErrors.cannotResolveAttributeError(

@@ -52,8 +52,7 @@ class UnivocityParser(
     requiredSchema: StructType,
     val options: CSVOptions,
     filters: Seq[Filter]) extends Logging {
-  require(requiredSchema.toSet.subsetOf(
-    CharVarcharUtils.removeCharVarcharTypeStringMetadataKey(dataSchema).toSet),
+  require(requiredSchema.toSet.subsetOf(dataSchema.toSet),
     s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
       s"dataSchema (${dataSchema.catalogString}).")
 
