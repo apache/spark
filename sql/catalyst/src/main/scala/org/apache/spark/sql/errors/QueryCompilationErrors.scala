@@ -2097,6 +2097,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "errors" -> errors.mkString("\n- ", "\n- ", "")))
   }
 
+  def invalidEscapeChar(sqlExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_ESCAPE_CHAR",
+      messageParameters = Map("sqlExpr" -> toSQLExpr(sqlExpr)))
+  }
+
   def secondArgumentOfFunctionIsNotIntegerError(
       function: String, e: NumberFormatException): Throwable = {
     // The second argument of {function} function needs to be an integer

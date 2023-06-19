@@ -1052,6 +1052,11 @@
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
     ]
   },
+  "INVALID_ESCAPE_CHAR" : {
+    "message" : [
+      "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
+    ]
+  },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
       "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
