@@ -18,7 +18,9 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedWriter, File, FileWriter}
+
 import scala.util.Properties
+
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.FileUtils
@@ -27,6 +29,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.Logging
