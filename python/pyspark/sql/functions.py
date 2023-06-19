@@ -9535,11 +9535,6 @@ def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
-    Notes
-    -----
-    Only STRING type is supported in this function,
-    while `startswith` in SQL supports both STRING and BINARY.
-
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
@@ -9552,6 +9547,19 @@ def endswith(str: "ColumnOrName", suffix: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([("Spark SQL", "Spark",)], ["a", "b"])
     >>> df.select(endswith(df.a, df.b).alias('r')).collect()
     [Row(r=False)]
+
+    >>> df = spark.createDataFrame([("414243", "4243",)], ["e", "f"])
+    >>> df = df.select(to_binary("e").alias("e"), to_binary("f").alias("f"))
+    >>> df.printSchema()
+    root
+     |-- e: binary (nullable = true)
+     |-- f: binary (nullable = true)
+    >>> df.select(endswith("e", "f"), endswith("f", "e")).show()
+    +--------------+--------------+
+    |endswith(e, f)|endswith(f, e)|
+    +--------------+--------------+
+    |          true|         false|
+    +--------------+--------------+
     """
     return _invoke_function_over_columns("endswith", str, suffix)
 
@@ -9565,11 +9573,6 @@ def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
-    Notes
-    -----
-    Only STRING type is supported in this function,
-    while `startswith` in SQL supports both STRING and BINARY.
-
     Parameters
     ----------
     str : :class:`~pyspark.sql.Column` or str
@@ -9582,6 +9585,19 @@ def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([("Spark SQL", "Spark",)], ["a", "b"])
     >>> df.select(startswith(df.a, df.b).alias('r')).collect()
     [Row(r=True)]
+
+    >>> df = spark.createDataFrame([("414243", "4142",)], ["e", "f"])
+    >>> df = df.select(to_binary("e").alias("e"), to_binary("f").alias("f"))
+    >>> df.printSchema()
+    root
+     |-- e: binary (nullable = true)
+     |-- f: binary (nullable = true)
+    >>> df.select(startswith("e", "f"), startswith("f", "e")).show()
+    +----------------+----------------+
+    |startswith(e, f)|startswith(f, e)|
+    +----------------+----------------+
+    |            true|           false|
+    +----------------+----------------+
     """
     return _invoke_function_over_columns("startswith", str, prefix)
 

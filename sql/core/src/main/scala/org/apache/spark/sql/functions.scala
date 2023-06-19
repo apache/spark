@@ -4048,15 +4048,13 @@ object functions {
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
    * Both str or suffix must be of STRING type.
    *
-   * @note
-   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
-   *   STRING and BINARY.
-   *
    * @group string_funcs
    * @since 3.5.0
    */
-  def endswith(str: Column, suffix: Column): Column = withExpr {
-    EndsWith(str.expr, suffix.expr)
+  def endswith(str: Column, suffix: Column): Column = {
+    // 'EndsWith' expression only supports StringType,
+    // use 'call_udf' to support both StringType and BinaryType.
+    call_udf("endswith", str, suffix)
   }
 
   /**
@@ -4064,15 +4062,13 @@ object functions {
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
    * Both str or prefix must be of STRING type.
    *
-   * @note
-   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
-   *   STRING and BINARY.
-   *
    * @group string_funcs
    * @since 3.5.0
    */
-  def startswith(str: Column, prefix: Column): Column = withExpr {
-    StartsWith(str.expr, prefix.expr)
+  def startswith(str: Column, prefix: Column): Column = {
+    // 'StartsWith' expression only supports StringType,
+    // use 'call_udf' to support both StringType and BinaryType.
+    call_udf("startswith", str, prefix)
   }
 
   /**
