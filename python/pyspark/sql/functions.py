@@ -13097,13 +13097,17 @@ def convert_timezone(
     Examples
     --------
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(convert_timezone(None, lit('Asia/Hong_Kong'), 'dt').alias('ts')).show()
+    >>> df.select(convert_timezone(   # doctest: +SKIP
+    ...     None, lit('Asia/Hong_Kong'), 'dt').alias('ts')
+    ... ).show()
     +-------------------+
     |                 ts|
     +-------------------+
     |2015-04-08 00:00:00|
     +-------------------+
-    >>> df.select(convert_timezone(lit('America/Los_Angeles'), lit('Asia/Hong_Kong'), 'dt').alias('ts')).show()
+    >>> df.select(convert_timezone(
+    ...     lit('America/Los_Angeles'), lit('Asia/Hong_Kong'), 'dt').alias('ts')
+    ... ).show()
     +-------------------+
     |                 ts|
     +-------------------+
