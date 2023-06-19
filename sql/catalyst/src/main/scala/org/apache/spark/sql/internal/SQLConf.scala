@@ -4274,7 +4274,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-<<<<<<< HEAD
   val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
     buildConf("spark.sql.stableDerivedColumnAlias.enabled")
       .internal()
