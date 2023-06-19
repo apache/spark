@@ -653,8 +653,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_add(birth, age)"), Seq(Row(1997)))
     checkAnswer(df.select(try_add(col("birth"), col("age"))), Seq(Row(1997)))
-
-    checkAnswer(df.select(try_add(lit(2147483647), lit(2))), Seq(Row(1997)))
   }
 
   test("try_avg") {
