@@ -2099,7 +2099,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidEscapeChar(sqlExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      errorClass = "INVALID_ESCAPE_CHAR",
       messageParameters = Map("sqlExpr" -> toSQLExpr(sqlExpr)))
   }
 

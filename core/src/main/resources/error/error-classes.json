@@ -395,11 +395,6 @@
           "Input to <functionName> should all be the same type, but it's <dataType>."
         ]
       },
-      "ESCAPE_CHAR_WRONG_TYPE" : {
-        "message" : [
-          "`EscapeChar` should be a string literal of length one."
-        ]
-      },
       "FILTER_NOT_BOOLEAN" : {
         "message" : [
           "Filter expression <filter> of type <type> is not a boolean."
@@ -1055,6 +1050,11 @@
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
+    ]
+  },
+  "INVALID_ESCAPE_CHAR" : {
+    "message" : [
+      "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
     ]
   },
   "INVALID_EXECUTOR_MEMORY" : {

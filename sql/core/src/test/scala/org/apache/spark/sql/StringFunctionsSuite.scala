@@ -940,7 +940,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df1.select(like(col("a"), col("b"), lit(618))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      errorClass = "INVALID_ESCAPE_CHAR",
       parameters = Map("sqlExpr" -> "\"618\"")
     )
 
@@ -948,7 +948,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df1.select(ilike(col("a"), col("b"), lit(618))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      errorClass = "INVALID_ESCAPE_CHAR",
       parameters = Map("sqlExpr" -> "\"618\"")
     )
 
@@ -958,7 +958,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df1.select(like(col("a"), col("b"), lit("中国"))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      errorClass = "INVALID_ESCAPE_CHAR",
       parameters = Map("sqlExpr" -> "\"中国\"")
     )
 
@@ -966,7 +966,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df1.select(ilike(col("a"), col("b"), lit("中国"))).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.ESCAPE_CHAR_WRONG_TYPE",
+      errorClass = "INVALID_ESCAPE_CHAR",
       parameters = Map("sqlExpr" -> "\"中国\"")
     )
     // scalastyle:on
