@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import java.util.Arrays;
-import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
@@ -68,13 +67,19 @@ public final class GeneralAggregateFunc extends ExpressionWithToString implement
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
+
     GeneralAggregateFunc that = (GeneralAggregateFunc) o;
-    return Objects.equals(name, that.name) && isDistinct == that.isDistinct &&
-      Arrays.equals(children, that.children);
+
+    if (isDistinct != that.isDistinct) return false;
+    if (!name.equals(that.name)) return false;
+    return Arrays.equals(children, that.children);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, isDistinct) * 31 + Arrays.hashCode(children);
+    int result = name.hashCode();
+    result = 31 * result + (isDistinct ? 1 : 0);
+    result = 31 * result + Arrays.hashCode(children);
+    return result;
   }
 }
