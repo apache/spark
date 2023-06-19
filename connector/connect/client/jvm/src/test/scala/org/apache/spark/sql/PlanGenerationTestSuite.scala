@@ -1921,12 +1921,24 @@ class PlanGenerationTestSuite
     fn.date_add(fn.col("d"), 2)
   }
 
+  temporalFunctionTest("dateadd") {
+    fn.dateadd(fn.col("d"), lit(2))
+  }
+
   temporalFunctionTest("date_sub") {
     fn.date_sub(fn.col("d"), 2)
   }
 
   temporalFunctionTest("datediff") {
     fn.datediff(fn.col("d"), fn.make_date(lit(2020), lit(10), lit(10)))
+  }
+
+  temporalFunctionTest("date_diff") {
+    fn.date_diff(fn.col("d"), fn.make_date(lit(2020), lit(10), lit(10)))
+  }
+
+  temporalFunctionTest("date_from_unix_date") {
+    fn.date_from_unix_date(lit(10))
   }
 
   temporalFunctionTest("year") {
@@ -1947,6 +1959,10 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("dayofmonth") {
     fn.dayofmonth(fn.col("d"))
+  }
+
+  temporalFunctionTest("day") {
+    fn.day(fn.col("d"))
   }
 
   temporalFunctionTest("dayofyear") {
