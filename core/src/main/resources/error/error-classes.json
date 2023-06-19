@@ -1606,6 +1606,12 @@
     ],
     "sqlState" : "42607"
   },
+  "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
+    "message" : [
+      "There is no default column value available for <colName> which is not nullable."
+    ],
+    "sqlState" : "42608"
+  },
   "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
     "message" : [
       "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition."
