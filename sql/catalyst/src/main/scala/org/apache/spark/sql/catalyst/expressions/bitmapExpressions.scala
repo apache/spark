@@ -237,10 +237,10 @@ case class BitmapConstructAgg(child: Expression,
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(col) FROM VALUES (X '10...'), (X '20...'), (X '40...') AS tab(col);
-       [70 00 ...]
-      > SELECT _FUNC_(col) FROM VALUES (X '10...'), (X '10...'), (X '10...') AS tab(col);
-       [10 00 ...]
+      > SELECT _FUNC_(col) FROM VALUES (X '10'), (X '20'), (X '40') AS tab(col);
+       [70]
+      > SELECT _FUNC_(col) FROM VALUES (X '10'), (X '10'), (X '10') AS tab(col);
+       [10]
   """,
   since = "3.5.0",
   group = "agg_funcs"
