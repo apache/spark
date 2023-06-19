@@ -1898,7 +1898,7 @@ object functions {
   }
 
   /**
-   * Returns `dividend`/`divisor`. It always performs floating point division. Its result is
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
    * always null if `divisor` is 0.
    *
    * @note
@@ -1914,7 +1914,7 @@ object functions {
   }
 
   /**
-   * Returns `left`*`right` and the result is null on overflow. The acceptable input types are the
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are the
    * same with the `*` operator.
    *
    * @note
