@@ -110,7 +110,13 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
-    from pyspark.sql._typing import AtomicValue, RowLike, SQLArrowBatchedUDFType, SQLBatchedUDFType
+    from pyspark.sql._typing import (
+        AtomicValue,
+        RowLike,
+        SQLArrowBatchedUDFType,
+        SQLBatchedUDFType,
+        SQLTableUDFType,
+    )
 
     from py4j.java_gateway import JavaObject
     from py4j.java_collections import JavaArray
@@ -151,6 +157,8 @@ class PythonEvalType:
     SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
+
+    SQL_TABLE_UDF: "SQLTableUDFType" = 300
 
 
 def portable_hash(x: Hashable) -> int:

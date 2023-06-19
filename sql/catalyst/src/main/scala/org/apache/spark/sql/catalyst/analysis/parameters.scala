@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -60,9 +60,7 @@ case class PosParameter(pos: Int) extends Parameter {
  * The logical plan representing a parameterized query. It will be removed during analysis after
  * the parameters are bind.
  */
-abstract class ParameterizedQuery(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = Nil
-  override lazy val resolved = false
+abstract class ParameterizedQuery(child: LogicalPlan) extends UnresolvedUnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETERIZED_QUERY)
 }
 

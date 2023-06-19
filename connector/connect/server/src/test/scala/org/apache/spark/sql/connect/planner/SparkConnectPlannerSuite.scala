@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProj
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -51,11 +52,12 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(spark).transformRelation(rel)
+    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId", new MockObserver())
+    new SparkConnectPlanner(SessionHolder.forTesting(spark))
+      .process(cmd, "clientId", "sessionId", new MockObserver())
   }
 
   def readRel: proto.Relation =
