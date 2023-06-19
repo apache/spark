@@ -624,9 +624,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map { f =>
-          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values)
-        }
+        p.files.map(f => PartitionedFileUtil.getPartitionedFile(f, p.values))
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(f.toPath.getName)
@@ -691,12 +689,9 @@ case class FileSourceScanExec(
 
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
-        // getPath() is very expensive so we only want to call it once in this block:
-        val filePath = file.getPath
-
-        if (shouldProcess(filePath)) {
+        if (shouldProcess(file.getPath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-              relation.sparkSession, relation.options, filePath) &&
+              relation.sparkSession, relation.options, file.getPath) &&
             // SPARK-39634: Allow file splitting in combination with row index generation once
             // the fix for PARQUET-2161 is available.
             (!relation.fileFormat.isInstanceOf[ParquetSource]
@@ -704,7 +699,6 @@ case class FileSourceScanExec(
           PartitionedFileUtil.splitFiles(
             sparkSession = relation.sparkSession,
             file = file,
-            filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
             partitionValues = partition.values

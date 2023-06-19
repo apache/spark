@@ -43,7 +43,7 @@ _CAPTURE_SCOPES = 3
 def sql(
     query: str,
     index_col: Optional[Union[str, List[str]]] = None,
-    args: Dict[str, str] = {},
+    args: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> DataFrame:
     """
@@ -103,10 +103,14 @@ def sql(
 
             Also note that the index name(s) should be matched to the existing name.
     args : dict
-        A dictionary of parameter names to string values that are parsed as SQL literal
-        expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
-        "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to SQL
-        comments are skipped while parsing.
+        A dictionary of parameter names to Python objects that can be converted to
+        SQL literal expressions. See
+        <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+        Supported Data Types</a> for supported value types in Python.
+        For example, dictionary keys: "rank", "name", "birthdate";
+        dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
+        Dict value can be also a `Column` of literal expression, in that case it is taken as is.
+
 
         .. versionadded:: 3.4.0
 
@@ -166,7 +170,7 @@ def sql(
 
     And substitude named parameters with the `:` prefix by SQL literals.
 
-    >>> ps.sql("SELECT * FROM range(10) WHERE id > :bound1", args={"bound1":"7"})
+    >>> ps.sql("SELECT * FROM range(10) WHERE id > :bound1", args={"bound1":7})
        id
     0   8
     1   9

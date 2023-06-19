@@ -116,8 +116,10 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    curdate
     current_date
     current_timestamp
+    current_timezone
     date_add
     date_format
     date_sub
@@ -133,6 +135,12 @@ Datetime Functions
     month
     last_day
     localtimestamp
+    make_dt_interval
+    make_interval
+    make_timestamp
+    make_timestamp_ltz
+    make_timestamp_ntz
+    make_ym_interval
     minute
     months_between
     next_day
@@ -245,24 +253,36 @@ Aggregate Functions
 .. autosummary::
     :toctree: api/
 
+    any_value
     approxCountDistinct
     approx_count_distinct
+    approx_percentile
     avg
+    bit_and
+    bit_or
+    bit_xor
+    bool_and
+    bool_or
     collect_list
     collect_set
     corr
     count
     count_distinct
     countDistinct
+    count_if
     covar_pop
     covar_samp
+    every
     first
+    first_value
     grouping
     grouping_id
+    histogram_numeric
     hll_sketch_agg
     hll_union_agg
     kurtosis
     last
+    last_value
     max
     max_by
     mean
@@ -273,6 +293,7 @@ Aggregate Functions
     percentile
     percentile_approx
     product
+    reduce
     regr_avgx
     regr_avgy
     regr_count
@@ -283,6 +304,7 @@ Aggregate Functions
     regr_sxy
     regr_syy
     skewness
+    some
     std
     stddev
     stddev_pop
@@ -335,6 +357,7 @@ String Functions
     concat_ws
     decode
     encode
+    endswith
     format_number
     format_string
     initcap
@@ -346,6 +369,9 @@ String Functions
     lpad
     ltrim
     octet_length
+    parse_url
+    position
+    printf
     rlike
     regexp
     regexp_like
@@ -355,12 +381,16 @@ String Functions
     regexp_replace
     regexp_substr
     regexp_instr
+    replace
     unbase64
     rpad
     repeat
     rtrim
     soundex
     split
+    split_part
+    startswith
+    substr
     substring
     substring_index
     overlay
@@ -371,6 +401,18 @@ String Functions
     translate
     trim
     upper
+    url_decode
+    url_encode
+
+
+Bitwise Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    bit_count
+    bit_get
+    getbit
 
 
 UDF
@@ -389,6 +431,10 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    current_catalog
+    current_database
+    current_schema
+    current_user
     md5
     sha1
     sha2
@@ -399,6 +445,19 @@ Misc Functions
     raise_error
     hll_sketch_estimate
     hll_union
+    user
+
+Predicate Functions
+-------------------
+.. autosummary::
+    :toctree: api/
+
+    equal_null
+    ifnull
+    isnotnull
+    nullif
+    nvl
+    nvl2
 
 Xml Functions
 --------------
