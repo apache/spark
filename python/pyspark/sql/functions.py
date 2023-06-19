@@ -351,6 +351,159 @@ def sqrt(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns the sum of `left`and `right` and the result is null on overflow.
+    The acceptable input types are the same with the `+` operator.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    Only Numeric type is supported in this function, while `try_add` in SQL supports Numeric,
+    DATE, TIMESTAMP, and INTERVAL.
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+    right : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(try_add(df.birth, df.age).alias('r')).collect()
+    [Row(r=1997), Row(r=1992)]
+    """
+    return _invoke_function_over_columns("try_add", left, right)
+
+
+@try_remote_functions
+def try_avg(col: "ColumnOrName") -> Column:
+    """
+    Returns the mean calculated from values of a group and the result is null on overflow.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(try_avg(df.age).alias('r')).collect()
+    [Row(r=8.5)]
+    """
+    return _invoke_function_over_columns("try_avg", col)
+
+
+@try_remote_functions
+def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns `dividend`/`divisor`. It always performs floating point division. Its result is
+    always null if `divisor` is 0.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    The `dividend` must be a numeric, `divisor` must be a numeric in this function. While the
+    `dividend` can be a numeric or an interval, `divisor` must be a numeric in SQL function
+    `try_divide`.
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        dividend
+    right : :class:`~pyspark.sql.Column` or str
+        divisor
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
+    >>> df.select(try_divide(df.a, df.b).alias('r')).collect()
+    [Row(r=400.0), Row(r=995.0)]
+    """
+    return _invoke_function_over_columns("try_divide", left, right)
+
+
+@try_remote_functions
+def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns `left`*`right` and the result is null on overflow. The acceptable input types are the
+    same with the `*` operator.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    Only Numeric type is supported in this function, while `try_multiply` in SQL supports
+    Numeric and INTERVAL.
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        multiplicand
+    right : :class:`~pyspark.sql.Column` or str
+        multiplier
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
+    >>> df.select(try_multiply(df.a, df.b).alias('r')).collect()
+    [Row(r=90000), Row(r=3980)]
+    """
+    return _invoke_function_over_columns("try_multiply", left, right)
+
+
+@try_remote_functions
+def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns `left`-`right` and the result is null on overflow. The acceptable input types are the
+    same with the `-` operator.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    Only Numeric type is supported in this function, while `try_subtract` in SQL supports
+    Numeric, DATE, TIMESTAMP, and INTERVAL.
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+    right : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(6000, 15), (1990, 2)], ["a", "b"])
+    >>> df.select(try_subtract(df.a, df.b).alias('r')).collect()
+    [Row(r=5985), Row(r=1988)]
+    """
+    return _invoke_function_over_columns("try_subtract", left, right)
+
+
+@try_remote_functions
+def try_sum(col: "ColumnOrName") -> Column:
+    """
+    Returns the sum calculated from values of a group and the result is null on overflow.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+
+    Examples
+    --------
+    >>> df = spark.range(10)
+    >>> df.select(try_sum(df["id"]).alias('r')).collect()
+    [Row(r=45)]
+    """
+    return _invoke_function_over_columns("try_sum", col)
+
+
+@try_remote_functions
 def abs(col: "ColumnOrName") -> Column:
     """
     Computes the absolute value.
@@ -6331,6 +6484,36 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
 
+def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Parses the `col` with the `format` to a timestamp. The function always
+    returns null on an invalid input with/without ANSI SQL mode enabled. The result data type is
+    consistent with the value of configuration `spark.sql.timestampType`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column values to convert.
+    format: str, optional
+        format to use to convert timestamp values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(try_to_timestamp(df.t).alias('dt')).collect()
+    [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
+
+    >>> df.select(try_to_timestamp(df.t, lit('yyyy-MM-dd HH:mm:ss')).alias('dt')).collect()
+    [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
+    """
+    if format is not None:
+        return _invoke_function_over_columns("try_to_timestamp", col, format)
+    else:
+        return _invoke_function_over_columns("try_to_timestamp", col)
+
+
 @try_remote_functions
 def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     """
@@ -9467,6 +9650,61 @@ def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("startswith", str, prefix)
 
 
+def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    """
+    This is a special version of `to_binary` that performs the same operation, but returns a NULL
+    value instead of raising an error if the conversion cannot be performed.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert binary values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("abc",)], ["e"])
+    >>> df.select(try_to_binary(df.e, lit("utf-8")).alias('r')).collect()
+    [Row(r=bytearray(b'abc'))]
+
+    >>> df = spark.createDataFrame([("414243",)], ["e"])
+    >>> df.select(try_to_binary(df.e).alias('r')).collect()
+    [Row(r=bytearray(b'ABC'))]
+    """
+    if format is not None:
+        return _invoke_function_over_columns("try_to_binary", col, format)
+    else:
+        return _invoke_function_over_columns("try_to_binary", col)
+
+
+@try_remote_functions
+def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    """
+    Convert string 'col' to a number based on the string format `format`. Returns NULL if the
+    string 'col' does not match the expected format. The format follows the same semantics as the
+    to_number function.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Input column or strings.
+    format : :class:`~pyspark.sql.Column` or str, optional
+        format to use to convert number values.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("$78.12",)], ["e"])
+    >>> df.select(try_to_number(df.e, lit("$99.99")).alias('r')).collect()
+    [Row(r=Decimal('78.12'))]
+    """
+    return _invoke_function_over_columns("try_to_number", col, format)
+
+
 # ---------------------- Collection functions ------------------------------
 
 
@@ -9868,6 +10106,40 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     [Row(element_at(data, a)=1.0)]
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
+
+
+@try_remote_functions
+def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
+    """
+    (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+    throw an error. If index < 0, accesses elements from the last to the first. The function
+    always returns NULL if the index exceeds the length of the array.
+
+    (map, key) - Returns value for given key. The function always returns NULL if the key is not
+    contained in the map.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array or map
+    extraction :
+        index to check for in array or key to check for in map
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
+    >>> df.select(try_element_at(df.data, lit(1)).alias('r')).collect()
+    [Row(r='a')]
+    >>> df.select(try_element_at(df.data, lit(-1)).alias('r')).collect()
+    [Row(r='c')]
+
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
+    >>> df.select(try_element_at(df.data, lit("a")).alias('r')).collect()
+    [Row(r=1.0)]
+    """
+    return _invoke_function_over_columns("try_element_at", col, extraction)
 
 
 @try_remote_functions

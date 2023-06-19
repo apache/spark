@@ -647,4 +647,54 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.select(width_bucket(col("v"), col("min"), col("max"), col("n")))
     )
   }
+
+  test("try_add") {
+    val df = Seq((1982, 15)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_add(birth, age)"), Seq(Row(1997)))
+    checkAnswer(df.select(try_add(col("birth"), col("age"))), Seq(Row(1997)))
+
+    checkAnswer(df.select(try_add(lit(2147483647), lit(2))), Seq(Row(1997)))
+  }
+
+  test("try_avg") {
+    val df = Seq((1982, 15), (1990, 11)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_avg(age)"), Seq(Row(13)))
+    checkAnswer(df.select(try_avg(col("age"))), Seq(Row(13)))
+  }
+
+  test("try_divide") {
+    val df = Seq((2000, 10), (2050, 5)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_divide(birth, age)"), Seq(Row(200.0), Row(410.0)))
+    checkAnswer(df.select(try_divide(col("birth"), col("age"))), Seq(Row(200.0), Row(410.0)))
+  }
+
+  test("try_element_at") {
+    val df = Seq((Array(1, 2, 3), 2)).toDF("a", "b")
+    checkAnswer(df.selectExpr("try_element_at(a, b)"), Seq(Row(2)))
+    checkAnswer(df.select(try_element_at(col("a"), col("b"))), Seq(Row(2)))
+  }
+
+  test("try_multiply") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_multiply(a, b)"), Seq(Row(6)))
+    checkAnswer(df.select(try_multiply(col("a"), col("b"))), Seq(Row(6)))
+  }
+
+  test("try_subtract") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_subtract(a, b)"), Seq(Row(-1)))
+    checkAnswer(df.select(try_subtract(col("a"), col("b"))), Seq(Row(-1)))
+  }
+
+  test("try_sum") {
+    val df = Seq((2, 3), (5, 6)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_sum(a)"), Seq(Row(7)))
+    checkAnswer(df.select(try_sum(col("a"))), Seq(Row(7)))
+  }
 }

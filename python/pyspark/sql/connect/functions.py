@@ -843,6 +843,48 @@ def sqrt(col: "ColumnOrName") -> Column:
 sqrt.__doc__ = pysparkfuncs.sqrt.__doc__
 
 
+def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_add", left, right)
+
+
+try_add.__doc__ = pysparkfuncs.try_add.__doc__
+
+
+def try_avg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_avg", col)
+
+
+try_avg.__doc__ = pysparkfuncs.try_avg.__doc__
+
+
+def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_divide", left, right)
+
+
+try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
+
+
+def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_multiply", left, right)
+
+
+try_multiply.__doc__ = pysparkfuncs.try_multiply.__doc__
+
+
+def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_subtract", left, right)
+
+
+try_subtract.__doc__ = pysparkfuncs.try_subtract.__doc__
+
+
+def try_sum(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_sum", col)
+
+
+try_sum.__doc__ = pysparkfuncs.try_sum.__doc__
+
+
 def tan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tan", col)
 
@@ -1636,6 +1678,13 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
 
 element_at.__doc__ = pysparkfuncs.element_at.__doc__
+
+
+def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_element_at", col, extraction)
+
+
+try_element_at.__doc__ = pysparkfuncs.try_element_at.__doc__
 
 
 def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
@@ -2490,6 +2539,23 @@ def startswith(str: "ColumnOrName", prefix: "ColumnOrName") -> Column:
 startswith.__doc__ = pysparkfuncs.startswith.__doc__
 
 
+def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("try_to_binary", col, format)
+    else:
+        return _invoke_function_over_columns("try_to_binary", col)
+
+
+try_to_binary.__doc__ = pysparkfuncs.try_to_binary.__doc__
+
+
+def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_to_number", col, format)
+
+
+try_to_number.__doc__ = pysparkfuncs.try_to_number.__doc__
+
+
 # Date/Timestamp functions
 # TODO(SPARK-41455): Resolve dtypes inconsistencies for:
 #     to_timestamp, from_utc_timestamp, to_utc_timestamp,
@@ -2709,6 +2775,16 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("try_to_timestamp", col, format)
+    else:
+        return _invoke_function_over_columns("try_to_timestamp", col)
+
+
+try_to_timestamp.__doc__ = pysparkfuncs.try_to_timestamp.__doc__
 
 
 def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:

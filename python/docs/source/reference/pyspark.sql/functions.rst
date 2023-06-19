@@ -104,6 +104,14 @@ Math Functions
     tan
     tanh
     toDegrees
+    try_add
+    try_avg
+    try_divide
+    try_multiply
+    try_subtract
+    try_sum
+    try_to_binary
+    try_to_number
     degrees
     toRadians
     radians
@@ -159,6 +167,7 @@ Datetime Functions
     window
     session_window
     timestamp_seconds
+    try_to_timestamp
     unix_date
     unix_micros
     unix_millis
@@ -234,6 +243,7 @@ Collection Functions
     schema_of_csv
     str_to_map
     to_csv
+    try_element_at
 
 
 Partition Transformation Functions

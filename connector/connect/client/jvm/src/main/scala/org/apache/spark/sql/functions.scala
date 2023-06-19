@@ -1808,6 +1808,75 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @note
+   *   Only Numeric type is supported in this function, while `try_add` in SQL supports Numeric,
+   *   DATE, TIMESTAMP, and INTERVAL.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = Column.fn("try_add", left, right)
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = Column.fn("try_avg", e)
+
+  /**
+   * Returns `dividend`/`divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @note
+   *   The `dividend` must be a numeric, `divisor` must be a numeric in this function. While the
+   *   `dividend` can be a numeric or an interval, `divisor` must be a numeric in SQL function
+   *   `try_divide`.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
+
+  /**
+   * Returns `left`*`right` and the result is null on overflow. The acceptable input types are the
+   * same with the `*` operator.
+   *
+   * @note
+   *   Only Numeric type is supported in this function, while `try_multiply` in SQL supports
+   *   Numeric and INTERVAL.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
+
+  /**
+   * Returns `left`-`right` and the result is null on overflow. The acceptable input types are the
+   * same with the `-` operator.
+   *
+   * @note
+   *   Only Numeric type is supported in this function, while `try_subtract` in SQL supports
+   *   Numeric, DATE, TIMESTAMP, and INTERVAL.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = Column.fn("try_subtract", left, right)
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = Column.fn("try_sum", e)
+
+  /**
    * Creates a new struct column. If the input column is a column in a `DataFrame`, or a derived
    * column expression that is named (i.e. aliased), its name would be retained as the
    * StructField's name, otherwise, the newly generated StructField's name would be auto generated
@@ -3971,6 +4040,34 @@ object functions {
   def startswith(str: Column, prefix: Column): Column =
     Column.fn("startswith", str, prefix)
 
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, f: Column): Column = Column.fn("try_to_binary", e, f)
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = Column.fn("try_to_binary", e)
+
+  /**
+   * Convert string 'e' to a number based on the string format `format`. Returns NULL if the
+   * string 'e' does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = Column.fn("try_to_number", e, format)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4473,6 +4570,27 @@ object functions {
    * @since 3.4.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with/without ANSI SQL mode enabled. The result data type is consistent with the
+   * value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column =
+    Column.fn("try_to_timestamp", s, format)
+
+  /**
+   * Parses the `s` expression to a timestamp. The function always returns null on an invalid
+   * input with/without ANSI SQL mode enabled. It follows casting rules to a timestamp. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = Column.fn("try_to_timestamp", s)
 
   /**
    * Converts the column into `DateType` by casting rules to `DateType`.
@@ -5033,6 +5151,20 @@ object functions {
    * @since 3.4.0
    */
   def element_at(column: Column, value: Any): Column = Column.fn("element_at", column, lit(value))
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index < 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column =
+    Column.fn("try_element_at", column, value)
 
   /**
    * Returns element of array at given (0-based) index. If the index points outside of the array
