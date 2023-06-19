@@ -52,6 +52,10 @@ class UnivocityParser(
     requiredSchema: StructType,
     val options: CSVOptions,
     filters: Seq[Filter]) extends Logging {
+  require(requiredSchema.toSet.subsetOf(
+    CharVarcharUtils.removeCharVarcharTypeStringMetadataKey(dataSchema).toSet),
+    s"requiredSchema (${requiredSchema.catalogString}) should be the subset of " +
+      s"dataSchema (${dataSchema.catalogString}).")
 
   def this(dataSchema: StructType, requiredSchema: StructType, options: CSVOptions) = {
     this(dataSchema, requiredSchema, options, Seq.empty)
