@@ -319,6 +319,7 @@ class TorchDistributor(Distributor):
     ...     # ...
     ...     torch.destroy_process_group()
     ...     return model # or anything else
+    ...
     >>> distributor = TorchDistributor(
     ...     num_processes=2,
     ...     local_mode=True,
@@ -345,6 +346,7 @@ class TorchDistributor(Distributor):
     ...     trainer.fit()
     ...     # ...
     ...     return trainer
+    ...
     >>> distributor = TorchDistributor(
     ...     num_processes=num_proc,
     ...     local_mode=True,

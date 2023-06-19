@@ -1331,6 +1331,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     scala_datatype = spark._jsparkSession.parseDataType(datatype.json())
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
+    ...
     >>> for cls in _all_atomic_types.values():
     ...     if cls is not VarcharType and cls is not CharType:
     ...         check_datatype(cls())
