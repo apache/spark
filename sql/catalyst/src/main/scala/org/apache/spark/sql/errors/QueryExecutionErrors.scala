@@ -212,7 +212,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(
       errorClass = "FAILED_EXECUTE_UDF",
       messageParameters = Map(
-        "functionName" -> functionName,
+        "functionName" -> toSQLId(functionName),
         "signature" -> inputTypes,
         "result" -> outputType),
       cause = e)

@@ -414,7 +414,8 @@ class QueryExecutionErrorsSuite
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map(
-        "functionName" -> "luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)",
+        "functionName" ->
+          "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`",
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
@@ -433,7 +434,7 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      parameters = Map("functionName" -> "QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+",
+      parameters = Map("functionName" -> "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`",
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
