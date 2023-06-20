@@ -4567,7 +4567,7 @@ object functions {
    * @since 3.5.0
    */
   def extract(field: Column, source: Column): Column = withExpr {
-    UnresolvedFunction("extract", Seq(field, source).map(_.expr), isDistinct = false)
+    UnresolvedFunction("extract", Seq(field.expr, source.expr), isDistinct = false)
   }
 
   /**
@@ -4581,7 +4581,7 @@ object functions {
    * @since 3.5.0
    */
   def date_part(field: Column, source: Column): Column = withExpr {
-    UnresolvedFunction("date_part", Seq(field, source).map(_.expr), isDistinct = false)
+    UnresolvedFunction("date_part", Seq(field.expr, source.expr), isDistinct = false)
   }
 
   /**
@@ -4595,7 +4595,7 @@ object functions {
    * @since 3.5.0
    */
   def datepart(field: Column, source: Column): Column = withExpr {
-    UnresolvedFunction("datepart", Seq(field, source).map(_.expr), isDistinct = false)
+    UnresolvedFunction("datepart", Seq(field.expr, source.expr), isDistinct = false)
   }
 
   /**
