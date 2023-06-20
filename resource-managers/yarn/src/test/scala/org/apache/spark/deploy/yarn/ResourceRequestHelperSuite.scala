@@ -43,6 +43,11 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
   private val NEW_CONFIG_DRIVER_MEMORY = s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${MEMORY}.${AMOUNT}"
   private val NEW_CONFIG_DRIVER_CORES = s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${CORES}.${AMOUNT}"
 
+  protected override def afterAll(): Unit = {
+    super.afterAll()
+    ResourceRequestTestHelper.initializeResourceTypes(Seq.empty)
+  }
+
   test("empty SparkConf should be valid") {
     val sparkConf = new SparkConf()
     validateResources(sparkConf)

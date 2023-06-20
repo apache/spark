@@ -62,6 +62,11 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
   var oldSystemProperties: Properties = null
 
+  protected override def afterAll(): Unit = {
+    super.afterAll()
+    ResourceRequestTestHelper.initializeResourceTypes(Seq.empty)
+  }
+
   test("default Yarn application classpath") {
     getDefaultYarnApplicationClasspath should be(Fixtures.knownDefYarnAppCP)
   }
