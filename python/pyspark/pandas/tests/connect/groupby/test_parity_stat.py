@@ -22,17 +22,8 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class GroupbyParityStatTests(GroupbyStatMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip(
-        "TODO(SPARK-43622): Enable pyspark.pandas.spark.functions.covar in Spark Connect."
-    )
-    def test_basic_stat_funcs(self):
-        super().test_basic_stat_funcs()
 
-    @unittest.skip(
-        "TODO(SPARK-43645): Enable pyspark.pandas.spark.functions.stddev in Spark Connect."
-    )
-    def test_ddof(self):
-        super().test_ddof()
+    pass
 
 
 if __name__ == "__main__":
