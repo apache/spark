@@ -1843,8 +1843,8 @@ object functions {
   def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
 
   /**
-   * Returns `left`-`right` and the result is null on overflow. The acceptable input types are the
-   * same with the `-` operator.
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
    *
    * @group math_funcs
    * @since 3.5.0
@@ -4067,8 +4067,8 @@ object functions {
   def try_to_binary(e: Column): Column = Column.fn("try_to_binary", e)
 
   /**
-   * Convert string 'e' to a number based on the string format `format`. Returns NULL if the
-   * string 'e' does not match the expected format. The format follows the same semantics as the
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
    * to_number function.
    *
    * @group string_funcs
@@ -5352,7 +5352,7 @@ object functions {
 
   /**
    * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
-   * throw an error. If index < 0, accesses elements from the last to the first. The function
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
    * always returns NULL if the index exceeds the length of the array.
    *
    * (map, key) - Returns value for given key. The function always returns NULL if the key is not

@@ -1916,7 +1916,7 @@ object functions {
   }
 
   /**
-   * Returns `left`-`right` and the result is null on overflow. The acceptable input types are
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
    * the same with the `-` operator.
    *
    * @group math_funcs
@@ -4193,8 +4193,8 @@ object functions {
   }
 
   /**
-   * Convert string 'e' to a number based on the string format `format`. Returns NULL if the
-   * string 'e' does not match the expected format. The format follows the same semantics as the
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
    * to_number function.
    *
    * @group string_funcs
@@ -5501,7 +5501,7 @@ object functions {
 
   /**
    * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
-   * throw an error. If index < 0, accesses elements from the last to the first. The function
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
    * always returns NULL if the index exceeds the length of the array.
    *
    * (map, key) - Returns value for given key. The function always returns NULL if the key is not
