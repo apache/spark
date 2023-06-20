@@ -48,19 +48,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-
-
-def _get_active_session(is_remote: bool) -> SparkSession:
-    if not is_remote:
-        spark = SparkSession.getActiveSession()
-    else:
-        import pyspark.sql.connect.session
-
-        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
-
-    if spark is None:
-        raise RuntimeError("An active SparkSession is required for the distributor.")
-    return spark
+from pyspark.ml.util import _get_active_session
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:

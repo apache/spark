@@ -225,6 +225,8 @@ class SparkSession private(
    */
   def udf: UDFRegistration = sessionState.udfRegistration
 
+  def udtf: UDTFRegistration = sessionState.udtfRegistration
+
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * `StreamingQuery`s active on `this`.
@@ -613,7 +615,7 @@ class SparkSession private(
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @param sqlText A SQL statement with positional parameters to execute.
-   * @param args A sequence of Java/Scala objects that can be converted to
+   * @param args An array of Java/Scala objects that can be converted to
    *             SQL literal expressions. See
    *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *             Supported Data Types</a> for supported value types in Scala/Java.
@@ -624,7 +626,7 @@ class SparkSession private(
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Seq[Any]): DataFrame = withActive {
+  def sql(sqlText: String, args: Array[_]): DataFrame = withActive {
     val tracker = new QueryPlanningTracker
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
@@ -635,27 +637,6 @@ class SparkSession private(
       }
     }
     Dataset.ofRows(self, plan, tracker)
-  }
-
-  /**
-   * Executes a SQL query substituting positional parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with positional parameters to execute.
-   * @param args A list of Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             A value can be also a `Column` of literal expression, in that case
-   *             it is taken as is.
-   *
-   * @since 3.5.0
-   */
-  @Experimental
-  def sql(sqlText: String, args: java.util.List[_]): DataFrame = {
-    sql(sqlText, args.asScala.toSeq)
   }
 
   /**

@@ -72,6 +72,7 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
+    from pyspark.sql.udtf import UDTFRegistration
 
 
 __all__ = ["SparkSession"]
@@ -791,6 +792,20 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.udf import UDFRegistration
 
         return UDFRegistration(self)
+
+    @property
+    def udtf(self) -> "UDTFRegistration":
+        """Returns a :class:`UDTFRegistration` for UDTF registration.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`UDTFRegistration`
+        """
+        from pyspark.sql.udtf import UDTFRegistration
+
+        return UDTFRegistration(self)
 
     def range(
         self,

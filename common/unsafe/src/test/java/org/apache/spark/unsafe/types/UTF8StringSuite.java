@@ -229,6 +229,10 @@ public class UTF8StringSuite {
     assertEquals(fromString("1"), fromString("1").trim());
     assertEquals(fromString("1"), fromString("1\t").trimAll());
 
+    assertEquals(fromString("1中文").toString(), fromString("1中文").trimAll().toString());
+    assertEquals(fromString("1"), fromString("1\u0003").trimAll());
+    assertEquals(fromString("1"), fromString("1\u007F").trimAll());
+
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
     assertEquals(fromString("  hello"), fromString("  hello ").trimRight());

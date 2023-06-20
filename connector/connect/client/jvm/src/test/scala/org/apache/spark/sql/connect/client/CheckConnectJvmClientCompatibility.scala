@@ -225,6 +225,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udtf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.streams"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
       ProblemFilters.exclude[Problem](

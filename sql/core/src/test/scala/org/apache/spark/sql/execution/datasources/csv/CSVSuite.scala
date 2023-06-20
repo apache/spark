@@ -3218,7 +3218,7 @@ class CSVv1Suite extends CSVSuite {
 
       checkError(
         exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[2015,Chevy,Volt,null,null]",
           "failFastMode" -> "FAILFAST")
