@@ -34,7 +34,7 @@ object BitmapFunctions {
 
   /** Merges both bitmaps and writes into bitmap1. */
   def merge(bitmap1: Array[Byte], bitmap2: Array[Byte]): Unit = {
-    for (i <- 0 until BitmapFunctions.NUM_BYTES) {
+    for (i <- 0 until Math.min(bitmap1.length, bitmap2.length)) {
       bitmap1.update(i, ((bitmap1(i) & 0x0FF) | (bitmap2(i) & 0x0FF)).toByte)
     }
   }
