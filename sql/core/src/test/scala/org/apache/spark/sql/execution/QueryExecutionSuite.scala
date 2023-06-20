@@ -220,8 +220,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     assertNoTag(tag5, df.queryExecution.sparkPlan)
   }
 
-  // TODO(SPARK-44074): re-enable this test after SPARK-44074 resolved
-  ignore("Logging plan changes for execution") {
+  test("Logging plan changes for execution") {
     val testAppender = new LogAppender("plan changes")
     withLogAppender(testAppender) {
       withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
