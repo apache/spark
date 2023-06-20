@@ -615,7 +615,7 @@ class SparkSession private(
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @param sqlText A SQL statement with positional parameters to execute.
-   * @param args A sequence of Java/Scala objects that can be converted to
+   * @param args An array of Java/Scala objects that can be converted to
    *             SQL literal expressions. See
    *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
    *             Supported Data Types</a> for supported value types in Scala/Java.
