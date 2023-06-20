@@ -2740,6 +2740,27 @@ def weekday(col: "ColumnOrName") -> Column:
 weekday.__doc__ = pysparkfuncs.weekday.__doc__
 
 
+def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("extract", field, source)
+
+
+extract.__doc__ = pysparkfuncs.extract.__doc__
+
+
+def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("date_part", field, source)
+
+
+extract.__doc__ = pysparkfuncs.extract.__doc__
+
+
+def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("datepart", field, source)
+
+
+extract.__doc__ = pysparkfuncs.extract.__doc__
+
+
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("make_date", year, month, day)
 

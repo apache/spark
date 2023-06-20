@@ -4445,6 +4445,56 @@ object functions {
   def hour(e: Column): Column = Column.fn("hour", e)
 
   /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = {
+    Column.fn("extract", field, source)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = {
+    Column.fn("date_part", field, source)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = {
+    Column.fn("datepart", field, source)
+  }
+
+  /**
    * Returns the last day of the month which the given date belongs to. For example, input
    * "2015-07-27" returns "2015-07-31" since July 31 is the last day of the month in July 2015.
    *

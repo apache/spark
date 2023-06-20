@@ -130,9 +130,12 @@ Datetime Functions
     dateadd
     datediff
     day
+    date_part
+    datepart
     dayofmonth
     dayofweek
     dayofyear
+    extract
     second
     weekofyear
     year

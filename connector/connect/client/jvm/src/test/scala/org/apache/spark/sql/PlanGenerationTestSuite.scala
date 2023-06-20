@@ -2021,6 +2021,18 @@ class PlanGenerationTestSuite
     fn.weekofyear(fn.col("d"))
   }
 
+  temporalFunctionTest("extract") {
+    fn.extract(lit("year"), fn.col("d"))
+  }
+
+  temporalFunctionTest("date_part") {
+    fn.date_part(lit("year"), fn.col("d"))
+  }
+
+  temporalFunctionTest("datepart") {
+    fn.datepart(lit("year"), fn.col("d"))
+  }
+
   temporalFunctionTest("from_unixtime") {
     fn.from_unixtime(lit(1L))
   }
