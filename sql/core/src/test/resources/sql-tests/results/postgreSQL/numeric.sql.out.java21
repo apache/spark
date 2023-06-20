@@ -3832,11 +3832,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
   "sqlState" : "21S01",
   "messageParameters" : {
-    "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
-    "tableColumns" : "`id1`, `id2`, `result`",
+    "dataColumns" : "'id', 'id', 'val', 'val', '(val * val)'",
+    "reason" : "too many data columns",
+    "tableColumns" : "'id1', 'id2', 'result'",
     "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }
@@ -4210,7 +4211,7 @@ struct<id1:int,result:decimal(38,10),expected:decimal(38,10)>
 5	5068226527.3212630000	5068226527.3212726541
 6	281839893606.9936500000	281839893606.9937234336
 8	167361463828.0749000000	167361463828.0749132007
-9	107511333880051872.0000000000	107511333880052007.0414112467
+9	107511333880051870.0000000000	107511333880052007.0414112467
 
 
 -- !query

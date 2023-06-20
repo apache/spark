@@ -44,6 +44,7 @@ from pyspark.sql.types import (
     DoubleType,
 )
 from pyspark.sql.window import WindowSpec
+from pyspark.sql.utils import is_remote
 
 
 class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
@@ -2448,11 +2449,26 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         unified_alpha = self._compute_unified_alpha()
 
         def mean(scol: Column) -> Column:
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+            if is_remote():
+                from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+                col_ewm = _invoke_function_over_columns(
+                    "ewm",
+                    scol,  # type: ignore[arg-type]
+                    lit(unified_alpha),
+                    lit(self._ignore_na),
+                )
+            else:
+                sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+                col_ewm = Column(
+                    sql_utils.ewm(
+                        scol._jc, unified_alpha, self._ignore_na  # type: ignore[assignment]
+                    )
+                )
             return F.when(
                 F.count(F.when(~scol.isNull(), 1).otherwise(None)).over(self._unbounded_window)
                 >= self._min_periods,
-                Column(sql_utils.ewm(scol._jc, unified_alpha, self._ignore_na)).over(self._window),
+                col_ewm.over(self._window),  # type: ignore[arg-type]
             ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(mean)
