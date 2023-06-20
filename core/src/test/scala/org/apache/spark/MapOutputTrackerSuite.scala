@@ -1052,11 +1052,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-44109: Remove duplicate preferred locations of each RDD partition") {
-    // TODO: remove this if the conf is reset after each suite
-    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
-
     try {
       tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
         new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
