@@ -1879,8 +1879,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_add(left: Column, right: Column): Column = {
-    call_udf("try_add", left, right)
+  def try_add(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_add", Seq(left.expr, right.expr), isDistinct = false)
   }
 
   /**
@@ -1900,8 +1900,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_divide(dividend: Column, divisor: Column): Column = {
-    call_udf("try_divide", dividend, divisor)
+  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
+    UnresolvedFunction("try_divide", Seq(dividend.expr, divisor.expr), isDistinct = false)
   }
 
   /**
@@ -1911,8 +1911,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_multiply(left: Column, right: Column): Column = {
-    call_udf("try_multiply", left, right)
+  def try_multiply(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_multiply", Seq(left.expr, right.expr), isDistinct = false)
   }
 
   /**
@@ -1922,8 +1922,8 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_subtract(left: Column, right: Column): Column = {
-    call_udf("try_subtract", left, right)
+  def try_subtract(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_subtract", Seq(left.expr, right.expr), isDistinct = false)
   }
 
   /**
