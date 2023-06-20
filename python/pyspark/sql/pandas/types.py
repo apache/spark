@@ -588,7 +588,7 @@ def _create_converter_to_pandas(
                     else:
                         # In Arrow Python UDF, ArrayType is converted to `np.ndarray`
                         # whereas a list is expected.
-                        return [_element_conv(v) for v in value]
+                        return [_element_conv(v) for v in value]  # type: ignore[misc]
 
                 return convert_array_ndarray_as_list
             else:
