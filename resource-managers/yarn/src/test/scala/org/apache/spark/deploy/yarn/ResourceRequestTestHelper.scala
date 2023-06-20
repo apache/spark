@@ -23,7 +23,7 @@ import org.apache.hadoop.yarn.api.records.ResourceTypeInfo
 import org.apache.hadoop.yarn.util.resource.ResourceUtils
 
 trait ResourceRequestTestHelper {
-  private def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
+  def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
     // ResourceUtils.reinitializeResources() is the YARN-way
     // to specify resources for the execution of the tests.
     // This method should receive standard resources with names of memory-mb and vcores.
