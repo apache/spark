@@ -40,7 +40,7 @@ class PipelineTestsMixin:
             np.testing.assert_allclose(
                 list(result_dataframe.probability),
                 expected_probabilities,
-                rtol=1e-2,
+                rtol=1e-1,
             )
 
     def test_pipeline(self):

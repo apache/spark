@@ -18,15 +18,15 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.ml.tests.connect.test_legacy_mode_classification import ClassificationTestsMixin
+from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin
 
 
-class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
+class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
             SparkSession.builder.remote("local[2]")
-            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
-            .getOrCreate()
+                .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+                .getOrCreate()
         )
 
     def tearDown(self) -> None:
@@ -34,7 +34,7 @@ class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.connect.test_connect_classification import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_connect_pipeline import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]
