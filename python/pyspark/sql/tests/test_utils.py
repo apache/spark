@@ -23,11 +23,62 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
+from pyspark.testing.utils import assert_df_equality
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase
+import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 
+import pandas as pd
 
-class UtilsTests(ReusedSQLTestCase):
+
+class UtilsTestsMixin:
+    def test_assert_pandas_df_equal(self):
+        df1 = pd.DataFrame(
+            data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
+        )
+        df2 = pd.DataFrame(
+            data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
+        )
+
+        assert_df_equality(df1, df2)
+
+    def test_assert_pyspark_df_equal(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+
+        assert_df_equality(df1, df2)
+
+    def remove_non_word_characters(self, col):
+        return F.regexp_replace(col, "[^\\w\\s]+", "")
+
+    def test_remove_non_word_characters_long(self):
+        source_data = [("jo&&se",), ("**li**",), ("#::luisa",), (None,)]
+        source_df = self.spark.createDataFrame(source_data, ["name"])
+
+        actual_df = source_df.withColumn(
+            "clean_name", self.remove_non_word_characters(F.col("name"))
+        )
+
+        expected_data = [("jo&&se", "jose"), ("**li**", "li"), ("#::luisa", "luisa"), (None, None)]
+        expected_df = self.spark.createDataFrame(expected_data, ["name", "clean_name"])
+
+        assert_df_equality(actual_df, expected_df)
+
+
+class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
@@ -74,6 +125,10 @@ class UtilsTests(ReusedSQLTestCase):
         except AnalysisException as e:
             self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
             self.assertEquals(e.getSqlState(), "42703")
+
+
+class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
+    pass
 
 
 if __name__ == "__main__":

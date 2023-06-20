@@ -21,12 +21,23 @@ import struct
 import sys
 import unittest
 from time import time, sleep
-from typing import Dict, Optional
+from typing import (
+    Optional,
+    Union,
+    Dict,
+    List,
+    Tuple,
+)
 
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkException
 from pyspark.find_spark_home import _find_spark_home
+from pyspark.sql import SparkSession
+from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+from pyspark.sql.types import StructType, AtomicType
+from functools import reduce
 
+import pandas as pd
 
 have_scipy = False
 have_numpy = False
@@ -184,10 +195,10 @@ class PySparkErrorTestUtils:
     """
 
     def check_error(
-        self,
-        exception: PySparkException,
-        error_class: str,
-        message_parameters: Optional[Dict[str, str]] = None,
+            self,
+            exception: PySparkException,
+            error_class: str,
+            message_parameters: Optional[Dict[str, str]] = None,
     ):
         # Test if given error is an instance of PySparkException.
         self.assertIsInstance(
@@ -209,3 +220,50 @@ class PySparkErrorTestUtils:
         self.assertEqual(
             expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
         )
+
+
+def assert_spark_schema_equality(
+        s1: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+        s2: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+):
+    if s1 != s2:
+        msg = "Schemas are different"
+        raise AssertionError(msg)
+
+
+def assert_spark_df_equality(
+        left: PySparkDataFrame, right: PySparkDataFrame, ignore_row_order: bool = True
+):
+    def assert_rows_equality(rows1, rows2):
+        if rows1 != rows2:
+            msg = "Dataframes are different"
+            raise AssertionError(msg)
+
+    transforms = []
+
+    if ignore_row_order:
+        transforms.append(lambda df: df.sort(df.columns))
+
+    left = reduce(lambda acc, fn: fn(acc), transforms, left)
+    right = reduce(lambda acc, fn: fn(acc), transforms, right)
+
+    assert_spark_schema_equality(left.schema, right.schema)
+    assert_rows_equality(left.collect(), right.collect())
+
+
+def assert_df_equality(
+        left: Union[
+            PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
+        ],
+        right: Union[
+            PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
+        ],
+):
+
+    from pyspark.testing.pandasutils import assert_pandas_df_equality
+
+    if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
+        assert_pandas_df_equality(left, right)
+
+    elif isinstance(left, PySparkDataFrame) and isinstance(right, PySparkDataFrame):
+        assert_spark_df_equality(left, right)
