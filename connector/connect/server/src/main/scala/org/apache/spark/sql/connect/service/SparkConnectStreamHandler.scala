@@ -94,6 +94,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         }
       } finally {
         session.sparkContext.removeJobTag(executeHolder.jobTag)
+        session.sparkContext.clearJobGroup()
         sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }
