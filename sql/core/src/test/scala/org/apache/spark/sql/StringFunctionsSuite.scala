@@ -1118,7 +1118,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // test binary
     checkAnswer(df.selectExpr("endswith(c, d)"), Row(true))
-    checkAnswer(df.select(endswith(col("a"), col("b"))), Row(false))
+    checkAnswer(df.select(endswith(col("c"), col("d"))), Row(true))
   }
 
   test("startswith") {
