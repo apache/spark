@@ -50,7 +50,7 @@ case class NamedParameter(name: String) extends Parameter
 /**
  * The expression represents a positional parameter that should be replaced by a literal.
  *
- * @param pos An unique position of the parameter in a SQL query.
+ * @param pos An unique position of the parameter in a SQL query text.
  */
 case class PosParameter(pos: Int) extends Parameter {
   override def name: String = s"_$pos"
