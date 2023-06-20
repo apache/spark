@@ -2852,23 +2852,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "enumString" -> enumString))
   }
 
-  def hllInvalidLogK(function: String, min: String, max: String, value: String): Throwable = {
+  def hllInvalidLgK(function: String, min: String, max: String, value: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "HLL_INVALID_LOG_K",
+      errorClass = "HLL_INVALID_LG_K",
       messageParameters = Map(
-        "function" -> function,
+        "function" -> toSQLId(function),
         "min" -> min,
         "max" -> max,
         "value" -> value))
   }
 
-  def hllUnionDifferentLogK(left: String, right: String, function: String): Throwable = {
+  def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "HLL_UNION_DIFFERENT_LOG_K",
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
       messageParameters = Map(
-        "left" -> left,
-        "right" -> right,
-        "function" -> function))
+        "left" -> toSQLValue(left, IntegerType),
+        "right" -> toSQLValue(right, IntegerType),
+        "function" -> toSQLId(function)))
   }
 
   def mergeCardinalityViolationError(): SparkRuntimeException = {

@@ -192,7 +192,7 @@ object HllSketchAgg {
   // Replicate Datasketches' HllUtil's checkLgK implementation, as we can't reference it directly.
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
-      throw QueryExecutionErrors.hllInvalidLogK(function = "HLL_SKETCH_AGG",
+      throw QueryExecutionErrors.hllInvalidLgK(function = "HLL_SKETCH_AGG",
         min = minLgConfigK.toString, max = maxLgConfigK.toString, value = lgConfigK.toString)
     }
   }
@@ -285,18 +285,15 @@ case class HllUnionAgg(
   }
 
   /**
-   * Helper method to compare lgConfigKs and throw an exception if allowDifferentLgConfigK isn't
+   * Helper method to compare lgConfigKs and throw an exception if 'allowDifferentLgConfigK' isn't
    * true and configs don't match.
    *
    * @param left An lgConfigK value
    * @param right An lgConfigK value
    */
   def compareLgConfigK(left: Int, right: Int): Unit = {
-    if (!allowDifferentLgConfigK) {
-      if (left != right) {
-        throw QueryExecutionErrors.hllUnionDifferentLogK(
-          left.toString, right.toString, function = "HLL_UNION_AGG")
-      }
+    if (!allowDifferentLgConfigK && left != right) {
+      throw QueryExecutionErrors.hllUnionDifferentLgK(left, right, function = "HLL_UNION_AGG")
     }
   }
 

@@ -103,8 +103,8 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val sketch2 = HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
     if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
-      throw QueryExecutionErrors.hllUnionDifferentLogK(
-        sketch1.getLgConfigK.toString, sketch2.getLgConfigK.toString, function = "HLL_UNION")
+      throw QueryExecutionErrors.hllUnionDifferentLgK(
+        sketch1.getLgConfigK, sketch2.getLgConfigK, function = "HLL_UNION")
     }
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)
