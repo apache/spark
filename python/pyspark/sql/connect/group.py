@@ -83,6 +83,26 @@ class GroupedData:
             self._pivot_col = pivot_col
             self._pivot_values = pivot_values
 
+    def __repr__(self) -> str:
+        # since the expressions are not resolved here,
+        # the string represent can be different from vanilla PySpark.
+        grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
+        grouping_str = f"grouping expressions: [{grouping_str}]"
+
+        value_str = str(self._df)
+        value_str = value_str[9:]
+
+        if self._group_type == "groupby":
+            type_str = "GroupBy"
+        elif self._group_type == "rollup":
+            type_str = "RollUp"
+        elif self._group_type == "cube":
+            type_str = "Cube"
+        else:
+            type_str = "Pivot"
+
+        return f"GroupedData[{grouping_str}, value: {value_str}, type: {type_str}]"
+
     @overload
     def agg(self, *exprs: Column) -> "DataFrame":
         ...
