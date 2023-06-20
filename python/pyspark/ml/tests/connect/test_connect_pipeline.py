@@ -25,8 +25,8 @@ class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
             SparkSession.builder.remote("local[2]")
-                .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
-                .getOrCreate()
+            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+            .getOrCreate()
         )
 
     def tearDown(self) -> None:
