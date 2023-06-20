@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.DataType
  * @param value The value of the function argument
  */
 case class NamedArgumentExpression(key: String, value: Expression)
-    extends UnaryExpression with Unevaluable {
+  extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = value.nullable
 
   override def dataType: DataType = value.dataType
