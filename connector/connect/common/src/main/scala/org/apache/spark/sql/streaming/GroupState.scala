@@ -194,7 +194,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * @tparam S
  *   User-defined type of the state to be stored for each group. Must be encodable into Spark SQL
  *   types (see `Encoder` for more details).
- * @since 2.2.0
+ * @since 3.5.0
  */
 @Experimental
 @Evolving
