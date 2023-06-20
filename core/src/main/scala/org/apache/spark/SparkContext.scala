@@ -844,25 +844,25 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Add a tag to be assigned to all the jobs started by this thread.
    *
-   * @param tagName The tag to be added. Cannot contain ',' (comma) character.
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
    */
-  def addJobTag(tagName: String): Unit = {
-    SparkContext.throwIfInvalidTagName(tagName)
+  def addJobTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
     val existingTags = getJobTags()
-    val newTags = (existingTags + tagName).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    val newTags = (existingTags + tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
 
   /**
    * Remove a tag previously added to be assigned to all the jobs started by this thread.
-   * Noop if such a tag was not added.
+   * Noop if such a tag was not added earlier.
    *
-   * @param tagName The tag to be removed. Cannot contain ',' (comma) character.
+   * @param tag The tag to be removed. Cannot contain ',' (comma) character.
    */
-  def removeJobTag(tagName: String): Unit = {
-    SparkContext.throwIfInvalidTagName(tagName)
+  def removeJobTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
     val existingTags = getJobTags()
-    val newTags = (existingTags - tagName).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
 
@@ -2523,12 +2523,12 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
-   * @param tagName The tag to be added. Cannot contain ',' (comma) character.
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
    */
-  def cancelJobsWithTag(tagName: String): Unit = {
-    SparkContext.throwIfInvalidTagName(tagName)
+  def cancelJobsWithTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(tagName)
+    dagScheduler.cancelJobsWithTag(tag)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
@@ -2915,15 +2915,15 @@ object SparkContext extends Logging {
   /** Separator of tags in SPARK_JOB_TAGS property */
   private[spark] val SPARK_JOB_TAGS_SEP = ","
 
-  private[spark] def throwIfInvalidTagName(tagName: String) = {
-    if (tagName == null) {
+  private[spark] def throwIfInvalidTag(tag: String) = {
+    if (tag == null) {
       throw new IllegalArgumentException("Spark job tag cannot be null.")
     }
-    if (tagName.contains(SPARK_JOB_TAGS_SEP)) {
+    if (tag.contains(SPARK_JOB_TAGS_SEP)) {
       throw new IllegalArgumentException(
         s"Spark job tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
     }
-    if (tagName.isEmpty) {
+    if (tag.isEmpty) {
       throw new IllegalArgumentException(
         "Spark job tag cannot be an empty string.")
     }
