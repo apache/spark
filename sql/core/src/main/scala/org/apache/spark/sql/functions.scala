@@ -4144,17 +4144,15 @@ object functions {
   /**
    * Returns a boolean. The value is True if right is found inside left.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both left or right must be of STRING type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `contains` in SQL supports both
-   *   STRING and BINARY.
+   * Both left or right must be of STRING or BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  def contains(left: Column, right: Column): Column = withExpr {
-    Contains(left.expr, right.expr)
+  def contains(left: Column, right: Column): Column = {
+    // 'Contains' expression only supports StringType
+    // use 'call_udf' to support both StringType and BinaryType.
+    call_udf("contains", left, right)
   }
 
   /**

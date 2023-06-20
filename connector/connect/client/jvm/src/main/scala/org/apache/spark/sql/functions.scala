@@ -4025,12 +4025,8 @@ object functions {
 
   /**
    * Returns a boolean. The value is True if right is found inside left. Returns NULL if either
-   * input expression is NULL. Otherwise, returns False. Both left or right must be of STRING
-   * type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `contains` in SQL supports both
-   *   STRING and BINARY.
+   * input expression is NULL. Otherwise, returns False. Both left or right must be of STRING or
+   * BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
