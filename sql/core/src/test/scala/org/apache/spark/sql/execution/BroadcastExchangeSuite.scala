@@ -29,7 +29,9 @@ import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class BroadcastExchangeSuite extends SparkPlanTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -98,6 +100,7 @@ class BroadcastExchangeSuite extends SparkPlanTest
 }
 
 // Additional tests run in 'local-cluster' mode.
+@ExtendedSQLTest
 class BroadcastExchangeExecSparkSuite
   extends SparkFunSuite with LocalSparkContext with AdaptiveSparkPlanHelper {
 

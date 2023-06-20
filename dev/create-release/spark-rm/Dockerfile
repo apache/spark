@@ -63,7 +63,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   apt-get update && \
   # Install openjdk 8.
   $APT_INSTALL openjdk-8-jdk && \
-  update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java && \
+  update-alternatives --set java $(ls /usr/lib/jvm/java-8-openjdk-*/jre/bin/java) && \
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \

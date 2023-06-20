@@ -888,10 +888,24 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "Cannot write to '<tableName>', <reason>:",
-      "Table columns: <tableColumns>.",
-      "Data columns: <dataColumns>."
+      "Cannot write to <tableName>, the reason is"
     ],
+    "subClass" : {
+      "NOT_ENOUGH_DATA_COLUMNS" : {
+        "message" : [
+          "not enough data columns:",
+          "Table columns: <tableColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      },
+      "TOO_MANY_DATA_COLUMNS" : {
+        "message" : [
+          "too many data columns:",
+          "Table columns: <tableColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      }
+    },
     "sqlState" : "21S01"
   },
   "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
@@ -1050,6 +1064,11 @@
   "INVALID_ESC" : {
     "message" : [
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
+    ]
+  },
+  "INVALID_ESCAPE_CHAR" : {
+    "message" : [
+      "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
     ]
   },
   "INVALID_EXECUTOR_MEMORY" : {
@@ -1709,6 +1728,11 @@
       "<cmd> is not supported for v2 tables."
     ],
     "sqlState" : "46110"
+  },
+  "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT" : {
+    "message" : [
+      "<cmd> is not supported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
+    ]
   },
   "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
     "message" : [
@@ -2459,6 +2483,33 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ]
   },
+  "UNSUPPORTED_INSERT" : {
+    "message" : [
+      "Can't insert into the target."
+    ],
+    "subClass" : {
+      "NOT_ALLOWED" : {
+        "message" : [
+          "The target relation <relationId> does not allow insertion."
+        ]
+      },
+      "NOT_PARTITIONED" : {
+        "message" : [
+          "The target relation <relationId> is not partitioned."
+        ]
+      },
+      "RDD_BASED" : {
+        "message" : [
+          "An RDD-based table is not allowed."
+        ]
+      },
+      "READ_FROM" : {
+        "message" : [
+          "The target relation <relationId> is also being read from."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
       "Can't overwrite the target that is also being read from."
@@ -3000,11 +3051,6 @@
       "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1038" : {
-    "message" : [
-      "Cannot write to table due to mismatched user specified column size(<columnSize>) and data column size(<outputSize>)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1039" : {
     "message" : [
       "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
@@ -3499,11 +3545,6 @@
       "Requested partitioning does not match the table <tableName>:",
       "Requested partitions: <normalizedPartSpec>.",
       "Table partitions: <partColNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1170" : {
-    "message" : [
-      "Hive support is required to <detail>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1171" : {

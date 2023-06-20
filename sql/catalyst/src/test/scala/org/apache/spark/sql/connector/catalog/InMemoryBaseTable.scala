@@ -429,10 +429,16 @@ abstract class InMemoryBaseTable(
         val ref = partitioning.head.references().head
         filters.foreach {
           case In(attrName, values) if attrName == ref.toString =>
-            val matchingKeys = values.map(_.toString).toSet
+            val matchingKeys = values.map { value =>
+              if (value != null) value.toString else null
+            }.toSet
             data = data.filter(partition => {
-              val key = partition.asInstanceOf[BufferedRows].keyString
-              matchingKeys.contains(key)
+              val rows = partition.asInstanceOf[BufferedRows]
+              rows.key match {
+                // null partitions are represented as Seq(null)
+                case Seq(null) => matchingKeys.contains(null)
+                case _ => matchingKeys.contains(rows.keyString())
+              }
             })
 
           case _ => // skip

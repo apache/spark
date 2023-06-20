@@ -192,11 +192,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val groupOutputMap = normalizedGroupingExpr.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"group_col_$i", e.dataType)() -> e
       }
-      val groupOutput = groupOutputMap.unzip._1
+      val groupOutput = groupOutputMap.map(_._1)
       val aggOutputMap = finalAggExprs.zipWithIndex.map { case (e, i) =>
         AttributeReference(s"agg_func_$i", e.dataType)() -> e
       }
-      val aggOutput = aggOutputMap.unzip._1
+      val aggOutput = aggOutputMap.map(_._1)
       val newOutput = groupOutput ++ aggOutput
       val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       normalizedGroupingExpr.zipWithIndex.foreach { case (expr, ordinal) =>
