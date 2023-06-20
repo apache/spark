@@ -1113,8 +1113,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(("Spark SQL", "Spark", Array[Byte](1, 2, 3, 4), Array[Byte](3, 4)))
       .toDF("a", "b", "c", "d")
 
-    checkAnswer(df.selectExpr("endswith(c, d)"), Row(true))
-    checkAnswer(df.select(endswith(col("c"), col("d"))), Row(true))
+    checkAnswer(df.selectExpr("endswith(a, b)"), Row(false))
+    checkAnswer(df.select(endswith(col("a"), col("b"))), Row(false))
 
     // test binary
     checkAnswer(df.selectExpr("endswith(c, d)"), Row(true))
@@ -1124,6 +1124,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   test("startswith") {
     val df = Seq(("Spark SQL", "Spark", Array[Byte](1, 2, 3, 4), Array[Byte](1, 2)))
       .toDF("a", "b", "c", "d")
+
+    checkAnswer(df.selectExpr("startswith(a, b)"), Row(true))
+    checkAnswer(df.select(startswith(col("a"), col("b"))), Row(true))
 
     // test binary
     checkAnswer(df.selectExpr("startswith(c, d)"), Row(true))
