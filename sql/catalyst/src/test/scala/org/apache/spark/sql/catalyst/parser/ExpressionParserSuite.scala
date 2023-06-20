@@ -332,8 +332,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("function expressions with named arguments") {
     assertEqual("encode(value => 'abc', charset => 'utf-8')",
-                $"encode".function(NamedArgumentExpression("value", Literal("abc")),
-                  NamedArgumentExpression("charset", Literal("utf-8"))))
+      $"encode".function(NamedArgumentExpression("value", Literal("abc")),
+      NamedArgumentExpression("charset", Literal("utf-8"))))
     assertEqual("encode('abc', charset => 'utf-8')",
                 $"encode".function(Literal("abc"),
                   NamedArgumentExpression("charset", Literal("utf-8"))))
