@@ -333,7 +333,7 @@ jobs:
   pyspark:
     needs: [precondition, infra-image]
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-    if: always() && fromJson(needs.precondition.outputs.required).pyspark == 'true'
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-22.04
     container:
@@ -446,7 +446,7 @@ jobs:
   sparkr:
     needs: [precondition, infra-image]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
-    if: always() && fromJson(needs.precondition.outputs.required).sparkr == 'true'
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-22.04
     container:
@@ -548,7 +548,7 @@ jobs:
   lint:
     needs: [precondition, infra-image]
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
-    if: always() && fromJson(needs.precondition.outputs.required).lint == 'true'
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-22.04
     env:
