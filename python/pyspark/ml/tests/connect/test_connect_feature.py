@@ -15,28 +15,26 @@
 # limitations under the License.
 #
 
-"""Spark Connect Python Client - ML module"""
+import unittest
+from pyspark.sql import SparkSession
+from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin
 
-from pyspark.mlv2.base import (
-    Estimator,
-    Transformer,
-    Model,
-)
 
-from pyspark.mlv2 import (
-    feature,
-    evaluation,
-)
+class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
+    def setUp(self) -> None:
+        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
 
-from pyspark.mlv2.pipeline import Pipeline, PipelineModel
+    def tearDown(self) -> None:
+        self.spark.stop()
 
-__all__ = [
-    "Estimator",
-    "Transformer",
-    "Estimator",
-    "Model",
-    "feature",
-    "evaluation",
-    "Pipeline",
-    "PipelineModel",
-]
+
+if __name__ == "__main__":
+    from pyspark.ml.tests.connect.test_connect_feature import *  # noqa: F401,F403
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
