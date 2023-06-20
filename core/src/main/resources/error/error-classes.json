@@ -1608,7 +1608,7 @@
   },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
-      "There is no default column value available for <colName> which is not nullable."
+      "Can't determine the default value for <colName> since it is not nullable and it has no default value."
     ],
     "sqlState" : "42608"
   },
