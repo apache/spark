@@ -22,8 +22,8 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.yarn.api.records.ResourceTypeInfo
 import org.apache.hadoop.yarn.util.resource.ResourceUtils
 
-object ResourceRequestTestHelper {
-  def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
+trait ResourceRequestTestHelper {
+  private def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
     // ResourceUtils.reinitializeResources() is the YARN-way
     // to specify resources for the execution of the tests.
     // This method should receive standard resources with names of memory-mb and vcores.
@@ -37,5 +37,12 @@ object ResourceRequestTestHelper {
     val allResourceTypes = defaultResourceTypes ++ customResourceTypes
 
     ResourceUtils.reinitializeResources(allResourceTypes.asJava)
+  }
+
+  def withResourceTypes(resourceTypes: Seq[String])(f: => Unit): Unit = {
+    initializeResourceTypes(resourceTypes)
+    try f finally {
+      initializeResourceTypes(Seq.empty)
+    }
   }
 }
