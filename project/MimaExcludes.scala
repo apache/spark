@@ -93,6 +93,10 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
 
+    // SPARK-44104: shaded protobuf code and Apis with parameters relocated
+    ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
