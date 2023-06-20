@@ -39,6 +39,10 @@ trait ResourceRequestTestHelper {
     ResourceUtils.reinitializeResources(allResourceTypes.asJava)
   }
 
+  /**
+   * `initializeResourceTypes` with inputs, call `f` and
+   * restore `resourceTypes`` as default value.
+   */
   def withResourceTypes(resourceTypes: Seq[String])(f: => Unit): Unit = {
     initializeResourceTypes(resourceTypes)
     try f finally {
