@@ -5582,6 +5582,31 @@ def current_timestamp() -> Column:
 
 
 @try_remote_functions
+def now() -> Column:
+    """
+    Returns the current timestamp at the start of query evaluation.
+
+    .. versionadded:: 3.5.0
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        current timestamp at the start of query evaluation.
+
+    Examples
+    --------
+    >>> df = spark.range(1)
+    >>> df.select(now()).show(truncate=False) # doctest: +SKIP
+    +-----------------------+
+    |now()    |
+    +-----------------------+
+    |2022-08-26 21:23:22.716|
+    +-----------------------+
+    """
+    return _invoke_function("current_timestamp")
+
+
+@try_remote_functions
 def localtimestamp() -> Column:
     """
     Returns the current timestamp without time zone at the start of query evaluation
@@ -5972,6 +5997,36 @@ def weekofyear(col: "ColumnOrName") -> Column:
     [Row(week=15)]
     """
     return _invoke_function_over_columns("weekofyear", col)
+
+
+@try_remote_functions
+def weekday(col: "ColumnOrName") -> Column:
+    """
+    Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target date/timestamp column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(weekday('dt').alias('day')).show()
+    +---+
+    |day|
+    +---+
+    |  2|
+    +---+
+    """
+    return _invoke_function_over_columns("weekday", col)
 
 
 @try_remote_functions
@@ -6968,6 +7023,76 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     return _invoke_function_over_columns("timestamp_seconds", col)
+
+
+@try_remote_functions
+def timestamp_millis(col: "ColumnOrName") -> Column:
+    """
+    Creates timestamp from the number of milliseconds since UTC epoch.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        unix time values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        converted timestamp value.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
+    >>> time_df.select(timestamp_millis(time_df.unix_time).alias('ts')).show()
+    +-------------------+
+    |                 ts|
+    +-------------------+
+    |1970-01-15 05:43:39|
+    +-------------------+
+    >>> time_df.select(timestamp_millis('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("timestamp_millis", col)
+
+
+@try_remote_functions
+def timestamp_micros(col: "ColumnOrName") -> Column:
+    """
+    Creates timestamp from the number of microseconds since UTC epoch.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        unix time values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        converted timestamp value.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
+    >>> time_df.select(timestamp_micros(time_df.unix_time).alias('ts')).show()
+    +--------------------+
+    |                  ts|
+    +--------------------+
+    |1970-01-01 00:20:...|
+    +--------------------+
+    >>> time_df.select(timestamp_micros('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("timestamp_micros", col)
 
 
 @try_remote_functions
@@ -12950,6 +13075,57 @@ def hours(col: "ColumnOrName") -> Column:
 
     """
     return _invoke_function_over_columns("hours", col)
+
+
+@try_remote_functions
+def convert_timezone(
+    sourceTz: Optional[Column], targetTz: Column, sourceTs: "ColumnOrName"
+) -> Column:
+    """
+    Converts the timestamp without time zone `sourceTs`
+    from the `sourceTz` time zone to `targetTz`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    sourceTz : :class:`~pyspark.sql.Column`
+        the time zone for the input timestamp. If it is missed,
+        the current session time zone is used as the source time zone.
+    targetTz : :class:`~pyspark.sql.Column`
+        the time zone to which the input timestamp should be converted.
+    sourceTs : :class:`~pyspark.sql.Column`
+        a timestamp without time zone.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        timestamp for converted time zone.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(convert_timezone(   # doctest: +SKIP
+    ...     None, lit('Asia/Hong_Kong'), 'dt').alias('ts')
+    ... ).show()
+    +-------------------+
+    |                 ts|
+    +-------------------+
+    |2015-04-08 00:00:00|
+    +-------------------+
+    >>> df.select(convert_timezone(
+    ...     lit('America/Los_Angeles'), lit('Asia/Hong_Kong'), 'dt').alias('ts')
+    ... ).show()
+    +-------------------+
+    |                 ts|
+    +-------------------+
+    |2015-04-08 15:00:00|
+    +-------------------+
+    """
+    if sourceTz is None:
+        return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
+    else:
+        return _invoke_function_over_columns("convert_timezone", sourceTz, targetTz, sourceTs)
 
 
 @try_remote_functions
