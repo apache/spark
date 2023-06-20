@@ -1511,6 +1511,7 @@ class SparkSession(SparkConversionMixin):
         +---+---+
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
+    
         >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}", [5, 2], df=mydf).show()
         +---+---+
         |  A|  B|

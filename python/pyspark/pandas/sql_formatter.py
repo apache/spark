@@ -102,7 +102,7 @@ def sql(
             e      f       3  6
 
             Also note that the index name(s) should be matched to the existing name.
-    args : dict
+    args : dict or list
         A dictionary of parameter names to string values that are parsed as SQL literal
         expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
         "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to SQL
@@ -167,6 +167,13 @@ def sql(
     And substitude named parameters with the `:` prefix by SQL literals.
 
     >>> ps.sql("SELECT * FROM range(10) WHERE id > :bound1", args={"bound1":"7"})
+       id
+    0   8
+    1   9
+
+    Or positional parameters marked by `?` in the SQL query by SQL literals.
+    
+    >>> ps.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
        id
     0   8
     1   9
