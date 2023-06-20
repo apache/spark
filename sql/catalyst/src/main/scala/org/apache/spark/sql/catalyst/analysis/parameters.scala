@@ -121,9 +121,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       // relations are not children of `UnresolvedWith`.
       case p @ NameParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
         checkArgs(args)
-        val res = bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
-        res.copyTagsFrom(p)
-        res
+        bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
       case p @ PosParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
         val indexedArgs = args.zipWithIndex
@@ -133,12 +131,10 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
-        val res = bind(child) {
+        bind(child) {
           case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
             args(posToIndex(pos))
         }
-        res.copyTagsFrom(p)
-        res
 
       case _ => plan
     }
