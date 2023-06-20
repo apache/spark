@@ -863,6 +863,7 @@ pyspark_connect = Module(
         "pyspark.ml.tests.connect.test_connect_evaluation",
         "pyspark.ml.tests.connect.test_connect_feature",
         "pyspark.ml.tests.connect.test_connect_classification",
+        "pyspark.ml.tests.connect.test_connect_pipeline",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
