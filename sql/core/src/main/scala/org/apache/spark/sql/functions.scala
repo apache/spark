@@ -4051,10 +4051,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def endswith(str: Column, suffix: Column): Column = {
-    // 'EndsWith' expression only supports StringType,
-    // use 'call_udf' to support both StringType and BinaryType.
-    call_udf("endswith", str, suffix)
+  def endswith(str: Column, suffix: Column): Column = withExpr {
+    UnresolvedFunction(Seq("endswith"), Seq(str.expr, suffix.expr), isDistinct = false)
   }
 
   /**
@@ -4065,10 +4063,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def startswith(str: Column, prefix: Column): Column = {
-    // 'StartsWith' expression only supports StringType,
-    // use 'call_udf' to support both StringType and BinaryType.
-    call_udf("startswith", str, prefix)
+  def startswith(str: Column, prefix: Column): Column = withExpr {
+    UnresolvedFunction(Seq("startswith"), Seq(str.expr, prefix.expr), isDistinct = false)
   }
 
   /**
@@ -4145,10 +4141,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def contains(left: Column, right: Column): Column = {
-    // 'Contains' expression only supports StringType
-    // use 'call_udf' to support both StringType and BinaryType.
-    call_udf("contains", left, right)
+  def contains(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction(Seq("contains"), Seq(left.expr, right.expr), isDistinct = false)
   }
 
   /**
