@@ -369,6 +369,7 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> df.select(try_add(df.birth, df.age).alias('r')).collect()
     [Row(r=1997), Row(r=1992)]
 
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
     >>> schema = StructType([
     ...     StructField("i", IntegerType(), True),
     ...     StructField("d", StringType(), True),
@@ -441,7 +442,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     >>> df = spark.createDataFrame([(1, 2)], ["year", "month"])
     >>> df.select(
-    ...     ttry_divide(make_interval(df.year), df.month).alias('r')
+    ...     try_divide(make_interval(df.year), df.month).alias('r')
     ... ).show(truncate=False)
     +--------+
     |r       |
