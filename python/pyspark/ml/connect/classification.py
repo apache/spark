@@ -16,7 +16,7 @@
 #
 
 from pyspark import keyword_only
-from pyspark.mlv2.base import _PredictorParams
+from pyspark.ml.connect.base import _PredictorParams
 
 from pyspark.ml.param.shared import HasProbabilityCol
 
@@ -39,8 +39,8 @@ from pyspark.ml.param.shared import (
     HasLearningRate,
     HasMomentum,
 )
-from pyspark.mlv2.base import Predictor, PredictionModel
-from pyspark.mlv2.io_utils import ParamsReadWrite, CoreModelReadWrite
+from pyspark.ml.connect.base import Predictor, PredictionModel
+from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
 from pyspark.sql.functions import lit, count, countDistinct
 
 import torch

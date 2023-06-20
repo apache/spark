@@ -15,26 +15,26 @@
 # limitations under the License.
 #
 
-from pyspark.mlv2.base import (
-    Estimator,
-    Transformer,
-    Model,
-)
+import unittest
+from pyspark.sql import SparkSession
+from pyspark.ml.tests.connect.test_legacy_mode_summarizer import SummarizerTestsMixin
 
-from pyspark.mlv2 import (
-    feature,
-    evaluation,
-)
 
-from pyspark.mlv2.pipeline import Pipeline, PipelineModel
+class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
+    def setUp(self) -> None:
+        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
 
-__all__ = [
-    "Estimator",
-    "Transformer",
-    "Estimator",
-    "Model",
-    "feature",
-    "evaluation",
-    "Pipeline",
-    "PipelineModel",
-]
+    def tearDown(self) -> None:
+        self.spark.stop()
+
+
+if __name__ == "__main__":
+    from pyspark.ml.tests.connect.test_connect_summarizer import *  # noqa: F401,F403
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

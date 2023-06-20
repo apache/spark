@@ -20,9 +20,9 @@ from typing import Any, Union
 
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol
-from pyspark.mlv2.base import Evaluator
-from pyspark.mlv2.io_utils import ParamsReadWrite
-from pyspark.mlv2.util import aggregate_dataframe
+from pyspark.ml.connect.base import Evaluator
+from pyspark.ml.connect.io_utils import ParamsReadWrite
+from pyspark.ml.connect.util import aggregate_dataframe
 from pyspark.sql import DataFrame
 
 import torch

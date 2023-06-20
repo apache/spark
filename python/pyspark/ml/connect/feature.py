@@ -23,9 +23,9 @@ from typing import Any, Union, List, Tuple, Callable, Dict, Optional
 from pyspark import keyword_only
 from pyspark.sql import DataFrame
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
-from pyspark.mlv2.base import Estimator, Model
-from pyspark.mlv2.io_utils import ParamsReadWrite, CoreModelReadWrite
-from pyspark.mlv2.summarizer import summarize_dataframe
+from pyspark.ml.connect.base import Estimator, Model
+from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
+from pyspark.ml.connect.summarizer import summarize_dataframe
 
 
 class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):

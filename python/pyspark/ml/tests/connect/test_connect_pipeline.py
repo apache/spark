@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,26 +18,23 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.mlv2.tests.test_evaluation import EvaluationTestsMixin
-
-have_torcheval = True
-try:
-    import torcheval  # noqa: F401
-except ImportError:
-    have_torcheval = False
+from pyspark.ml.tests.connect.test_legacy_mode_pipeline import PipelineTestsMixin
 
 
-@unittest.skipIf(not have_torcheval, "torcheval is required")
-class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
+class PipelineTestsOnConnect(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
+        self.spark = (
+            SparkSession.builder.remote("local[2]")
+            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+            .getOrCreate()
+        )
 
     def tearDown(self) -> None:
         self.spark.stop()
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.connect.test_parity_evaluation import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_connect_pipeline import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

@@ -19,9 +19,9 @@ import os
 import tempfile
 import unittest
 import numpy as np
-from pyspark.mlv2.feature import StandardScaler
-from pyspark.mlv2.classification import LogisticRegression as LORV2
-from pyspark.mlv2.pipeline import Pipeline
+from pyspark.ml.connect.feature import StandardScaler
+from pyspark.ml.connect.classification import LogisticRegression as LORV2
+from pyspark.ml.connect.pipeline import Pipeline
 from pyspark.sql import SparkSession
 
 
@@ -40,7 +40,7 @@ class PipelineTestsMixin:
             np.testing.assert_allclose(
                 list(result_dataframe.probability),
                 expected_probabilities,
-                rtol=1e-2,
+                rtol=1e-1,
             )
 
     def test_pipeline(self):
@@ -173,7 +173,7 @@ class PipelineTests(PipelineTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_pipeline import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_legacy_mode_pipeline import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

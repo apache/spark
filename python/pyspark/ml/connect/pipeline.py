@@ -20,8 +20,8 @@ import pandas as pd
 from typing import Any, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
 from pyspark import keyword_only, since
-from pyspark.mlv2.base import Estimator, Model, Transformer
-from pyspark.mlv2.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite
+from pyspark.ml.connect.base import Estimator, Model, Transformer
+from pyspark.ml.connect.io_utils import ParamsReadWrite, MetaAlgorithmReadWrite, CoreModelReadWrite
 from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
@@ -133,8 +133,8 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         Parameters
         ----------
         value : list
-            of :py:class:`pyspark.mlv2.Transformer`
-            or :py:class:`pyspark.mlv2.Estimator`
+            of :py:class:`pyspark.ml.connect.Transformer`
+            or :py:class:`pyspark.ml.connect.Estimator`
 
         Returns
         -------

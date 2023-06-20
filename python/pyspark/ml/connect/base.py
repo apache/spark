@@ -40,7 +40,7 @@ from pyspark.ml.param.shared import (
     HasFeaturesCol,
     HasPredictionCol,
 )
-from pyspark.mlv2.util import transform_dataframe_column
+from pyspark.ml.connect.util import transform_dataframe_column
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -18,23 +17,19 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.mlv2.tests.test_classification import ClassificationTestsMixin
+from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin
 
 
-class FeatureTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
+class FeatureTestsOnConnect(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = (
-            SparkSession.builder.remote("local[2]")
-            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
-            .getOrCreate()
-        )
+        self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
 
     def tearDown(self) -> None:
         self.spark.stop()
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.connect.test_parity_classification import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_connect_feature import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

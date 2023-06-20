@@ -20,7 +20,7 @@ import pandas as pd
 from typing import Any, Union, List, Dict
 
 from pyspark.sql import DataFrame
-from pyspark.mlv2.util import aggregate_dataframe
+from pyspark.ml.connect.util import aggregate_dataframe
 
 
 class SummarizerAggState:

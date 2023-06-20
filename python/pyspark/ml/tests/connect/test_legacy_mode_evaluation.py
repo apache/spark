@@ -18,7 +18,7 @@
 import unittest
 import numpy as np
 
-from pyspark.mlv2.evaluation import RegressionEvaluator
+from pyspark.ml.connect.evaluation import RegressionEvaluator
 from pyspark.sql import SparkSession
 
 
@@ -77,7 +77,7 @@ class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_evaluation import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_legacy_mode_evaluation import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

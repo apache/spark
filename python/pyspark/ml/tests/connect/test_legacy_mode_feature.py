@@ -22,7 +22,7 @@ import numpy as np
 import tempfile
 import unittest
 
-from pyspark.mlv2.feature import (
+from pyspark.ml.connect.feature import (
     MaxAbsScaler,
     MaxAbsScalerModel,
     StandardScaler,
@@ -145,7 +145,7 @@ class FeatureTests(FeatureTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_feature import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_legacy_mode_feature import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

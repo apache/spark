@@ -19,7 +19,7 @@
 import unittest
 import numpy as np
 
-from pyspark.mlv2.summarizer import summarize_dataframe
+from pyspark.ml.connect.summarizer import summarize_dataframe
 from pyspark.sql import SparkSession
 
 
@@ -67,7 +67,7 @@ class SummarizerTests(SummarizerTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_summarizer import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_legacy_mode_summarizer import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

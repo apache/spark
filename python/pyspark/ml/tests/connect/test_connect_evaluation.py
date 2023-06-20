@@ -17,10 +17,17 @@
 
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.mlv2.tests.test_summarizer import SummarizerTestsMixin
+from pyspark.ml.tests.connect.test_legacy_mode_evaluation import EvaluationTestsMixin
+
+have_torcheval = True
+try:
+    import torcheval  # noqa: F401
+except ImportError:
+    have_torcheval = False
 
 
-class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
+@unittest.skipIf(not have_torcheval, "torcheval is required")
+class EvaluationTestsOnConnect(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.remote("local[2]").getOrCreate()
 
@@ -29,7 +36,7 @@ class SummarizerTestsOnConnect(SummarizerTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.connect.test_parity_summarizer import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_connect_evaluation import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]

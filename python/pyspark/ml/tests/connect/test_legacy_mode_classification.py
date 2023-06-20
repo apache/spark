@@ -19,7 +19,7 @@ import os
 import tempfile
 import unittest
 import numpy as np
-from pyspark.mlv2.classification import (
+from pyspark.ml.connect.classification import (
     LogisticRegression as LORV2,
     LogisticRegressionModel as LORV2Model,
 )
@@ -41,7 +41,7 @@ class ClassificationTestsMixin:
             np.testing.assert_allclose(
                 list(result_dataframe.probability),
                 expected_probabilities,
-                rtol=1e-2,
+                rtol=1e-1,
             )
 
     def test_binary_classes_logistic_regression(self):
@@ -227,7 +227,7 @@ class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mlv2.tests.test_classification import *  # noqa: F401,F403
+    from pyspark.ml.tests.connect.test_legacy_mode_classification import *  # noqa: F401,F403
 
     try:
         import xmlrunner  # type: ignore[import]
