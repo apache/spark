@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range, RelationWithOptions}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -1066,6 +1066,7 @@ object TableFunctionRegistry {
 
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
     logicalPlan[Range]("range"),
+    logicalPlan[RelationWithOptions]("with_options"),
     generatorBuilder("explode", ExplodeGeneratorBuilder),
     generatorBuilder("explode_outer", ExplodeOuterGeneratorBuilder),
     generator[Inline]("inline"),

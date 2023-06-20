@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedRelation, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -33,6 +36,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
@@ -1133,6 +1137,40 @@ case class Range(
       Descending
     }
     output.map(a => SortOrder(a, order))
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(identifier: String, options: Map) - " +
+    "Returns the data source relation with the given configuration.",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_('cat.db.table', map('foo','bar'));
+       1,a
+  """,
+  since = "4.0.0",
+  group = "table_funcs")
+case class RelationWithOptions(child: LogicalPlan)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = Nil
+
+  def this(identifier: Expression, options: Expression) = {
+    this(RelationWithOptions.childRelation(identifier, options))
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+
+  override lazy val resolved = expressions.forall(_.resolved) && childrenResolved
+}
+
+object RelationWithOptions {
+  def childRelation(identifier: Expression, options: Expression): UnresolvedRelation = {
+    val tableIdentifier = CatalystSqlParser.parseMultipartIdentifier(
+      identifier.asInstanceOf[Literal].toString)
+    val relationOptions = ExprUtils.convertToMapData(options)
+    UnresolvedRelation(tableIdentifier,
+      new CaseInsensitiveStringMap(relationOptions.asJava))
   }
 }
 

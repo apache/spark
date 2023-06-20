@@ -301,6 +301,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
+      ResolveRelationsWithOptions ::
       ResolveTableSpec ::
       ResolveAliases ::
       ResolveSubquery ::
@@ -3765,6 +3766,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
       a.expressions.exists(_.exists(_.isInstanceOf[UnresolvedFieldName]))
+    }
+  }
+
+  object ResolveRelationsWithOptions extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case RelationWithOptions(child) => child
     }
   }
 

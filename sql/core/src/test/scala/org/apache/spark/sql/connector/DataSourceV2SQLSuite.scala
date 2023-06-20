@@ -20,10 +20,8 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.time.{Duration, LocalDate, Period}
 import java.util.Locale
-
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.MICROSECONDS
-
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -3292,6 +3290,43 @@ class DataSourceV2SQLSuiteV1Filter
           && expressionsAfter(1).toString.trim.startsWith("(id")
           && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data"))
       }
+    }
+  }
+
+  test("SPARK-36680: Supports Dynamic Table Options for Spark SQL") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      val df = sql(s"SELECT * FROM with_options('$t1', map('foo','bar'))")
+      val collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.get("foo") == "bar")
+      }
+      assert (collected.size == 1)
+      checkAnswer(sql(s"SELECT * FROM with_options('$t1', map('foo','bar'))"),
+        Seq(Row(1, "a"), Row(2, "b")))
+    }
+
+    // negative tests
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+
+      val notEnoughArgs = intercept[AnalysisException](sql(s"SELECT * FROM with_options('$t1')"))
+      assert(notEnoughArgs.message.contains(
+        "The `with_options` requires 2 parameters but the actual number is 1"))
+
+      val wrongFirstArg = intercept[AnalysisException](
+        sql(s"SELECT * FROM with_options(foo, map('foo','bar'))"))
+      assert(wrongFirstArg.message.contains(
+        "A column or function parameter with name `foo` cannot be resolved"
+      ))
+
+      val wrongSecondArg = intercept[AnalysisException](
+        sql(s"SELECT * FROM with_options('$t1', array('foo'))"))
+      assert(wrongSecondArg.message.contains(
+        "Must use the `map()` function for options"))
     }
   }
 
