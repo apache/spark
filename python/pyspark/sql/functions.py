@@ -521,6 +521,7 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> df.select(try_subtract(df.a, df.b).alias('r')).collect()
     [Row(r=5985), Row(r=1988)]
 
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
     >>> schema = StructType([
     ...     StructField("i", IntegerType(), True),
     ...     StructField("d", StringType(), True),
