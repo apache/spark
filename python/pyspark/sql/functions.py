@@ -9711,14 +9711,9 @@ def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """
     Returns a boolean. The value is True if right is found inside left.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
-    Both left or right must be of STRING.
+    Both left or right must be of STRING or BINARY type.
 
     .. versionadded:: 3.5.0
-
-    Notes
-    -----
-    Only STRING type is supported in this function,
-    while `contains` in SQL supports both STRING and BINARY.
 
     Parameters
     ----------
@@ -9732,6 +9727,19 @@ def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([("Spark SQL", "Spark")], ['a', 'b'])
     >>> df.select(contains(df.a, df.b).alias('r')).collect()
     [Row(r=True)]
+
+    >>> df = spark.createDataFrame([("414243", "4243",)], ["c", "d"])
+    >>> df = df.select(to_binary("c").alias("c"), to_binary("d").alias("d"))
+    >>> df.printSchema()
+    root
+     |-- c: binary (nullable = true)
+     |-- d: binary (nullable = true)
+    >>> df.select(contains("c", "d"), contains("d", "c")).show()
+    +--------------+--------------+
+    |contains(c, d)|contains(d, c)|
+    +--------------+--------------+
+    |          true|         false|
+    +--------------+--------------+
     """
     return _invoke_function_over_columns("contains", left, right)
 
