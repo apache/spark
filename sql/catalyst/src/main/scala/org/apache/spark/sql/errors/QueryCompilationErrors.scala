@@ -196,7 +196,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
     new AnalysisException(
       errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
-      messageParameters = Map("functionName" -> toSQLId(functionName),
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
     )
   }
