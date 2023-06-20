@@ -298,6 +298,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
+      ResolveTableSpec ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
@@ -321,6 +322,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
+      RewriteMergeIntoTable ::
       typeCoercionRules ++
       Seq(
         ResolveWithCTE,
@@ -1287,7 +1289,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Create a project if this is an INSERT INTO BY NAME query.
         val projectByName = if (i.userSpecifiedCols.nonEmpty) {
-          Some(createProjectForByNameQuery(i))
+          Some(createProjectForByNameQuery(r.table.name, i))
         } else {
           None
         }
