@@ -790,8 +790,8 @@ class AnalysisErrorSuite extends AnalysisTest {
         """
           |Failure when resolving conflicting references in Join:
           |'Join Cross
-          |:- LocalRelation <empty>, [a#0]
-          |+- LocalRelation <empty>, [a#0]
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
           |
           |Conflicting attributes: "a".""".stripMargin))
   }
@@ -807,8 +807,8 @@ class AnalysisErrorSuite extends AnalysisTest {
         """
           |Failure when resolving conflicting references in Intersect All:
           |'Intersect All true
-          |:- LocalRelation <empty>, [a#0]
-          |+- LocalRelation <empty>, [a#0]
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
           |
           |Conflicting attributes: "a".""".stripMargin))
   }
@@ -824,8 +824,8 @@ class AnalysisErrorSuite extends AnalysisTest {
         """
           |Failure when resolving conflicting references in Except All:
           |'Except All true
-          |:- LocalRelation <empty>, [a#0]
-          |+- LocalRelation <empty>, [a#0]
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
           |
           |Conflicting attributes: "a".""".stripMargin))
   }
@@ -843,9 +843,9 @@ class AnalysisErrorSuite extends AnalysisTest {
       parameters = Map("message" ->
         """
           |Failure when resolving conflicting references in AsOfJoin:
-          |'AsOfJoin (a#0 >= a#0), Inner
-          |:- LocalRelation <empty>, [a#0]
-          |+- LocalRelation <empty>, [a#0]
+          |'AsOfJoin (a#x >= a#x), Inner
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
           |
           |Conflicting attributes: "a".""".stripMargin))
   }
