@@ -21,7 +21,7 @@ import java.io.Serializable
 
 /**
  * Artifact set for a job.
- * This class is used to store session (i.e [[SparkSession]]) specific resources/artifacts.
+ * This class is used to store session (i.e `SparkSession`) specific resources/artifacts.
  *
  * When Spark Connect is used, this job-set points towards session-specific jars and class files.
  * Note that Spark Connect is not a requirement for using this class.
