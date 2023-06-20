@@ -83,7 +83,7 @@ case class NameParameterizedQuery(child: LogicalPlan, args: Map[String, Expressi
  * @param child The parameterized logical plan.
  * @param args The literal values of positional parameters.
  */
-case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
+case class PosParameterizedQuery(child: LogicalPlan, args: Array[Expression])
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
