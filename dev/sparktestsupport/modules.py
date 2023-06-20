@@ -859,10 +859,10 @@ pyspark_connect = Module(
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",
-        "pyspark.mlv2.tests.connect.test_connect_summarizer",
-        "pyspark.mlv2.tests.connect.test_connect_evaluation",
-        "pyspark.mlv2.tests.connect.test_connect_feature",
-        "pyspark.mlv2.tests.connect.test_connect_classification",
+        "pyspark.ml.tests.connect.test_connect_summarizer",
+        "pyspark.ml.tests.connect.test_connect_evaluation",
+        "pyspark.ml.tests.connect.test_connect_feature",
+        "pyspark.ml.tests.connect.test_connect_classification",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
