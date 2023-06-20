@@ -1515,7 +1515,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   private def extractExpression(expr: FunctionArgumentContext, funcName: String) : Expression = {
     Option(expr.namedArgumentExpression).map { n =>
-      if (SQLConf.get.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
+      if (conf.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
         NamedArgumentExpression(n.key.getText, expression(n.value))
       } else {
         throw QueryCompilationErrors.namedArgumentsNotEnabledError(
