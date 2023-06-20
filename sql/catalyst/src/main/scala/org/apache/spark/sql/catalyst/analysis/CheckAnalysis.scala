@@ -674,11 +674,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            throw SparkException.internalError(
-              msg = "Only a single table generating function is allowed in a SELECT clause, " +
-                s"found: ${exprs.map(toSQLExpr(_)).mkString(", ")}.",
-              context = p.origin.getQueryContext,
-              summary = p.origin.context.summary)
+            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
+            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
