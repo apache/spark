@@ -354,32 +354,32 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
     checkError(
       exception = intercept[AnalysisException](df.intersect(df)),
-      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
-        "colName" -> "\"m\"",
+        "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\"")
     )
     checkError(
       exception = intercept[AnalysisException](df.except(df)),
-      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
-        "colName" -> "\"m\"",
+        "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\"")
     )
     checkError(
       exception = intercept[AnalysisException](df.distinct()),
-      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
-        "colName" -> "\"m\"",
+        "colName" -> "`m`",
         "dataType" -> "\"MAP<STRING, BIGINT>\"")
     )
     withTempView("v") {
       df.createOrReplaceTempView("v")
       checkError(
         exception = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v")),
-        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
+        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
         parameters = Map(
-          "colName" -> "\"m\"",
+          "colName" -> "`m`",
           "dataType" -> "\"MAP<STRING, BIGINT>\""),
         context = ExpectedContext(
           fragment = "SELECT DISTINCT m FROM v",

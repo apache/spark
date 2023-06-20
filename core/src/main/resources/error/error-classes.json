@@ -2467,9 +2467,9 @@
           "<property> is a reserved namespace property, <msg>."
         ]
       },
-      "SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED" : {
+      "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
-          "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {

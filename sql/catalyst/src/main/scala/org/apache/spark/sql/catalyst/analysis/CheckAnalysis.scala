@@ -722,9 +722,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
             o.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE_UNSUPPORTED",
+              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
               messageParameters = Map(
-                "colName" -> toSQLExpr(mapCol),
+                "colName" -> toSQLId(mapCol.name),
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
