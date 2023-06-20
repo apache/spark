@@ -692,7 +692,7 @@ class CliSuite extends SparkFunSuite {
         // names.
         runCliWithin(1.minute, extraArgs = extraConf)(
           "create table src(key int) using hive;" ->
-            "Hive support is required to CREATE Hive TABLE",
+            "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
           "create table src(key int) using parquet;" -> "")
         cd.countDown()
       }

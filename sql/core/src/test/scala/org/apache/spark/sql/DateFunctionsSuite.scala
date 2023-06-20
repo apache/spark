@@ -177,11 +177,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(4, 4, 4))
   }
 
-  test("dayofmonth") {
+  test("dayofmonth & day") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
+      Row(8, 8, 8))
+
+    checkAnswer(
+      df.select(day($"a"), day($"b"), day($"c")),
       Row(8, 8, 8))
 
     checkAnswer(
@@ -249,7 +253,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(15, 15, 15))
   }
 
-  test("function date_add") {
+  test("function date_add & dateadd") {
     val st1 = "2015-06-01 12:34:56"
     val st2 = "2015-06-02 12:34:56"
     val t1 = Timestamp.valueOf(st1)
@@ -271,9 +275,24 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(date_add(col("ss"), 7)),
       Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
+    checkAnswer(
+      df.select(dateadd(col("d"), lit(1))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.select(dateadd(col("t"), lit(3))),
+      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
+    checkAnswer(
+      df.select(dateadd(col("s"), lit(5))),
+      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
+    checkAnswer(
+      df.select(dateadd(col("ss"), lit(7))),
+      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
 
     checkAnswer(
       df.withColumn("x", lit(1)).select(date_add(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.withColumn("x", lit(1)).select(dateadd(col("d"), col("x"))),
       Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
 
     checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
@@ -893,7 +912,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("datediff") {
+  test("datediff & date_diff") {
     val df = Seq(
       (Date.valueOf("2015-07-24"), Timestamp.valueOf("2015-07-24 01:00:00"),
         "2015-07-23", "2015-07-23 03:00:00"),
@@ -903,8 +922,20 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(datediff(col("a"), col("b"))), Seq(Row(0), Row(0)))
     checkAnswer(df.select(datediff(col("a"), col("c"))), Seq(Row(1), Row(1)))
     checkAnswer(df.select(datediff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.select(date_diff(col("a"), col("b"))), Seq(Row(0), Row(0)))
+    checkAnswer(df.select(date_diff(col("a"), col("c"))), Seq(Row(1), Row(1)))
+    checkAnswer(df.select(date_diff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
     checkAnswer(df.selectExpr("date_diff(a, d)"), Seq(Row(1), Row(1)))
+  }
+
+  test("date_from_unix_date") {
+    val df = spark.range(1).select(
+      date_from_unix_date(lit(1)).cast("string"),
+      date_from_unix_date(lit(20)).cast("string"),
+      date_from_unix_date(lit(300)).cast("string"))
+
+    checkAnswer(df, Seq(Row("1970-01-02", "1970-01-21", "1970-10-28")))
   }
 
   test("to_timestamp with microseconds precision") {

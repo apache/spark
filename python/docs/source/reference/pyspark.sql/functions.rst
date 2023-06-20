@@ -129,10 +129,14 @@ Datetime Functions
     current_timestamp
     current_timezone
     date_add
+    date_diff
     date_format
+    date_from_unix_date
     date_sub
     date_trunc
+    dateadd
     datediff
+    day
     dayofmonth
     dayofweek
     dayofyear
@@ -364,16 +368,28 @@ String Functions
     ascii
     base64
     bit_length
+    btrim
+    char
+    character_length
+    char_length
+    chr
     concat_ws
+    contains
     decode
+    elt
     encode
     endswith
+    find_in_set
     format_number
     format_string
+    ilike
     initcap
     instr
+    lcase
     length
+    like
     lower
+    left
     levenshtein
     locate
     lpad
@@ -392,6 +408,8 @@ String Functions
     regexp_substr
     regexp_instr
     replace
+    right
+    ucase
     unbase64
     rpad
     repeat

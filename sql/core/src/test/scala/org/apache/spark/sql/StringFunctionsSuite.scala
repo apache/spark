@@ -873,6 +873,125 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("char & chr function") {
+    val df = Seq(65).toDF("a")
+    checkAnswer(df.selectExpr("char(a)"), Seq(Row("A")))
+    checkAnswer(df.select(char(col("a"))), Seq(Row("A")))
+
+    checkAnswer(df.selectExpr("chr(a)"), Seq(Row("A")))
+    checkAnswer(df.select(chr(col("a"))), Seq(Row("A")))
+  }
+
+  test("btrim function") {
+    val df = Seq(("SSparkSQLS", "SL")).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("btrim(a)"), Seq(Row("SSparkSQLS")))
+    checkAnswer(df.select(btrim(col("a"))), Seq(Row("SSparkSQLS")))
+
+    checkAnswer(df.selectExpr("btrim(a, b)"), Seq(Row("parkSQ")))
+    checkAnswer(df.select(btrim(col("a"), col("b"))), Seq(Row("parkSQ")))
+  }
+
+  test("char_length & character_length function") {
+    val df = Seq("SSparkSQLS").toDF("a")
+    checkAnswer(df.selectExpr("char_length(a)"), Seq(Row(10)))
+    checkAnswer(df.select(char_length(col("a"))), Seq(Row(10)))
+
+    checkAnswer(df.selectExpr("character_length(a)"), Seq(Row(10)))
+    checkAnswer(df.select(character_length(col("a"))), Seq(Row(10)))
+  }
+
+  test("contains function") {
+    val df = Seq(("Spark SQL", "Spark")).toDF("a", "b")
+    checkAnswer(df.selectExpr("contains(a, b)"), Seq(Row(true)))
+    checkAnswer(df.select(contains(col("a"), col("b"))), Seq(Row(true)))
+  }
+
+  test("elt function") {
+    val df = Seq((1, "scala", "java")).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("elt(a, b, c)"), Seq(Row("scala")))
+    checkAnswer(df.select(elt(col("a"), col("b"), col("c"))), Seq(Row("scala")))
+  }
+
+  test("find_in_set function") {
+    val df = Seq(("ab", "abc,b,ab,c,def")).toDF("a", "b")
+    checkAnswer(df.selectExpr("find_in_set(a, b)"), Seq(Row(3)))
+    checkAnswer(df.select(find_in_set(col("a"), col("b"))), Seq(Row(3)))
+  }
+
+  test("like & ilike function") {
+    val df = Seq(("Spark", "_park")).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("a like b"), Seq(Row(true)))
+    checkAnswer(df.select(like(col("a"), col("b"))), Seq(Row(true)))
+
+    checkAnswer(df.selectExpr("a ilike b"), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"))), Seq(Row(true)))
+
+    val df1 = Seq(("%SystemDrive%/Users/John", "/%SystemDrive/%//Users%")).toDF("a", "b")
+
+    checkAnswer(df1.selectExpr("a like b escape '/'"), Seq(Row(true)))
+    checkAnswer(df1.select(like(col("a"), col("b"), lit('/'))), Seq(Row(true)))
+
+    checkAnswer(df.selectExpr("a ilike b escape '/'"), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"), lit('/'))), Seq(Row(true)))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(like(col("a"), col("b"), lit(618))).collect()
+      },
+      errorClass = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"618\"")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(ilike(col("a"), col("b"), lit(618))).collect()
+      },
+      errorClass = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"618\"")
+    )
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(like(col("a"), col("b"), lit("中国"))).collect()
+      },
+      errorClass = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"中国\"")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(ilike(col("a"), col("b"), lit("中国"))).collect()
+      },
+      errorClass = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"中国\"")
+    )
+    // scalastyle:on
+  }
+
+  test("lcase & ucase function") {
+    val df = Seq("Spark").toDF("a")
+
+    checkAnswer(df.selectExpr("lcase(a)"), Seq(Row("spark")))
+    checkAnswer(df.select(lcase(col("a"))), Seq(Row("spark")))
+
+    checkAnswer(df.selectExpr("ucase(a)"), Seq(Row("SPARK")))
+    checkAnswer(df.select(ucase(col("a"))), Seq(Row("SPARK")))
+  }
+
+  test("left & right function") {
+    val df = Seq(("Spark SQL", 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("left(a, b)"), Seq(Row("Spa")))
+    checkAnswer(df.select(left(col("a"), col("b"))), Seq(Row("Spa")))
+
+    checkAnswer(df.selectExpr("right(a, b)"), Seq(Row("SQL")))
+    checkAnswer(df.select(right(col("a"), col("b"))), Seq(Row("SQL")))
+  }
+
   test("replace") {
     val df = Seq(("ABCabc", "abc", "DEF")).toDF("a", "b", "c")
 

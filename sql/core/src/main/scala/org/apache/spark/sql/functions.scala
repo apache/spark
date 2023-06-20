@@ -1876,15 +1876,11 @@ object functions {
    * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
    * input types are the same with the `+` operator.
    *
-   * @note
-   *   Only Numeric type is supported in this function, while `try_add` in SQL supports Numeric,
-   *   DATE, TIMESTAMP, and INTERVAL.
-   *
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_add(left: Column, right: Column): Column = withExpr {
-    Add(left.expr, right.expr, EvalMode.TRY)
+  def try_add(left: Column, right: Column): Column = {
+    call_udf("try_add", left, right)
   }
 
   /**
@@ -1901,46 +1897,33 @@ object functions {
    * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
    * always null if `divisor` is 0.
    *
-   * @note
-   *   The `dividend` must be a numeric, `divisor` must be a numeric in this function. While the
-   *   `dividend` can be a numeric or an interval, `divisor` must be a numeric in SQL function
-   *   `try_divide`.
-   *
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
-    Divide(dividend.expr, divisor.expr, EvalMode.TRY)
+  def try_divide(dividend: Column, divisor: Column): Column = {
+    call_udf("try_divide", dividend, divisor)
   }
 
   /**
-   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are the
-   * same with the `*` operator.
-   *
-   * @note
-   *   Only Numeric type is supported in this function, while `try_multiply` in SQL supports
-   *   Numeric and INTERVAL.
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
    *
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_multiply(left: Column, right: Column): Column = withExpr {
-    Multiply(left.expr, right.expr, EvalMode.TRY)
+  def try_multiply(left: Column, right: Column): Column = {
+    call_udf("try_multiply", left, right)
   }
 
   /**
-   * Returns `left`-`right` and the result is null on overflow. The acceptable input types are the
-   * same with the `-` operator.
-   *
-   * @note
-   *   Only Numeric type is supported in this function, while `try_subtract` in SQL supports
-   *   Numeric, DATE, TIMESTAMP, and INTERVAL.
+   * Returns `left`-`right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
    *
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_subtract(left: Column, right: Column): Column = withExpr {
-    Subtract(left.expr, right.expr, EvalMode.TRY)
+  def try_subtract(left: Column, right: Column): Column = {
+    call_udf("try_subtract", left, right)
   }
 
   /**
@@ -4157,6 +4140,37 @@ object functions {
   }
 
   /**
+   * Returns the ASCII character having the binary equivalent to `n`.
+   * If n is larger than 256 the result is equivalent to char(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char(n: Column): Column = withExpr {
+    Chr(n.expr)
+  }
+
+  /**
+   * Removes the leading and trailing space characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column): Column = withExpr {
+    new StringTrimBoth(str.expr)
+  }
+
+  /**
+   * Remove the leading and trailing `trim` characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column, trim: Column): Column = withExpr {
+    new StringTrimBoth(str.expr, trim.expr)
+  }
+
+  /**
    * This is a special version of `to_binary` that performs the same operation, but returns a NULL
    * value instead of raising an error if the conversion cannot be performed.
    *
@@ -4188,6 +4202,179 @@ object functions {
    */
   def try_to_number(e: Column, format: Column): Column = withExpr {
     TryToNumber(e.expr, format.expr)
+  }
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data.
+   * The length of string data includes the trailing spaces.
+   * The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char_length(str: Column): Column = withExpr {
+    Length(str.expr)
+  }
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data.
+   * The length of string data includes the trailing spaces.
+   * The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def character_length(str: Column): Column = withExpr {
+    Length(str.expr)
+  }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`.
+   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def chr(n: Column): Column = withExpr {
+    Chr(n.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if right is found inside left.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both left or right must be of STRING type.
+   *
+   * @note
+   *   Only STRING type is supported in this function, while `contains` in SQL supports both
+   *   STRING and BINARY.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def contains(left: Column, right: Column): Column = withExpr {
+    Contains(left.expr, right.expr)
+  }
+
+  /**
+   * Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+   * The function returns NULL if the index exceeds the length of the array
+   * and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+   * it throws ArrayIndexOutOfBoundsException for invalid indices.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def elt(inputs: Column*): Column = withExpr {
+    Elt(inputs.map(_.expr))
+  }
+
+  /**
+   * Returns the index (1-based) of the given string (`str`) in the comma-delimited
+   * list (`strArray`). Returns 0, if the string was not found or if the given string (`str`)
+   * contains a comma.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def find_in_set(str: Column, strArray: Column): Column = withExpr {
+    FindInSet(str.expr, strArray.expr)
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    escapeChar.expr match {
+      case StringLiteral(v) if v.length == 1 =>
+        Like(str.expr, pattern.expr, v.charAt(0))
+      case _ =>
+        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
+    }
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column): Column = withExpr {
+    new Like(str.expr, pattern.expr)
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    escapeChar.expr match {
+      case StringLiteral(v) if v.length == 1 =>
+        ILike(str.expr, pattern.expr, v.charAt(0))
+      case _ =>
+        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
+    }
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column): Column = withExpr {
+    new ILike(str.expr, pattern.expr)
+  }
+
+  /**
+   * Returns `str` with all characters changed to lowercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def lcase(str: Column): Column = withExpr {
+    Lower(str.expr)
+  }
+
+  /**
+   * Returns `str` with all characters changed to uppercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ucase(str: Column): Column = withExpr {
+    Upper(str.expr)
+  }
+
+  /**
+   * Returns the leftmost `len`(`len` can be string type) characters from the string `str`,
+   * if `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def left(str: Column, len: Column): Column = withExpr {
+    Left(str.expr, len.expr)
+  }
+
+  /**
+   * Returns the rightmost `len`(`len` can be string type) characters from the string `str`,
+   * if `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def right(str: Column, len: Column): Column = withExpr {
+    Right(str.expr, len.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4313,6 +4500,18 @@ object functions {
   def date_add(start: Column, days: Column): Column = withExpr { DateAdd(start.expr, days.expr) }
 
   /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def dateadd(start: Column, days: Column): Column = date_add(start, days)
+
+  /**
    * Returns the date that is `days` days before `start`
    *
    * @param start A date, timestamp or string. If a string, the data must be in a format that
@@ -4358,6 +4557,34 @@ object functions {
   def datediff(end: Column, start: Column): Column = withExpr { DateDiff(end.expr, start.expr) }
 
   /**
+   * Returns the number of days from `start` to `end`.
+   *
+   * Only considers the date part of the input. For example:
+   * {{{
+   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * // returns 1
+   * }}}
+   *
+   * @param end A date, timestamp or string. If a string, the data must be in a format that
+   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
+   *         a date. Negative if `end` is before `start`
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_diff(end: Column, start: Column): Column = datediff(end, start)
+
+  /**
+   * Create date from the number of `days` since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_from_unix_date(days: Column): Column = withExpr { DateFromUnixDate(days.expr) }
+
+  /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -4397,6 +4624,14 @@ object functions {
    * @since 1.5.0
    */
   def dayofmonth(e: Column): Column = withExpr { DayOfMonth(e.expr) }
+
+  /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def day(e: Column): Column = dayofmonth(e)
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
@@ -4651,8 +4886,8 @@ object functions {
 
   /**
    * Parses the `s` with the `format` to a timestamp. The function always returns null on an
-   * invalid input with/without ANSI SQL mode enabled. The result data type is consistent with the
-   * value of configuration `spark.sql.timestampType`.
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
    *
    * @group datetime_funcs
    * @since 3.5.0
@@ -4662,9 +4897,9 @@ object functions {
   }
 
   /**
-   * Parses the `s` expression to a timestamp. The function always returns null on an invalid
-   * input with/without ANSI SQL mode enabled. It follows casting rules to a timestamp. The result
-   * data type is consistent with the value of configuration `spark.sql.timestampType`.
+   * Parses the `s` to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
    *
    * @group datetime_funcs
    * @since 3.5.0

@@ -18,7 +18,10 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.Date
+import java.text.SimpleDateFormat
 import java.time.Period
+import java.util.Locale
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
@@ -648,11 +651,28 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+  val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
+  val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+
   test("try_add") {
     val df = Seq((1982, 15)).toDF("birth", "age")
 
     checkAnswer(df.selectExpr("try_add(birth, age)"), Seq(Row(1997)))
     checkAnswer(df.select(try_add(col("birth"), col("age"))), Seq(Row(1997)))
+
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val df1 = Seq((1, d1), (2, d2)).toDF("i", "d")
+
+    checkAnswer(df1.selectExpr("try_add(d, i)"),
+      df1.select(try_add(col("d"), col("i"))))
+    checkAnswer(df1.selectExpr(s"try_add(d, make_interval(i))"),
+      df1.select(try_add(column("d"), make_interval(col("i")))))
+    checkAnswer(df1.selectExpr(s"try_add(d, make_interval(0, 0, 0, i))"),
+      df1.select(try_add(column("d"), make_interval(lit(0), lit(0), lit(0), col("i")))))
+    checkAnswer(df1.selectExpr("try_add(make_interval(i), make_interval(i))"),
+      df1.select(try_add(make_interval(col("i")), make_interval(col("i")))))
   }
 
   test("try_avg") {
@@ -667,6 +687,13 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_divide(birth, age)"), Seq(Row(200.0), Row(410.0)))
     checkAnswer(df.select(try_divide(col("birth"), col("age"))), Seq(Row(200.0), Row(410.0)))
+
+    val df1 = Seq((1, 2)).toDF("year", "month")
+
+    checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 2)"),
+      df1.select(try_divide(make_interval(col("year"), col("month")), lit(2))))
+    checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 0)"),
+      df1.select(try_divide(make_interval(col("year"), col("month")), lit(0))))
   }
 
   test("try_element_at") {
@@ -680,6 +707,9 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_multiply(a, b)"), Seq(Row(6)))
     checkAnswer(df.select(try_multiply(col("a"), col("b"))), Seq(Row(6)))
+
+    checkAnswer(df.selectExpr("try_multiply(make_interval(a), b)"),
+      df.select(try_multiply(make_interval(col("a")), col("b"))))
   }
 
   test("try_subtract") {
@@ -687,6 +717,19 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_subtract(a, b)"), Seq(Row(-1)))
     checkAnswer(df.select(try_subtract(col("a"), col("b"))), Seq(Row(-1)))
+
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val df1 = Seq((1, d1), (2, d2)).toDF("i", "d")
+
+    checkAnswer(df1.selectExpr("try_subtract(d, i)"),
+      df1.select(try_subtract(col("d"), col("i"))))
+    checkAnswer(df1.selectExpr(s"try_subtract(d, make_interval(i))"),
+      df1.select(try_subtract(col("d"), make_interval(col("i")))))
+    checkAnswer(df1.selectExpr(s"try_subtract(d, make_interval(0, 0, 0, i))"),
+      df1.select(try_subtract(col("d"), make_interval(lit(0), lit(0), lit(0), col("i")))))
+    checkAnswer(df1.selectExpr("try_subtract(make_interval(i), make_interval(i))"),
+      df1.select(try_subtract(make_interval(col("i")), make_interval(col("i")))))
   }
 
   test("try_sum") {

@@ -26,6 +26,8 @@ from pyspark.mlv2 import (
     evaluation,
 )
 
+from pyspark.mlv2.pipeline import Pipeline, PipelineModel
+
 __all__ = [
     "Estimator",
     "Transformer",
@@ -33,4 +35,6 @@ __all__ = [
     "Model",
     "feature",
     "evaluation",
+    "Pipeline",
+    "PipelineModel",
 ]
