@@ -1357,4 +1357,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val result6 = df.select(make_ym_interval())
     checkAnswer(result5, result6)
   }
+
+  test("try_to_timestamp") {
+    val df = Seq(("2016-12-31", "yyyy-MM-dd")).toDF("a", "b")
+    val ts = Timestamp.valueOf("2016-12-31 00:00:00")
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a, b)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"), col("b"))), Seq(Row(ts)))
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
+  }
 }

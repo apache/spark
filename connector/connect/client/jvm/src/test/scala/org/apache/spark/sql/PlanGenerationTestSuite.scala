@@ -1213,6 +1213,58 @@ class PlanGenerationTestSuite
     fn.sqrt("b")
   }
 
+  functionTest("try_add") {
+    fn.try_add(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_avg") {
+    fn.try_avg(fn.col("a"))
+  }
+
+  functionTest("try_divide") {
+    fn.try_divide(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_multiply") {
+    fn.try_multiply(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_subtract") {
+    fn.try_subtract(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_sum") {
+    fn.try_sum(fn.col("a"))
+  }
+
+  functionTest("try_to_timestamp") {
+    fn.try_to_timestamp(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_to_timestamp without format") {
+    fn.try_to_timestamp(fn.col("g"))
+  }
+
+  functionTest("try_to_binary") {
+    fn.try_to_binary(fn.col("g"), lit("format"))
+  }
+
+  functionTest("try_to_binary without format") {
+    fn.try_to_binary(fn.col("g"))
+  }
+
+  functionTest("try_to_number") {
+    fn.try_to_number(fn.col("g"), lit("99,999"))
+  }
+
+  functionTest("try_element_at array") {
+    fn.try_element_at(fn.col("e"), fn.col("a"))
+  }
+
+  functionTest("try_element_at map") {
+    fn.try_element_at(fn.col("f"), fn.col("g"))
+  }
+
   functionTest("struct") {
     fn.struct("a", "d")
   }
