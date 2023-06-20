@@ -6030,6 +6030,116 @@ def weekday(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    """
+    Extracts a part of the date/timestamp or interval source.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    field : :class:`~pyspark.sql.Column` or str
+        selects which part of the source should be extracted.
+    source : :class:`~pyspark.sql.Column` or str
+        a date/timestamp or interval column from where `field` should be extracted.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a part of the date/timestamp or interval source.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
+    >>> df.select(
+    ...     extract(lit('YEAR'), 'ts').alias('year'),
+    ...     extract(lit('month'), 'ts').alias('month'),
+    ...     extract(lit('WEEK'), 'ts').alias('week'),
+    ...     extract(lit('D'), 'ts').alias('day'),
+    ...     extract(lit('M'), 'ts').alias('minute'),
+    ...     extract(lit('S'), 'ts').alias('second')
+    ... ).collect()
+    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
+    """
+    return _invoke_function_over_columns("extract", field, source)
+
+
+@try_remote_functions
+def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    """
+    Extracts a part of the date/timestamp or interval source.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    field : :class:`~pyspark.sql.Column` or str
+        selects which part of the source should be extracted, and supported string values
+        are as same as the fields of the equivalent function `extract`.
+    source : :class:`~pyspark.sql.Column` or str
+        a date/timestamp or interval column from where `field` should be extracted.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a part of the date/timestamp or interval source.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
+    >>> df.select(
+    ...     date_part(lit('YEAR'), 'ts').alias('year'),
+    ...     date_part(lit('month'), 'ts').alias('month'),
+    ...     date_part(lit('WEEK'), 'ts').alias('week'),
+    ...     date_part(lit('D'), 'ts').alias('day'),
+    ...     date_part(lit('M'), 'ts').alias('minute'),
+    ...     date_part(lit('S'), 'ts').alias('second')
+    ... ).collect()
+    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
+    """
+    return _invoke_function_over_columns("date_part", field, source)
+
+
+@try_remote_functions
+def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    """
+    Extracts a part of the date/timestamp or interval source.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    field : :class:`~pyspark.sql.Column` or str
+        selects which part of the source should be extracted, and supported string values
+        are as same as the fields of the equivalent function `extract`.
+    source : :class:`~pyspark.sql.Column` or str
+        a date/timestamp or interval column from where `field` should be extracted.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a part of the date/timestamp or interval source.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
+    >>> df.select(
+    ...     datepart(lit('YEAR'), 'ts').alias('year'),
+    ...     datepart(lit('month'), 'ts').alias('month'),
+    ...     datepart(lit('WEEK'), 'ts').alias('week'),
+    ...     datepart(lit('D'), 'ts').alias('day'),
+    ...     datepart(lit('M'), 'ts').alias('minute'),
+    ...     datepart(lit('S'), 'ts').alias('second')
+    ... ).collect()
+    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
+    """
+    return _invoke_function_over_columns("datepart", field, source)
+
+
+@try_remote_functions
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
     """
     Returns a column with a date built from the year, month and day columns.
