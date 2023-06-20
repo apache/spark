@@ -70,7 +70,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       session.sparkContext.setJobGroup(
         executeHolder.jobTag,
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
-        interruptOnCancel = true))
+        interruptOnCancel = true)
 
       try {
         // Add debug information to the query execution so that the jobs are traceable.
