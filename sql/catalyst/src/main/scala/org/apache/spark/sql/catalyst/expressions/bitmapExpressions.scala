@@ -154,13 +154,15 @@ case class BitmapCount(child: Expression)
     _FUNC_(child) - Returns a bitmap with the positions of the bits set from all the values from
     the child expression. The child expression will most likely be bitmap_bit_position().
   """,
+  // scalastyle:off line.size.limit
   examples = """
     Examples:
-      > SELECT _FUNC_(bitmap_bit_position(col)) FROM VALUES (1), (2), (3) AS tab(col);
-       [07 00 00 ...]
-      > SELECT _FUNC_(bitmap_bit_position(col)) FROM VALUES (1), (1), (1) AS tab(col);
-       [01 00 00 ...]
+      > SELECT substring(hex(_FUNC_((bitmap_bit_position(col)))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col);
+       070000
+      > SELECT substring(hex(_FUNC_((bitmap_bit_position(col)))), 0, 6) FROM VALUES (1), (1), (1) AS tab(col);
+       010000
   """,
+  // scalastyle:on line.size.limit
   since = "3.5.0",
   group = "agg_funcs"
 )
@@ -235,13 +237,15 @@ case class BitmapConstructAgg(child: Expression,
     _FUNC_(child) - Returns a bitmap that is the bitwise OR of all of the bitmaps from the child
     expression. The input should be bitmaps created from bitmap_construct_agg().
   """,
+  // scalastyle:off line.size.limit
   examples = """
     Examples:
-      > SELECT _FUNC_(col) FROM VALUES (X '10'), (X '20'), (X '40') AS tab(col);
-       [70]
-      > SELECT _FUNC_(col) FROM VALUES (X '10'), (X '10'), (X '10') AS tab(col);
-       [10]
+      > SELECT substring(hex(_FUNC_(col)), 0, 6) FROM VALUES (X '10'), (X '20'), (X '40') AS tab(col);
+       700000
+      > SELECT substring(hex(_FUNC_(col)), 0, 6) FROM VALUES (X '10'), (X '10'), (X '10') AS tab(col);
+       100000
   """,
+  // scalastyle:on line.size.limit
   since = "3.5.0",
   group = "agg_funcs"
 )
