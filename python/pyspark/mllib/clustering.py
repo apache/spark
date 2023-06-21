@@ -79,14 +79,14 @@ class BisectingKMeansModel(JavaModelWrapper):
         super(BisectingKMeansModel, self).__init__(java_model)
         self.centers = [c.toArray() for c in self.call("clusterCenters")]
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def clusterCenters(self) -> List[np.ndarray]:
         """Get the cluster centers, represented as a list of NumPy
         arrays."""
         return self.centers
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def k(self) -> int:
         """Get the number of clusters"""
@@ -281,13 +281,13 @@ class KMeansModel(Saveable, Loader["KMeansModel"]):
     def __init__(self, centers: List["VectorLike"]):
         self.centers = centers
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.0.0")
     def clusterCenters(self) -> List["VectorLike"]:
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return self.centers
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def k(self) -> int:
         """Total number of clusters."""
@@ -532,7 +532,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
     True
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def weights(self) -> np.ndarray:
         """
@@ -541,7 +541,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
         """
         return array(self.call("weights"))
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def gaussians(self) -> List[MultivariateGaussian]:
         """
@@ -552,7 +552,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
             MultivariateGaussian(gaussian[0], gaussian[1]) for gaussian in self.call("gaussians")
         ]
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def k(self) -> int:
         """Number of gaussians in mixture."""
@@ -778,7 +778,7 @@ class PowerIterationClusteringModel(
     ...     pass
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def k(self) -> int:
         """
@@ -946,7 +946,7 @@ class StreamingKMeansModel(KMeansModel):
         super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)  # type: ignore[arg-type]
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def clusterWeights(self) -> List[np.float64]:
         """Return the cluster weights."""
