@@ -1989,13 +1989,15 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-43876: Enable fast hashmap for distinct queries") {
-    val df = testData2.distinct()
-    checkAnswer(df, testData2)
-    val output = new java.io.ByteArrayOutputStream()
-    Console.withOut(output) {
-      df.explain("codegen")
+    withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true") {
+      val df = testData2.distinct()
+      checkAnswer(df, testData2)
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain("codegen")
+      }
+      assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
     }
-    assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
   }
 }
 
