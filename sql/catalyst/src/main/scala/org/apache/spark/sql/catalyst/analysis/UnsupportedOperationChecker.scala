@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
@@ -508,8 +509,7 @@ object UnsupportedOperationChecker extends Logging {
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
-        case Window(_, _, _, child) if child.isStreaming =>
-          val windowExpression = subPlan.asInstanceOf[Window].windowExpressions
+        case Window(windowExpression, _, _, child) if child.isStreaming =>
           val windowFuncs = windowExpression.flatMap { e =>
             e.collect {
               case we: WindowExpression =>
@@ -521,12 +521,10 @@ object UnsupportedOperationChecker extends Logging {
               case we: WindowExpression => we.windowSpec.sql
             }
           }.mkString(", ")
-          throw new AnalysisException(
-            s"Window function is not supported in $windowFuncs on streaming DataFrames/Datasets. " +
-            "Structured Streaming only supports time-window aggregation using the `window` " +
-            s"function. (window specification: '$windowSpec')",
-            subPlan.origin.line,
-            subPlan.origin.startPosition)
+          throw QueryExecutionErrors.nonTimeWindowNotSupportedInStreamingError(
+            windowFuncs,
+            windowSpec,
+            subPlan.origin)
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +

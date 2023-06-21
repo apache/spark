@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -722,6 +722,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2049",
       messageParameters = Map("className" -> className, "operator" -> operator))
+  }
+
+  def nonTimeWindowNotSupportedInStreamingError(
+      windowFuncs: String,
+      windowSpec: String,
+      origin: Origin): AnalysisException = {
+    new AnalysisException(
+      errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
+      messageParameters = Map("windowFuncs" -> windowFuncs, "windowSpec" -> windowSpec),
+      origin = origin)
   }
 
   def multiplePathsSpecifiedError(allPaths: Seq[String]): SparkIllegalArgumentException = {

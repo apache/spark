@@ -1892,6 +1892,11 @@
       "UDF class <className> doesn't implement any UDF interface."
     ]
   },
+  "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING" : {
+    "message" : [
+      "Window function is not supported in <windowFuncs> on streaming DataFrames/Datasets. Structured Streaming only supports time-window aggregation using the `window` function. (window specification: '<windowSpec>')"
+    ]
+  },
   "NULLABLE_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is nullable while it's required to be non-nullable."
