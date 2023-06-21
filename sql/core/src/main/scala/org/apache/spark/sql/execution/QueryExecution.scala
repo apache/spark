@@ -191,6 +191,8 @@ class QueryExecution(
     plan
   }
 
+  def assertExecutedPlanPrepared(): Unit = executedPlan
+
   /**
    * Internal version of the RDD. Avoids copies and has no schema.
    * Note for callers: Spark may apply various optimization including reusing object: this means

@@ -122,8 +122,10 @@ class SparkConnectService(debug: Boolean)
       userId: String,
       sessionId: String,
       planHolder: Option[ExecutePlanHolder] = None): PartialFunction[Throwable, Unit] = {
-    val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
+    val sessionHolder = planHolder
+      .map(_.sessionHolder)
+      .getOrElse(SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId))
     val session = sessionHolder.session
     val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
 

@@ -28,7 +28,9 @@ import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, Plan, UserContext}
 import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.sql.execution.QueryExecution
@@ -49,17 +51,15 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
   val DEFAULT_SESSION_ID = "2"
   val DEFAULT_QUERY_ID = "3"
   val DEFAULT_CLIENT_TYPE = "clientType"
-  val DEFAULT_JOB_GROUP_ID =
-    s"User_${DEFAULT_USER_ID}_Session_${DEFAULT_SESSION_ID}_Request_${DEFAULT_QUERY_ID}"
 
   test("SPARK-43923: post started") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
 
     events.postStarted()
 
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(SparkListenerConnectOperationStarted(
-        DEFAULT_JOB_GROUP_ID,
+        events.planHolder.jobTag,
         DEFAULT_QUERY_ID,
         DEFAULT_CLOCK.getTimeMillis(),
         DEFAULT_SESSION_ID,
@@ -70,56 +70,48 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
         Map.empty))
   }
 
-  gridTest("SPARK-43923: post parsed with dataframe")(Seq(true, false)) { isEager =>
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
-    val df = setupDf(isEager, false)
-    events.postParsed(Some(df))
-    val expectedTimes = isEager match {
-      case true =>
-        0
-      case false =>
-        1
-    }
-
-    verify(df.queryExecution, times(expectedTimes)).executedPlan
+  test("SPARK-43923: post parsed with plan") {
+    val events = setupEvents()
+    val mockPlan = mock[LogicalPlan]
+    events.postParsed(Some(mockPlan))
     val event = SparkListenerConnectOperationParsed(
-      DEFAULT_JOB_GROUP_ID,
+      events.planHolder.jobTag,
       DEFAULT_QUERY_ID,
       DEFAULT_CLOCK.getTimeMillis())
-    event.analyzedPlan = Some(df.queryExecution.analyzed)
+    event.analyzedPlan = Some(mockPlan)
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(event)
   }
 
   test("SPARK-43923: post parsed with empty dataframe") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
     events.postParsed()
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationParsed(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
   test("SPARK-43923: post canceled") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
     events.postCanceled()
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationCanceled(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
   test("SPARK-43923: post failed") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
     events.postFailed(DEFAULT_ERROR)
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationFailed(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis(),
           DEFAULT_ERROR,
@@ -127,40 +119,40 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
   }
 
   test("SPARK-43923: post finished") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
     events.postFinished()
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationFinished(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
   test("SPARK-43923: post postParsedAndFinished with empty dataframe") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
     events.postParsedAndFinished()
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationParsed(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis()))
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationFinished(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis()))
   }
 
   test("SPARK-43923: post closed") {
-    val events = setupEvents(Some(DEFAULT_JOB_GROUP_ID))
+    val events = setupEvents()
     events.postClosed()
     verify(events.planHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
       .post(
         SparkListenerConnectOperationClosed(
-          DEFAULT_JOB_GROUP_ID,
+          events.planHolder.jobTag,
           DEFAULT_QUERY_ID,
           DEFAULT_CLOCK.getTimeMillis()))
   }
@@ -172,24 +164,25 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
     }
   }
 
-  def setupDf(isEager: Boolean, isStreaming: Boolean): DataFrame = {
-    val df = mock[DataFrame]
+  def setupQe(testCase: ParsedTestCase): QueryExecution = {
     val plan = mock[LogicalPlan]
-    val queryExecution = mock[QueryExecution]
-    val findRes = isEager match {
+    val qe = mock[QueryExecution]
+    val tracker = mock[QueryPlanningTracker]
+    val findRes = testCase.isEager match {
       case true =>
         Some(mock[LogicalPlan])
       case false =>
         Option.empty[LogicalPlan]
     }
+    when(tracker.phases).thenReturn(testCase.phases)
     when(plan.find(any())).thenReturn(findRes)
-    when(queryExecution.analyzed).thenReturn(plan)
-    when(queryExecution.analyzed.isStreaming).thenReturn(isStreaming)
-    when(df.queryExecution).thenReturn(queryExecution)
-    df
+    when(qe.analyzed).thenReturn(plan)
+    when(qe.analyzed.isStreaming).thenReturn(testCase.isStreaming)
+    when(qe.tracker).thenReturn(tracker)
+    qe
   }
 
-  def setupEvents(jobGroupId: Option[String] = None): RequestEvents = {
+  def setupEvents(): RequestEvents = {
     val mockSession = mock[SparkSession]
     val sessionHolder = SessionHolder(DEFAULT_USER_ID, DEFAULT_SESSION_ID, mockSession)
     val mockContext = mock[SparkContext]
@@ -222,4 +215,10 @@ class RequestEventsSuite extends SparkFunSuite with MockitoSugar with SparkConne
 
     RequestEvents(planHolder, DEFAULT_CLOCK)
   }
+
+  case class ParsedTestCase(
+      isEager: Boolean,
+      isStreaming: Boolean,
+      expectations: (QueryExecution, RequestEvents) => Unit,
+      phases: Map[String, PhaseSummary] = Map.empty[String, PhaseSummary])
 }

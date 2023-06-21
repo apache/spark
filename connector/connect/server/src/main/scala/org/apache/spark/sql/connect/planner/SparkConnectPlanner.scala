@@ -42,7 +42,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
@@ -68,6 +68,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryProgress, Trigger}
@@ -2402,6 +2403,96 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     responseObserver.onNext(SparkConnectStreamHandler.createMetricsResponse(sessionId, df))
   }
 
+  /**
+   * Executes a SQL query substituting named parameters by the given arguments, returning the
+   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
+   *
+   * Copied from @org.apache.spark.sql.SparkSession.sql, but with additional callback triggered
+   * after an eager command has been analyzed, but before it has been executed.
+   *
+   * @param sqlText
+   *   A SQL statement with named parameters to execute.
+   * @param args
+   *   A map of parameter names to Java/Scala objects that can be converted to SQL literal
+   *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
+   *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
+   *   can be also a `Column` of literal expression, in that case it is taken as is.
+   * @param analyzedCallback
+   *   Callback triggered before an eager command has been analyzed, but before it has been
+   *   executed.
+   */
+  def datasetFromSql(
+      sqlText: String,
+      args: Map[String, Any],
+      analyzedCallback: QueryExecution => Unit = _ => ()): DataFrame = {
+    val tracker = new QueryPlanningTracker
+    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+      val parsedPlan = sessionHolder.session.sessionState.sqlParser.parsePlan(sqlText)
+      if (args.nonEmpty) {
+        ParameterizedQuery(parsedPlan, args.mapValues(lit(_).expr).toMap)
+      } else {
+        parsedPlan
+      }
+    }
+    datasetFromRows(plan, analyzedCallback, Some(tracker))
+  }
+
+  /**
+   * Copied from @link org.apache.spark.sql.Dataset.ofRows, but with additional callback triggered
+   * after an eager command has been analyzed, but before it has been executed.
+   *
+   * @param plan
+   *   Plan to execute
+   * @param tracker
+   *   A simple utility for tracking runtime and associated stats in query planning. Specified
+   *   when planning tasks precedes analysis (i.e. parsing)
+   * @param analyzedCallback
+   *   Callback triggered before an eager command has been analyzed, but before it has been
+   *   executed.
+   */
+  def datasetFromRows(
+      plan: LogicalPlan,
+      analyzedCallback: QueryExecution => Unit = _ => (),
+      tracker: Option[QueryPlanningTracker] = None): Dataset[Row] = {
+    val qe =
+      new QueryExecution(sessionHolder.session, plan, tracker.getOrElse(new QueryPlanningTracker))
+    qe.assertAnalyzed()
+    analyzedCallback(qe)
+    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+  }
+
+  /**
+   * Calls @link org.apache.spark.sql.connect.service.RequestEvents.postParsed after analysis for
+   * commands and after planning for other queries. Will eagerly execute commands, see @link
+   * org.apache.spark.sql.execution.CommandExecutionMode
+   *
+   * @param qe
+   *   Query to execute
+   * @param planHolder
+   *   Holder of the query to execute
+   */
+  def analyzedCallback(planHolder: ExecutePlanHolder): QueryExecution => Unit = {
+    def callback(qe: QueryExecution): Unit = {
+      val isEagerlyExecuted = qe.analyzed.find {
+        case _: Command => true
+        case _ => false
+      }.isDefined
+      val isStreaming = qe.analyzed.isStreaming
+      if (isEagerlyExecuted || isStreaming) {
+        // assertExecutedPlanPrepared will eagerly execute the command,
+        // record the compilationEndTime first.
+        planHolder.events.postParsed(Some(qe))
+      } else {
+        qe.assertExecutedPlanPrepared()
+        // Record the compilationEndTime in case the query was not (eagerly) executed by
+        // assertExecutedPlanPrepared
+        planHolder.events.postParsed(Some(qe))
+      }
+    }
+    callback
+  }
+
   private def handleRegisterUserDefinedFunction(
       fun: proto.CommonInlineUserDefinedFunction,
       planHolder: ExecutePlanHolder): Unit = {
@@ -2481,8 +2572,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       replace = createView.getReplace,
       viewType = viewType)
 
-    val df = Dataset.ofRows(session, plan)
-    planHolder.events.postParsed(Some(df))
+    val df = datasetFromRows(plan, analyzedCallback(planHolder))
     df.queryExecution.commandExecuted
     planHolder.events.postFinished()
   }
@@ -2502,7 +2592,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = Dataset.ofRows(session, logicalPlan = plan)
+    val dataset = datasetFromRows(plan, analyzedCallback(planHolder))
 
     val w = dataset.write
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
@@ -2536,7 +2626,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     if (writeOperation.hasSource) {
       w.format(writeOperation.getSource)
     }
-    planHolder.events.postParsed(Some(dataset))
 
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.save()
@@ -2576,8 +2665,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = Dataset.ofRows(session, logicalPlan = plan)
-    planHolder.events.postParsed(Some(dataset))
+    val dataset = datasetFromRows(plan, analyzedCallback(planHolder))
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
 
@@ -2636,8 +2724,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       responseObserver: StreamObserver[ExecutePlanResponse],
       planHolder: ExecutePlanHolder): Unit = {
     val plan = transformRelation(writeOp.getInput)
-    val dataset = Dataset.ofRows(session, logicalPlan = plan)
-    planHolder.events.postParsed(Some(dataset))
+    val dataset = datasetFromRows(plan, analyzedCallback(planHolder))
 
     val writer = dataset.writeStream
 

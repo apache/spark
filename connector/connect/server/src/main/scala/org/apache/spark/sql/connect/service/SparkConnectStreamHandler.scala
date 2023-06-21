@@ -28,7 +28,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -96,9 +96,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val sessionHolder = planHolder.sessionHolder
     val planner = new SparkConnectPlanner(sessionHolder)
     val request = planHolder.request
-    val dataframe =
-      Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
-    planHolder.events.postParsed(Some(dataframe))
+    val dataframe = planner.datasetFromRows(
+      planner.transformRelation(request.getPlan.getRoot),
+      planner.analyzedCallback(planHolder))
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, planHolder)
