@@ -74,7 +74,7 @@ class GroupedData(PandasGroupedOpsMixin):
         index = 26  # index to truncate string from the JVM side
         jvm_string = self._jgd.toString()
         if jvm_string is not None and len(jvm_string) > index and jvm_string[index] == "[":
-            return f"GroupedData{jvm_string[26:]}"
+            return f"GroupedData{jvm_string[index:]}"
         else:
             return super().__repr__()
 
