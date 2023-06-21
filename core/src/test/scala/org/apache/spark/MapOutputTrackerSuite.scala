@@ -1069,7 +1069,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("exec-3", "hostA", 1000),
         Array(4L), 7))
 
-      sc = new SparkContext("local", "test", conf.clone())
+      sc = new SparkContext("local", "MapOutputTrackerSuite", conf.clone())
       val rdd = sc.parallelize(1 to 3, 3).map(num => (num, num).asInstanceOf[Product2[Int, Int]])
       val mockShuffleDep = mock(classOf[ShuffleDependency[Int, Int, _]])
       when(mockShuffleDep.shuffleId).thenReturn(10)
