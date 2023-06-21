@@ -2613,6 +2613,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         session.streams.resetTerminated()
         respBuilder.setResetTerminated(true)
 
+      case StreamingQueryManagerCommand.CommandCase.ADD_LISTENER =>
+        val listener =
+          new PythonStreamingQueryListener(command.getAddListener, sessionId, pythonExec)
+        session.streams.addListener(listener)
+
       case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
     }
