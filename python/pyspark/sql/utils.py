@@ -294,7 +294,7 @@ def isinstance_iterable(obj: Any) -> bool:
     try:
         iter(obj)
         return True
-    except TypeError, PySparkTypeError:
+    except (TypeError, PySparkTypeError):
         return False
 
 def to_list_column_style(

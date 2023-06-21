@@ -24,8 +24,11 @@ from pyspark.errors import (
     SparkUpgradeException,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
-
+from pyspark.sql.functions import col, to_date, unix_timestamp, from_unixtime
+from pyspark.sql.utils import (
+    isinstance_iterable,
+    to_list_column_style,
+)
 
 class UtilsTests(ReusedSQLTestCase):
     def test_capture_analysis_exception(self):
@@ -74,6 +77,32 @@ class UtilsTests(ReusedSQLTestCase):
         except AnalysisException as e:
             self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
             self.assertEquals(e.getSqlState(), "42703")
+
+    def test_isinstance_iterable(self):
+        a_col = col("")
+        a_str = ""
+
+        self.assertFalse(isinstance_iterable(a_col))
+        self.assertTrue(isinstance_iterable([a_col]))
+        self.assertTrue(isinstance_iterable((a_col,)))
+
+        self.assertFalse(isinstance_iterable(a_str))
+        self.assertTrue(isinstance_iterable([a_str]))
+        self.assertTrue(isinstance_iterable((a_str,)))
+
+        self.assertIsInstance(to_list_column_style(a_col), list)
+        self.assertIsInstance(to_list_column_style([a_col]), list)
+        self.assertIsInstance(to_list_column_style((a_col,)), list)
+        self.assertFalse(isinstance_iterable(to_list_column_style(a_col)[0]))
+        self.assertFalse(isinstance_iterable(to_list_column_style([a_col])[0]))
+        self.assertFalse(isinstance_iterable(to_list_column_style((a_col,))[0]))
+
+        self.assertIsInstance(to_list_column_style(a_str), list)
+        self.assertIsInstance(to_list_column_style([a_str]), list)
+        self.assertIsInstance(to_list_column_style((a_str,)), list)
+        self.assertFalse(isinstance_iterable(to_list_column_style(a_str)[0]))
+        self.assertFalse(isinstance_iterable(to_list_column_style([a_str])[0]))
+        self.assertFalse(isinstance_iterable(to_list_column_style((a_str,))[0]))
 
 
 if __name__ == "__main__":

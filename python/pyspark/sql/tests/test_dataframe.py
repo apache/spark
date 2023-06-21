@@ -1077,6 +1077,17 @@ class DataFrameTestsMixin:
             expected = [Row(a=0, b=0)]
             self.assertEqual(actual, expected)
 
+    def test_join_on_types(self):
+        df1 = self.spark.range(1).toDF("a").withColumn('key', lit(1))
+        df2 = self.spark.range(1).toDF("b").withColumn('key', lit(1))
+        expected_result = df1.join(df2, on='key')
+
+        self.assertEqual(expected_result, df1.join(df2, on=['key']))
+        self.assertEqual(expected_result, df1.join(df2, on=('key',)))
+        self.assertEqual(expected_result, df1.join(df2, on=col('key')))
+        self.assertEqual(expected_result, df1.join(df2, on=[col('key')]))
+        self.assertEqual(expected_result, df1.join(df2, on=(col('key'),)))
+
     # Regression test for invalid join methods when on is None, Spark-14761
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
