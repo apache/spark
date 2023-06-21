@@ -33,6 +33,7 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
+import scala.collection.Seq;
 
 import com.google.common.base.Objects;
 import org.apache.spark.sql.streaming.TestGroupState;
@@ -2000,4 +2001,73 @@ public class JavaDatasetSuite implements Serializable {
       return Objects.hashCode(arrayList, linkedList, list);
     }
   }
+
+  // SPARK-44132: nesting full outer joins confuses code generator
+  @Test
+  public void nestedJoinCodegenErrorNPE() {
+    Encoder<BeanForJoin> encoder = Encoders.bean(BeanForJoin.class);
+    Seq<String> idSeq = scala.collection.JavaConverters.collectionAsScalaIterableConverter(
+            Collections.singletonList("id")
+    ).asScala().toSeq();
+    Dataset<Row> dsA = spark.createDataset(Collections.singletonList(new BeanForJoin("i1", "a1")), encoder).toDF();
+    Dataset<Row> dsB = spark.createDataset(Collections.singletonList(new BeanForJoin("i2", "a2")), encoder).toDF();
+    Dataset<Row> dsC = spark.createDataset(Collections.singletonList(new BeanForJoin("i3", "a3")), encoder).toDF();
+    Dataset<Row> joined = dsA.join(dsB, idSeq, "full_outer").join(dsC, idSeq, "full_outer");
+    joined.collectAsList();
+  }
+
+  // SPARK-44132: nesting full outer joins confuses code generator
+  @Test
+  public void nestedJoinCodegenErrorBadAccess() {
+    Encoder<BeanForJoin> encoder = Encoders.bean(BeanForJoin.class);
+    Seq<String> idSeq = scala.collection.JavaConverters.collectionAsScalaIterableConverter(
+            Collections.singletonList("id")
+    ).asScala().toSeq();
+    Dataset<Row> dsA = spark.createDataset(Collections.singletonList(new BeanForJoin("i1", "a1")), encoder).toDF();
+    Dataset<Row> joined = dsA.join(dsA, idSeq, "full_outer").join(dsA, idSeq, "full_outer");
+    joined.collectAsList();
+  }
+  public static class BeanForJoin {
+    private String id;
+    private String a;
+
+    public BeanForJoin() {
+    }
+
+    public BeanForJoin(String id, String a) {
+      this.id = id;
+      this.a = a;
+    }
+
+    public String getId() {
+      return id;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public String getA() {
+      return a;
+    }
+
+    public void setA(String a) {
+      this.a = a;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (!(o instanceof BeanForJoin)) return false;
+      BeanForJoin beanForJoin = (BeanForJoin) o;
+      return java.util.Objects.equals(id, beanForJoin.id) && java.util.Objects.equals(a, beanForJoin.a);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(id, a);
+    }
+  }
+
+
 }
