@@ -75,7 +75,7 @@ object SchemaConverters extends Logging {
       case BOOLEAN => Some(BooleanType)
       case STRING => Some(StringType)
       case BYTE_STRING => Some(BinaryType)
-      case ENUM => Some(StringType)
+      case ENUM => if (protobufOptions.enumsAsInts) Some(IntegerType) else Some(StringType)
       case MESSAGE
         if (fd.getMessageType.getName == "Duration" &&
           fd.getMessageType.getFields.size() == 2 &&

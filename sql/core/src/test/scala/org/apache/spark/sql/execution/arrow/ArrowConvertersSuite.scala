@@ -1382,7 +1382,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val ctx = TaskContext.empty()
     val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, true, ctx)
-    val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, true, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
@@ -1415,7 +1415,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // Read Arrow stream into batches, then convert back to rows
     val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
     val readBatches = ArrowConverters.getBatchesFromStream(in)
-    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches, schema, null, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches, schema, null, true, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>

@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveStrin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -108,7 +109,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       testCase: TestCase,
       configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
 
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
@@ -245,7 +246,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      // JDK-4511638 changes 'toString' result of Float/Double
+      // JDK-8282081 changes DataTimeFormatter 'F' symbol
+      if (Utils.isJavaVersionAtLeast21 && (new File(resultFile + ".java21")).exists()) {
+        resultFile += ".java21"
+      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
@@ -266,7 +272,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   test("Check if ThriftServer can work") {
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val rs = statement.executeQuery("select 1L")
       rs.next()
       assert(rs.getLong(1) === 1L)

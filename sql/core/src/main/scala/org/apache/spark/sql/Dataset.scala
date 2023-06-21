@@ -2932,6 +2932,67 @@ class Dataset[T] private[sql](
    * This method can only be used to drop top level columns. the colName string is treated
    * literally without further interpretation.
    *
+   * Note: `drop(colName)` has different semantic with `drop(col(colName))`, for example:
+   * 1, multi column have the same colName:
+   * {{{
+   *   val df1 = spark.range(0, 2).withColumn("key1", lit(1))
+   *   val df2 = spark.range(0, 2).withColumn("key2", lit(2))
+   *   val df3 = df1.join(df2)
+   *
+   *   df3.show
+   *   // +---+----+---+----+
+   *   // | id|key1| id|key2|
+   *   // +---+----+---+----+
+   *   // |  0|   1|  0|   2|
+   *   // |  0|   1|  1|   2|
+   *   // |  1|   1|  0|   2|
+   *   // |  1|   1|  1|   2|
+   *   // +---+----+---+----+
+   *
+   *   df3.drop("id").show()
+   *   // output: the two 'id' columns are both dropped.
+   *   // |key1|key2|
+   *   // +----+----+
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // |   1|   2|
+   *   // +----+----+
+   *
+   *   df3.drop(col("id")).show()
+   *   // ...AnalysisException: [AMBIGUOUS_REFERENCE] Reference `id` is ambiguous...
+   * }}}
+   *
+   * 2, colName contains special characters, like dot.
+   * {{{
+   *   val df = spark.range(0, 2).withColumn("a.b.c", lit(1))
+   *
+   *   df.show()
+   *   // +---+-----+
+   *   // | id|a.b.c|
+   *   // +---+-----+
+   *   // |  0|    1|
+   *   // |  1|    1|
+   *   // +---+-----+
+   *
+   *   df.drop("a.b.c").show()
+   *   // +---+
+   *   // | id|
+   *   // +---+
+   *   // |  0|
+   *   // |  1|
+   *   // +---+
+   *
+   *   df.drop(col("a.b.c")).show()
+   *   // no column match the expression 'a.b.c'
+   *   // +---+-----+
+   *   // | id|a.b.c|
+   *   // +---+-----+
+   *   // |  0|    1|
+   *   // |  1|    1|
+   *   // +---+-----+
+   * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -2970,6 +3031,9 @@ class Dataset[T] private[sql](
    * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
+   *
+   * Note: `drop(col(colName))` has different semantic with `drop(colName)`,
+   * please refer to `Dataset#drop(colName: String)`.
    *
    * @group untypedrel
    * @since 2.0.0

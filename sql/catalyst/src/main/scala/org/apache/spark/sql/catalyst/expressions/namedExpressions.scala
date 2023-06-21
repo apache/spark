@@ -459,6 +459,7 @@ case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[Strin
   override def dataType: DataType = ne.dataType
   override def prettyName: String = "lateralAliasReference"
   override def sql: String = s"$prettyName($name)"
+  override def toString: String = sql
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
 }

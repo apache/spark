@@ -89,6 +89,11 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_DETERMINE_TYPE": {
+    "message": [
+      "Some of types cannot be determined after inferring."
+    ]
+  },
   "CANNOT_GET_BATCH_ID": {
     "message": [
       "Could not get batch id from <obj_name>."
@@ -470,6 +475,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list[str], got <arg_type>."
     ]
   },
+  "NOT_LIST_OR_NONE_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
+    ]
+  },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
@@ -576,9 +586,24 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot start a remote Spark session because there is a regular Spark session already running."
+    ]
+  },
+  "SESSION_NOT_SAME" : {
+    "message" : [
+      "Both Datasets must belong to the same SparkSession."
+    ]
+  },
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
     ]
   },
   "SLICE_WITH_STEP" : {

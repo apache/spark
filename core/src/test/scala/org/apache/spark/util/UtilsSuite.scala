@@ -527,7 +527,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // 6. Symbolic link
     val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
-    assert(!Utils.createDirectory(scenario6))
+    if (Utils.isJavaVersionAtLeast21) {
+      assert(Utils.createDirectory(scenario6))
+    } else {
+      assert(!Utils.createDirectory(scenario6))
+    }
     assert(scenario6.exists())
 
     // 7. Directory exists

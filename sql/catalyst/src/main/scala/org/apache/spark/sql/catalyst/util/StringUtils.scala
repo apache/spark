@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -79,10 +80,28 @@ object StringUtils extends Logging {
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
-  private[spark] def orderStringsBySimilarity(
+  private[spark] def orderSuggestedIdentifiersBySimilarity(
       baseString: String,
-      testStrings: Seq[String]): Seq[String] = {
-    testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+      candidates: Seq[Seq[String]]): Seq[String] = {
+    val baseParts = UnresolvedAttribute.parseAttributeName(baseString)
+    val strippedCandidates =
+      // Group by the qualifier. If all identifiers have the same qualifier, strip it.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
+      if (baseParts.size == 1 && candidates.groupBy(_.dropRight(1)).size == 1) {
+        candidates.map(_.takeRight(1))
+      // Group by the qualifier excluding table name. If all identifiers have the same prefix
+      // (namespace) excluding table names, strip this prefix.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
+      } else if (baseParts.size <= 2 && candidates.groupBy(_.dropRight(2)).size == 1) {
+        candidates.map(_.takeRight(2))
+      } else {
+        // Some candidates have different qualifiers
+        candidates
+      }
+
+    strippedCandidates
+      .map(quoteNameParts)
+      .sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale

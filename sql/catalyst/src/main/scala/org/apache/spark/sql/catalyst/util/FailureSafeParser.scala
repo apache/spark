@@ -65,8 +65,14 @@ class FailureSafeParser[IN](
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-            toResultRow(e.partialResult(), e.record).toString, e)
+          e.getCause match {
+            case _: JsonArraysAsStructsException =>
+              // SPARK-42298 we recreate the exception here to make sure the error message
+              // have the record content.
+              throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
+            case _ => throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+              toResultRow(e.partialResult(), e.record).toString, e)
+          }
       }
     }
   }

@@ -45,7 +45,7 @@ function formatStatus(status, type, row) {
   }
 
   if (status) {
-    if (row.excludedInStages.length == 0) {
+    if (typeof row.excludedInStages === "undefined" || row.excludedInStages.length == 0) {
       return "Active"
     }
     return "Active (Excluded in Stages: [" + row.excludedInStages.join(", ") + "])";
@@ -126,7 +126,6 @@ function totalDurationAlpha(totalGCTime, totalDuration) {
     (Math.min(totalGCTime / totalDuration + 0.5, 1)) : 1;
 }
 
-// When GCTimePercent is edited change ToolTips.TASK_TIME to match
 var GCTimePercent = 0.1;
 
 function totalDurationStyle(totalGCTime, totalDuration) {

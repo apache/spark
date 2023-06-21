@@ -66,6 +66,10 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
+  override val pythonExec: String =
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head.funcs.head.pythonExec)
+
   private val sqlConf = SQLConf.get
 
   override protected val schema: StructType = inputSchema.add("__state", STATE_METADATA_SCHEMA)
@@ -73,6 +77,8 @@ class ApplyInPandasWithStatePythonRunner(
   override val errorOnDuplicatedFieldNames: Boolean = true
 
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
+
+  override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 
   override val bufferSize: Int = {
     val configuredSize = sqlConf.pandasUDFBufferSize

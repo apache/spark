@@ -95,5 +95,9 @@ private[sql] object UdfUtils extends Serializable {
       }
   }
 
+  def mapReduceFuncToScalaFunc[T](func: ReduceFunction[T]): (T, T) => T = func.call
+
   def identical[T](): T => T = t => t
+
+  def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
 }

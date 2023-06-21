@@ -1576,7 +1576,7 @@ class CachedLocalRelation(google.protobuf.message.Message):
     sessionId: builtins.str
     """(Required) An identifier of the Spark SQL session in which the user created the local relation."""
     hash: builtins.str
-    """(Required) A sha-256 hash of the serialized local relation."""
+    """(Required) A sha-256 hash of the serialized local relation in proto, see LocalRelation."""
     def __init__(
         self,
         *,

@@ -476,6 +476,34 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.executorCount == 0 )
   }
 
+  for (isShuffleTrackingEnabled <- Seq(true, false)) {
+    test(s"SPARK-43398: executor timeout should be max of shuffle and rdd timeout with" +
+      s" shuffleTrackingEnabled as $isShuffleTrackingEnabled") {
+      conf
+        .set(DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT.key, "240s")
+        .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, isShuffleTrackingEnabled)
+        .set(SHUFFLE_SERVICE_ENABLED, false)
+      monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
+
+      monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+      knownExecs += "1"
+      val stage1 = stageInfo(1, shuffleId = 0)
+      monitor.onJobStart(SparkListenerJobStart(1, clock.getTimeMillis(), Seq(stage1)))
+      monitor.onBlockUpdated(rddUpdate(1, 0, "1"))
+      val t1 = taskInfo("1", 1)
+      monitor.onTaskStart(SparkListenerTaskStart(1, 1, t1))
+      monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, t1, new ExecutorMetrics, null))
+      monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
+
+      if (isShuffleTrackingEnabled) {
+        assert(monitor.timedOutExecutors(storageDeadline).isEmpty)
+        assert(monitor.timedOutExecutors(shuffleDeadline) == Seq("1"))
+      } else {
+        assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
+        assert(monitor.timedOutExecutors(storageDeadline) == Seq("1"))
+      }
+    }
+  }
 
   private def idleDeadline: Long = clock.nanoTime() + idleTimeoutNs + 1
   private def storageDeadline: Long = clock.nanoTime() + storageTimeoutNs + 1

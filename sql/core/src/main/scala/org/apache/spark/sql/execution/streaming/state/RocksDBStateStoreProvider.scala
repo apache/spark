@@ -195,8 +195,14 @@ private[sql] class RocksDBStateStoreProvider
     new RocksDBStateStore(version)
   }
 
+  override def getReadStore(version: Long): StateStore = {
+    require(version >= 0, "Version cannot be less than 0")
+    rocksDB.load(version, true)
+    new RocksDBStateStore(version)
+  }
+
   override def doMaintenance(): Unit = {
-    rocksDB.cleanup()
+    rocksDB.doMaintenance()
   }
 
   override def close(): Unit = {

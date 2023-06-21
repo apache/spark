@@ -29,31 +29,45 @@ class OpsOnDiffFramesGroupByExpandingParityTests(
     TestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_count(self):
         super().test_groupby_expanding_count()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_min(self):
         super().test_groupby_expanding_min()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_max(self):
         super().test_groupby_expanding_max()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_mean(self):
         super().test_groupby_expanding_mean()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_sum(self):
         super().test_groupby_expanding_sum()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_std(self):
         super().test_groupby_expanding_std()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43611): Fix unexpected `AnalysisException` from Spark Connect client."
+    )
     def test_groupby_expanding_var(self):
         super().test_groupby_expanding_var()
 

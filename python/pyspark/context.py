@@ -180,7 +180,7 @@ class SparkContext:
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
-        if "SPARK_REMOTE" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
+        if "SPARK_CONNECT_MODE_ENABLED" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
             raise PySparkRuntimeError(
                 error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
                 message_parameters={},
@@ -1802,6 +1802,7 @@ class SparkContext:
         >>> def f(x):
         ...     global acc
         ...     acc += 1
+        ...
         >>> rdd.foreach(f)
         >>> acc.value
         15
@@ -2140,6 +2141,7 @@ class SparkContext:
         >>> def map_func(x):
         ...     sleep(100)
         ...     raise RuntimeError("Task should have been cancelled")
+        ...
         >>> def start_job(x):
         ...     global result
         ...     try:
@@ -2148,9 +2150,11 @@ class SparkContext:
         ...     except Exception as e:
         ...         result = "Cancelled"
         ...     lock.release()
+        ...
         >>> def stop_job():
         ...     sleep(5)
         ...     sc.cancelJobGroup("job_to_cancel")
+        ...
         >>> suppress = lock.acquire()
         >>> suppress = InheritableThread(target=start_job, args=(10,)).start()
         >>> suppress = InheritableThread(target=stop_job).start()

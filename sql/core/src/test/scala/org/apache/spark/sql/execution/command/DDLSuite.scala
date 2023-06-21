@@ -82,10 +82,13 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
     val tabName = "tbl"
     withTable(tabName) {
-      val e = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $tabName (i INT, j STRING) STORED AS parquet")
-      }.getMessage
-      assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE $tabName (i INT, j STRING) STORED AS parquet")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
+        parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
+      )
     }
   }
 
@@ -94,15 +97,18 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
     withTempDir { tempDir =>
       val tabName = "tbl"
       withTable(tabName) {
-        val e = intercept[AnalysisException] {
-          sql(
-            s"""
-               |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
-               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-               |LOCATION '${tempDir.toURI}'
-             """.stripMargin)
-        }.getMessage
-        assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""
+                 |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
+                 |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+                 |LOCATION '${tempDir.toURI}'
+               """.stripMargin)
+          },
+          errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
+          parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
+        )
       }
     }
   }
@@ -110,16 +116,22 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   test("Create Hive Table As Select") {
     import testImplicits._
     withTable("t", "t1") {
-      var e = intercept[AnalysisException] {
-        sql("CREATE TABLE t STORED AS parquet SELECT 1 as a, 1 as b")
-      }.getMessage
-      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t STORED AS parquet SELECT 1 as a, 1 as b")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
+        parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
+      )
 
       spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b")).write.saveAsTable("t1")
-      e = intercept[AnalysisException] {
-        sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
-      }.getMessage
-      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT",
+        parameters = Map("cmd" -> "CREATE Hive TABLE (AS SELECT)")
+      )
     }
   }
 
@@ -534,12 +546,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       parameters = Map(
         "colType" -> "partition",
-        "colName" -> "c",
-        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
-        "tableCols" -> "a, b"))
+        "colName" -> "`c`",
+        "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tbl`",
+        "tableCols" -> "`a`, `b`"))
   }
 
   test("create table - bucket column names not in table definition") {
@@ -547,12 +559,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       parameters = Map(
         "colType" -> "bucket",
-        "colName" -> "c",
-        "tableName" -> s"$SESSION_CATALOG_NAME.default.tbl",
-        "tableCols" -> "a, b"))
+        "colName" -> "`c`",
+        "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`tbl`",
+        "tableCols" -> "`a`, `b`"))
   }
 
   test("create table - column repeated in partition columns") {
@@ -2106,8 +2118,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "routineName" -> "`default`.`md5`",
         "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
-        fragment = "REFRESH FUNCTION default.md5",
-        start = 0,
+        fragment = "default.md5",
+        start = 17,
         stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
@@ -2140,8 +2152,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           "routineName" -> "`func2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(
-          fragment = "REFRESH FUNCTION func2",
-          start = 0,
+          fragment = "func2",
+          start = 17,
           stop = 21))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 

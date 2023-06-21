@@ -389,7 +389,7 @@ class TaskSetManagerSuite
     manager.isZombie = false
 
     // offers not accepted due to excludelist are not delay schedule rejects
-    val tsmSpy = spy(manager)
+    val tsmSpy = spy[TaskSetManager](manager)
     val excludelist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
     when(excludelist.isNodeExcludedForTaskSet(any())).thenReturn(true)
@@ -1416,7 +1416,7 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(4)
     val tsm = new TaskSetManager(sched, taskSet, 4)
     // we need a spy so we can attach our mock excludelist
-    val tsmSpy = spy(tsm)
+    val tsmSpy = spy[TaskSetManager](tsm)
     val excludelist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
 
@@ -1497,7 +1497,7 @@ class TaskSetManagerSuite
     val mockListenerBus = mock(classOf[LiveListenerBus])
     val healthTracker = new HealthTracker(mockListenerBus, conf, None, clock)
     val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(healthTracker))
-    val taskSetManagerSpy = spy(taskSetManager)
+    val taskSetManagerSpy = spy[TaskSetManager](taskSetManager)
 
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)._1
 

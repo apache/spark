@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -103,8 +104,11 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         case assignment if assignment.key.semanticEquals(attr) => assignment
       }
       val resolvedValue = if (matchingAssignments.isEmpty) {
-        errors += s"No assignment for '${attr.name}'"
-        attr
+        val defaultExpr = getDefaultValueExprOrNullLit(attr, conf)
+        if (defaultExpr.isEmpty) {
+          errors += s"No assignment for '${attr.name}'"
+        }
+        defaultExpr.getOrElse(attr)
       } else if (matchingAssignments.length > 1) {
         val conflictingValuesStr = matchingAssignments.map(_.value.sql).mkString(", ")
         errors += s"Multiple assignments for '${attr.name}': $conflictingValuesStr"

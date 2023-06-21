@@ -109,7 +109,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetExcludelist
-          val tsmSpy = spy(tsm)
+          val tsmSpy = spy[TaskSetManager](tsm)
           val taskSetExcludelist = mock[TaskSetExcludelist]
           when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(taskSetExcludelist))
           stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
@@ -1946,7 +1946,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
         val tsm = super.createTaskSetManager(taskSet, maxFailures)
         // we need to create a spied tsm so that we can see the copies running
-        val tsmSpy = spy(tsm)
+        val tsmSpy = spy[TaskSetManager](tsm)
         stageToMockTaskSetManager(taskSet.stageId) = tsmSpy
         tsmSpy
       }

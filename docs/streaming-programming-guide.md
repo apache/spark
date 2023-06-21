@@ -748,7 +748,7 @@ of the store is consistent with that expected by Spark Streaming. It may be
 that writing directly into a destination directory is the appropriate strategy for
 streaming data via the chosen object store.
 
-For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
+For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable3/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
 
 #### Streams based on Custom Receivers
 {:.no_toc}

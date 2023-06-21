@@ -1001,10 +1001,39 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class RequestOption(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXTENSION_FIELD_NUMBER: builtins.int
+        @property
+        def extension(self) -> google.protobuf.any_pb2.Any:
+            """Extension type for request options"""
+        def __init__(
+            self,
+            *,
+            extension: google.protobuf.any_pb2.Any | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extension", b"extension", "request_option", b"request_option"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "extension", b"extension", "request_option", b"request_option"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["request_option", b"request_option"]
+        ) -> typing_extensions.Literal["extension"] | None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     PLAN_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    REQUEST_OPTIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -1027,6 +1056,15 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
+    @property
+    def request_options(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ExecutePlanRequest.RequestOption
+    ]:
+        """Repeated element for options that can be passed to the request. This element is currently
+        unused but allows to pass in an extension value used for arbitrary options.
+        """
     def __init__(
         self,
         *,
@@ -1034,6 +1072,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         user_context: global___UserContext | None = ...,
         plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
+        request_options: collections.abc.Iterable[global___ExecutePlanRequest.RequestOption]
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1057,6 +1097,8 @@ class ExecutePlanRequest(google.protobuf.message.Message):
             b"client_type",
             "plan",
             b"plan",
+            "request_options",
+            b"request_options",
             "session_id",
             b"session_id",
             "user_context",

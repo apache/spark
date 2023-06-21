@@ -114,7 +114,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, "hr") :: Row(2, -1, "hardware") :: Row(3, -1, "hr") :: Nil)
   }
 
-  test("update with NULL conditions") {
+  test("update with NULL conditions on partition columns") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": null }
         |{ "pk": 2, "salary": 200, "dep": "hr" }
@@ -132,6 +132,26 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, null) :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+  }
+
+  test("update with NULL conditions on data columns") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": null, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "hr" }
+        |{ "pk": 3, "salary": 300, "dep": "hardware" }
+        |""".stripMargin)
+
+    // should not update any rows as NULL is never equal to NULL
+    sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary = NULL")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, null, "hr") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+
+    // should update one matching row with a null-safe condition
+    sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary <=> NULL")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, null, "invalid") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
   }
 
   test("update with IN and NOT IN predicates") {
@@ -491,6 +511,21 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
     }
+  }
+
+  test("update with nondeterministic assignments") {
+    createAndInitTable("pk INT NOT NULL, id INT, value DOUBLE, dep STRING",
+      """{ "pk": 1, "id": 1, "value": 2.0, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "value": 2.0,  "dep": "software" }
+        |{ "pk": 3, "id": 3, "value": 2.0, "dep": "hr" }
+        |""".stripMargin)
+
+    // rand() always generates values in [0, 1) range
+    sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
+
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
   }
 
   test("update with nondeterministic conditions") {

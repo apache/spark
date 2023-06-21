@@ -71,7 +71,11 @@ private[sql] trait QueryErrorsBase {
   }
 
   def toSQLId(parts: Seq[String]): String = {
-    parts.map(quoteIdentifier).mkString(".")
+    val cleaned = parts match {
+      case Seq("__auto_generated_subquery_name", rest @ _*) if rest != Nil => rest
+      case other => other
+    }
+    cleaned.map(quoteIdentifier).mkString(".")
   }
 
   def toSQLId(parts: String): String = {

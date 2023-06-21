@@ -970,7 +970,7 @@ struct<timestampadd(MICROSECOND, 1001, TIMESTAMP '2022-02-25 01:02:03.123'):time
 
 
 -- !query
-select dateadd(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
+select date_add(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
 -- !query schema
 struct<timestampadd(MILLISECOND, -1, TIMESTAMP '2022-02-25 01:02:03.456'):timestamp>
 -- !query output
@@ -986,7 +986,7 @@ struct<timestampadd(SECOND, 58, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 
 
 -- !query
-select dateadd(MINUTE, -100, date'2022-02-25')
+select date_add(MINUTE, -100, date'2022-02-25')
 -- !query schema
 struct<timestampadd(MINUTE, -100, DATE '2022-02-25'):timestamp>
 -- !query output
@@ -1002,7 +1002,7 @@ struct<timestampadd(HOUR, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 
 
 -- !query
-select dateadd(DAY, 367, date'2022-02-25')
+select date_add(DAY, 367, date'2022-02-25')
 -- !query schema
 struct<timestampadd(DAY, 367, DATE '2022-02-25'):timestamp>
 -- !query output
@@ -1018,7 +1018,7 @@ struct<timestampadd(WEEK, -4, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 
 
 -- !query
-select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03')
+select date_add(MONTH, -1, timestamp'2022-02-25 01:02:03')
 -- !query schema
 struct<timestampadd(MONTH, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 -- !query output
@@ -1034,11 +1034,59 @@ struct<timestampadd(QUARTER, 5, DATE '2022-02-25'):timestamp>
 
 
 -- !query
-select dateadd(YEAR, 1, date'2022-02-25')
+select date_add(YEAR, 1, date'2022-02-25')
 -- !query schema
 struct<timestampadd(YEAR, 1, DATE '2022-02-25'):timestamp>
 -- !query output
 2023-02-25 00:00:00
+
+
+-- !query
+select dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`dateadd`",
+    "invalidValue" : "'MICROSECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123')"
+  } ]
+}
+
+
+-- !query
+select date_add('QUARTER', 5, date'2022-02-25')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`date_add`",
+    "invalidValue" : "'QUARTER'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 47,
+    "fragment" : "date_add('QUARTER', 5, date'2022-02-25')"
+  } ]
+}
 
 
 -- !query
@@ -1050,7 +1098,7 @@ struct<timestampdiff(MICROSECOND, TIMESTAMP '2022-02-25 01:02:03.123', TIMESTAMP
 
 
 -- !query
-select datediff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
+select date_diff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
 -- !query schema
 struct<timestampdiff(MILLISECOND, TIMESTAMP '2022-02-25 01:02:03.456', TIMESTAMP '2022-02-25 01:02:03.455'):bigint>
 -- !query output
@@ -1066,7 +1114,7 @@ struct<timestampdiff(SECOND, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02
 
 
 -- !query
-select datediff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00')
+select date_diff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00')
 -- !query schema
 struct<timestampdiff(MINUTE, DATE '2022-02-25', TIMESTAMP '2022-02-24 22:20:00'):bigint>
 -- !query output
@@ -1082,7 +1130,7 @@ struct<timestampdiff(HOUR, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02-2
 
 
 -- !query
-select datediff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00')
+select date_diff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00')
 -- !query schema
 struct<timestampdiff(DAY, DATE '2022-02-25', TIMESTAMP '2023-02-27 00:00:00'):bigint>
 -- !query output
@@ -1098,7 +1146,7 @@ struct<timestampdiff(WEEK, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-2
 
 
 -- !query
-select datediff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03')
+select date_diff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03')
 -- !query schema
 struct<timestampdiff(MONTH, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-25 01:02:03'):bigint>
 -- !query output
@@ -1114,8 +1162,56 @@ struct<timestampdiff(QUARTER, DATE '2022-02-25', DATE '2023-05-25'):bigint>
 
 
 -- !query
-select datediff(YEAR, date'2022-02-25', date'2023-02-25')
+select date_diff(YEAR, date'2022-02-25', date'2023-02-25')
 -- !query schema
 struct<timestampdiff(YEAR, DATE '2022-02-25', DATE '2023-02-25'):bigint>
 -- !query output
 1
+
+
+-- !query
+select date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`date_diff`",
+    "invalidValue" : "'MILLISECOND'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 103,
+    "fragment" : "date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455')"
+  } ]
+}
+
+
+-- !query
+select datediff('YEAR', date'2022-02-25', date'2023-02-25')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`datediff`",
+    "invalidValue" : "'YEAR'",
+    "parameter" : "`unit`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "datediff('YEAR', date'2022-02-25', date'2023-02-25')"
+  } ]
+}

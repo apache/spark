@@ -52,6 +52,10 @@ class CoGroupedArrowPythonRunner(
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
   with BasicPythonArrowOutput {
 
+  override val pythonExec: String =
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head.funcs.head.pythonExec)
+
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriterThread(

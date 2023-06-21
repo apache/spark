@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.connect.proto
@@ -59,5 +59,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
           logWarning(s"Exception $e while trying to interrupt execution ${execute.operationId}")
       }
     }
+  }
+}
+
+object SessionHolder {
+
+  /** Creates a dummy session holder for use in tests. */
+  def forTesting(session: SparkSession): SessionHolder = {
+    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = session)
   }
 }

@@ -829,15 +829,29 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       s"SELECT avg(salary) AS a, a           + dept + 10 FROM $testTable GROUP BY dept + 10",
       "\"dept\""
     )
-    Seq(
-      s"SELECT dept AS a, dept, " +
-      s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg",
-      s"SELECT dept AS a, a, " +
-      s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
-    ).foreach { query =>
-      val e = intercept[AnalysisException] { sql(query) }
-      assert(e.getErrorClass == "_LEGACY_ERROR_TEMP_2423")
-    }
+    checkError(
+      exception = intercept[AnalysisException] { sql(
+        "SELECT dept AS a, dept, " +
+          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg") },
+      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
+      context = ExpectedContext(
+        fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
+        start = 24,
+        stop = 93)
+    )
+    checkError(
+      exception = intercept[AnalysisException] { sql(
+        "SELECT dept AS a, a, " +
+          s"(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept) $groupBySeg"
+      ) },
+      errorClass = "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION",
+      parameters = Map("sqlExpr" -> "\"scalarsubquery(dept)\""),
+      context = ExpectedContext(
+        fragment = "(SELECT count(col) FROM VALUES (1), (2) AS data(col) WHERE col = dept)",
+        start = 21,
+        stop = 90)
+    )
 
     // one exception: no longer throws NESTED_AGGREGATE_FUNCTION but UNSUPPORTED_FEATURE
     Seq("", windowSeg).foreach { windowExpr =>

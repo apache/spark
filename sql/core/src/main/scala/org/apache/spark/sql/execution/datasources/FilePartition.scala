@@ -18,11 +18,13 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A collection of file blocks that should be read as a single task
@@ -50,10 +52,10 @@ case class FilePartition(index: Int, files: Array[PartitionedFile])
 
 object FilePartition extends Logging {
 
-  def getFilePartitions(
-      sparkSession: SparkSession,
+  private def getFilePartitions(
       partitionedFiles: Seq[PartitionedFile],
-      maxSplitBytes: Long): Seq[FilePartition] = {
+      maxSplitBytes: Long,
+      openCostInBytes: Long): Seq[FilePartition] = {
     val partitions = new ArrayBuffer[FilePartition]
     val currentFiles = new ArrayBuffer[PartitionedFile]
     var currentSize = 0L
@@ -69,7 +71,6 @@ object FilePartition extends Logging {
       currentSize = 0
     }
 
-    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     // Assign files to partitions using "Next Fit Decreasing"
     partitionedFiles.foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
@@ -81,6 +82,28 @@ object FilePartition extends Logging {
     }
     closePartition()
     partitions.toSeq
+  }
+
+  def getFilePartitions(
+      sparkSession: SparkSession,
+      partitionedFiles: Seq[PartitionedFile],
+      maxSplitBytes: Long): Seq[FilePartition] = {
+    val openCostBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val maxPartitionNum = sparkSession.sessionState.conf.filesMaxPartitionNum
+    val partitions = getFilePartitions(partitionedFiles, maxSplitBytes, openCostBytes)
+    if (maxPartitionNum.exists(partitions.size > _)) {
+      val totalSizeInBytes =
+        partitionedFiles.map(_.length + openCostBytes).map(BigDecimal(_)).sum[BigDecimal]
+      val desiredSplitBytes =
+        (totalSizeInBytes / BigDecimal(maxPartitionNum.get)).setScale(0, RoundingMode.UP).longValue
+      val desiredPartitions = getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
+      logWarning(s"The number of partitions is ${partitions.size}, which exceeds the maximum " +
+        s"number configured: $maxPartitionNum. Spark rescales it to ${desiredPartitions.size} " +
+        s"by ignoring the configuration of ${SQLConf.FILES_MAX_PARTITION_BYTES.key}.")
+      desiredPartitions
+    } else {
+      partitions
+    }
   }
 
   def maxSplitBytes(
