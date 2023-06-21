@@ -20,6 +20,13 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 abstract class DataTypeExpression(val dataType: DataType) {
+  /**
+   * Enables matching against DataType for expressions:
+   * {{{
+   *   case Cast(child @ BinaryType(), StringType) =>
+   *     ...
+   * }}}
+   */
   private[sql] def unapply(e: Expression): Boolean = e.dataType == dataType
 }
 
@@ -41,6 +48,13 @@ case object DoubleTypeExpression extends DataTypeExpression(DoubleType)
 case object FloatTypeExpression extends DataTypeExpression(FloatType)
 
 object NumericTypeExpression {
+  /**
+   * Enables matching against NumericType for expressions:
+   * {{{
+   *   case Cast(child @ NumericType(), StringType) =>
+   *     ...
+   * }}}
+   */
   def unapply(e: Expression): Boolean = {
     if (e.dataType.isInstanceOf[NumericType]) {
       e.dataType match {
@@ -61,6 +75,13 @@ object NumericTypeExpression {
 }
 
 object IntegralTypeExpression {
+  /**
+   * Enables matching against IntegralType for expressions:
+   * {{{
+   *   case Cast(child @ IntegralType(), StringType) =>
+   *     ...
+   * }}}
+   */
   def unapply(e: Expression): Boolean = {
     if (e.dataType.isInstanceOf[IntegralType]) {
       e.dataType match {

@@ -50,15 +50,6 @@ import org.apache.spark.util.Utils
 @JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
 abstract class DataType extends AbstractDataType {
   /**
-   * Enables matching against DataType for expressions:
-   * {{{
-   *   case Cast(child @ BinaryType(), StringType) =>
-   *     ...
-   * }}}
-   */
-//  private[sql] def unapply(e: Expression): Boolean = DataTypeUtils.unapply(this, e)
-
-  /**
    * The default size of a value of this data type, used internally for size estimation.
    */
   def defaultSize: Int
