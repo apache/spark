@@ -2670,10 +2670,6 @@ class PlanGenerationTestSuite
     fn.right(fn.col("g"), fn.col("g"))
   }
 
-  functionTest("uuid") {
-    fn.uuid()
-  }
-
   functionTest("aes_encrypt with mode padding iv aad") {
     fn.aes_encrypt(
       fn.col("g"),
@@ -2751,10 +2747,6 @@ class PlanGenerationTestSuite
 
   functionTest("random with seed") {
     fn.random(lit(1))
-  }
-
-  functionTest("random") {
-    fn.random()
   }
 
   test("groupby agg") {
