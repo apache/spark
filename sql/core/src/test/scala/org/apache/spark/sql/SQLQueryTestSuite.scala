@@ -590,9 +590,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-      val analyzerResultFile =
+      var resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var analyzerResultFile =
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
+      // JDK-4511638 changes 'toString' result of Float/Double
+      // JDK-8282081 changes DataTimeFormatter 'F' symbol
+      if (Utils.isJavaVersionAtLeast21) {
+        if (new File(resultFile + ".java21").exists()) resultFile += ".java21"
+        if (new File(analyzerResultFile + ".java21").exists()) analyzerResultFile += ".java21"
+      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       val analyzerTestCaseName = s"${testCaseName}_analyzer_test"

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions;
 
 import java.util.Arrays;
-import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.internal.connector.ExpressionWithToString;
@@ -51,13 +50,19 @@ public class UserDefinedScalarFunc extends ExpressionWithToString {
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
+
     UserDefinedScalarFunc that = (UserDefinedScalarFunc) o;
-    return Objects.equals(name, that.name) && Objects.equals(canonicalName, that.canonicalName) &&
-      Arrays.equals(children, that.children);
+
+    if (!name.equals(that.name)) return false;
+    if (!canonicalName.equals(that.canonicalName)) return false;
+    return Arrays.equals(children, that.children);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, canonicalName, children);
+    int result = name.hashCode();
+    result = 31 * result + canonicalName.hashCode();
+    result = 31 * result + Arrays.hashCode(children);
+    return result;
   }
 }
