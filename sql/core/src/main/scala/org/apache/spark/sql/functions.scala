@@ -464,7 +464,7 @@ object functions {
   def count_distinct(expr: Column, exprs: Column*): Column =
     // For usage like countDistinct("*"), we should let analyzer expand star and
     // resolve function.
-    call_function("count", expr +: exprs, true)
+    call_function("count", true, expr +: exprs: _*)
 
   /**
    * Aggregate function: returns the population covariance for two columns.
@@ -1936,7 +1936,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    */
-  def try_add(left: Column, right: Column): Column = call_function("try_add", Seq(left, right))
+  def try_add(left: Column, right: Column): Column = call_function("try_add", left, right)
 
   /**
    * Returns the mean calculated from values of a group and the result is null on overflow.
@@ -1956,7 +1956,7 @@ object functions {
    * @since 3.5.0
    */
   def try_divide(dividend: Column, divisor: Column): Column =
-    call_function("try_divide", Seq(dividend, divisor))
+    call_function("try_divide", dividend, divisor)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
@@ -1966,7 +1966,7 @@ object functions {
    * @since 3.5.0
    */
   def try_multiply(left: Column, right: Column): Column =
-    call_function("try_multiply", Seq(left, right))
+    call_function("try_multiply", left, right)
 
   /**
    * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
@@ -1976,7 +1976,7 @@ object functions {
    * @since 3.5.0
    */
   def try_subtract(left: Column, right: Column): Column =
-    call_function("try_subtract", Seq(left, right))
+    call_function("try_subtract", left, right)
 
   /**
    * Returns the sum calculated from values of a group and the result is null on overflow.
@@ -2361,7 +2361,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def ceil(e: Column, scale: Column): Column = call_function("ceil", Seq(e, scale))
+  def ceil(e: Column, scale: Column): Column = call_function("ceil", e, scale)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2369,7 +2369,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def ceil(e: Column): Column = call_function("ceil", Seq(e))
+  def ceil(e: Column): Column = call_function("ceil", e)
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -2513,7 +2513,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def floor(e: Column, scale: Column): Column = call_function("floor", Seq(e, scale))
+  def floor(e: Column, scale: Column): Column = call_function("floor", e, scale)
 
   /**
    * Computes the floor of the given value of `e` to 0 decimal places.
@@ -2521,7 +2521,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def floor(e: Column): Column = call_function("floor", Seq(e))
+  def floor(e: Column): Column = call_function("floor", e)
 
   /**
    * Computes the floor of the given column value to 0 decimal places.
@@ -3995,7 +3995,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    call_function("lpad", Seq(str, lit(len), lit(pad)))
+    call_function("lpad", str, lit(len), lit(pad))
 
   /**
    * Trim the spaces from left end for the specified string value.
@@ -4177,7 +4177,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    call_function("rpad", Seq(str, lit(len), lit(pad)))
+    call_function("rpad", str, lit(len), lit(pad))
 
   /**
    * Repeats a string column n times, and returns it as a new string column.
@@ -4613,7 +4613,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def endswith(str: Column, suffix: Column): Column = call_function("endswith", Seq(str, suffix))
+  def endswith(str: Column, suffix: Column): Column = call_function("endswith", str, suffix)
 
   /**
    * Returns a boolean. The value is True if str starts with prefix.
@@ -4623,8 +4623,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def startswith(str: Column, prefix: Column): Column =
-    call_function("startswith", Seq(str, prefix))
+  def startswith(str: Column, prefix: Column): Column = call_function("startswith", str, prefix)
 
   /**
    * Returns the ASCII character having the binary equivalent to `n`.
@@ -4734,7 +4733,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def contains(left: Column, right: Column): Column = call_function("contains", Seq(left, right))
+  def contains(left: Column, right: Column): Column = call_function("contains", left, right)
 
   /**
    * Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
@@ -5147,7 +5146,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def extract(field: Column, source: Column): Column = call_function("extract", Seq(field, source))
+  def extract(field: Column, source: Column): Column = call_function("extract", field, source)
 
   /**
    * Extracts a part of the date/timestamp or interval source.
@@ -5159,8 +5158,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def date_part(field: Column, source: Column): Column =
-    call_function("date_part", Seq(field, source))
+  def date_part(field: Column, source: Column): Column = call_function("date_part", field, source)
 
   /**
    * Extracts a part of the date/timestamp or interval source.
@@ -5172,8 +5170,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    */
-  def datepart(field: Column, source: Column): Column =
-    call_function("datepart", Seq(field, source))
+  def datepart(field: Column, source: Column): Column = call_function("datepart", field, source)
 
   /**
    * Returns the last day of the month which the given date belongs to.
@@ -8341,7 +8338,7 @@ object functions {
   @scala.annotation.varargs
   @deprecated("Use call_function")
   def callUDF(udfName: String, cols: Column*): Column =
-    call_function(udfName, cols)
+    call_function(udfName, cols: _*)
 
   /**
    * Call an user-defined function.
@@ -8361,7 +8358,17 @@ object functions {
   @scala.annotation.varargs
   @deprecated("Use call_function")
   def call_udf(udfName: String, cols: Column*): Column =
-    call_function(udfName, cols)
+    call_function(udfName, cols: _*)
+
+  /**
+   * Call a builtin or temp function.
+   *
+   * @param funcName function name
+   * @param cols the expression parameters of function
+   * @since 3.5.0
+   */
+  def call_function(funcName: String, cols: Column*): Column =
+    withExpr { UnresolvedFunction(funcName, cols.map(_.expr), false) }
 
   /**
    * Call a builtin or temp function.
@@ -8371,7 +8378,7 @@ object functions {
    * @param isDistinct the distinct for aggregate functions
    * @since 3.5.0
    */
-  def call_function(funcName: String, cols: Seq[Column], isDistinct: Boolean = false): Column =
+  def call_function(funcName: String, isDistinct: Boolean, cols: Column*): Column =
     withExpr { UnresolvedFunction(funcName, cols.map(_.expr), isDistinct) }
 
   /**

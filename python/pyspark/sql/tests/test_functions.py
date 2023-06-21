@@ -63,6 +63,7 @@ class FunctionsTestsMixin:
             "any",  # equivalent to python ~some
             "len",  # equivalent to python ~length
             "udaf",  # used for creating UDAF's which are not supported in PySpark
+            "call_function",  # Scala only
         ]
 
         jvm_fn_set.difference_update(jvm_excluded_fn)
