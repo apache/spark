@@ -24,6 +24,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
@@ -130,6 +131,8 @@ class SparkConnectServiceSuite extends SharedSparkSession {
   }
 
   test("SPARK-41224: collect data using arrow") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val instance = new SparkConnectService(false)
     val connect = new MockRemoteSession()
     val context = proto.UserContext
@@ -304,6 +307,8 @@ class SparkConnectServiceSuite extends SharedSparkSession {
   }
 
   test("Test observe response") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("test") {
       spark.sql("""
                   | CREATE TABLE test (col1 INT, col2 STRING)
