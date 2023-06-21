@@ -1777,6 +1777,12 @@
     },
     "sqlState" : "46110"
   },
+  "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
+    "message" : [
+      "Can't determine the default value for <colName> since it is not nullable and it has no default value."
+    ],
+    "sqlState" : "42608"
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
