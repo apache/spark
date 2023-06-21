@@ -14477,17 +14477,19 @@ def aes_encrypt(
     ...     "Spark SQL", "1234567890abcdef", "ECB", "PKCS",)],
     ...     ["input", "key", "mode", "padding"]
     ... )
-    >>> df.select(base64(aes_encrypt(
-    ...     df.input, df.key, df.mode, df.padding)).alias('r')
+    >>> df.select(aes_decrypt(aes_encrypt(df.input, df.key, df.mode, df.padding),
+    ...     df.key, df.mode, df.padding).alias('r')
     ... ).collect()
-    [Row(r='mqJ9WNUFjXlxZPV8gnqzHeneMuH1jBwNuUm3+R/Ts48W')]
+    [Row(r=bytearray(b'Spark SQL'))]
 
     >>> df = spark.createDataFrame([(
     ...     "Spark SQL", "0000111122223333", "ECB",)],
     ...     ["input", "key", "mode"]
     ... )
-    >>> df.select(base64(aes_encrypt(df.input, df.key, df.mode)).alias('r')).collect()
-    [Row(r='sA9v9L9p+KSC3fU2zfsESQ==')]
+    >>> df.select(aes_decrypt(aes_encrypt(df.input, df.key, df.mode),
+    ...     df.key, df.mode).alias('r')
+    ... ).collect()
+    [Row(r=bytearray(b'Spark SQL'))]
 
     >>> df = spark.createDataFrame([(
     ...     "Spark SQL", "abcdefghijklmnop",)],
@@ -14746,6 +14748,7 @@ def stack(*cols: "ColumnOrName") -> Column:
     +----+----+
     |1   |2   |
     |3   |NULL|
+    +----+----+
     """
     return _invoke_function_over_seq_of_columns("stack", cols)
 
