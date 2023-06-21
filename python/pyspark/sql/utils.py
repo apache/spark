@@ -17,6 +17,7 @@
 import functools
 import os
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
+from collections.abc import Iterable
 
 from py4j.java_collections import JavaArray
 from py4j.java_gateway import (
@@ -282,3 +283,41 @@ def get_dataframe_class() -> Type["DataFrame"]:
         return ConnectDataFrame  # type: ignore[return-value]
     else:
         return PySparkDataFrame
+
+def isinstance_iterable(obj: Any) -> bool:
+    """
+    Check for iterability (with string-safe and Column-safe modifications).
+    """
+    if isinstance(obj, str):
+        return False
+    try:
+        iter(obj)
+        return True
+    except TypeError:
+        return False
+
+def to_list_column_style(
+    cols: Optional[Union[
+        str,
+        Any,
+        Iterable[Union[str, Any]]
+    ]]
+) -> list[Type["Column"]]:
+    """
+    Convert a range of objects to a list in a way that is consistent with
+    what would be expected for a column-like input field.
+
+    None -> None
+    str -> [str]
+    container[Any] -> list[Any]
+    Any -> [Any]
+
+    No type-checking is performed on contained objects.
+    """
+    if cols is None:
+        return None
+    if isinstance_iterable(cols):
+        return list(cols)
+    if:
+        return [cols]
+

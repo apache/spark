@@ -60,7 +60,7 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
-from pyspark.sql.utils import get_active_spark_context
+from pyspark.sql.utils import get_active_spark_context, to_list_column_style
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -2374,9 +2374,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+---+
         """
 
-        if on is not None and not isinstance(on, list):
-            on = [on]  # type: ignore[assignment]
-
+        on = to_list_column_style(on)
         if on is not None:
             if isinstance(on[0], str):
                 on = self._jseq(cast(List[str], on))
@@ -2484,9 +2482,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             rightAsOfColumn = other[rightAsOfColumn]
         right_as_of_jcol = rightAsOfColumn._jc
 
-        if on is not None and not isinstance(on, list):
-            on = [on]  # type: ignore[assignment]
-
+        on = to_list_column_style(on)
         if on is not None:
             if isinstance(on[0], str):
                 on = self._jseq(cast(List[str], on))
