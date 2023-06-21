@@ -84,13 +84,12 @@ class GroupedData:
             self._pivot_values = pivot_values
 
     def __repr__(self) -> str:
-        # since the expressions are not resolved here,
-        # the string represent can be different from vanilla PySpark.
+        # the expressions are not resolved here,
+        # so the string representation can be different from vanilla PySpark.
         grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
         grouping_str = f"grouping expressions: [{grouping_str}]"
 
-        value_str = str(self._df)
-        value_str = value_str[9:]
+        value_str = ", ".join("%s: %s" % c for c in self._df.dtypes)
 
         if self._group_type == "groupby":
             type_str = "GroupBy"
@@ -101,7 +100,7 @@ class GroupedData:
         else:
             type_str = "Pivot"
 
-        return f"GroupedData[{grouping_str}, value: {value_str}, type: {type_str}]"
+        return f"GroupedData[{grouping_str}, value: [{value_str}], type: {type_str}]"
 
     @overload
     def agg(self, *exprs: Column) -> "DataFrame":
