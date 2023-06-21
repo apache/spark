@@ -17,15 +17,11 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Union, no_type_check
+from typing import Union
 
 from pyspark import SparkContext
 import pyspark.sql.functions as F
-from pyspark.sql.column import (
-    Column,
-    _to_java_column,
-    _create_column_from_literal,
-)
+from pyspark.sql.column import Column
 
 # For supporting Spark Connect
 from pyspark.sql.utils import is_remote
@@ -145,27 +141,3 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     _n = F.lit(n) if isinstance(n, int) else n
     return F.call_udf("repeat", col, _n)
-
-
-def date_part(field: Union[str, Column], source: Column) -> Column:
-    """
-    Extracts a part of the date/timestamp or interval source.
-    """
-    sc = SparkContext._active_spark_context
-    field = (
-        _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
-    )
-    return _call_udf(sc, "date_part", field, _to_java_column(source))
-
-
-@no_type_check
-def _call_udf(sc, name, *cols):
-    return Column(sc._jvm.functions.callUDF(name, _make_arguments(sc, *cols)))
-
-
-@no_type_check
-def _make_arguments(sc, *cols):
-    java_arr = sc._gateway.new_array(sc._jvm.Column, len(cols))
-    for i, col in enumerate(cols):
-        java_arr[i] = col
-    return java_arr
