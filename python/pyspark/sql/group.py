@@ -71,7 +71,12 @@ class GroupedData(PandasGroupedOpsMixin):
         self.session: SparkSession = df.sparkSession
 
     def __repr__(self) -> str:
-        return f"GroupedData{self._jgd.toString()[26:]}"
+        index = 26  # index to truncate string from the JVM side
+        jvm_string = self._jgd.toString()
+        if jvm_string is not None and len(jvm_string) > index and jvm_string[index] == "[":
+            return f"GroupedData{jvm_string[26:]}"
+        else:
+            return super().__repr__()
 
     @overload
     def agg(self, *exprs: Column) -> DataFrame:
