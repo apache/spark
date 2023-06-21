@@ -381,22 +381,60 @@ class QueryExecutionErrorsSuite
       sqlState = "22018")
   }
 
+  test("CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS: parse json arrays as structs") {
+    val jsonStr = """[{"a":1, "b":0.8}]"""
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"SELECT from_json('$jsonStr', 'a INT, b DOUBLE', map('mode','FAILFAST') )")
+          .collect()
+      },
+      errorClass = "MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS",
+      parameters = Map(
+        "badRecord" -> jsonStr,
+        "failFastMode" -> "FAILFAST"
+      ),
+      sqlState = "22023")
+  }
+
+  test("FAILED_EXECUTE_UDF: execute user defined function with registered UDF") {
+    val luckyCharOfWord = udf { (word: String, index: Int) => {
+      word.substring(index, index + 1)
+    }}
+    spark.udf.register("luckyCharOfWord", luckyCharOfWord)
+
+    val e = intercept[SparkException] {
+      Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6))
+        .toDF("word", "index")
+        .createOrReplaceTempView("words")
+      spark.sql("select luckyCharOfWord(word, index) from words").collect()
+    }
+    assert(e.getCause.isInstanceOf[SparkException])
+
+    checkError(
+      exception = e.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_EXECUTE_UDF",
+      parameters = Map(
+        "functionName" ->
+          "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`",
+        "signature" -> "string, int",
+        "result" -> "string"),
+      matchPVals = true)
+  }
+
   test("FAILED_EXECUTE_UDF: execute user defined function") {
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)
     }}
-    val e1 = intercept[SparkException] {
+    val e = intercept[SparkException] {
       val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
       words.select(luckyCharOfWord($"word", $"index")).collect()
     }
-    assert(e1.getCause.isInstanceOf[SparkException])
-
-    Utils.getSimpleName(luckyCharOfWord.getClass)
+    assert(e.getCause.isInstanceOf[SparkException])
 
     checkError(
-      exception = e1.getCause.asInstanceOf[SparkException],
+      exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      parameters = Map("functionName" -> "QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+",
+      parameters = Map("functionName" -> "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`",
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)

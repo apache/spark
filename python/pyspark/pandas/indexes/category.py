@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from typing import Any, Callable, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
@@ -252,6 +253,10 @@ class CategoricalIndex(Index):
                          categories=['a', 'b', 'c', 'x'], ordered=False, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(
@@ -285,6 +290,10 @@ class CategoricalIndex(Index):
                          categories=['a', 'b', 'c'], ordered=True, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.as_ordered()).rename(self.name)
@@ -316,6 +325,10 @@ class CategoricalIndex(Index):
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.as_unordered()).rename(self.name)
@@ -369,6 +382,10 @@ class CategoricalIndex(Index):
                          categories=['a', 'c'], ordered=False, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.remove_categories(removals)).rename(self.name)
@@ -410,6 +427,10 @@ class CategoricalIndex(Index):
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.remove_unused_categories()).rename(self.name)
@@ -480,6 +501,10 @@ class CategoricalIndex(Index):
         CategoricalIndex(['A', 'A', 'B'], categories=['A', 'B'], ordered=False, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.rename_categories(new_categories)).rename(
@@ -542,6 +567,10 @@ class CategoricalIndex(Index):
                          categories=['c', 'b', 'a'], ordered=False, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(
@@ -625,6 +654,10 @@ class CategoricalIndex(Index):
         CategoricalIndex([1, 2, 2, 3, 3, 3], categories=[1, 2, 3], ordered=True, dtype='category')
         """
         if inplace:
+            warnings.warn(
+                "Argument `inplace` will be removed in 4.0.0.",
+                FutureWarning,
+            )
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(

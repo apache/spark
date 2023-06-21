@@ -39,7 +39,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     // push down the filter from the command condition instead of the filter in the rewrite plan,
     // which is negated for data sources that only support replacing groups of data (e.g. files)
-    case GroupBasedRowLevelOperation(rd: ReplaceData, cond, relation: DataSourceV2Relation) =>
+    case GroupBasedRowLevelOperation(rd: ReplaceData, cond, _, relation: DataSourceV2Relation) =>
       val table = relation.table.asRowLevelOperationTable
       val scanBuilder = table.newScanBuilder(relation.options)
 
@@ -61,8 +61,9 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
          """.stripMargin)
 
       // replace DataSourceV2Relation with DataSourceV2ScanRelation for the row operation table
+      // there may be multiple read relations for UPDATEs that are rewritten as UNION
       rd transform {
-        case r: DataSourceV2Relation if r eq relation =>
+        case r: DataSourceV2Relation if r.table eq table =>
           DataSourceV2ScanRelation(r, scan, PushDownUtils.toOutputAttrs(scan.readSchema(), r))
       }
   }

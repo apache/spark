@@ -226,12 +226,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.12 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.13 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.12"
+        val silencerVersion = "1.7.13"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -286,7 +286,9 @@ object SparkBuild extends PomBuild {
           // TODO(SPARK-43850): Remove the following suppression rules and remove `import scala.language.higherKinds`
           // from the corresponding files when Scala 2.12 is no longer supported.
           "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBase.scala:s",
-          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s"
+          "-Wconf:cat=unused-imports&src=org\\/apache\\/spark\\/graphx\\/impl\\/VertexPartitionBaseOps.scala:s",
+          // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
+          "-Wconf:msg=Implicit definition should have explicit type:s"
         )
       }
     }
@@ -331,7 +333,13 @@ object SparkBuild extends PomBuild {
     javaOptions ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
-      if (major >= 16) Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn") else Seq.empty
+      if (major >= 21) {
+        Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
+      } else if (major >= 16) {
+        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
+      } else {
+        Seq.empty
+      }
     },
 
     (Compile / doc / javacOptions) ++= {
@@ -407,7 +415,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf,
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
       commonUtils, sqlApi
     ).contains(x)
   }

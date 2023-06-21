@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, OptionList, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -51,7 +51,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
@@ -74,7 +75,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
@@ -98,7 +100,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
@@ -121,7 +124,8 @@ class V2CommandsCaseSensitivitySuite
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
-          val tableSpec = UnresolvedTableSpec(Map.empty, None, None, None, None, false)
+          val tableSpec =
+            UnresolvedTableSpec(Map.empty, None, OptionList(Seq.empty), None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,

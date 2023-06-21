@@ -71,7 +71,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadTable(ident: Identifier): Table = {
-    V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    try {
+      V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
+    } catch {
+      case _: NoSuchDatabaseException =>
+        throw QueryCompilationErrors.noSuchTableError(ident)
+    }
   }
 
   override def loadTable(ident: Identifier, timestamp: Long): Table = {
@@ -108,6 +113,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
+  }
+
+  override def purgeTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident, purge = true)
   }
 
   // TODO: remove it when no tests calling this deprecated method.
@@ -194,16 +203,29 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def dropTable(ident: Identifier): Boolean = {
+    dropTableInternal(ident)
+  }
+
+  private def dropTableInternal(ident: Identifier, purge: Boolean = false): Boolean = {
     try {
-      if (loadTable(ident) != null) {
-        catalog.dropTable(
-          ident.asTableIdentifier,
-          ignoreIfNotExists = true,
-          purge = true /* skip HDFS trash */)
-        true
-      } else {
-        false
+      loadTable(ident) match {
+        case V1Table(v1Table) if v1Table.tableType == CatalogTableType.VIEW =>
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = s"${CatalogTableType.EXTERNAL.name} or" +
+              s" ${CatalogTableType.MANAGED.name}",
+            objectName = v1Table.qualifiedName,
+            foundType = v1Table.tableType.name,
+            alternative = "DROP VIEW"
+          )
+        case _ =>
       }
+      catalog.invalidateCachedTable(ident.asTableIdentifier)
+      catalog.dropTable(
+        ident.asTableIdentifier,
+        ignoreIfNotExists = true,
+        purge = purge)
+      true
     } catch {
       case _: NoSuchTableException =>
         false

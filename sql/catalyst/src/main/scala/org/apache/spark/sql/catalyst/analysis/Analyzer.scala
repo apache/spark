@@ -322,6 +322,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
+      RewriteMergeIntoTable ::
       typeCoercionRules ++
       Seq(
         ResolveWithCTE,
@@ -1288,7 +1289,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         // Create a project if this is an INSERT INTO BY NAME query.
         val projectByName = if (i.userSpecifiedCols.nonEmpty) {
-          Some(createProjectForByNameQuery(i))
+          Some(createProjectForByNameQuery(r.table.name, i))
         } else {
           None
         }
@@ -2070,8 +2071,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           } catch {
             case _: NoSuchFunctionException =>
               u.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2308",
-                messageParameters = Map("name" -> u.name.quoted))
+                errorClass = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
+                messageParameters = Map("name" -> toSQLId(u.name)))
           }
         }
 
@@ -2325,8 +2326,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           processV2AggregateFunction(aggFunc, arguments, u)
         case _ =>
           failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2444",
-            messageParameters = Map("funcName" -> bound.name()))
+            errorClass = "INVALID_UDF_IMPLEMENTATION",
+            messageParameters = Map("funcName" -> toSQLId(bound.name())))
       }
     }
 

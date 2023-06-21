@@ -32,7 +32,9 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   import testImplicits._
 
