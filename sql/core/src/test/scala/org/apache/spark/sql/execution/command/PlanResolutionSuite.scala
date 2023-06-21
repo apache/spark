@@ -1268,12 +1268,11 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(sql3, checkAnalysis = true)
       },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       parameters = Map(
-        "tableName" -> "tab2",
-        "reason" -> "not enough data columns",
-        "tableColumns" -> "'i', 'x'",
-        "dataColumns" -> "'col1'")
+        "tableName" -> "`tab2`",
+        "tableColumns" -> "`i`, `x`",
+        "dataColumns" -> "`col1`")
     )
   }
 
