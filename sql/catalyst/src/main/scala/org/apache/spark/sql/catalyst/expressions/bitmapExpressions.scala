@@ -53,7 +53,7 @@ object BitmapFunctions {
   group = "misc_funcs"
 )
 case class BitmapBucketNumber(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with CodegenFallback {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -88,7 +88,7 @@ case class BitmapBucketNumber(child: Expression)
   group = "misc_funcs"
 )
 case class BitmapBitPosition(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with CodegenFallback {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -126,7 +126,7 @@ case class BitmapBitPosition(child: Expression)
   group = "misc_funcs"
 )
 case class BitmapCount(child: Expression)
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression with NullIntolerant with CodegenFallback {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
