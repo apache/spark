@@ -174,7 +174,7 @@ class DataFrame:
     select.__doc__ = PySparkDataFrame.select.__doc__
 
     def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
-        sql_expr = []python/pyspark/sql/pandas/types.py
+        sql_expr = []
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]  # type: ignore[assignment]
         for element in expr:
