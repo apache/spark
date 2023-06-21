@@ -1873,6 +1873,70 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_add", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = withAggregateFunction {
+    Average(e.expr, EvalMode.TRY)
+  }
+
+  /**
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
+    UnresolvedFunction("try_divide", Seq(dividend.expr, divisor.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_multiply", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_subtract", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = withAggregateFunction {
+    Sum(e.expr, EvalMode.TRY)
+  }
+
+  /**
    * Creates a new struct column.
    * If the input column is a column in a `DataFrame`, or a derived column expression
    * that is named (i.e. aliased), its name would be retained as the StructField's name,
@@ -4051,10 +4115,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def endswith(str: Column, suffix: Column): Column = {
-    // 'EndsWith' expression only supports StringType,
-    // use 'call_udf' to support both StringType and BinaryType.
-    call_udf("endswith", str, suffix)
+  def endswith(str: Column, suffix: Column): Column = withExpr {
+    UnresolvedFunction(Seq("endswith"), Seq(str.expr, suffix.expr), isDistinct = false)
   }
 
   /**
@@ -4065,10 +4127,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def startswith(str: Column, prefix: Column): Column = {
-    // 'StartsWith' expression only supports StringType,
-    // use 'call_udf' to support both StringType and BinaryType.
-    call_udf("startswith", str, prefix)
+  def startswith(str: Column, prefix: Column): Column = withExpr {
+    UnresolvedFunction(Seq("startswith"), Seq(str.expr, prefix.expr), isDistinct = false)
   }
 
   /**
@@ -4100,6 +4160,40 @@ object functions {
    */
   def btrim(str: Column, trim: Column): Column = withExpr {
     new StringTrimBoth(str.expr, trim.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, format: Column): Column = withExpr {
+    new TryToBinary(e.expr, format.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = withExpr {
+    new TryToBinary(e.expr)
+  }
+
+  /**
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = withExpr {
+    TryToNumber(e.expr, format.expr)
   }
 
   /**
@@ -4145,10 +4239,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def contains(left: Column, right: Column): Column = {
-    // 'Contains' expression only supports StringType
-    // use 'call_udf' to support both StringType and BinaryType.
-    call_udf("contains", left, right)
+  def contains(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction(Seq("contains"), Seq(left.expr, right.expr), isDistinct = false)
   }
 
   /**
@@ -4554,6 +4646,47 @@ object functions {
   def hour(e: Column): Column = withExpr { Hour(e.expr) }
 
   /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("extract", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `extract`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("date_part", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `EXTRACT`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("datepart", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
    * Returns the last day of the month which the given date belongs to.
    * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
    * month in July 2015.
@@ -4794,6 +4927,30 @@ object functions {
    */
   def to_timestamp(s: Column, fmt: String): Column = withExpr {
     new ParseToTimestamp(s.expr, Literal(fmt))
+  }
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr, format.expr)
+  }
+
+  /**
+   * Parses the `s` to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr)
   }
 
   /**
@@ -5405,6 +5562,21 @@ object functions {
    */
   def element_at(column: Column, value: Any): Column = withExpr {
     ElementAt(column.expr, lit(value).expr)
+  }
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column = withExpr {
+    new TryElementAt(column.expr, value.expr)
   }
 
   /**

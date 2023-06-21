@@ -267,6 +267,74 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(2, 2, 0))
   }
 
+  test("extract") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        extract(lit("YEAR"), $"a"),
+        extract(lit("MONTH"), $"a"),
+        extract(lit("week"), $"b"),
+        extract(lit("day"), $"b"),
+        extract(lit("MINUTE"), $"c"),
+        extract(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "extract(YEAR FROM a)",
+        "extract(MONTH FROM a)",
+        "extract(week FROM b)",
+        "extract(day FROM b)",
+        "extract(MINUTE FROM c)",
+        "extract(SECONDS FROM c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+  }
+
+  test("date_part & datepart") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        date_part(lit("YEAR"), $"a"),
+        date_part(lit("MONTH"), $"a"),
+        date_part(lit("week"), $"b"),
+        date_part(lit("day"), $"b"),
+        date_part(lit("MINUTE"), $"c"),
+        date_part(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.select(
+        datepart(lit("YEAR"), $"a"),
+        datepart(lit("MONTH"), $"a"),
+        datepart(lit("week"), $"b"),
+        datepart(lit("day"), $"b"),
+        datepart(lit("MINUTE"), $"c"),
+        datepart(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "date_part('YEAR', a)",
+        "date_part('MONTH', a)",
+        "date_part('week', b)",
+        "date_part('day', b)",
+        "date_part('MINUTE', c)",
+        "date_part('SECONDS', c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "datepart('YEAR', a)",
+        "datepart('MONTH', a)",
+        "datepart('week', b)",
+        "datepart('day', b)",
+        "datepart('MINUTE', c)",
+        "datepart('SECONDS', c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+  }
+
   test("function date_add & dateadd") {
     val st1 = "2015-06-01 12:34:56"
     val st2 = "2015-06-02 12:34:56"
@@ -1288,5 +1356,16 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val result5 = df.selectExpr(s"make_ym_interval()")
     val result6 = df.select(make_ym_interval())
     checkAnswer(result5, result6)
+  }
+
+  test("try_to_timestamp") {
+    val df = Seq(("2016-12-31", "yyyy-MM-dd")).toDF("a", "b")
+    val ts = Timestamp.valueOf("2016-12-31 00:00:00")
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a, b)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"), col("b"))), Seq(Row(ts)))
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
   }
 }

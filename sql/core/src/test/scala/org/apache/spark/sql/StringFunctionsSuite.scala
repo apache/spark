@@ -1138,4 +1138,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("startswith(c, d)"), Row(true))
     checkAnswer(df.select(startswith(col("c"), col("d"))), Row(true))
   }
+
+  test("try_to_binary") {
+    val df = Seq("abc").toDF("a")
+
+    checkAnswer(df.selectExpr("try_to_binary(a, 'utf-8')"),
+      df.select(try_to_binary(col("a"), lit("utf-8"))))
+
+    checkAnswer(df.selectExpr("try_to_binary(a)"),
+      df.select(try_to_binary(col("a"))))
+  }
+
+  test("try_to_number") {
+    val df = Seq("$78.12").toDF("a")
+
+    checkAnswer(df.selectExpr("try_to_number(a, '$99.99')"), Seq(Row(78.12)))
+    checkAnswer(df.select(try_to_number(col("a"), lit("$99.99"))), Seq(Row(78.12)))
+  }
 }

@@ -1808,6 +1808,58 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = Column.fn("try_add", left, right)
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = Column.fn("try_avg", e)
+
+  /**
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
+
+  /**
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
+
+  /**
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = Column.fn("try_subtract", left, right)
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = Column.fn("try_sum", e)
+
+  /**
    * Creates a new struct column. If the input column is a column in a `DataFrame`, or a derived
    * column expression that is named (i.e. aliased), its name would be retained as the
    * StructField's name, otherwise, the newly generated StructField's name would be auto generated
@@ -3991,6 +4043,34 @@ object functions {
   def btrim(str: Column, trim: Column): Column = Column.fn("btrim", str, trim)
 
   /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, f: Column): Column = Column.fn("try_to_binary", e, f)
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = Column.fn("try_to_binary", e)
+
+  /**
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = Column.fn("try_to_number", e, format)
+
+  /**
    * Returns the character length of string data or number of bytes of binary data. The length of
    * string data includes the trailing spaces. The length of binary data includes binary zeros.
    *
@@ -4439,6 +4519,56 @@ object functions {
   def hour(e: Column): Column = Column.fn("hour", e)
 
   /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = {
+    Column.fn("extract", field, source)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = {
+    Column.fn("date_part", field, source)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = {
+    Column.fn("datepart", field, source)
+  }
+
+  /**
    * Returns the last day of the month which the given date belongs to. For example, input
    * "2015-07-27" returns "2015-07-31" since July 31 is the last day of the month in July 2015.
    *
@@ -4694,6 +4824,27 @@ object functions {
    * @since 3.4.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column =
+    Column.fn("try_to_timestamp", s, format)
+
+  /**
+   * Parses the `s` expression to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = Column.fn("try_to_timestamp", s)
 
   /**
    * Converts the column into `DateType` by casting rules to `DateType`.
@@ -5270,6 +5421,20 @@ object functions {
    * @since 3.4.0
    */
   def element_at(column: Column, value: Any): Column = Column.fn("element_at", column, lit(value))
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column =
+    Column.fn("try_element_at", column, value)
 
   /**
    * Returns element of array at given (0-based) index. If the index points outside of the array
