@@ -1086,6 +1086,15 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * Cancel all jobs with a given tag.
+   */
+  def cancelJobsWithTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    logInfo(s"Asked to cancel jobs with tag $tag")
+    eventProcessLoop.post(JobTagCancelled(tag))
+  }
+
+  /**
    * Cancel all jobs that are running or waiting in the queue.
    */
   def cancelAllJobs(): Unit = {
@@ -1180,6 +1189,19 @@ private[spark] class DAGScheduler(
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
         Option("part of cancelled job group %s".format(groupId))))
+  }
+
+  private[scheduler] def handleJobTagCancelled(tag: String): Unit = {
+    // Cancel all jobs belonging that have this tag.
+    // First finds all active jobs with this group id, and then kill stages for them.
+    val jobIds = activeJobs.filter { activeJob =>
+      Option(activeJob.properties).exists { properties =>
+        Option(properties.getProperty(SparkContext.SPARK_JOB_TAGS)).getOrElse("")
+          .split(SparkContext.SPARK_JOB_TAGS_SEP).toSet.contains(tag)
+      }
+    }.map(_.jobId)
+    jobIds.foreach(handleJobCancellation(_,
+      Option(s"part of cancelled job tag $tag")))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
@@ -2971,6 +2993,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case JobGroupCancelled(groupId) =>
       dagScheduler.handleJobGroupCancelled(groupId)
+
+    case JobTagCancelled(groupId) =>
+      dagScheduler.handleJobTagCancelled(groupId)
 
     case AllJobsCancelled =>
       dagScheduler.doCancelAllJobs()
