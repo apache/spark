@@ -395,7 +395,8 @@ CreateViewCommand `spark_catalog`.`mydb1`.`v1`, SELECT * FROM t1, false, false, 
 -- !query
 DROP TABLE t1
 -- !query analysis
-DropTableCommand `spark_catalog`.`mydb1`.`t1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), mydb1.t1
 
 
 -- !query
@@ -441,7 +442,8 @@ CreateViewCommand `v2`, SELECT * FROM t1, false, false, LocalTempView, true
 -- !query
 DROP TABLE t1
 -- !query analysis
-DropTableCommand `spark_catalog`.`mydb2`.`t1`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), mydb2.t1
 
 
 -- !query
