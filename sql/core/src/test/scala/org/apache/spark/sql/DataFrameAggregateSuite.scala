@@ -1850,7 +1850,7 @@ class DataFrameAggregateSuite extends QueryTest
         )
       checkAnswer(res, Nil)
     }
-    assert(error0.toString contains "SketchesArgumentException")
+    assert(error0.toString contains "'lgConfigK' value must be between")
 
     val error1 = intercept[SparkException] {
       val res = df1.groupBy("id")
@@ -1859,7 +1859,7 @@ class DataFrameAggregateSuite extends QueryTest
         )
       checkAnswer(res, Nil)
     }
-    assert(error1.toString contains "SketchesArgumentException")
+    assert(error1.toString contains "'lgConfigK' value must be between")
 
     // validate that unions error out by default for different lgConfigK sketches
     val error2 = intercept[SparkException] {
@@ -1874,7 +1874,7 @@ class DataFrameAggregateSuite extends QueryTest
       val res = i1.join(i2).withColumn("union", hll_union("hllsketch_left", "hllsketch_right"))
       checkAnswer(res, Nil)
     }
-    assert(error2.toString contains "UnsupportedOperationException")
+    assert(error2.toString contains "different 'lgConfigK' values")
 
     val error3 = intercept[SparkException] {
       val i1 = df1.groupBy("id")
@@ -1891,7 +1891,7 @@ class DataFrameAggregateSuite extends QueryTest
         )
       checkAnswer(res, Nil)
     }
-    assert(error3.toString contains "UnsupportedOperationException")
+    assert(error3.toString contains "different 'lgConfigK' values")
 
     // validate that the functions error out when provided unexpected types
     val error4 = intercept[AnalysisException] {
@@ -1954,7 +1954,7 @@ class DataFrameAggregateSuite extends QueryTest
           |""".stripMargin)
       checkAnswer(res, Nil)
     }
-    assert(error6.toString contains "UnsupportedOperationException")
+    assert(error6.toString contains "different 'lgConfigK' values")
 
     val error7 = intercept[SparkException] {
       val res = sql(
@@ -1985,7 +1985,7 @@ class DataFrameAggregateSuite extends QueryTest
           |""".stripMargin)
       checkAnswer(res, Nil)
     }
-    assert(error7.toString contains "UnsupportedOperationException")
+    assert(error7.toString contains "different 'lgConfigK' values")
   }
 }
 
