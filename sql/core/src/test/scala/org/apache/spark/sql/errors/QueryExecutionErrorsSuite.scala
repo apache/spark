@@ -31,7 +31,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, R
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, NamedArgumentExpression, RowNumber}
-
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
