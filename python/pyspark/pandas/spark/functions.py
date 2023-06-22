@@ -141,3 +141,19 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     _n = F.lit(n) if isinstance(n, int) else n
     return F.call_udf("repeat", col, _n)
+
+
+def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "ewm",
+            col,  # type: ignore[arg-type]
+            lit(alpha),
+            lit(ignore_na),
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasCovar(col._jc, alpha, ignore_na))
