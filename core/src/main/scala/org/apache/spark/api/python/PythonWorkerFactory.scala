@@ -115,7 +115,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     try {
       serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
 
-      val streamingWorkerModule = "pyspark.streaming_worker"
+      val streamingWorkerModule = "pyspark.streaming_worker_listener"
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", streamingWorkerModule))

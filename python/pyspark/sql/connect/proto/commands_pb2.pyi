@@ -1297,6 +1297,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     GET_FIELD_NUMBER: builtins.int
     AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
     RESET_TERMINATED_FIELD_NUMBER: builtins.int
+    ADD_LISTENER_FIELD_NUMBER: builtins.int
     active: builtins.bool
     """active() API, returns a list of active queries."""
     get: builtins.str
@@ -1308,6 +1309,9 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         """awaitAnyTermination() API, wait until any query terminates or timeout."""
     reset_terminated: builtins.bool
     """resetTerminated() API."""
+    @property
+    def add_listener(self) -> pyspark.sql.connect.proto.expressions_pb2.PythonUDF:
+        """addListener() API."""
     def __init__(
         self,
         *,
@@ -1316,12 +1320,15 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
         | None = ...,
         reset_terminated: builtins.bool = ...,
+        add_listener: pyspark.sql.connect.proto.expressions_pb2.PythonUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "active",
             b"active",
+            "add_listener",
+            b"add_listener",
             "await_any_termination",
             b"await_any_termination",
             "command",
@@ -1337,6 +1344,8 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "active",
             b"active",
+            "add_listener",
+            b"add_listener",
             "await_any_termination",
             b"await_any_termination",
             "command",
@@ -1350,7 +1359,7 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> typing_extensions.Literal[
-        "active", "get", "await_any_termination", "reset_terminated"
+        "active", "get", "await_any_termination", "reset_terminated", "add_listener"
     ] | None: ...
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand

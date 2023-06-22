@@ -496,7 +496,9 @@ class DataStreamWriter:
             returnType=StringType(),
             evalType=PythonEvalType.SQL_BATCHED_UDF,
         )
-        udf_proto = udf_obj._build_common_inline_user_defined_function().to_plan_udf(self._session.client)
+        udf_proto = udf_obj._build_common_inline_user_defined_function().to_plan_udf(
+            self._session.client
+        )
         self._write_proto.for_each_batch.CopyFrom(udf_proto)
 
         return self

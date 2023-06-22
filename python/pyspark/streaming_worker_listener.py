@@ -25,6 +25,13 @@ from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
 import json
 
+from pyspark.sql.streaming.listener import (
+    QueryStartedEvent,
+    QueryProgressEvent,
+    QueryTerminatedEvent,
+    QueryIdleEvent,
+)
+
 # 'resource' is a Unix specific module.
 has_resource_module = True
 try:
@@ -77,25 +84,32 @@ def main(infile, outfile):
     sparkConnectSession = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
     sparkConnectSession._client._session_id = sessionId
 
-    func, _ = worker.read_command(pickleSer, infile)
-    print("##### func test test in python process is", func)
+    listener = worker.read_command(pickleSer, infile)
+    print("##### listener test in python process is", listener)
 
     write_int(9999, outfile)
-    print("##### write data 9999 to server", func)
+    print("##### write data 9999 to server", listener)
 
     outfile.flush()
 
-    def process(dfRefId, batchId):
-        print("##### start processing dfRefId", dfRefId)
-        batchDf = sparkConnectSession.createRefDataFrame(dfRefId)
-        func(batchDf, batchId)
+    # TODO: move the logic to streaming_worker
+    def process(listener_event_str, listener_event_type):
+        listener_event = json.loads(listener_event_str)
+        if listener_event_type == 0:
+            listener.onQueryStarted(QueryStartedEvent.fromJson(listener_event))
+        elif listener_event_type == 1:
+            listener.onQueryProgress(QueryProgressEvent.fromJson(listener_event))
+        elif listener_event_type == 2:
+            listener.onQueryIdle(QueryIdleEvent.fromJson(listener_event))
+        elif listener_event_type == 3:
+            listener.onQueryTerminated(QueryTerminatedEvent.fromJson(listener_event))
 
     while True:
-        dfRefId = utf8_deserializer.loads(infile)
-        print("##### dfRefId received from python process is", dfRefId)
-        batchId = read_long(infile)
-        print("##### batchId received from python process is", batchId)
-        process(dfRefId, int(batchId))
+        event = utf8_deserializer.loads(infile)
+        print("##### event received from python process is", event)
+        event_type = read_int(infile)
+        print("##### event_type received from python process is", event_type)
+        process(event, int(event_type))
         write_int(SpecialLengths.END_OF_MICRO_BATCH, outfile)
         outfile.flush()
 
