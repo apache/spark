@@ -1563,18 +1563,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Seq.empty
     }
 
-    withIdentClause(
-      func.functionName.expression,
-      () => getFunctionMultiparts(func.functionName),
-      name => {
-        if (name.length > 1) {
-          throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
+    withFuncIdentClause(
+      func.functionName,
+      ident => {
+        if (ident.length > 1) {
+          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
         }
         val args = func.functionArgument.asScala.map { e =>
           extractExpression(e, func.functionName.getText)
         }.toSeq
 
-        val tvf = UnresolvedTableValuedFunction(name, args)
+        val tvf = UnresolvedTableValuedFunction(ident, args)
 
         val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
 
