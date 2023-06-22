@@ -52,7 +52,12 @@ case class HllSketchEstimate(child: Expression)
 
   override def nullSafeEval(input: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
+    try {
+      Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
+    } catch {
+      case _: java.lang.Error =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
   }
 }
 
@@ -99,8 +104,18 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val sketch1 = HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
-    val sketch2 = HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
+    val sketch1 = try {
+      HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
+    } catch {
+      case _: java.lang.Error =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
+    val sketch2 = try {
+      HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
+    } catch {
+      case _: java.lang.Error =>
+        throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+    }
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
     if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
       throw QueryExecutionErrors.hllUnionDifferentLgK(

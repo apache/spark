@@ -1,4 +1,6 @@
 -- Positive test cases
+-- Create a table with some testing data.
+DROP TABLE IF EXISTS t1;
 CREATE TABLE t1 USING JSON AS VALUES (0), (1), (2), (2), (2), (3), (4) as tab(col);
 
 SELECT hll_sketch_estimate(hll_sketch_agg(col)) AS result FROM t1;
@@ -62,3 +64,13 @@ SELECT hll_union(1, 2)
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
+-- The HLL functions receive invalid buffers as inputs.
+SELECT hll_sketch_estimate(CAST ('abc' AS BINARY));
+
+SELECT hll_union(CAST ('abc' AS BINARY), CAST ('def' AS BINARY));
+
+SELECT hll_union_agg(buffer, false)
+FROM (SELECT CAST('abc' AS BINARY) AS buffer);
+
+-- Clean up
+DROP TABLE IF EXISTS t1;

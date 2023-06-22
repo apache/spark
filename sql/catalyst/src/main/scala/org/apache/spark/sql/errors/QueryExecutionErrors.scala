@@ -2862,6 +2862,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "value" -> value))
   }
 
+  def hllInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map(
+        "function" -> toSQLId(function)))
+  }
+
   def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_UNION_DIFFERENT_LG_K",

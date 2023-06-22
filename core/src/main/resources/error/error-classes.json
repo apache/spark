@@ -757,6 +757,11 @@
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ]
   },
+  "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the HLL_SKETCH_AGG function)."
+    ]
+  },
   "HLL_INVALID_LG_K" : {
     "message" : [
       "Invalid call to <function>; the 'lgConfigK' value must be between <min> and <max>, inclusive: <value>."
@@ -764,7 +769,7 @@
   },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
-      "Sketches have different lgConfigK values: <left> and <right>. Set the 'allowDifferentLgConfigK' parameter to true to call <function> with different lgConfigK values."
+      "Sketches have different 'lgConfigK' values: <left> and <right>. Set the 'allowDifferentLgConfigK' parameter to true to call <function> with different 'lgConfigK' values."
     ]
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {

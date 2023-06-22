@@ -293,7 +293,7 @@ case class HllUnionAgg(
    */
   def compareLgConfigK(left: Int, right: Int): Unit = {
     if (!allowDifferentLgConfigK && left != right) {
-      throw QueryExecutionErrors.hllUnionDifferentLgK(left, right, function = "HLL_UNION_AGG")
+      throw QueryExecutionErrors.hllUnionDifferentLgK(left, right, function = prettyName)
     }
   }
 
@@ -308,13 +308,18 @@ case class HllUnionAgg(
     if (v != null) {
       left.dataType match {
         case BinaryType =>
-          val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
-          val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
-          compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
-          union.update(sketch)
-          Some(union)
-        case _ => throw new UnsupportedOperationException(
-          s"A Union instance can only be updated with a valid HllSketch byte array")
+          try {
+            val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
+            val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
+            compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
+            union.update(sketch)
+            Some(union)
+          } catch {
+            case _: java.lang.Error =>
+              throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
+          }
+        case _ =>
+          throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
       }
     } else {
       unionOption
