@@ -53,7 +53,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
-from pyspark import SparkContext
 from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -70,7 +69,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import get_column_class, is_remote, get_window_class
+from pyspark.sql.utils import get_column_class, get_window_class
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
@@ -2257,44 +2256,27 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        if is_remote():
-            from pyspark.sql.connect.functions import _invoke_function_over_columns
-
-            last_non_null = _invoke_function_over_columns(
-                "last_non_null",
-                scol,  # type: ignore[arg-type]
-            )
-            null_index = _invoke_function_over_columns(
-                "null_index",
-                scol,  # type: ignore[arg-type]
-            )
-        else:
-            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-            last_non_null = PySparkColumn(
-                sql_utils.lastNonNull(scol._jc)  # type: ignore[assignment]
-            )
-            null_index = PySparkColumn(sql_utils.nullIndex(scol._jc))  # type: ignore[assignment]
+        last_non_null = SF.last_non_null(scol)
+        null_index = SF.null_index(scol)
 
         Window = get_window_class()
         window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
-        last_non_null_forward = last_non_null.over(window_forward)  # type: ignore[arg-type]
-        null_index_forward = null_index.over(window_forward)  # type: ignore[arg-type]
+        last_non_null_forward = last_non_null.over(window_forward)
+        null_index_forward = null_index.over(window_forward)
 
         window_backward = Window.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
-        last_non_null_backward = last_non_null.over(window_backward)  # type: ignore[arg-type]
-        null_index_backward = null_index.over(window_backward)  # type: ignore[arg-type]
+        last_non_null_backward = last_non_null.over(window_backward)
+        null_index_backward = null_index.over(window_backward)
 
         fill = (last_non_null_backward - last_non_null_forward) / (
             null_index_backward + null_index_forward
         ) * null_index_forward + last_non_null_forward
 
-        fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(  # type: ignore[arg-type]
-            last_non_null_forward  # type: ignore[arg-type]
-        )
+        fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
 
         pad_head = F.lit(None)
         pad_head_cond = F.lit(False)
@@ -2304,55 +2286,35 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         # inputs  -> NaN, NaN, 1.0, NaN, NaN, NaN, 5.0, NaN, NaN
         if limit_direction is None or limit_direction == "forward":
             # outputs -> NaN, NaN, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
-            pad_tail = last_non_null_forward  # type: ignore[assignment]
-            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(  # type: ignore[arg-type]
-                last_non_null_forward  # type: ignore[arg-type]
-            )
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
             if limit is not None:
                 # outputs (limit=1) -> NaN, NaN, 1.0, 2.0, NaN, NaN, 5.0, 5.0, NaN
-                fill_cond = fill_cond & (
-                    null_index_forward <= F.lit(limit)  # type: ignore[assignment]
-                )
-                pad_tail_cond = pad_tail_cond & (
-                    null_index_forward <= F.lit(limit)  # type: ignore[assignment]
-                )
+                fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
 
         elif limit_direction == "backward":
             # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, NaN, NaN
-            pad_head = last_non_null_backward  # type: ignore[assignment]
-            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(  # type: ignore[arg-type]
-                last_non_null_forward  # type: ignore[arg-type]
-            )
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
             if limit is not None:
                 # outputs (limit=1) -> NaN, 1.0, 1.0, NaN, NaN, 4.0, 5.0, NaN, NaN
-                fill_cond = fill_cond & (
-                    null_index_backward <= F.lit(limit)  # type: ignore[assignment]
-                )
-                pad_head_cond = pad_head_cond & (
-                    null_index_backward <= F.lit(limit)  # type: ignore[assignment]
-                )
+                fill_cond = fill_cond & (null_index_backward <= F.lit(limit))
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
 
         else:
             # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
-            pad_head = last_non_null_backward  # type: ignore[assignment]
-            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(  # type: ignore[arg-type]
-                last_non_null_forward  # type: ignore[arg-type]
-            )
-            pad_tail = last_non_null_forward  # type: ignore[assignment]
-            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(  # type: ignore[arg-type]
-                last_non_null_forward  # type: ignore[arg-type]
-            )
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
             if limit is not None:
                 # outputs (limit=1) -> NaN, 1.0, 1.0, 2.0, NaN, 4.0, 5.0, 5.0, NaN
-                fill_cond = fill_cond & (  # type: ignore[assignment]
+                fill_cond = fill_cond & (
                     (null_index_forward <= F.lit(limit)) | (null_index_backward <= F.lit(limit))
                 )
-                pad_head_cond = pad_head_cond & (
-                    null_index_backward <= F.lit(limit)  # type: ignore[assignment]
-                )
-                pad_tail_cond = pad_tail_cond & (
-                    null_index_forward <= F.lit(limit)  # type: ignore[assignment]
-                )
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
 
         if limit_area == "inside":
             pad_head_cond = F.lit(False)
