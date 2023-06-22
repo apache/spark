@@ -1526,7 +1526,7 @@ class SparkSession(SparkConversionMixin):
         +---+---+
 
         Or positional parameters marked by `?` in the SQL query by SQL literals.
-    
+
         >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}", [5, 2], df=mydf).show()
         +---+---+
         |  A|  B|
@@ -1542,7 +1542,9 @@ class SparkSession(SparkConversionMixin):
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
             else:
-                litArgs = self._jvm.PythonUtils.toArray([_to_java_column(lit(v)) for v in (args or [])])
+                litArgs = self._jvm.PythonUtils.toArray(
+                    [_to_java_column(lit(v)) for v in (args or [])]
+                )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
             if len(kwargs) > 0:

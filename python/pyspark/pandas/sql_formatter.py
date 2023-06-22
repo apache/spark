@@ -176,7 +176,7 @@ def sql(
     1   9
 
     Or positional parameters marked by `?` in the SQL query by SQL literals.
-    
+
     >>> ps.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
        id
     0   8
