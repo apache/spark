@@ -20,25 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
-
-/** Shared constants and methods for bitmap functions. */
-object BitmapFunctions {
-  /** Number of bytes in a bitmap. */
-  final val NUM_BYTES = 4 * 1024
-
-  /** Number of bits in a bitmap. */
-  final val NUM_BITS = 8 * NUM_BYTES
-
-  /** Merges both bitmaps and writes into bitmap1. */
-  def merge(bitmap1: Array[Byte], bitmap2: Array[Byte]): Unit = {
-    for (i <- 0 until Math.min(bitmap1.length, bitmap2.length)) {
-      bitmap1.update(i, ((bitmap1(i) & 0x0FF) | (bitmap2(i) & 0x0FF)).toByte)
-    }
-  }
-}
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bucket number for the given input child expression.",
@@ -53,7 +37,7 @@ object BitmapFunctions {
   group = "misc_funcs"
 )
 case class BitmapBucketNumber(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with CodegenFallback {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -61,15 +45,12 @@ case class BitmapBucketNumber(child: Expression)
 
   override def prettyName: String = "bitmap_bucket_number"
 
-  protected override def nullSafeEval(input: Any): Any = {
-    // inputs are already automatically cast to long.
-    val value = input.asInstanceOf[Long]
-    if (value > 0) {
-      1 + (value - 1) / BitmapFunctions.NUM_BITS
-    } else {
-      value / BitmapFunctions.NUM_BITS
-    }
-  }
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[BitmapExpressionUtils],
+    LongType,
+    "bitmapBucketNumber",
+    Seq(child),
+    inputTypes)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapBucketNumber =
     copy(child = newChild)
@@ -88,7 +69,7 @@ case class BitmapBucketNumber(child: Expression)
   group = "misc_funcs"
 )
 case class BitmapBitPosition(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with CodegenFallback {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -96,16 +77,12 @@ case class BitmapBitPosition(child: Expression)
 
   override def prettyName: String = "bitmap_bit_position"
 
-  protected override def nullSafeEval(input: Any): Any = {
-    // inputs are already automatically cast to long.
-    val value = input.asInstanceOf[Long]
-    if (value > 0) {
-      // inputs: (1 -> NUM_BITS) map to positions (0 -> NUM_BITS - 1)
-      (value - 1) % BitmapFunctions.NUM_BITS
-    } else {
-      (-value) % BitmapFunctions.NUM_BITS
-    }
-  }
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[BitmapExpressionUtils],
+    LongType,
+    "bitmapBitPosition",
+    Seq(child),
+    inputTypes)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapBitPosition =
     copy(child = newChild)
@@ -126,7 +103,7 @@ case class BitmapBitPosition(child: Expression)
   group = "misc_funcs"
 )
 case class BitmapCount(child: Expression)
-  extends UnaryExpression with NullIntolerant with CodegenFallback {
+  extends UnaryExpression with RuntimeReplaceable with NullIntolerant {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
@@ -140,10 +117,12 @@ case class BitmapCount(child: Expression)
 
   override def prettyName: String = "bitmap_count"
 
-  protected override def nullSafeEval(input: Any): Any = {
-    val bitmap = input.asInstanceOf[Array[Byte]]
-    bitmap.map(b => java.lang.Integer.bitCount(b & 0x0FF)).sum.toLong
-  }
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[BitmapExpressionUtils],
+    LongType,
+    "bitmapCount",
+    Seq(child),
+    Seq(BinaryType))
 
   override protected def withNewChildInternal(newChild: Expression): BitmapCount =
     copy(child = newChild)
@@ -197,7 +176,7 @@ case class BitmapConstructAgg(child: Expression,
   override def aggBufferAttributes: Seq[AttributeReference] = bitmapAttr :: Nil
 
   override def defaultResult: Option[Literal] =
-    Option(Literal(Array.fill[Byte](BitmapFunctions.NUM_BYTES)(0)))
+    Option(Literal(Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)))
 
   override def inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
@@ -206,7 +185,7 @@ case class BitmapConstructAgg(child: Expression,
   private val bitmapAttr = AttributeReference("bitmap", BinaryType, nullable = false)()
 
   override def initialize(buffer: InternalRow): Unit = {
-    buffer.update(mutableAggBufferOffset, Array.fill[Byte](BitmapFunctions.NUM_BYTES)(0))
+    buffer.update(mutableAggBufferOffset, Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0))
   }
 
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
@@ -224,7 +203,7 @@ case class BitmapConstructAgg(child: Expression,
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
     val bitmap1 = buffer1.getBinary(mutableAggBufferOffset)
     val bitmap2 = buffer2.getBinary(inputAggBufferOffset)
-    BitmapFunctions.merge(bitmap1, bitmap2)
+    BitmapExpressionUtils.bitmapMerge(bitmap1, bitmap2)
   }
 
   override def eval(buffer: InternalRow): Any = {
@@ -286,7 +265,7 @@ case class BitmapOrAgg(child: Expression,
   override def aggBufferAttributes: Seq[AttributeReference] = bitmapAttr :: Nil
 
   override def defaultResult: Option[Literal] =
-    Option(Literal(Array.fill[Byte](BitmapFunctions.NUM_BYTES)(0)))
+    Option(Literal(Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)))
 
   override def inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
@@ -295,21 +274,21 @@ case class BitmapOrAgg(child: Expression,
   private val bitmapAttr = AttributeReference("bitmap", BinaryType, false)()
 
   override def initialize(buffer: InternalRow): Unit = {
-    buffer.update(mutableAggBufferOffset, Array.fill[Byte](BitmapFunctions.NUM_BYTES)(0))
+    buffer.update(mutableAggBufferOffset, Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0))
   }
 
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val input_bitmap = child.eval(input).asInstanceOf[Array[Byte]]
     if (input_bitmap != null) {
       val bitmap = buffer.getBinary(mutableAggBufferOffset)
-      BitmapFunctions.merge(bitmap, input_bitmap)
+      BitmapExpressionUtils.bitmapMerge(bitmap, input_bitmap)
     }
   }
 
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
     val bitmap1 = buffer1.getBinary(mutableAggBufferOffset)
     val bitmap2 = buffer2.getBinary(inputAggBufferOffset)
-    BitmapFunctions.merge(bitmap1, bitmap2)
+    BitmapExpressionUtils.bitmapMerge(bitmap1, bitmap2)
   }
 
   override def eval(buffer: InternalRow): Any = {

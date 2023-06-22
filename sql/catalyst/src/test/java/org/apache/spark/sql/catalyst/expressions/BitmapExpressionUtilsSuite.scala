@@ -18,15 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types._
 
-class BitmapExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class BitmapExpressionUtilsSuite extends SparkFunSuite {
 
   test("bitmap_bucket_number with positive inputs") {
     Seq((0L, 0L), (1L, 1L), (2L, 1L), (3L, 1L),
       (32768L, 1L), (32769L, 2L), (32770L, 2L)).foreach {
       case (input, expected) =>
-        checkEvaluation(BitmapBucketNumber(Literal.create(input, LongType)), expected)
+        assert(BitmapExpressionUtils.bitmapBucketNumber(input) == expected)
     }
   }
 
@@ -34,19 +33,15 @@ class BitmapExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq((-1L, 0L), (-2L, 0L), (-3L, 0L),
       (-32767L, 0L), (-32768L, -1L), (-32769L, -1L)).foreach {
       case (input, expected) =>
-        checkEvaluation(BitmapBucketNumber(Literal.create(input, LongType)), expected)
+        assert(BitmapExpressionUtils.bitmapBucketNumber(input) == expected)
     }
-  }
-
-  test("bitmap_bucket_number with null input") {
-    checkEvaluation(BitmapBucketNumber(Literal.create(null, LongType)), null)
   }
 
   test("bitmap_bit_position with positive inputs") {
     Seq((0L, 0L), (1L, 0L), (2L, 1L), (3L, 2L),
       (32768L, 32767L), (32769L, 0L), (32770L, 1L)).foreach {
       case (input, expected) =>
-        checkEvaluation(BitmapBitPosition(Literal.create(input, LongType)), expected)
+        assert(BitmapExpressionUtils.bitmapBitPosition(input) == expected)
     }
   }
 
@@ -54,16 +49,12 @@ class BitmapExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq((-1L, 1L), (-2L, 2L), (-3L, 3L),
       (-32767L, 32767L), (-32768L, 0L), (-32769L, 1L)).foreach {
       case (input, expected) =>
-        checkEvaluation(BitmapBitPosition(Literal.create(input, LongType)), expected)
+        assert(BitmapExpressionUtils.bitmapBitPosition(input) == expected)
     }
   }
 
-  test("bitmap_bit_position with null input") {
-    checkEvaluation(BitmapBitPosition(Literal.create(null, LongType)), null)
-  }
-
   private def createBitmap(): Array[Byte] = {
-    Array.fill[Byte](BitmapFunctions.NUM_BYTES)(0)
+    Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)
   }
 
   private def clearBitmap(bitmap: Array[Byte]): Unit = {
@@ -78,22 +69,22 @@ class BitmapExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("bitmap_count empty") {
     val bitmap = createBitmap()
-    checkEvaluation(BitmapCount(Literal.create(bitmap, BinaryType)), 0L)
+    assert(BitmapExpressionUtils.bitmapCount(bitmap) == 0L)
   }
 
   test("bitmap_count") {
     val bitmap = createBitmap()
     setBitmapBits(bitmap, 0, 0x01)
-    checkEvaluation(BitmapCount(Literal.create(bitmap, BinaryType)), 1L)
+    assert(BitmapExpressionUtils.bitmapCount(bitmap) == 1L)
 
     clearBitmap(bitmap)
     setBitmapBits(bitmap, 0, 0xff)
-    checkEvaluation(BitmapCount(Literal.create(bitmap, BinaryType)), 8L)
+    assert(BitmapExpressionUtils.bitmapCount(bitmap) == 8L)
 
     setBitmapBits(bitmap, 1, 0x22)
-    checkEvaluation(BitmapCount(Literal.create(bitmap, BinaryType)), 10L)
+    assert(BitmapExpressionUtils.bitmapCount(bitmap) == 10L)
 
     setBitmapBits(bitmap, bitmap.length - 1, 0x67)
-    checkEvaluation(BitmapCount(Literal.create(bitmap, BinaryType)), 15L)
+    assert(BitmapExpressionUtils.bitmapCount(bitmap) == 15L)
   }
 }
