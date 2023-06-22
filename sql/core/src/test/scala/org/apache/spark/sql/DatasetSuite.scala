@@ -68,6 +68,14 @@ class DatasetSuite extends QueryTest
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
 
+  test("udf with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val f = functions.udf((row: Row) => row.schema.fieldNames)
+    checkDataset(df.select(f(struct(df.columns map col: _*))), Row(1, 2, 3))
+  }
+
   test("checkAnswer should compare map correctly") {
     val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
     checkAnswer(

@@ -22,9 +22,11 @@ import scala.reflect.runtime.universe.TypeTag
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.ScalaReflection.localTypeOf
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
 import org.apache.spark.util.Utils
 
@@ -142,7 +144,15 @@ object ScalarUserDefinedFunction {
 
     ScalarUserDefinedFunction(
       function = function,
-      inputEncoders = parameterTypes.map(tag => ScalaReflection.encoderFor(tag)),
+      // Input can be a row because the input data schema can be found from the plan.
+      inputEncoders = parameterTypes.map(tag =>
+        tag.tpe match {
+          case t if t <:< localTypeOf[Row] =>
+            UnboundRowEncoder
+          case _ =>
+            ScalaReflection.encoderFor(tag)
+        }),
+      // Output cannot be a row as there is no good way to get the return data type.
       outputEncoder = ScalaReflection.encoderFor(returnType))
   }
 

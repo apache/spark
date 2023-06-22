@@ -27,7 +27,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.connect.client.util.QueryTest
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col, struct, udf}
 
 /**
  * All tests in this class requires client UDF defined in this test class synced with the server.
@@ -226,6 +226,14 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
         .reduce(new ReduceFunction[Long] {
           override def call(v1: Long, v2: Long): Long = v1 + v2
         }) == 55)
+  }
+
+  test("udf with row input encoder") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val f = udf((row: Row) => row.schema.fieldNames)
+    checkDataset(df.select(f(struct(df.columns map col: _*))), Row(Seq("a", "b", "c")))
   }
 
   test("Filter with row input encoder") {
