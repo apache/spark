@@ -119,6 +119,15 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Release any used resources.
    */
   def close(): Unit
+
+  def containsKey(key: InternalRow): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
+  def containsKey(key: Long): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
 }
 
 private[execution] object HashedRelation {
@@ -260,6 +269,15 @@ private[joins] class UnsafeHashedRelation(
     } else {
       null
     }
+  }
+
+  override def containsKey(key: InternalRow): Boolean = {
+    val unsafeKey = key.asInstanceOf[UnsafeRow]
+    val map = binaryMap // avoid the compiler error
+    val loc = new map.Location // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
+    loc.isDefined
   }
 
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
@@ -669,6 +687,24 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     null
   }
 
+  def containsKey(key: Long): Boolean = {
+    if (isDense) {
+      if (key >= minKey && key <= maxKey) {
+        val value = array((key - minKey).toInt)
+        return value > 0
+      }
+    } else {
+      var pos = firstSlot(key)
+      while (array(pos + 1) != 0) {
+        if (array(pos) == key) {
+          return true
+        }
+        pos = nextSlot(pos)
+      }
+    }
+    false
+  }
+
   /**
    * Returns an iterator of UnsafeRow for multiple linked values.
    */
@@ -1009,6 +1045,16 @@ class LongHashedRelation(
   override def getValue(key: Long): InternalRow = map.getValue(key, resultRow)
 
   override def keyIsUnique: Boolean = map.keyIsUnique
+
+  override def containsKey(key: Long): Boolean = map.containsKey(key)
+
+  override def containsKey(key: InternalRow): Boolean = {
+    if (key.isNullAt(0)) {
+      false
+    } else {
+      containsKey(key.getLong(0))
+    }
+  }
 
   override def close(): Unit = {
     map.free()

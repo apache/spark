@@ -276,6 +276,10 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     return this.totalJoinKeys;
   }
 
+  public HashedRelation getUnderlyingRelation() {
+    return this.bcVar.getValue();
+  }
+
   @Override
   public void invalidateSelf() {
     removeBroadcast(this.bcVar.id());

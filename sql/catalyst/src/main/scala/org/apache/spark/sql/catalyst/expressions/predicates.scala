@@ -1220,10 +1220,18 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
-case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapper,
-      countCorrectionVariable: String, localInsetVarTerm: String) extends UnaryExpression with
-  Predicate  {
+case class InWithBroadcastVar(
+    child: Expression,
+    bcVar: BroadcastedJoinKeysWrapper,
+    countCorrectionVariable: String,
+    localInsetVarTerm: String,
+    singleKeyUnsafeRowWriter: String)
+  extends UnaryExpression with Predicate {
 
+  // TODO: Asif: Eliminate the deserialized getKeysAsSet call. and directly use the HashedRelation
+  // but that is problematic as it would require HashedRelation to be defined in catalyst module
+  // or move BroadcastJoinKeysWrapper trait to sql module. But moving the trait to sql module
+  // will create problems as catalyst package needs access to BroadcastJoinKeysWrapper trait
   @transient private lazy val inset: java.util.Set[Object] = this.bcVar.getKeysAsSet()
 
   @transient private lazy val catalystToScalaConverter: Any => Any =
@@ -1250,7 +1258,38 @@ case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapp
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  private def evaluateUsingHashedRelation(
+                                           resultTerm: String,
+                                           keyTerm: ExprCode): String = {
+    // since we are going to use HashedRelation we do not need to convert the catalyst data type
+    // to scala types
+    if (CatalystTypeConverters.isPrimitive(child.dataType)) {
+      s"""
+         |if(!${keyTerm.isNull}) {
+         |  $resultTerm = $localInsetVarTerm.containsKey(${keyTerm.value});
+         |}
+         |""".stripMargin
+    } else {
+      // we need to deal with internal row
+      val fieldWritingCode = this.child.dataType match {
+        case DecimalType.Fixed(precision, scale) =>
+          s"$singleKeyUnsafeRowWriter.write(0, ${keyTerm.value}, $precision, $scale);"
+        case _ => s"$singleKeyUnsafeRowWriter.write(0, ${keyTerm.value});"
+      }
+      s"""
+         |if(!${keyTerm.isNull}) {
+         |  $singleKeyUnsafeRowWriter.reset();
+         |  $fieldWritingCode
+         |  $resultTerm = $localInsetVarTerm.containsKey($singleKeyUnsafeRowWriter.getRow());
+         |}
+         |""".stripMargin
+    }
+  }
+
+  private def evaluateUsingDeserializedJavaSet(
+                                                resultTerm: String,
+                                                keyTerm: ExprCode,
+                                                ctx: CodegenContext): String = {
     val converterInitCode = if (CatalystTypeConverters.isPrimitive(child.dataType)) {
       "null;"
     } else {
@@ -1259,36 +1298,53 @@ case class InWithBroadcastVar(child: Expression, bcVar: BroadcastedJoinKeysWrapp
       s"${CatalystTypeConverters.getClass.getName}.MODULE$$.createToScalaConverter(" +
         s"$dataTypeRefTerm);"
     }
-    val filterCountIncrementCode = s"++${this.countCorrectionVariable}"
     val catalystToScalaConverterTerm = ctx.addMutableState(
       classOf[Any => Any].getName,
       "catalystToScalaConverter",
       varName =>
         s"""
            |$varName = $converterInitCode
-           |""".stripMargin )
-    val resultTerm = ctx.freshName("resultTerm")
+           |""".stripMargin)
+    s"""
+       |if ($catalystToScalaConverterTerm != null) {
+       |  if(!${keyTerm.isNull}) {
+       |    $resultTerm = $localInsetVarTerm.contains($catalystToScalaConverterTerm.apply(
+       |             ${keyTerm.value}));
+       |  }
+       |} else {
+       |  if (!${keyTerm.isNull}) {
+       |    $resultTerm = $localInsetVarTerm.contains(${keyTerm.value});
+       |  }
+       |}
+       |""".stripMargin
+
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val columnTermGen = child.genCode(ctx)
+    val resultTerm = ctx.freshName("resultTerm")
+    val evaluationCode = if (bcVar.getTotalJoinKeys == 1) {
+      // evaluate using HashedRelation
+      evaluateUsingHashedRelation(resultTerm, columnTermGen)
+    } else {
+      // TODO: Asif: Eventually we need to remove this part completely
+      // evaluate using deserialized Java Set
+      evaluateUsingDeserializedJavaSet(resultTerm, columnTermGen, ctx)
+    }
+
+    val filterCountIncrementCode = s"++${this.countCorrectionVariable}"
+
     ev.copy(code =
       code"""
         ${columnTermGen.code}
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = false;
         boolean $resultTerm = false;
-        if ($catalystToScalaConverterTerm != null) {
-           if(!${columnTermGen.isNull}) {
-             $resultTerm = $localInsetVarTerm.contains($catalystToScalaConverterTerm.apply(
-             ${columnTermGen.value}));
-           }
-        } else {
-          if (!${columnTermGen.isNull}) {
-            $resultTerm = $localInsetVarTerm.contains(${columnTermGen.value});
-          }
-        }
+        $evaluationCode
         if (!$resultTerm) {
           $filterCountIncrementCode;
         }
         ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = $resultTerm;
-       """)
+      """)
   }
 
   override protected def withNewChildInternal(newChild: Expression): InWithBroadcastVar =

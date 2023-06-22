@@ -22,8 +22,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{broadcast, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.bcVar.BroadcastedJoinKeysWrapper
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression, InWithBroadcastVar, SortOrder, SpecializedGetters, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BindReferences, Expression,
+  InWithBroadcastVar, SortOrder, SpecializedGetters, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{PushedBroadcastFilterData, SupportsRuntimeFiltering}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.joins.BroadcastHashJoinUtil
+import org.apache.spark.sql.execution.joins.{BroadcastedJoinKeysWrapperImpl,
+  BroadcastHashJoinUtil, HashedRelation}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -75,7 +76,8 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
 
   private var processedBCVar: Boolean = false
   private var filterCountCorrectionTerm: Option[String] = None
-  private var localSetInitCode: String = ""
+  private var localSetOrHashedRelInitCode: String = ""
+  private var commonSingleFieldUnsafeRowWriterVar = ""
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -112,7 +114,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     } else {
       val newFilterCondn = pushedFilters.map(bcData => {
         val attribute = this.output.find(_.name == bcData.columnName).get
-        InWithBroadcastVar(attribute, bcData.bcVar, this.filterCountCorrectionTerm.get, "")
+        InWithBroadcastVar(attribute, bcData.bcVar, this.filterCountCorrectionTerm.get, "", "")
       }).reduce[Expression](And(_, _))
       val boundExpr = BindReferences.bindReference(newFilterCondn, this.output)
       retVal.mapPartitionsWithIndexInternal { (index, iter) =>
@@ -173,25 +175,38 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
         // add broadcast vars as field of generated class and get the names of field storing the
         // ref
         val broadcastVarTermsFieldVars = for (bcData <- pushedBroadcastFilters) yield {
-          ctx.addReferenceObj("broadcastVarWrapper", bcData.bcVar,
-            classOf[BroadcastedJoinKeysWrapper].getName)
+          ctx.addReferenceObj("broadcastVarWrapper",
+            bcData.bcVar.asInstanceOf[BroadcastedJoinKeysWrapperImpl],
+            classOf[BroadcastedJoinKeysWrapperImpl].getName)
         }
 
         val localBroadcastVarTerms = Array.fill[String](broadcastVarTermsFieldVars.size)(
           ctx.freshName("localInset"))
 
-        localSetInitCode = localBroadcastVarTerms.zip(broadcastVarTermsFieldVars).map {
-          case (localTerm, refTerm) =>
+        this.commonSingleFieldUnsafeRowWriterVar = ctx.freshName("commonKeyUnsafeRowWriter")
+
+        localSetOrHashedRelInitCode = localBroadcastVarTerms.zip(broadcastVarTermsFieldVars).
+          zipWithIndex.map {
+          case ((localTerm, refTerm), indx) =>
+            val (termClass, funcToCall) =
+              if (pushedBroadcastFilters(indx).bcVar.getTotalJoinKeys == 1) {
+                (classOf[HashedRelation].getName, "getUnderlyingRelation")
+              } else {
+                (classOf[java.util.Set[Any]].getName, "getKeysAsSet")
+              }
             s"""
-               |${classOf[java.util.Set[Any]].getName} $localTerm = $refTerm.getKeysAsSet();
+               |$termClass $localTerm = $refTerm.$funcToCall();
                |""".stripMargin
         }.mkString("\n")
 
+        // TODO: Asif:. Do not evaluate filter for the bottom most broadcast hash join as if
+        // the tuple is filtered to be selected, then it would unnecessary be again have to be
+        // evaluated.
         val newFilterExpr = pushedBroadcastFilters.zip(localBroadcastVarTerms).map{
           case (bcData, localInsetTerm) =>
           val attribute = this.output.find(_.name == bcData.columnName).get
           InWithBroadcastVar(attribute, bcData.bcVar, this.filterCountCorrectionTerm.get,
-            localInsetTerm)
+            localInsetTerm, this.commonSingleFieldUnsafeRowWriterVar)
         }.reduce[Expression](And(_, _))
         val filterPlan = FilterExec(newFilterExpr, ColumnarToRowExec.this)
         filterPlan.produce(ctx, this.parent)
@@ -311,12 +326,27 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
     } else {
       "// shouldStop check is eliminated"
     }
+
+
+
+    val unsafeRowWriterInitCode = if (this.commonSingleFieldUnsafeRowWriterVar.isEmpty) {
+      ""
+    } else {
+      val unsafeRowWriterClass = classOf[UnsafeRowWriter].getName
+      s"""
+         |$unsafeRowWriterClass $commonSingleFieldUnsafeRowWriterVar =
+         | new $unsafeRowWriterClass(1, 1024);
+         | $commonSingleFieldUnsafeRowWriterVar.resetRowWriter();
+         |""".stripMargin
+    }
+
     s"""
        |if ($batch == null) {
        |  $nextBatchFuncName();
        |}
        |$filterCountInitCode;
-       |$localSetInitCode
+       |$localSetOrHashedRelInitCode
+       |$unsafeRowWriterInitCode
        |while ($limitNotReachedCond $batch != null) {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
