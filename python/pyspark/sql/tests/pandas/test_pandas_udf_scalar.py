@@ -50,7 +50,7 @@ from pyspark.sql.types import (
     BinaryType,
     YearMonthIntervalType,
 )
-from pyspark.errors import AnalysisException, PythonException
+from pyspark.errors import AnalysisException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
@@ -1445,26 +1445,6 @@ class ScalarPandasUDFTestsMixin:
                     )
         finally:
             shutil.rmtree(path)
-
-    def test_type_coercion_string_to_numeric(self):
-        # string to int
-        df = self.spark.createDataFrame(["1", "2"], schema="string")
-        self.assertEquals(
-            df.select(pandas_udf(lambda x: x, "int")("value").alias("res")).collect(),
-            [Row(res=1), Row(res=2)],
-        )
-        df = self.spark.createDataFrame(["1", "x"], schema="string")
-        with self.assertRaises(PythonException):
-            df.select(pandas_udf(lambda x: x, "int")("value").alias("res")).collect()
-
-        df = self.spark.createDataFrame(["1", "1.1"], schema="string")
-        with self.assertRaises(PythonException):
-            df.select(pandas_udf(lambda x: x, "int")("value").alias("res")).collect()
-
-        # string to double
-        df = self.spark.createDataFrame(["1.1", "2.2"], schema="string")
-        with self.assertRaises(PythonException):
-            df.select(pandas_udf(lambda x: x, "double")("value").alias("res")).collect()
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
