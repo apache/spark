@@ -25,6 +25,8 @@ import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.json4s._
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
@@ -50,7 +52,6 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -87,6 +88,15 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  // SparkConnectPlanner is used per request.
+  private lazy val pythonIncludes = {
+    implicit val formats = DefaultFormats
+    parse(session.conf.get("spark.connect.pythonUDF.includes", "[]"))
+      .extract[Array[String]]
+      .toList
+      .asJava
+  }
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
@@ -1418,13 +1428,13 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
     Utils.deserialize[UdfPacket](
       fun.getScalarScalaUdf.getPayload.toByteArray,
-      SparkConnectArtifactManager.classLoaderWithArtifacts)
+      Utils.getContextOrSparkClassLoader)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
     Utils.deserialize[ForeachWriterPacket](
       fun.getPayload.toByteArray,
-      SparkConnectArtifactManager.classLoaderWithArtifacts)
+      Utils.getContextOrSparkClassLoader)
   }
 
   /**
@@ -1481,8 +1491,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       command = fun.getCommand.toByteArray,
       // Empty environment variables
       envVars = Maps.newHashMap(),
-      pythonIncludes =
-        SparkConnectArtifactManager.getOrCreateArtifactManager.getSparkConnectPythonIncludes.asJava,
+      pythonIncludes = pythonIncludes,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
