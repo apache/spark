@@ -2527,6 +2527,44 @@
     },
     "sqlState" : "42605"
   },
+  "CANNOT_LOAD_STATE_STORE" : {
+    "message" : [
+      "An error occurred during loading state."
+    ],
+    "subClass" : {
+      "INVALID_UNSAFE_ROW_EXCEPTION" : {
+        "message" : [
+          "The streaming query failed by state format invalidation.",
+          "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed among restart.",
+          "For the first case, you can try to restart the application without checkpoint or use the legacy Spark version to process the streaming state.",
+          "<err>"
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: <message>."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: <message>."
+        ]
+      },
+      "UNRELEASED_THREAD_ERROR": {
+        "message" : [
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      },
+      "CANNOT_READ_CHECKPOINT" : {
+        "message" : "Cannot read RocksDB checkpoint metadata of version <versionLine>."
+      },
+      "UNEXPECTED_FILE_SIZE" : {
+        "message" : "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+      }
+    },
+    "sqlState" : "40000"
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
@@ -5211,16 +5249,6 @@
   "_LEGACY_ERROR_TEMP_2256" : {
     "message" : [
       "Foreach writer has been aborted due to a task failure."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2258" : {
-    "message" : [
-      "Error reading delta file <fileToRead> of <clazz>: key size cannot be <keySize>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2259" : {
-    "message" : [
-      "Error reading snapshot file <fileToRead> of <clazz>: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2260" : {

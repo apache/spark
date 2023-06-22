@@ -38,6 +38,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.util.Utils
 
@@ -452,9 +453,8 @@ class RocksDBFileManager(
         val localFileSize = localFile.length()
         val expectedSize = file.sizeBytes
         if (localFileSize != expectedSize) {
-          throw new IllegalStateException(
-            s"Copied $dfsFile to $localFile," +
-              s" expected $expectedSize bytes, found $localFileSize bytes ")
+          throw QueryExecutionErrors.unexpectedFileSize(dfsFile, localFile, expectedSize,
+            localFileSize)
         }
         filesCopied += 1
         bytesCopied += localFileSize
@@ -640,8 +640,7 @@ object RocksDBCheckpointMetadata {
     try {
       val versionLine = reader.readLine()
       if (versionLine != s"v$VERSION") {
-        throw new IllegalStateException(
-          s"Cannot read RocksDB checkpoint metadata of version $versionLine")
+        throw QueryExecutionErrors.cannotReadCheckpoint(versionLine)
       }
       Serialization.read[RocksDBCheckpointMetadata](reader)
     } finally {

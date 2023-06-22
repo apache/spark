@@ -456,9 +456,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     val sourceStream = try {
       fm.open(fileToRead)
     } catch {
-      case f: FileNotFoundException =>
-        throw new IllegalStateException(
-          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+      case _: FileNotFoundException =>
+        throw QueryExecutionErrors.failedToReadDeltaFileError(
+          fileToRead, toString(), s"$fileToRead does not exist"
+        )
     }
     try {
       input = decompressStream(sourceStream)
@@ -469,7 +470,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw QueryExecutionErrors.failedToReadDeltaFileError(fileToRead, toString(), keySize)
+          throw QueryExecutionErrors.failedToReadDeltaFileError(
+            fileToRead, toString(), s"key size cannot be ${keySize}"
+          )
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)

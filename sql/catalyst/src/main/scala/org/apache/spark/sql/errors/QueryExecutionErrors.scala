@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{File, FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.{DateTimeException, LocalDate}
@@ -29,8 +29,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-
 import org.apache.spark._
+
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.AnalysisException
@@ -2466,19 +2466,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         s"but it's ${endSeconds.toString} now.")
   }
 
-  def failedToReadDeltaFileError(fileToRead: Path, clazz: String, keySize: Int): Throwable = {
+  def failedToReadDeltaFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2258",
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE",
       messageParameters = Map(
         "fileToRead" -> fileToRead.toString(),
         "clazz" -> clazz,
-        "keySize" -> keySize.toString()),
+        "message" -> message),
       cause = null)
   }
 
   def failedToReadSnapshotFileError(fileToRead: Path, clazz: String, message: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2259",
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE",
       messageParameters = Map(
         "fileToRead" -> fileToRead.toString(),
         "clazz" -> clazz,
@@ -2848,5 +2848,55 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "protobufColumn" -> protobufColumn,
         "data" -> data,
         "enumString" -> enumString))
+  }
+
+  def invalidUnsafeRowException(err: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_UNSAFE_ROW_EXCEPTION",
+      messageParameters = Map(
+        "err" -> err
+      ),
+      cause = null
+    )
+  }
+
+  def unreleasedThreadError(loggingId: String, newAcquiredThreadInfo: String,
+                            AcquiredThreadInfo: String, timeWaitedMs: Long,
+                            stackTraceOutput: String): Throwable = {
+    new SparkException (
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
+      messageParameters = Map(
+        "loggingId" -> loggingId,
+        "newAcquiredThreadInfo" -> newAcquiredThreadInfo,
+        "AcquiredThreadInfo" -> AcquiredThreadInfo,
+        "timeWaitedMs" -> timeWaitedMs.toString,
+        "stackTraceOutput" -> stackTraceOutput
+      ),
+      cause = null
+    )
+  }
+
+  def cannotReadCheckpoint(versionLine: String): Throwable = {
+    new SparkException (
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+      messageParameters = Map(
+        "versionLine" -> versionLine
+      ),
+      cause = null
+    )
+  }
+
+  def unexpectedFileSize(dfsFile: Path, localFile: File, expectedSize: Long,
+                         localFileSize: Long): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_FILE_SIZE",
+      messageParameters = Map(
+        "dfsFile" -> dfsFile.toString,
+        "localFile" -> localFile.toString,
+        "expectedSize" -> expectedSize.toString,
+        "localFileSize" -> localFileSize.toString
+      ),
+      cause = null
+    )
   }
 }
