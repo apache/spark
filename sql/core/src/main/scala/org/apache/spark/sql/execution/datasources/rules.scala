@@ -389,23 +389,25 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
     }
 
     // Create a project if this INSERT has a user-specified column list.
-    val isByName = insert.userSpecifiedCols.nonEmpty
-    val query = if (isByName) {
-      createProjectForByNameQuery(insert)
+    val hasColumnList = insert.userSpecifiedCols.nonEmpty
+    val query = if (hasColumnList) {
+      createProjectForByNameQuery(tblName, insert)
     } else {
       insert.query
     }
     val newQuery = try {
       TableOutputResolver.resolveOutputColumns(
-        tblName, expectedColumns, query, byName = isByName, conf, supportColDefaultValue = true)
+        tblName, expectedColumns, query, byName = hasColumnList || insert.byName, conf,
+        supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
-          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH" =>
+        (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
+          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
         val newException = e.copy(
           errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
           messageParameters = e.messageParameters ++ Map(
-            "tableColumns" -> insert.table.output.map(c => s"'${c.name}'").mkString(", "),
-            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => s"'$c'").mkString(", ")
+            "tableColumns" -> insert.table.output.map(c => toSQLId(c.name)).mkString(", "),
+            "staticPartCols" -> staticPartCols.toSeq.sorted.map(c => toSQLId(c)).mkString(", ")
           ))
         newException.setStackTrace(e.getStackTrace)
         throw newException
@@ -425,7 +427,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
@@ -502,17 +504,18 @@ object PreReadCheck extends (LogicalPlan => Unit) {
  */
 object PreWriteCheck extends (LogicalPlan => Unit) {
 
-  def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
-
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, _, query, _, _) =>
+      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition,
+          _, query, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
         }
         if (srcRelations.contains(relation)) {
-          failAnalysis("Cannot insert into table that is also being read from.")
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_INSERT.READ_FROM",
+            messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         } else {
           // OK
         }
@@ -522,18 +525,25 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
           // Right now, we do not support insert into a non-file-based data source table with
           // partition specs.
-          case _: InsertableRelation if partition.nonEmpty =>
-            failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
+          case i: InsertableRelation if partition.nonEmpty =>
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_INSERT.NOT_PARTITIONED",
+              messageParameters = Map("relationId" -> toSQLId(i.toString)))
 
-          case _ => failAnalysis(s"$relation does not allow insertion.")
+          case _ =>
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_INSERT.NOT_ALLOWED",
+              messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
-        failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          messageParameters = Map.empty)
 
       case _ => // OK
     }

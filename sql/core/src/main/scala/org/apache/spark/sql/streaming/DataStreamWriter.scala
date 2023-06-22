@@ -30,7 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, TableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
@@ -290,10 +290,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
        * Note, currently the new table creation by this API doesn't fully cover the V2 table.
        * TODO (SPARK-33638): Full support of v2 table creation
        */
-      val tableSpec = TableSpec(
+      val tableSpec = UnresolvedTableSpec(
         Map.empty[String, String],
         Some(source),
-        Map.empty[String, String],
+        OptionList(Seq.empty),
         extraOptions.get("path"),
         None,
         None,
@@ -355,8 +355,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       query
     } else if (source == SOURCE_NAME_FOREACH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = ForeachWriterTable[Any](foreachWriter,
-        ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]])
+      val sink = ForeachWriterTable[Any](foreachWriter, foreachWriterEncoder)
       startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
@@ -451,12 +450,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     foreachImplementation(writer.asInstanceOf[ForeachWriter[Any]])
   }
 
-  private[sql] def foreachImplementation(writer: ForeachWriter[Any]): DataStreamWriter[T] = {
+  private[sql] def foreachImplementation(writer: ForeachWriter[Any],
+      encoder: ExpressionEncoder[Any] = null): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
       throw new IllegalArgumentException("foreach writer cannot be null")
+    }
+    if (encoder != null) {
+      this.foreachWriterEncoder = encoder
     }
     this
   }
@@ -539,6 +542,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
   private var foreachWriter: ForeachWriter[Any] = null
+
+  private var foreachWriterEncoder: ExpressionEncoder[Any] =
+    ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]]
 
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, DeleteFromTable, InsertIntoStatement, LogicalPlan, MergeIntoTable, UnaryNode, UpdateTable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Literal, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -47,10 +47,10 @@ case class Parameter(name: String) extends LeafExpression with Unevaluable {
  * The logical plan representing a parameterized query. It will be removed during analysis after
  * the parameters are bind.
  */
-case class ParameterizedQuery(child: LogicalPlan, args: Map[String, Expression]) extends UnaryNode {
+case class ParameterizedQuery(child: LogicalPlan, args: Map[String, Expression])
+  extends UnresolvedUnaryNode {
+
   assert(args.nonEmpty)
-  override def output: Seq[Attribute] = Nil
-  override lazy val resolved = false
   final override val nodePatterns: Seq[TreePattern] = Seq(PARAMETERIZED_QUERY)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
@@ -72,23 +72,6 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
       case p @ ParameterizedQuery(child, args) if !child.containsPattern(UNRESOLVED_WITH) =>
-        // Some commands may store the original SQL text, like CREATE VIEW, GENERATED COLUMN, etc.
-        // We can't store the original SQL text with parameters, as we don't store the arguments and
-        // are not able to resolve it after parsing it back. Since parameterized query is mostly
-        // used to avoid SQL injection for SELECT queries, we simply forbid non-DML commands here.
-        child match {
-          case _: InsertIntoStatement => // OK
-          case _: UpdateTable => // OK
-          case _: DeleteFromTable => // OK
-          case _: MergeIntoTable => // OK
-          case cmd: Command =>
-            child.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-              messageParameters = Map("statement" -> cmd.nodeName)
-            )
-          case _ => // OK
-        }
-
         args.find(!_._2.isInstanceOf[Literal]).foreach { case (name, expr) =>
           expr.failAnalysis(
             errorClass = "INVALID_SQL_ARG",
