@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
@@ -1316,6 +1316,109 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              |""".stripMargin)
       }
       assert(e3.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+    }
+  }
+
+  test("unsupported merge into conditions") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, salary INT, dep STRING")
+
+      val sourceRows = Seq(
+        (1, 100, "hr"),
+        (2, 200, "finance"),
+        (3, 300, "hr"))
+      sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      val unsupportedSourceExprs = Map(
+        "s.pk < rand()" -> "Non-deterministic expressions are not allowed",
+        "max(s.pk) < 10" -> "Aggregates are not allowed",
+        s"s.pk IN (SELECT pk FROM $tableNameAsString)" -> "Subqueries are not allowed")
+
+      unsupportedSourceExprs.map { case (expr, errMsg) =>
+        val e1 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk AND $expr
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |""".stripMargin)
+        }
+        assert(e1.message.contains("unsupported SEARCH condition") && e1.message.contains(errMsg))
+
+        val e2 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND $expr THEN
+               | UPDATE SET *
+               |""".stripMargin)
+        }
+        assert(e2.message.contains("unsupported UPDATE condition") && e2.message.contains(errMsg))
+
+        val e3 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED AND $expr THEN
+               | DELETE
+               |""".stripMargin)
+        }
+        assert(e3.message.contains("unsupported DELETE condition") && e3.message.contains(errMsg))
+
+        val e4 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN NOT MATCHED AND $expr THEN
+               | INSERT *
+               |""".stripMargin)
+        }
+        assert(e4.message.contains("unsupported INSERT condition") && e4.message.contains(errMsg))
+      }
+
+      val unsupportedTargetExprs = Map(
+        "t.pk < rand()" -> "Non-deterministic expressions are not allowed",
+        "max(t.pk) < 10" -> "Aggregates are not allowed",
+        s"t.pk IN (SELECT pk FROM $tableNameAsString)" -> "Subqueries are not allowed")
+
+      unsupportedTargetExprs.map { case (expr, errMsg) =>
+        val e1 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk AND $expr
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |""".stripMargin)
+        }
+        assert(e1.message.contains("unsupported SEARCH condition") && e1.message.contains(errMsg))
+
+        val e2 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN NOT MATCHED BY SOURCE AND $expr THEN
+               | UPDATE SET t.pk = -1
+               |""".stripMargin)
+        }
+        assert(e2.message.contains("unsupported UPDATE condition") && e2.message.contains(errMsg))
+
+        val e3 = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN NOT MATCHED BY SOURCE AND $expr THEN
+               | DELETE
+               |""".stripMargin)
+        }
+        assert(e3.message.contains("unsupported DELETE condition") && e3.message.contains(errMsg))
+      }
     }
   }
 
