@@ -31,10 +31,11 @@ import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map, WrappedArray}
+import scala.collection.mutable.{ArrayBuffer, HashMap, WrappedArray}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
+import com.google.common.cache.CacheBuilder
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.slf4j.MDC
 
@@ -52,6 +53,14 @@ import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
+
+private[spark] class IsolatedSessionState(
+  val sessionUUID: String,
+  val urlClassLoader: MutableURLClassLoader,
+  var replClassLoader: ClassLoader,
+  val currentFiles: HashMap[String, Long],
+  val currentJars: HashMap[String, Long],
+  val currentArchives: HashMap[String, Long])
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -76,11 +85,6 @@ private[spark] class Executor(
   val stopHookReference = ShutdownHookManager.addShutdownHook(
     () => stop()
   )
-  // Application dependencies (added through SparkContext) that we've fetched so far on this node.
-  // Each map holds the master's timestamp for the version of that file or JAR we got.
-  private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
-  private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
-  private val currentArchives: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -160,16 +164,34 @@ private[spark] class Executor(
 
   private val killOnFatalErrorDepth = conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
 
-  // Create our ClassLoader
-  // do this after SparkEnv creation so can access the SecurityManager
-  private val urlClassLoader = createClassLoader()
-  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  private val systemLoader = Utils.getContextOrSparkClassLoader
+
+  private def newSessionState(
+      sessionUUID: String,
+      classUri: Option[String]): IsolatedSessionState = {
+    val currentFiles = new HashMap[String, Long]
+    val currentJars = new HashMap[String, Long]
+    val currentArchives = new HashMap[String, Long]
+    val urlClassLoader = createClassLoader(currentJars)
+    val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader, classUri)
+    new IsolatedSessionState(
+      sessionUUID, urlClassLoader, replClassLoader, currentFiles, currentJars, currentArchives)
+  }
+
+  // Classloader isolation
+  // The default isolation group
+  val defaultSessionState = newSessionState("default", None)
+
+  val isolatedSessionCache = CacheBuilder.newBuilder()
+    .maximumSize(100)
+    .expireAfterAccess(5, TimeUnit.MINUTES)
+    .build[String, IsolatedSessionState]
 
   // Set the classloader for serializer
-  env.serializer.setDefaultClassLoader(replClassLoader)
+  env.serializer.setDefaultClassLoader(defaultSessionState.replClassLoader)
   // SPARK-21928.  SerializerManager's internal instance of Kryo might get used in netty threads
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
-  env.serializerManager.setDefaultClassLoader(replClassLoader)
+  env.serializerManager.setDefaultClassLoader(defaultSessionState.replClassLoader)
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back. This is guaranteed to be smaller than array bytes limit (2GB)
@@ -273,17 +295,18 @@ private[spark] class Executor(
   private val Seq(initialUserJars, initialUserFiles, initialUserArchives) =
     Seq("jar", "file", "archive").map { key =>
       conf.getOption(s"spark.app.initial.$key.urls").map { urls =>
-        Map(urls.split(",").map(url => (url, appStartTime)): _*)
-      }.getOrElse(Map.empty)
+        immutable.Map(urls.split(",").map(url => (url, appStartTime)): _*)
+      }.getOrElse(immutable.Map.empty)
     }
-  updateDependencies(initialUserFiles, initialUserJars, initialUserArchives)
+  updateDependencies(initialUserFiles, initialUserJars, initialUserArchives, defaultSessionState)
 
   // Plugins need to load using a class loader that includes the executor's user classpath.
   // Plugins also needs to be initialized after the heartbeater started
   // to avoid blocking to send heartbeat (see SPARK-32175).
-  private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
-    PluginContainer(env, resources.asJava)
-  }
+  private val plugins: Option[PluginContainer] =
+    Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
+      PluginContainer(env, resources.asJava)
+    }
 
   metricsPoller.start()
 
@@ -381,9 +404,9 @@ private[spark] class Executor(
       if (killMarkCleanupService != null) {
         killMarkCleanupService.shutdown()
       }
-      if (replClassLoader != null && plugins != null) {
+      if (defaultSessionState != null && plugins != null) {
         // Notify plugins that executor is shutting down so they can terminate cleanly
-        Utils.withContextClassLoader(replClassLoader) {
+        Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
           plugins.foreach(_.shutdown())
         }
       }
@@ -485,6 +508,16 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+
+      // Classloader isolation
+      val isolatedSessionUUID: Option[String] = taskDescription.artifacts.uuid
+      val isolatedSession = isolatedSessionUUID match {
+        case Some(uuid) => isolatedSessionCache.get(
+          uuid,
+          () => newSessionState(uuid, taskDescription.artifacts.replClassDirUri))
+        case _ => defaultSessionState
+      }
+
       setMDCForTask(taskName, mdcProperties)
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
@@ -494,7 +527,7 @@ private[spark] class Executor(
       val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
         threadMXBean.getCurrentThreadCpuTime
       } else 0L
-      Thread.currentThread.setContextClassLoader(replClassLoader)
+      Thread.currentThread.setContextClassLoader(isolatedSession.replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
@@ -509,7 +542,10 @@ private[spark] class Executor(
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
         updateDependencies(
-          taskDescription.addedFiles, taskDescription.addedJars, taskDescription.addedArchives)
+          taskDescription.artifacts.files,
+          taskDescription.artifacts.jars,
+          taskDescription.artifacts.archives,
+          isolatedSession)
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
@@ -961,14 +997,12 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): MutableURLClassLoader = {
+  private def createClassLoader(currentJars: HashMap[String, Long]): MutableURLClassLoader = {
     // Bootstrap the list of jars with the user class path.
     val now = System.currentTimeMillis()
     userClassPath.foreach { url =>
       currentJars(url.getPath().split("/").last) = now
     }
-
-    val currentLoader = Utils.getContextOrSparkClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
@@ -978,9 +1012,9 @@ private[spark] class Executor(
     logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
         urls.mkString("'", ",", "'"))
     if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, currentLoader)
+      new ChildFirstURLClassLoader(urls, systemLoader)
     } else {
-      new MutableURLClassLoader(urls, currentLoader)
+      new MutableURLClassLoader(urls, systemLoader)
     }
   }
 
@@ -988,8 +1022,10 @@ private[spark] class Executor(
    * If the REPL is in use, add another ClassLoader that will read
    * new classes defined by the REPL as the user types code
    */
-  private def addReplClassLoaderIfNeeded(parent: ClassLoader): ClassLoader = {
-    val classUri = conf.get("spark.repl.class.uri", null)
+  private def addReplClassLoaderIfNeeded(
+      parent: ClassLoader,
+      sessionClassUri: Option[String]): ClassLoader = {
+    val classUri = sessionClassUri.getOrElse(conf.get("spark.repl.class.uri", null))
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       new ExecutorClassLoader(conf, env, classUri, parent, userClassPathFirst)
@@ -1004,9 +1040,10 @@ private[spark] class Executor(
    * Visible for testing.
    */
   private[executor] def updateDependencies(
-      newFiles: Map[String, Long],
-      newJars: Map[String, Long],
-      newArchives: Map[String, Long],
+      newFiles: immutable.Map[String, Long],
+      newJars: immutable.Map[String, Long],
+      newArchives: immutable.Map[String, Long],
+      state: IsolatedSessionState,
       testStartLatch: Option[CountDownLatch] = None,
       testEndLatch: Option[CountDownLatch] = None): Unit = {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
@@ -1015,14 +1052,15 @@ private[spark] class Executor(
       // For testing, so we can simulate a slow file download:
       testStartLatch.foreach(_.countDown())
       // Fetch missing dependencies
-      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+      for ((name, timestamp) <- newFiles if state.currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
         // Fetch file with useCache mode, close cache for local mode.
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
           hadoopConf, timestamp, useCache = !isLocal)
-        currentFiles(name) = timestamp
+        state.currentFiles(name) = timestamp
       }
-      for ((name, timestamp) <- newArchives if currentArchives.getOrElse(name, -1L) < timestamp) {
+      for ((name, timestamp) <- newArchives if
+          state.currentArchives.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
         val sourceURI = new URI(name)
         val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
@@ -1035,24 +1073,24 @@ private[spark] class Executor(
           s"Unpacking an archive $name from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
         Utils.deleteRecursively(dest)
         Utils.unpack(source, dest)
-        currentArchives(name) = timestamp
+        state.currentArchives(name) = timestamp
       }
       for ((name, timestamp) <- newJars) {
         val localName = new URI(name).getPath.split("/").last
-        val currentTimeStamp = currentJars.get(name)
-          .orElse(currentJars.get(localName))
+        val currentTimeStamp = state.currentJars.get(name)
+          .orElse(state.currentJars.get(localName))
           .getOrElse(-1L)
         if (currentTimeStamp < timestamp) {
           logInfo(s"Fetching $name with timestamp $timestamp")
           // Fetch file with useCache mode, close cache for local mode.
           Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
             hadoopConf, timestamp, useCache = !isLocal)
-          currentJars(name) = timestamp
+          state.currentJars(name) = timestamp
           // Add it to our class loader
           val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
-          if (!urlClassLoader.getURLs().contains(url)) {
+          if (!state.urlClassLoader.getURLs().contains(url)) {
             logInfo(s"Adding $url to class loader")
-            urlClassLoader.addURL(url)
+            state.urlClassLoader.addURL(url)
           }
         }
       }

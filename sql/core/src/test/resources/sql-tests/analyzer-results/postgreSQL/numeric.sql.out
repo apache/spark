@@ -3841,12 +3841,11 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
   "sqlState" : "21S01",
   "messageParameters" : {
-    "dataColumns" : "'id', 'id', 'val', 'val', '(val * val)'",
-    "reason" : "too many data columns",
-    "tableColumns" : "'id1', 'id2', 'result'",
+    "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
+    "tableColumns" : "`id1`, `id2`, `result`",
     "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }
@@ -4205,7 +4204,8 @@ Project [id#x, val#x]
 -- !query
 DROP TABLE fract_only
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`fract_only`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.fract_only
 
 
 -- !query
@@ -4323,7 +4323,8 @@ Project [a#x, CEIL(a#x) AS CEIL(a)#x, ceiling(a#x) AS ceiling(a)#x, FLOOR(a#x) A
 -- !query
 DROP TABLE ceil_floor_round
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`ceil_floor_round`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.ceil_floor_round
 
 
 -- !query
@@ -4462,7 +4463,8 @@ Project [width_bucket(cast(Infinity as double), cast(1 as double), cast(10 as do
 -- !query
 DROP TABLE width_bucket_test
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`width_bucket_test`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.width_bucket_test
 
 
 -- !query
@@ -4905,64 +4907,75 @@ Aggregate [sum(cast(-9999 as decimal(10,0))) AS sum(-9999)#x]
 -- !query
 DROP TABLE num_data
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_data`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_data
 
 
 -- !query
 DROP TABLE num_exp_add
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_add`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_add
 
 
 -- !query
 DROP TABLE num_exp_sub
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_sub`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_sub
 
 
 -- !query
 DROP TABLE num_exp_div
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_div`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_div
 
 
 -- !query
 DROP TABLE num_exp_mul
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_mul`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_mul
 
 
 -- !query
 DROP TABLE num_exp_sqrt
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_sqrt`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_sqrt
 
 
 -- !query
 DROP TABLE num_exp_ln
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_ln`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_ln
 
 
 -- !query
 DROP TABLE num_exp_log10
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_log10`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_log10
 
 
 -- !query
 DROP TABLE num_exp_power_10_ln
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_exp_power_10_ln`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_exp_power_10_ln
 
 
 -- !query
 DROP TABLE num_result
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_result`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_result
 
 
 -- !query
 DROP TABLE num_input_test
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`num_input_test`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.num_input_test

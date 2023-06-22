@@ -63,8 +63,12 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         }
 
       val executeHolder = sessionHolder.createExecutePlanHolder(v)
+      session.sparkContext.addJobTag(executeHolder.jobTag)
+      session.sparkContext.setInterruptOnCancel(true)
+      // Also set the tag as the JobGroup for all the jobs in the query.
+      // TODO: In the long term, it should be encouraged to use job tag only.
       session.sparkContext.setJobGroup(
-        executeHolder.jobGroupId,
+        executeHolder.jobTag,
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
         interruptOnCancel = true)
 
@@ -89,6 +93,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
         }
       } finally {
+        session.sparkContext.removeJobTag(executeHolder.jobTag)
+        session.sparkContext.clearJobGroup()
         sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }

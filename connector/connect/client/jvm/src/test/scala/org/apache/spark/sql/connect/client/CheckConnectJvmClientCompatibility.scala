@@ -202,12 +202,6 @@ object CheckConnectJvmClientCompatibility {
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.KeyValueGroupedDataset.mapGroupsWithState"
-      ), // streaming
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.KeyValueGroupedDataset.flatMapGroupsWithState"
-      ), // streaming
-      ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.this"),
 

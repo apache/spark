@@ -74,6 +74,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   test("function current_timestamp and now") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     checkAnswer(df1.select(count_distinct(current_timestamp())), Row(1))
+    checkAnswer(df1.select(count_distinct(now())), Row(1))
 
     // Execution in one query should return the same value
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""), Row(true))
@@ -85,6 +86,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(got >= before && got <= after)
 
     // Now alias
+    checkAnswer(df1.select(current_timestamp().equalTo(now())), Seq(Row(true), Row(true)))
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = NOW()"""), Row(true))
   }
 
@@ -251,6 +253,86 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("weekofyear(a)", "weekofyear(b)", "weekofyear(c)"),
       Row(15, 15, 15))
+  }
+
+  test("weekday") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(weekday($"a"), weekday($"b"), weekday($"c")),
+      Row(2, 2, 0))
+
+    checkAnswer(
+      df.selectExpr("weekday(a)", "weekday(b)", "weekday(c)"),
+      Row(2, 2, 0))
+  }
+
+  test("extract") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        extract(lit("YEAR"), $"a"),
+        extract(lit("MONTH"), $"a"),
+        extract(lit("week"), $"b"),
+        extract(lit("day"), $"b"),
+        extract(lit("MINUTE"), $"c"),
+        extract(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "extract(YEAR FROM a)",
+        "extract(MONTH FROM a)",
+        "extract(week FROM b)",
+        "extract(day FROM b)",
+        "extract(MINUTE FROM c)",
+        "extract(SECONDS FROM c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+  }
+
+  test("date_part & datepart") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        date_part(lit("YEAR"), $"a"),
+        date_part(lit("MONTH"), $"a"),
+        date_part(lit("week"), $"b"),
+        date_part(lit("day"), $"b"),
+        date_part(lit("MINUTE"), $"c"),
+        date_part(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.select(
+        datepart(lit("YEAR"), $"a"),
+        datepart(lit("MONTH"), $"a"),
+        datepart(lit("week"), $"b"),
+        datepart(lit("day"), $"b"),
+        datepart(lit("MINUTE"), $"c"),
+        datepart(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "date_part('YEAR', a)",
+        "date_part('MONTH', a)",
+        "date_part('week', b)",
+        "date_part('day', b)",
+        "date_part('MINUTE', c)",
+        "date_part('SECONDS', c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "datepart('YEAR', a)",
+        "datepart('MONTH', a)",
+        "datepart('week', b)",
+        "datepart('day', b)",
+        "datepart('MINUTE', c)",
+        "datepart('SECONDS', c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
   }
 
   test("function date_add & dateadd") {
@@ -1024,6 +1106,32 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
   }
 
+  test("timestamp_millis") {
+    val df = Seq((123456789, 1230219000123L)).toDF("a", "b")
+    checkAnswer(
+      df.select(timestamp_millis(col("a")), timestamp_millis(col("b"))),
+      Row(Timestamp.valueOf("1970-01-02 02:17:36.789"),
+        Timestamp.valueOf("2008-12-25 07:30:00.123")))
+
+    checkAnswer(
+      df.selectExpr("timestamp_millis(a)", "timestamp_millis(b)"),
+      Row(Timestamp.valueOf("1970-01-02 02:17:36.789"),
+        Timestamp.valueOf("2008-12-25 07:30:00.123")))
+  }
+
+  test("timestamp_micros") {
+    val df = Seq((123456789, 1230219000123L)).toDF("a", "b")
+    checkAnswer(
+      df.select(timestamp_micros(col("a")), timestamp_micros(col("b"))),
+      Row(Timestamp.valueOf("1969-12-31 16:02:03.456789"),
+        Timestamp.valueOf("1970-01-14 21:43:39.000123")))
+
+    checkAnswer(
+      df.selectExpr("timestamp_micros(a)", "timestamp_micros(b)"),
+      Row(Timestamp.valueOf("1969-12-31 16:02:03.456789"),
+        Timestamp.valueOf("1970-01-14 21:43:39.000123")))
+  }
+
   test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
     val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
     val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
@@ -1109,6 +1217,19 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(to_timestamp_ntz(col("d"), lit("yyyy-MM-dd")))
       )
     }
+  }
+
+  test("convert_timezone") {
+    val df = Seq("1990-11-22").toDF("d")
+    checkAnswer(
+      df.selectExpr(s"convert_timezone('${CEST.getId}', '${LA.getId}', d)"),
+      df.select(convert_timezone(lit(CEST.getId), lit(LA.getId), col("d")))
+    )
+
+    checkAnswer(
+      df.selectExpr(s"convert_timezone('${LA.getId}', d)"),
+      df.select(convert_timezone(lit(LA.getId), col("d")))
+    )
   }
 
   test("make_dt_interval") {
@@ -1235,5 +1356,16 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val result5 = df.selectExpr(s"make_ym_interval()")
     val result6 = df.select(make_ym_interval())
     checkAnswer(result5, result6)
+  }
+
+  test("try_to_timestamp") {
+    val df = Seq(("2016-12-31", "yyyy-MM-dd")).toDF("a", "b")
+    val ts = Timestamp.valueOf("2016-12-31 00:00:00")
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a, b)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"), col("b"))), Seq(Row(ts)))
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
   }
 }

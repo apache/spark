@@ -32,7 +32,7 @@ select 128Y
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
   "messageParameters" : {
     "maxValue" : "127",
     "minValue" : "-128",
@@ -68,7 +68,7 @@ select 32768S
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
   "messageParameters" : {
     "maxValue" : "32767",
     "minValue" : "-32768",
@@ -104,7 +104,7 @@ select 9223372036854775808L
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
   "messageParameters" : {
     "maxValue" : "9223372036854775807",
     "minValue" : "-9223372036854775808",
@@ -196,7 +196,7 @@ select -3.4028235E39f
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
   "messageParameters" : {
     "maxValue" : "3.4028234663852886E+38",
     "minValue" : "-3.4028234663852886E+38",
@@ -246,7 +246,7 @@ select 1E309, -1E309
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0023",
+  "errorClass" : "INVALID_NUMERIC_LITERAL_RANGE",
   "messageParameters" : {
     "maxValue" : "1.7976931348623157E+308",
     "minValue" : "-1.7976931348623157E+308",
