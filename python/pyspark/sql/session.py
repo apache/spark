@@ -1544,6 +1544,7 @@ class SparkSession(SparkConversionMixin):
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
             else:
+                assert self._jvm is not None
                 litArgs = self._jvm.PythonUtils.toArray(
                     [_to_java_column(lit(v)) for v in (args or [])]
                 )
