@@ -947,6 +947,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       }
     }
   }
+
+  test("sql() with positional parameters") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
+    val t = "pos_param_table"
+    withTable(t) {
+      spark.sql(s"create table $t (id int)")
+      spark.sql(s"insert into $t values (1), (2)")
+      val result = spark.sql(s"select ?, id from $t where id = ?", Array(3L, 1)).collect()
+      assert(result.length == 1)
+      assert(result(0).getLong(0) === 3L)
+      assert(result(0).getInt(1) === 1)
+    }
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)

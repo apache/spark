@@ -2261,9 +2261,14 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
-    val df = session.sql(
-      getSqlCommand.getSql,
-      getSqlCommand.getArgsMap.asScala.mapValues(transformLiteral).toMap)
+    val args = getSqlCommand.getArgsMap
+    val df = if (!args.isEmpty) {
+      session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap)
+    } else {
+      session.sql(
+        getSqlCommand.getSql,
+        getSqlCommand.getPosArgsList.asScala.map(transformLiteral).toArray)
+    }
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
     val rows = df.logicalPlan match {

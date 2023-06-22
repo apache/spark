@@ -326,7 +326,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def sql(query: String): DataFrame = {
-    sql(query, Map.empty[String, String])
+    sql(query, Array.empty)
   }
 
   /**
