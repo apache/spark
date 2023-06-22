@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -460,6 +461,356 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
     cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
       UdfUtils.coGroupFunctionToScalaFunc(f))(encoder)
   }
+
+  protected def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
+      outputMode: Option[OutputMode],
+      timeoutConf: GroupStateTimeout,
+      initialState: Option[KeyValueGroupedDataset[K, S]],
+      isMapGroupWithState: Boolean)(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See
+   * [[org.apache.spark.sql.streaming.GroupState]] for more details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def mapGroupsWithState[S: Encoder, U: Encoder](
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
+    mapGroupsWithState(GroupStateTimeout.NoTimeout)(func)
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See
+   * [[org.apache.spark.sql.streaming.GroupState]] for more details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def mapGroupsWithState[S: Encoder, U: Encoder](timeoutConf: GroupStateTimeout)(
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
+    flatMapGroupsWithStateHelper(None, timeoutConf, None, isMapGroupWithState = true)(
+      UdfUtils.mapGroupsWithStateFuncToFlatMapAdaptor(func))
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See
+   * [[org.apache.spark.sql.streaming.GroupState]] for more details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param timeoutConf
+   *   Timeout Conf, see GroupStateTimeout for more details
+   * @param initialState
+   *   The user provided state that will be initialized when the first batch of data is processed
+   *   in the streaming query. The user defined function will be called on the state data even if
+   *   there are no other values in the group. To convert a Dataset ds of type Dataset[(K, S)] to
+   *   a KeyValueGroupedDataset[K, S] do {{{ds.groupByKey(x => x._1).mapValues(_._2)}}}
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def mapGroupsWithState[S: Encoder, U: Encoder](
+      timeoutConf: GroupStateTimeout,
+      initialState: KeyValueGroupedDataset[K, S])(
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
+    flatMapGroupsWithStateHelper(
+      None,
+      timeoutConf,
+      Some(initialState),
+      isMapGroupWithState = true)(UdfUtils.mapGroupsWithStateFuncToFlatMapAdaptor(func))
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param stateEncoder
+   *   Encoder for the state type.
+   * @param outputEncoder
+   *   Encoder for the output type.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U]): Dataset[U] = {
+    mapGroupsWithState[S, U](UdfUtils.mapGroupsWithStateFuncToScalaFunc(func))(
+      stateEncoder,
+      outputEncoder)
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param stateEncoder
+   *   Encoder for the state type.
+   * @param outputEncoder
+   *   Encoder for the output type.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeoutConf: GroupStateTimeout): Dataset[U] = {
+    mapGroupsWithState[S, U](timeoutConf)(UdfUtils.mapGroupsWithStateFuncToScalaFunc(func))(
+      stateEncoder,
+      outputEncoder)
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param stateEncoder
+   *   Encoder for the state type.
+   * @param outputEncoder
+   *   Encoder for the output type.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   * @param initialState
+   *   The user provided state that will be initialized when the first batch of data is processed
+   *   in the streaming query. The user defined function will be called on the state data even if
+   *   there are no other values in the group.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeoutConf: GroupStateTimeout,
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
+    mapGroupsWithState[S, U](timeoutConf, initialState)(
+      UdfUtils.mapGroupsWithStateFuncToScalaFunc(func))(stateEncoder, outputEncoder)
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param outputMode
+   *   The output mode of the function.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def flatMapGroupsWithState[S: Encoder, U: Encoder](
+      outputMode: OutputMode,
+      timeoutConf: GroupStateTimeout)(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    flatMapGroupsWithStateHelper(
+      Some(outputMode),
+      timeoutConf,
+      None,
+      isMapGroupWithState = false)(func)
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param outputMode
+   *   The output mode of the function.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   * @param initialState
+   *   The user provided state that will be initialized when the first batch of data is processed
+   *   in the streaming query. The user defined function will be called on the state data even if
+   *   there are no other values in the group. To covert a Dataset `ds` of type of type
+   *   `Dataset[(K, S)]` to a `KeyValueGroupedDataset[K, S]`, use
+   *   {{{ds.groupByKey(x => x._1).mapValues(_._2)}}} See [[Encoder]] for more details on what
+   *   types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def flatMapGroupsWithState[S: Encoder, U: Encoder](
+      outputMode: OutputMode,
+      timeoutConf: GroupStateTimeout,
+      initialState: KeyValueGroupedDataset[K, S])(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    flatMapGroupsWithStateHelper(
+      Some(outputMode),
+      timeoutConf,
+      Some(initialState),
+      isMapGroupWithState = false)(func)
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param outputMode
+   *   The output mode of the function.
+   * @param stateEncoder
+   *   Encoder for the state type.
+   * @param outputEncoder
+   *   Encoder for the output type.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def flatMapGroupsWithState[S, U](
+      func: FlatMapGroupsWithStateFunction[K, V, S, U],
+      outputMode: OutputMode,
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeoutConf: GroupStateTimeout): Dataset[U] = {
+    val f = UdfUtils.flatMapGroupsWithStateFuncToScalaFunc(func)
+    flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each group of data, while maintaining a
+   * user-defined per-group state. The result Dataset will represent the objects returned by the
+   * function. For a static batch Dataset, the function will be invoked once per group. For a
+   * streaming Dataset, the function will be invoked for each group repeatedly in every trigger,
+   * and updates to each group's state will be saved across invocations. See `GroupState` for more
+   * details.
+   *
+   * @tparam S
+   *   The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U
+   *   The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func
+   *   Function to be called on every group.
+   * @param outputMode
+   *   The output mode of the function.
+   * @param stateEncoder
+   *   Encoder for the state type.
+   * @param outputEncoder
+   *   Encoder for the output type.
+   * @param timeoutConf
+   *   Timeout configuration for groups that do not receive data for a while.
+   * @param initialState
+   *   The user provided state that will be initialized when the first batch of data is processed
+   *   in the streaming query. The user defined function will be called on the state data even if
+   *   there are no other values in the group. To covert a Dataset `ds` of type of type
+   *   `Dataset[(K, S)]` to a `KeyValueGroupedDataset[K, S]`, use
+   *   {{{ds.groupByKey(x => x._1).mapValues(_._2)}}}
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 3.5.0
+   */
+  def flatMapGroupsWithState[S, U](
+      func: FlatMapGroupsWithStateFunction[K, V, S, U],
+      outputMode: OutputMode,
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeoutConf: GroupStateTimeout,
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
+    val f = UdfUtils.flatMapGroupsWithStateFuncToScalaFunc(func)
+    flatMapGroupsWithState[S, U](outputMode, timeoutConf, initialState)(f)(
+      stateEncoder,
+      outputEncoder)
+  }
 }
 
 /**
@@ -570,6 +921,53 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val expr = Column.fn("reduce", input).expr
     val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr, vEncoder)
     agg(aggregator)
+  }
+
+  override protected def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
+      outputMode: Option[OutputMode],
+      timeoutConf: GroupStateTimeout,
+      initialState: Option[KeyValueGroupedDataset[K, S]],
+      isMapGroupWithState: Boolean)(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    if (outputMode.isDefined && outputMode.get != OutputMode.Append &&
+      outputMode.get != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
+
+    if (initialState.isDefined) {
+      assert(initialState.get.isInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]])
+    }
+
+    val initialStateImpl = if (initialState.isDefined) {
+      initialState.get.asInstanceOf[KeyValueGroupedDatasetImpl[K, S, _, _]]
+    } else {
+      null
+    }
+
+    val outputEncoder = encoderFor[U]
+    val nf = if (valueMapFunc == UdfUtils.identical()) {
+      func
+    } else {
+      UdfUtils.mapValuesAdaptor(func, valueMapFunc)
+    }
+
+    sparkSession.newDataset[U](outputEncoder) { builder =>
+      val groupMapBuilder = builder.getGroupMapBuilder
+      groupMapBuilder
+        .setInput(plan.getRoot)
+        .addAllGroupingExpressions(groupingExprs)
+        .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
+        .setIsMapGroupsWithState(isMapGroupWithState)
+        .setOutputMode(if (outputMode.isEmpty) OutputMode.Update.toString
+        else outputMode.get.toString)
+        .setTimeoutConf(timeoutConf.toString)
+
+      if (initialStateImpl != null) {
+        groupMapBuilder
+          .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
+          .setInitialInput(initialStateImpl.plan.getRoot)
+      }
+    }
   }
 
   private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(

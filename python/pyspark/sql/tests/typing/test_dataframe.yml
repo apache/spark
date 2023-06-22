@@ -123,9 +123,9 @@
 
   out: |
     main:10: error: No overload variant of "drop" of "DataFrame" matches argument types "Column", "Column"  [call-overload]
-    main:10: note: Possible overload variant:
+    main:10: note: Possible overload variants:
+    main:10: note:     def drop(self, cols: Union[Column, str]) -> DataFrame
     main:10: note:     def drop(self, *cols: str) -> DataFrame
-    main:10: note:     <1 more non-matching overload not shown>
 
 
 - case: fillNullValues
