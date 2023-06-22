@@ -446,6 +446,7 @@ ARROW: '->';
 FAT_ARROW : '=>';
 HENT_START: '/*+';
 HENT_END: '*/';
+QUESTION: '?';
 
 STRING_LITERAL
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
