@@ -214,7 +214,7 @@ def as_spark_type(
         return types.DayTimeIntervalType()
 
     # categorical types
-    elif isinstance(tpe, CategoricalDtype) or (isinstance(tpe, str) and type == "category"):
+    elif isinstance(tpe, CategoricalDtype) or (isinstance(tpe, str) and tpe == "category"):
         return types.LongType()
 
     # extension types
