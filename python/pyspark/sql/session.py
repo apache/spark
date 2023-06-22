@@ -1425,7 +1425,7 @@ class SparkSession(SparkConversionMixin):
             Supports Spark Connect and parameterized SQL.
 
         .. versionchanged:: 3.5.0
-            Supports parameterized SQL with positional parameters.
+            Added positional parameters.
 
         Parameters
         ----------
