@@ -1542,7 +1542,7 @@ class SparkSession(SparkConversionMixin):
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
             else:
-                litArgs = [_to_java_column(lit(v)) for v in (args or [])]
+                litArgs = self._jvm.PythonUtils.toArray([_to_java_column(lit(v)) for v in (args or [])])
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
             if len(kwargs) > 0:
