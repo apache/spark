@@ -342,18 +342,6 @@ object SparkBuild extends PomBuild {
       }
     },
 
-    // Copy system properties to forked JVMs so that tests know proxy settings
-    javaOptions ++= {
-      val q = "\""
-      sys.props.toList
-        .filter {
-          case (key, value) => key.startsWith("http.") || key.startsWith("https.")
-        }
-        .map {
-          case (key, value) => s"-D$key=$q$value$q"
-        }
-    },
-
     (Compile / doc / javacOptions) ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
@@ -1592,6 +1580,19 @@ object TestSettings {
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
       "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+
+    // Copy system properties to forked JVMs so that tests know proxy settings
+    (Test / javaOptions) ++= {
+      val q = "\""
+      sys.props.toList
+        .filter {
+          case (key, value) => key.startsWith("http.") || key.startsWith("https.")
+        }
+        .map {
+          case (key, value) => s"-D$key=$q$value$q"
+        }
+    },
+
     (Test / javaOptions) += s"-Djava.io.tmpdir=$testTempDir",
     (Test / javaOptions) += "-Dspark.test.home=" + sparkHome,
     (Test / javaOptions) += "-Dspark.testing=1",
