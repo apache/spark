@@ -496,7 +496,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       throw QueryCompilationErrors.subqueryNotAllowedInMergeCondition(condName, cond)
     }
 
-    if (cond.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+    if (cond.exists(_.isInstanceOf[AggregateExpression])) {
       throw QueryCompilationErrors.aggregationNotAllowedInMergeCondition(condName, cond)
     }
   }
