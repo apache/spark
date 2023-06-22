@@ -257,8 +257,8 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
   override def listPartitionsByNames(
       db: String,
       table: String,
-      partitionNames: Seq[String]): Seq[CatalogTablePartition] = {
-    delegate.listPartitionsByNames(db, table, partitionNames)
+      parts: Seq[String]): Seq[CatalogTablePartition] = {
+    delegate.listPartitionsByNames(db, table, parts)
   }
 
   override def listPartitionsByFilter(

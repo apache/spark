@@ -1286,9 +1286,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listPartitionsByNames(
      db: String,
      table: String,
-     partNames: Seq[String]): Seq[CatalogTablePartition] = withClient {
+     parts: Seq[String]): Seq[CatalogTablePartition] = withClient {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-    client.getPartitionsByNames(db, table, partNames.map(_.toLowerCase()))
+    client.getPartitionsByNames(db, table, parts.map(_.toLowerCase()))
       .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))}
   }
 

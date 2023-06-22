@@ -116,7 +116,6 @@ case class InsertIntoHadoopFsRelationCommand(
     // When partitions are tracked by the catalog, compute all custom partition locations that
     // may be relevant to the insertion job.
     if (partitionsTrackedByCatalog) {
-
       matchingPartitions = if (dynamicPartitionOverwrite) {
         // Get the matching partitions from the written path instead of pull all
         // partitions from metastore, avoiding heavy pressures
@@ -197,7 +196,7 @@ case class InsertIntoHadoopFsRelationCommand(
           // The `customPartitionLocations` is getting from writing paths. Hence, it need to move
           // files from `qualifiedOutputPath` to custom location.
           if (updatedPartitions.nonEmpty && dynamicPartitionOverwrite) {
-            overWriteCustomParttions(
+            overwriteCustomPartitions(
               fs,
               catalogTable.get,
               qualifiedOutputPath,
@@ -314,13 +313,13 @@ case class InsertIntoHadoopFsRelationCommand(
    * Deletes all partition files that match the custom locations and copy files from the dynamic
    * writing paths
    */
-  private def overWriteCustomParttions(
+  private def overwriteCustomPartitions(
       fs: FileSystem,
       table: CatalogTable,
       qualifiedOutputPath: Path,
       committer: FileCommitProtocol,
-      customPatitions: Map[TablePartitionSpec, String]) = {
-    for ((spec, customLoc) <- customPatitions) {
+      customPartitions: Map[TablePartitionSpec, String]) = {
+    customPartitions.foreach { case (spec, customLoc) =>
       val defaultLocation = qualifiedOutputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(spec, table.partitionSchema))
 

@@ -597,11 +597,11 @@ class InMemoryCatalog(
   def listPartitionsByNames(
       db: String,
       table: String,
-      partitionNames: Seq[String]): Seq[CatalogTablePartition] = synchronized {
+      parts: Seq[String]): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
 
     catalog(db).tables(table).partitions.filter { case (spec, _) =>
-      partitionNames.contains(spec.map(v => v._1 + "=" + v._2).toSeq.mkString("/"))
+      parts.contains(spec.map { case (k, v) => s"$k=$v" }.toSeq.mkString("/"))
     }.values.toSeq
   }
 
