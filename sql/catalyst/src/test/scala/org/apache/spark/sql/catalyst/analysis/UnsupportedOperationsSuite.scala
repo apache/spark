@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
 
-class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
+  class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   val attribute = AttributeReference("a", IntegerType, nullable = true)()
   val watermarkMetadata = new MetadataBuilder()
@@ -740,8 +740,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testUnaryOperatorInStreamingPlan(
     "window",
     Window(Nil, Nil, Nil, _),
-    expectedMsg =
-      "Structured Streaming only supports time-window aggregation using the `window` function")
+    errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING")
 
   // Output modes with aggregation and non-aggregation plans
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
@@ -873,7 +872,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     operationName: String,
     logicalPlanGenerator: LogicalPlan => LogicalPlan,
     outputMode: OutputMode = Append,
-    expectedMsg: String = ""): Unit = {
+    expectedMsg: String = "",
+    errorClass: String = ""): Unit = {
 
     val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
 
@@ -881,7 +881,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       s"$operationName with stream relation",
       wrapInStreaming(logicalPlanGenerator(streamRelation)),
       outputMode,
-      expectedMsgs)
+      expectedMsgs,
+      errorClass)
 
     assertSupportedInStreamingPlan(
       s"$operationName with batch relation",
@@ -1028,10 +1029,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       name: String,
       plan: LogicalPlan,
       outputMode: OutputMode,
-      expectedMsgs: Seq[String]): Unit = {
+      expectedMsgs: Seq[String],
+      errorClass: String = ""): Unit = {
     testError(
       s"streaming plan - $name: not supported",
-      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported") {
+      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported",
+      errorClass) {
       UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
     }
   }
@@ -1093,7 +1096,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
    * Test whether the body of code will fail. If it does fail, then check if it has expected
    * messages.
    */
-  def testError(testName: String, expectedMsgs: Seq[String])(testBody: => Unit): Unit = {
+  def testError(
+      testName: String,
+      expectedMsgs: Seq[String],
+      errorClass: String = "")(testBody: => Unit): Unit = {
 
     test(testName) {
       val e = intercept[AnalysisException] {
@@ -1104,6 +1110,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           fail(s"Exception message should contain: '$m', " +
             s"actual exception message:\n\t'${e.getMessage}'")
         }
+      }
+      if (!errorClass.isEmpty) {
+        assert(e.getErrorClass == errorClass)
       }
     }
   }

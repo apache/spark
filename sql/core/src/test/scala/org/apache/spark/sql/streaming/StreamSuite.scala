@@ -702,8 +702,14 @@ class StreamSuite extends StreamTest {
         .format("console")
         .start()
     }
-  assert(e.getMessage.contains(
-    "Window function is not supported in 'row_number()' as column 'rn_col'"))
+    checkError(
+      e,
+      "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
+      parameters = Map(
+        "windowFunc" -> "'row_number()' as column 'rn_col'",
+        "windowSpec" ->
+          ("'(PARTITION BY col1 ORDER BY col2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
+          "AND CURRENT ROW)'")))
   }
 
 

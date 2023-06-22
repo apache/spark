@@ -514,7 +514,7 @@ object UnsupportedOperationChecker extends Logging {
             e.collect {
               case we: WindowExpression =>
                 s"'${we.windowFunction}' as column '${e.toAttribute.sql}'"
-            }
+              }
           }.mkString(", ")
           val windowSpec = windowExpression.flatMap { e =>
             e.collect {
