@@ -124,7 +124,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
         """
         return self._set(predictionCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def freqItemsets(self) -> DataFrame:
         """
@@ -134,7 +134,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
         """
         return self._call_java("freqItemsets")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def associationRules(self) -> DataFrame:
         """

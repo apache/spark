@@ -302,7 +302,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "\nReplacement is unresolved: " + e.replacement)
 
           case g: Grouping =>
-            g.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_2445", messageParameters = Map.empty)
+            g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
           case g: GroupingID =>
             g.failAnalysis(
               errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
@@ -721,10 +722,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2438",
+              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
               messageParameters = Map(
-                "colName" -> mapCol.name,
-                "dataType" -> mapCol.dataType.catalogString))
+                "colName" -> toSQLId(mapCol.name),
+                "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -734,10 +735,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2439",
-              messageParameters = Map(
-                "sqlExprs" -> o.expressions.map(_.sql).mkString(","),
-                "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)))
+              errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+              messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
+            )
 
           case _: UnresolvedHint => throw new IllegalStateException(
             "Logical hint operator should be removed during analysis.")
@@ -868,6 +868,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def scrubOutIds(string: String): String =
     string.replaceAll("#\\d+", "#x")
       .replaceAll("operator id = \\d+", "operator id = #x")
+      .replaceAll("rand\\(-?\\d+\\)", "rand(number)")
 
   private def planToString(plan: LogicalPlan): String = {
     if (Utils.isTesting) scrubOutIds(plan.toString) else plan.toString
@@ -1056,10 +1057,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               // of a CTE that is used multiple times or a self join.
               if (!simplifiedMetrics.sameResult(simplifiedOther)) {
                 failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2443",
-                  messageParameters = Map(
-                    "name" -> name,
-                    "plan" -> plan.toString))
+                  errorClass = "DUPLICATED_METRICS_NAME",
+                  messageParameters = Map("metricName" -> name))
               }
             case None =>
               metricsMap.put(name, metrics)

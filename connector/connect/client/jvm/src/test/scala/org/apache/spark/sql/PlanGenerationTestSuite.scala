@@ -1213,6 +1213,58 @@ class PlanGenerationTestSuite
     fn.sqrt("b")
   }
 
+  functionTest("try_add") {
+    fn.try_add(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_avg") {
+    fn.try_avg(fn.col("a"))
+  }
+
+  functionTest("try_divide") {
+    fn.try_divide(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_multiply") {
+    fn.try_multiply(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_subtract") {
+    fn.try_subtract(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_sum") {
+    fn.try_sum(fn.col("a"))
+  }
+
+  functionTest("try_to_timestamp") {
+    fn.try_to_timestamp(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_to_timestamp without format") {
+    fn.try_to_timestamp(fn.col("g"))
+  }
+
+  functionTest("try_to_binary") {
+    fn.try_to_binary(fn.col("g"), lit("format"))
+  }
+
+  functionTest("try_to_binary without format") {
+    fn.try_to_binary(fn.col("g"))
+  }
+
+  functionTest("try_to_number") {
+    fn.try_to_number(fn.col("g"), lit("99,999"))
+  }
+
+  functionTest("try_element_at array") {
+    fn.try_element_at(fn.col("e"), fn.col("a"))
+  }
+
+  functionTest("try_element_at map") {
+    fn.try_element_at(fn.col("f"), fn.col("g"))
+  }
+
   functionTest("struct") {
     fn.struct("a", "d")
   }
@@ -1717,6 +1769,14 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
+  temporalFunctionTest("convert_timezone with source time zone") {
+    fn.convert_timezone(lit("\"Africa/Dakar\""), lit("\"Asia/Urumqi\""), fn.col("t"))
+  }
+
+  temporalFunctionTest("convert_timezone without source time zone") {
+    fn.convert_timezone(lit("\"Asia/Urumqi\""), fn.col("t"))
+  }
+
   functionTest("make_dt_interval days hours mins secs") {
     fn.make_dt_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("b"))
   }
@@ -1909,6 +1969,10 @@ class PlanGenerationTestSuite
     fn.current_timestamp()
   }
 
+  temporalFunctionTest("now") {
+    fn.now()
+  }
+
   temporalFunctionTest("localtimestamp") {
     fn.localtimestamp()
   }
@@ -1981,6 +2045,10 @@ class PlanGenerationTestSuite
     fn.minute(fn.col("t"))
   }
 
+  temporalFunctionTest("weekday") {
+    fn.weekday(fn.col("d"))
+  }
+
   temporalFunctionTest("make_date") {
     fn.make_date(fn.lit(2018), fn.lit(5), fn.lit(14))
   }
@@ -2003,6 +2071,18 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("weekofyear") {
     fn.weekofyear(fn.col("d"))
+  }
+
+  temporalFunctionTest("extract") {
+    fn.extract(lit("year"), fn.col("d"))
+  }
+
+  temporalFunctionTest("date_part") {
+    fn.date_part(lit("year"), fn.col("d"))
+  }
+
+  temporalFunctionTest("datepart") {
+    fn.datepart(lit("year"), fn.col("d"))
   }
 
   temporalFunctionTest("from_unixtime") {
@@ -2118,6 +2198,14 @@ class PlanGenerationTestSuite
 
   temporalFunctionTest("timestamp_seconds") {
     fn.timestamp_seconds(fn.col("x"))
+  }
+
+  temporalFunctionTest("timestamp_millis") {
+    fn.timestamp_millis(fn.col("x"))
+  }
+
+  temporalFunctionTest("timestamp_micros") {
+    fn.timestamp_micros(fn.col("x"))
   }
 
   // Array of Long

@@ -150,9 +150,9 @@ class TimedeltaIndex(Index):
 
         @no_type_check
         def get_seconds(scol):
-            hour_scol = SF.date_part("HOUR", scol)
-            minute_scol = SF.date_part("MINUTE", scol)
-            second_scol = SF.date_part("SECOND", scol)
+            hour_scol = F.date_part("HOUR", scol)
+            minute_scol = F.date_part("MINUTE", scol)
+            second_scol = F.date_part("SECOND", scol)
             return (
                 F.when(
                     hour_scol < 0,
