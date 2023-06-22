@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongT
   group = "misc_funcs"
 )
 case class BitmapBucketNumber(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -50,7 +50,8 @@ case class BitmapBucketNumber(child: Expression)
     LongType,
     "bitmapBucketNumber",
     Seq(child),
-    inputTypes)
+    inputTypes,
+    returnNullable = false)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapBucketNumber =
     copy(child = newChild)
@@ -69,7 +70,7 @@ case class BitmapBucketNumber(child: Expression)
   group = "misc_funcs"
 )
 case class BitmapBitPosition(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
 
@@ -82,7 +83,8 @@ case class BitmapBitPosition(child: Expression)
     LongType,
     "bitmapBitPosition",
     Seq(child),
-    inputTypes)
+    inputTypes,
+    returnNullable = false)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapBitPosition =
     copy(child = newChild)
@@ -103,7 +105,7 @@ case class BitmapBitPosition(child: Expression)
   group = "misc_funcs"
 )
 case class BitmapCount(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable with NullIntolerant {
+  extends UnaryExpression with RuntimeReplaceable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BinaryType) {
@@ -122,7 +124,8 @@ case class BitmapCount(child: Expression)
     LongType,
     "bitmapCount",
     Seq(child),
-    Seq(BinaryType))
+    Seq(BinaryType),
+    returnNullable = false)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapCount =
     copy(child = newChild)
