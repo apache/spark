@@ -1279,17 +1279,16 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   test("SPARK-43327: location exists when insertoverwrite fails") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("t", "t1") {
-        sql("create table t(c1 int) using parquet")
-        sql("create table t1(c2 long) using parquet")
-        sql("INSERT OVERWRITE TABLE t1 select 6000044164")
+        sql("CREATE TABLE t(c1 int) USING parquet")
+        sql("CREATE TABLE t1(c2 long) USING parquet")
+        sql("INSERT OVERWRITE TABLE t1 SELECT 6000044164")
 
-        //      spark.sql("CREATE TABLE IF NOT EXISTS t(amt1 int) using ORC")
         val identifier = TableIdentifier("t")
         val location = spark.sessionState.catalog.getTableMetadata(identifier).location
 
         intercept[SparkException] {
-          sql("INSERT OVERWRITE TABLE t select c2 from " +
-            "(select cast(c2 as int) as c2 from t1 distribute by c2)")
+          sql("INSERT OVERWRITE TABLE t SELECT c2 FROM " +
+            "(SELECT cast(c2 as int) as c2 FROM t1 distribute by c2)")
         }
         // scalastyle:off hadoopconfiguration
         val fs = FileSystem.get(location, spark.sparkContext.hadoopConfiguration)
