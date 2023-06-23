@@ -1611,8 +1611,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     tableDoesNotSupportError("atomic partition management", table)
   }
 
-  def tableDoesNotSupportUpsertError(table: String): Throwable = {
-    tableNameDoesNotSupportError("upsert", table)
+  def tableDoesNotSupportUpsertError(table: String, dialect: String): Throwable = {
+    tableNameDoesNotSupportError(s"upsert in dialect $dialect", table)
   }
 
   def upsertKeyColumnsRequiredError(): Throwable = {
