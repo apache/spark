@@ -3186,6 +3186,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
+  def nonDeterministicMergeCondition(condName: String, cond: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_MERGE_CONDITION.NON_DETERMINISTIC",
+      messageParameters = Map(
+        "condName" -> condName,
+        "cond" -> toSQLExpr(cond)))
+  }
+
+  def subqueryNotAllowedInMergeCondition(condName: String, cond: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_MERGE_CONDITION.SUBQUERY",
+      messageParameters = Map(
+        "condName" -> condName,
+        "cond" -> toSQLExpr(cond)))
+  }
+
+  def aggregationNotAllowedInMergeCondition(condName: String, cond: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_MERGE_CONDITION.AGGREGATE",
+      messageParameters = Map(
+        "condName" -> condName,
+        "cond" -> toSQLExpr(cond)))
+  }
+
   def failedToParseExistenceDefaultAsLiteral(fieldName: String, defaultValue: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1344",

@@ -1410,28 +1410,35 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None, **kwargs: Any) -> DataFrame:
+    def sql(
+        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
+    ) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
-        standard formatter. The method binds named parameters to SQL literals from `args`.
+        standard formatter. The method binds named parameters to SQL literals or
+        positional parameters from `args`. It doesn't support named and positional parameters
+        in the same SQL query.
 
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect and parameterized SQL.
 
+        .. versionchanged:: 3.5.0
+            Added positional parameters.
+
         Parameters
         ----------
         sqlQuery : str
             SQL query string.
-        args : dict
-            A dictionary of parameter names to Python objects that can be converted to
-            SQL literal expressions. See
+        args : dict or list
+            A dictionary of parameter names to Python objects or a list of Python objects
+            that can be converted to SQL literal expressions. See
             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
             Supported Data Types</a> for supported value types in Python.
             For example, dictionary keys: "rank", "name", "birthdate";
-            dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
-            Map value can be also a `Column` of literal expression, in that case it is taken as is.
+            dictionary or list values: 1, "Steven", datetime.date(2023, 4, 2).
+            A value can be also a `Column` of literal expression, in that case it is taken as is.
 
             .. versionadded:: 3.4.0
 
@@ -1517,13 +1524,30 @@ class SparkSession(SparkConversionMixin):
         +---+---+
         |  3|  6|
         +---+---+
+
+        Or positional parameters marked by `?` in the SQL query by SQL literals.
+
+        >>> spark.sql(
+        ...   "SELECT * FROM {df} WHERE {df[B]} > ? and ? < {df[A]}",
+        ...   args=[5, 2], df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  3|  6|
+        +---+---+
         """
 
         formatter = SQLStringFormatter(self)
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
+            if isinstance(args, Dict):
+                litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
+            else:
+                assert self._jvm is not None
+                litArgs = self._jvm.PythonUtils.toArray(
+                    [_to_java_column(lit(v)) for v in (args or [])]
+                )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
             if len(kwargs) > 0:
