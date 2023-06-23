@@ -1835,6 +1835,8 @@ class SparkSession(SparkConversionMixin):
         Copy file from local to cloud storage file system.
         If the file already exits in destination path, old file is overwritten.
 
+        .. versionadded:: 3.5.0
+
         Parameters
         ----------
         local_path: str
