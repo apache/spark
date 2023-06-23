@@ -41,7 +41,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, Row, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -2634,15 +2634,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       } else {
         val foreachWriterPkt = unpackForeachWriter(writeOp.getForeachWriter.getScalaWriter)
         val clientWriter = foreachWriterPkt.foreachWriter
-        if (foreachWriterPkt.datasetEncoder == null) {
-          // datasetEncoder is null means the client-side writer has type parameter Row,
-          // Since server-side dataset is always dataframe, here just use foreach directly.
-          writer.foreach(clientWriter.asInstanceOf[ForeachWriter[Row]])
-        } else {
-          val encoder = ExpressionEncoder(
-            foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])
-          writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
-        }
+        val encoder: Option[ExpressionEncoder[Any]] = Try(
+          ExpressionEncoder(
+            foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])).toOption
+        writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
       }
     }
 
