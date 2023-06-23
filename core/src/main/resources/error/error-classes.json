@@ -4223,11 +4223,6 @@
       "class `<cls>` is not supported by `MapObjects` as resulting collection."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2020" : {
-    "message" : [
-      "Couldn't find a valid constructor on <cls>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2021" : {
     "message" : [
       "Couldn't find a primary constructor on <cls>."
