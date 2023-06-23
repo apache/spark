@@ -37,7 +37,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
 
-abstract class StructTypeBase(fields: Array[StructField]) extends DataType with Seq[StructField] {
+abstract class StructTypeBase extends DataType with Seq[StructField] {
+  def fields: Array[StructField]
+
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
@@ -365,7 +367,7 @@ abstract class StructTypeBase(fields: Array[StructField]) extends DataType with 
  * @since 1.3.0
  */
 @Stable
-case class StructType(fields: Array[StructField]) extends StructTypeBase(fields) {
+case class StructType(override val fields: Array[StructField]) extends StructTypeBase {
   /** No-arg constructor for kryo. */
   def this() = this(Array.empty[StructField])
 
