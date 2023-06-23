@@ -249,7 +249,10 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   }
 
 
-  protected def assignAtomic(atomicRef: String, value: String, isNull: String = FalseLiteral,
+  protected def assignAtomic(
+      atomicRef: String,
+      value: String,
+      isNull: String = FalseLiteral,
       nullable: Boolean = false) = {
     if (nullable) {
       s"""
@@ -264,8 +267,12 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     }
   }
 
-  protected def assignArrayElement(ctx: CodegenContext, arrayName: String, elementCode: ExprCode,
-      elementVar: NamedLambdaVariable, index: String): String = {
+  protected def assignArrayElement(
+      ctx: CodegenContext,
+      arrayName: String,
+      elementCode: ExprCode,
+      elementVar: NamedLambdaVariable,
+      index: String): String = {
     val elementType = elementVar.dataType
     val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
     val extractElement = CodeGenerator.getValue(arrayName, elementType, index)
@@ -286,8 +293,11 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     }
   }
 
-  protected def assignIndex(ctx: CodegenContext, indexCode: ExprCode,
-      indexVar: NamedLambdaVariable, index: String): String = {
+  protected def assignIndex(
+      ctx: CodegenContext,
+      indexCode: ExprCode,
+      indexVar: NamedLambdaVariable,
+      index: String): String = {
     val indexAtomic = ctx.addReferenceObj(indexVar.name, indexVar.value)
     s"""
       ${indexCode.value} = $index;
@@ -1179,7 +1189,10 @@ case class ArrayAggregate(
     }
   }
 
-  protected def assignVar(varCode: ExprCode, value: String, isNull: String,
+  protected def assignVar(
+      varCode: ExprCode,
+      value: String,
+      isNull: String,
       nullable: Boolean): String = {
     if (nullable) {
       s"""
