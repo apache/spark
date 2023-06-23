@@ -1079,7 +1079,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val isolationLevel = options.isolationLevel
 
     if (!dialect.isInstanceOf[MergeByTempTable]) {
-      throw QueryCompilationErrors.tableDoesNotSupportUpsertError(options.table)
+      throw QueryCompilationErrors.tableDoesNotSupportUpsertError(
+        options.table, dialect.getClass.getSimpleName)
     }
     val dialectWithMerge = dialect.asInstanceOf[JdbcDialect with MergeByTempTable]
 
@@ -1111,7 +1112,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JdbcOptionsInWrite): (StructType, Option[JdbcDialect with MergeByTempTable]) = {
     if (options.isUpsert) {
       if (!dialect.isInstanceOf[MergeByTempTable]) {
-        throw QueryCompilationErrors.tableDoesNotSupportUpsertError(options.table)
+        throw QueryCompilationErrors.tableDoesNotSupportUpsertError(
+          options.table, dialect.getClass.getSimpleName)
       }
       val mergeDialect = dialect.asInstanceOf[JdbcDialect with MergeByTempTable]
 
