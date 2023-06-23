@@ -56,21 +56,7 @@ object NumericTypeExpression {
    * }}}
    */
   def unapply(e: Expression): Boolean = {
-    if (e.dataType.isInstanceOf[NumericType]) {
-      e.dataType match {
-        case ByteType => ByteTypeExpression.unapply(e)
-        case ShortType => ShortTypeExpression.unapply(e)
-        case IntegerType => IntegerTypeExpression.unapply(e)
-        case LongType => LongTypeExpression.unapply(e)
-        case FloatType => FloatTypeExpression.unapply(e)
-        case DoubleType => DoubleTypeExpression.unapply(e)
-        case _: DecimalType => DecimalType.unapply(e)
-        case _ => throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-          "UninitializedNumericTypeExpression")
-      }
-    } else {
-      false
-    }
+    e.dataType.isInstanceOf[NumericType]
   }
 }
 
@@ -83,17 +69,6 @@ object IntegralTypeExpression {
    * }}}
    */
   def unapply(e: Expression): Boolean = {
-    if (e.dataType.isInstanceOf[IntegralType]) {
-      e.dataType match {
-        case ByteType => ByteTypeExpression.unapply(e)
-        case ShortType => ShortTypeExpression.unapply(e)
-        case IntegerType => IntegerTypeExpression.unapply(e)
-        case LongType => LongTypeExpression.unapply(e)
-        case _ => throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-          "UninitializedIntegralTypeExpression")
-      }
-    } else {
-      false
-    }
+    e.dataType.isInstanceOf[IntegralType]
   }
 }
