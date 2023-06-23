@@ -249,6 +249,8 @@ class ParquetToSparkSchemaConverter(
             }
           case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
             typeNotImplemented()
+          case _: TimeLogicalTypeAnnotation =>
+            DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND)
           case _ => illegalType()
         }
 
@@ -280,6 +282,10 @@ class ParquetToSparkSchemaConverter(
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
             LongType
+          case _: TimeLogicalTypeAnnotation =>
+            DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND)
+
+
           case _ => illegalType()
         }
 

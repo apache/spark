@@ -94,6 +94,8 @@ public class ParquetVectorUpdaterFactory {
           }
         } else if (sparkType instanceof YearMonthIntervalType) {
           return new IntegerUpdater();
+        } else if (sparkType instanceof DayTimeIntervalType) {
+          return new IntAsMicrosUpdater();
         }
         break;
       case INT64:
@@ -601,6 +603,42 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long gregorianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
+      values.putLong(offset, DateTimeUtils.millisToMicros(gregorianMillis));
+    }
+  }
+
+  private static class IntAsMicrosUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+            int total,
+            int offset,
+            WritableColumnVector values,
+            VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+            int offset,
+            WritableColumnVector values,
+            VectorizedValuesReader valuesReader) {
+      values.putLong(offset, DateTimeUtils.millisToMicros(valuesReader.readInteger()));
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+            int offset,
+            WritableColumnVector values,
+            WritableColumnVector dictionaryIds,
+            Dictionary dictionary) {
+      int gregorianMillis = dictionary.decodeToInt(dictionaryIds.getDictId(offset));
       values.putLong(offset, DateTimeUtils.millisToMicros(gregorianMillis));
     }
   }
