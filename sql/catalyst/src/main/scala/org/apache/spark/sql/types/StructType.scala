@@ -36,77 +36,8 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
-/**
- * A [[StructType]] object can be constructed by
- * {{{
- * StructType(fields: Seq[StructField])
- * }}}
- * For a [[StructType]] object, one or multiple [[StructField]]s can be extracted by names.
- * If multiple [[StructField]]s are extracted, a [[StructType]] object will be returned.
- * If a provided name does not have a matching field, it will be ignored. For the case
- * of extracting a single [[StructField]], a `null` will be returned.
- *
- * Scala Example:
- * {{{
- * import org.apache.spark.sql._
- * import org.apache.spark.sql.types._
- *
- * val struct =
- *   StructType(
- *     StructField("a", IntegerType, true) ::
- *     StructField("b", LongType, false) ::
- *     StructField("c", BooleanType, false) :: Nil)
- *
- * // Extract a single StructField.
- * val singleField = struct("b")
- * // singleField: StructField = StructField(b,LongType,false)
- *
- * // If this struct does not have a field called "d", it throws an exception.
- * struct("d")
- * // java.lang.IllegalArgumentException: d does not exist.
- * //   ...
- *
- * // Extract multiple StructFields. Field names are provided in a set.
- * // A StructType object will be returned.
- * val twoFields = struct(Set("b", "c"))
- * // twoFields: StructType =
- * //   StructType(StructField(b,LongType,false), StructField(c,BooleanType,false))
- *
- * // Any names without matching fields will throw an exception.
- * // For the case shown below, an exception is thrown due to "d".
- * struct(Set("b", "c", "d"))
- * // java.lang.IllegalArgumentException: d does not exist.
- * //    ...
- * }}}
- *
- * A [[org.apache.spark.sql.Row]] object is used as a value of the [[StructType]].
- *
- * Scala Example:
- * {{{
- * import org.apache.spark.sql._
- * import org.apache.spark.sql.types._
- *
- * val innerStruct =
- *   StructType(
- *     StructField("f1", IntegerType, true) ::
- *     StructField("f2", LongType, false) ::
- *     StructField("f3", BooleanType, false) :: Nil)
- *
- * val struct = StructType(
- *   StructField("a", innerStruct, true) :: Nil)
- *
- * // Create a Row with the schema defined by struct
- * val row = Row(Row(1, 2, true))
- * }}}
- *
- * @since 1.3.0
- */
-@Stable
-case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
-  /** No-arg constructor for kryo. */
-  def this() = this(Array.empty[StructField])
-
+abstract class StructTypeBase(fields: Array[StructField]) extends DataType with Seq[StructField] {
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
@@ -209,72 +140,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Creates a new [[StructType]] by adding a new nullable field with no metadata where the
-   * dataType is specified as a String.
-   *
-   * {{{
-   * val struct = (new StructType)
-   *   .add("a", "int")
-   *   .add("b", "long")
-   *   .add("c", "string")
-   * }}}
-   */
-  def add(name: String, dataType: String): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
-  }
-
-  /**
-   * Creates a new [[StructType]] by adding a new field with no metadata where the
-   * dataType is specified as a String.
-   *
-   * {{{
-   * val struct = (new StructType)
-   *   .add("a", "int", true)
-   *   .add("b", "long", false)
-   *   .add("c", "string", true)
-   * }}}
-   */
-  def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
-  }
-
-  /**
-   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
-   * dataType is specified as a String.
-   * {{{
-   * val struct = (new StructType)
-   *   .add("a", "int", true, Metadata.empty)
-   *   .add("b", "long", false, Metadata.empty)
-   *   .add("c", "string", true, Metadata.empty)
-   * }}}
-   */
-  def add(
-      name: String,
-      dataType: String,
-      nullable: Boolean,
-      metadata: Metadata): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
-  }
-
-  /**
-   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
-   * dataType is specified as a String.
-   * {{{
-   * val struct = (new StructType)
-   *   .add("a", "int", true, "comment1")
-   *   .add("b", "long", false, "comment2")
-   *   .add("c", "string", true, "comment3")
-   * }}}
-   */
-  def add(
-      name: String,
-      dataType: String,
-      nullable: Boolean,
-      comment: String): StructType = {
-    add(name, CatalystSqlParser.parseDataType(dataType), nullable, comment)
-  }
-
-  /**
    * Extracts the [[StructField]] with the given name.
    *
    * @throws IllegalArgumentException if a field with the given name does not exist
@@ -316,72 +181,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def getFieldIndex(name: String): Option[Int] = {
     nameToIndex.get(name)
   }
-
-  /**
-   * Returns the normalized path to a field and the field in this struct and its child structs.
-   *
-   * If includeCollections is true, this will return fields that are nested in maps and arrays.
-   */
-  private[sql] def findNestedField(
-      fieldNames: Seq[String],
-      includeCollections: Boolean = false,
-      resolver: Resolver = _ == _,
-      context: Origin = Origin()): Option[(Seq[String], StructField)] = {
-
-    def findFieldInStruct(
-        struct: StructType,
-        searchPath: Seq[String],
-        normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
-      assert(searchPath.nonEmpty)
-      val searchName = searchPath.head
-      val found = struct.fields.filter(f => resolver(searchName, f.name))
-      if (found.length > 1) {
-        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
-      } else if (found.isEmpty) {
-        None
-      } else {
-        findField(
-          parent = found.head,
-          searchPath = searchPath.tail,
-          normalizedPath)
-      }
-    }
-
-    @scala.annotation.tailrec
-    def findField(
-        parent: StructField,
-        searchPath: Seq[String],
-        normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
-      if (searchPath.isEmpty) {
-        Some(normalizedPath -> parent)
-      } else {
-        val currentPath = normalizedPath :+ parent.name
-        (searchPath, parent.dataType) match {
-          case (_, s: StructType) =>
-            findFieldInStruct(s, searchPath, currentPath)
-
-          case _ if !includeCollections =>
-            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
-
-          case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
-            findField(StructField("key", keyType, nullable = false), rest, currentPath)
-
-          case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
-            findField(StructField("value", valueType, isNullable), rest, currentPath)
-
-          case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
-            findField(StructField("element", elementType, isNullable), rest, currentPath)
-
-          case _ =>
-            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
-        }
-      }
-    }
-
-    findFieldInStruct(this, fieldNames, Nil)
-  }
-
-  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
 
   def treeString: String = treeString(Int.MaxValue)
 
@@ -497,6 +296,209 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
+  }
+}
+
+/**
+ * A [[StructType]] object can be constructed by
+ * {{{
+ * StructType(fields: Seq[StructField])
+ * }}}
+ * For a [[StructType]] object, one or multiple [[StructField]]s can be extracted by names.
+ * If multiple [[StructField]]s are extracted, a [[StructType]] object will be returned.
+ * If a provided name does not have a matching field, it will be ignored. For the case
+ * of extracting a single [[StructField]], a `null` will be returned.
+ *
+ * Scala Example:
+ * {{{
+ * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
+ *
+ * val struct =
+ *   StructType(
+ *     StructField("a", IntegerType, true) ::
+ *     StructField("b", LongType, false) ::
+ *     StructField("c", BooleanType, false) :: Nil)
+ *
+ * // Extract a single StructField.
+ * val singleField = struct("b")
+ * // singleField: StructField = StructField(b,LongType,false)
+ *
+ * // If this struct does not have a field called "d", it throws an exception.
+ * struct("d")
+ * // java.lang.IllegalArgumentException: d does not exist.
+ * //   ...
+ *
+ * // Extract multiple StructFields. Field names are provided in a set.
+ * // A StructType object will be returned.
+ * val twoFields = struct(Set("b", "c"))
+ * // twoFields: StructType =
+ * //   StructType(StructField(b,LongType,false), StructField(c,BooleanType,false))
+ *
+ * // Any names without matching fields will throw an exception.
+ * // For the case shown below, an exception is thrown due to "d".
+ * struct(Set("b", "c", "d"))
+ * // java.lang.IllegalArgumentException: d does not exist.
+ * //    ...
+ * }}}
+ *
+ * A [[org.apache.spark.sql.Row]] object is used as a value of the [[StructType]].
+ *
+ * Scala Example:
+ * {{{
+ * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
+ *
+ * val innerStruct =
+ *   StructType(
+ *     StructField("f1", IntegerType, true) ::
+ *     StructField("f2", LongType, false) ::
+ *     StructField("f3", BooleanType, false) :: Nil)
+ *
+ * val struct = StructType(
+ *   StructField("a", innerStruct, true) :: Nil)
+ *
+ * // Create a Row with the schema defined by struct
+ * val row = Row(Row(1, 2, true))
+ * }}}
+ *
+ * @since 1.3.0
+ */
+@Stable
+case class StructType(fields: Array[StructField]) extends StructTypeBase(fields) {
+  /** No-arg constructor for kryo. */
+  def this() = this(Array.empty[StructField])
+
+  /**
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int")
+   *   .add("b", "long")
+   *   .add("c", "string")
+   * }}}
+   */
+  def add(name: String, dataType: String): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true)
+   *   .add("b", "long", false)
+   *   .add("c", "string", true)
+   * }}}
+   */
+  def add(name: String, dataType: String, nullable: Boolean): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, Metadata.empty)
+   *   .add("b", "long", false, Metadata.empty)
+   *   .add("c", "string", true, Metadata.empty)
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, "comment1")
+   *   .add("b", "long", false, "comment2")
+   *   .add("c", "string", true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      comment: String): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, comment)
+  }
+
+  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
+
+  /**
+   * Returns the normalized path to a field and the field in this struct and its child structs.
+   *
+   * If includeCollections is true, this will return fields that are nested in maps and arrays.
+   */
+  private[sql] def findNestedField(
+      fieldNames: Seq[String],
+      includeCollections: Boolean = false,
+      resolver: Resolver = _ == _,
+      context: Origin = Origin()): Option[(Seq[String], StructField)] = {
+
+    def findFieldInStruct(
+        struct: StructType,
+        searchPath: Seq[String],
+        normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
+      assert(searchPath.nonEmpty)
+      val searchName = searchPath.head
+      val found = struct.fields.filter(f => resolver(searchName, f.name))
+      if (found.length > 1) {
+        throw QueryCompilationErrors.ambiguousColumnOrFieldError(fieldNames, found.length, context)
+      } else if (found.isEmpty) {
+        None
+      } else {
+        findField(
+          parent = found.head,
+          searchPath = searchPath.tail,
+          normalizedPath)
+      }
+    }
+
+    @scala.annotation.tailrec
+    def findField(
+                   parent: StructField,
+                   searchPath: Seq[String],
+                   normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
+      if (searchPath.isEmpty) {
+        Some(normalizedPath -> parent)
+      } else {
+        val currentPath = normalizedPath :+ parent.name
+        (searchPath, parent.dataType) match {
+          case (_, s: StructType) =>
+            findFieldInStruct(s, searchPath, currentPath)
+
+          case _ if !includeCollections =>
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
+
+          case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
+            findField(StructField("key", keyType, nullable = false), rest, currentPath)
+
+          case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
+            findField(StructField("value", valueType, isNullable), rest, currentPath)
+
+          case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
+            findField(StructField("element", elementType, isNullable), rest, currentPath)
+
+          case _ =>
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
+        }
+      }
+    }
+
+    findFieldInStruct(this, fieldNames, Nil)
   }
 
   /**
