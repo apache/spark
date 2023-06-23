@@ -2289,7 +2289,8 @@ private[spark] object Utils extends Logging with SparkClassUtils {
 
   /** Return a heap dump. Used to capture dumps for the web UI */
   def getHeapHistogram(): Array[String] = {
-    val pid = String.valueOf(ProcessHandle.current().pid())
+    // From Java 9+, we can use 'ProcessHandle.current().pid()'
+    val pid = getProcessName().split("@").head
     val builder = new ProcessBuilder("jmap", "-histo:live", pid)
     builder.redirectErrorStream(true)
     val p = builder.start()
