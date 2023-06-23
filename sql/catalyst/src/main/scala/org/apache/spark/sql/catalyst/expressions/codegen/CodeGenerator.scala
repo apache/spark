@@ -179,20 +179,21 @@ class CodegenContext extends Logging {
    */
   var currentLambdaVars: mutable.Map[Long, ExprCode] = mutable.HashMap.empty
 
-  def withLambdaVars(namedLambdas: Seq[NamedLambdaVariable],
+  def withLambdaVars(
+      namedLambdas: Seq[NamedLambdaVariable],
       f: Seq[ExprCode] => ExprCode): ExprCode = {
-    val lambdaVars = namedLambdas.map { namedLambda =>
-      val id = namedLambda.exprId.id
+    val lambdaVars = namedLambdas.map { lambda =>
+      val id = lambda.exprId.id
       if (currentLambdaVars.get(id).nonEmpty) {
         throw QueryExecutionErrors.lambdaVariableAlreadyDefinedError(id)
       }
-      val isNull = if (namedLambda.nullable) {
+      val isNull = if (lambda.nullable) {
         JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "lambdaIsNull"))
       } else {
         FalseLiteral
       }
-      val value = addMutableState(javaType(namedLambda.dataType), "lambdaValue")
-      val lambdaVar = ExprCode(isNull, JavaCode.global(value, namedLambda.dataType))
+      val value = addMutableState(javaType(lambda.dataType), "lambdaValue")
+      val lambdaVar = ExprCode(isNull, JavaCode.global(value, lambda.dataType))
       currentLambdaVars.put(id, lambdaVar)
       lambdaVar
     }
@@ -203,7 +204,8 @@ class CodegenContext extends Logging {
   }
 
   def getLambdaVar(id: Long): ExprCode = {
-    currentLambdaVars.getOrElse(id,
+    currentLambdaVars.getOrElse(
+      id,
       throw QueryExecutionErrors.lambdaVariableNotDefinedError(id))
   }
 
