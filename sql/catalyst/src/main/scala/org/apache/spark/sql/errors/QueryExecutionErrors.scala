@@ -457,7 +457,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def constructorNotFoundError(cls: String): Throwable = {
     SparkException.internalError(
-      s"Couldn't find a valid constructor on "$cls".")
+      s"""Couldn't find a valid constructor on "$cls".""")
   }
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
