@@ -17,7 +17,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.errors.QueryExecutionErrors
 
 abstract class DataTypeExpression(val dataType: DataType) {
   /**
