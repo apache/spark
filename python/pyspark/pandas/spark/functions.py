@@ -147,7 +147,7 @@ def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
 
-        return _invoke_function_over_columns(
+        return _invoke_function_over_columns(  # type: ignore[return-value]
             "ewm",
             col,  # type: ignore[arg-type]
             lit(alpha),
@@ -156,4 +156,4 @@ def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
 
     else:
         sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.pandasCovar(col._jc, alpha, ignore_na))
+        return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
