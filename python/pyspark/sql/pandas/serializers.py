@@ -202,6 +202,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             If None, pyarrow's inferred type will be used
         spark_type : DataType, optional
             If None, spark type converted from arrow_type will be used
+        arrow_cast: bool, optional
+            Whether to apply Arrow casting when the user-specified return type mismatches the
+            actual return values.
 
         Returns
         -------
