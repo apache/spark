@@ -2287,6 +2287,22 @@ private[spark] object Utils extends Logging with SparkClassUtils {
     }.map(threadInfoToThreadStackTrace)
   }
 
+  /** Return a heap dump. Used to capture dumps for the web UI */
+  def getHeapHistogram(): Array[String] = {
+    val pid = String.valueOf(ProcessHandle.current().pid())
+    val builder = new ProcessBuilder("jmap", "-histo:live", pid)
+    builder.redirectErrorStream(true)
+    val p = builder.start()
+    val r = new BufferedReader(new InputStreamReader(p.getInputStream()))
+    val rows = ArrayBuffer.empty[String]
+    var line = ""
+    while (line != null) {
+      if (line.nonEmpty) rows += line
+      line = r.readLine()
+    }
+    rows.toArray
+  }
+
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
     if (threadId <= 0) {
       None
