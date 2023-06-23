@@ -192,7 +192,7 @@ object HllSketchAgg {
   // Replicate Datasketches' HllUtil's checkLgK implementation, as we can't reference it directly.
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
-      throw QueryExecutionErrors.hllInvalidLgK(function = "HLL_SKETCH_AGG",
+      throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
         min = minLgConfigK.toString, max = maxLgConfigK.toString, value = lgConfigK.toString)
     }
   }

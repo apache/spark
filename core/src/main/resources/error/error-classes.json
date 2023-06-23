@@ -759,7 +759,7 @@
   },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
-      "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the HLL_SKETCH_AGG function)."
+      "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the 'hll_sketch_agg' function)."
     ]
   },
   "HLL_INVALID_LG_K" : {

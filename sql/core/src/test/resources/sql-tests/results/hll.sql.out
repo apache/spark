@@ -108,7 +108,7 @@ org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "HLL_INVALID_LG_K",
   "messageParameters" : {
-    "function" : "`HLL_SKETCH_AGG`",
+    "function" : "`hll_sketch_agg`",
     "max" : "21",
     "min" : "4",
     "value" : "2"
@@ -126,7 +126,7 @@ org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "HLL_INVALID_LG_K",
   "messageParameters" : {
-    "function" : "`HLL_SKETCH_AGG`",
+    "function" : "`hll_sketch_agg`",
     "max" : "21",
     "min" : "4",
     "value" : "40"
@@ -151,7 +151,7 @@ org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "HLL_UNION_DIFFERENT_LG_K",
   "messageParameters" : {
-    "function" : "`HLL_UNION`",
+    "function" : "`hll_union`",
     "left" : "12",
     "right" : "13"
   }
