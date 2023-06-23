@@ -73,7 +73,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "sum_distinct", // equivalent to sum(distinct foo)
       "typedLit", "typedlit", // Scala only
       "udaf", "udf", // create function statement in sql
-      "call_function", // moot in SQL as you just call the function directly
+      "call_function" // moot in SQL as you just call the function directly
     )
 
     val excludedSqlFunctions = Set.empty[String]
