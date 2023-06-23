@@ -27,7 +27,7 @@ def require_minimum_pandas_version() -> None:
         import pandas
 
         have_pandas = True
-    except ImportError as error:
+    except (ImportError, ModuleNotFoundError) as error:
         have_pandas = False
         raised_error = error
     if not have_pandas:
@@ -53,7 +53,7 @@ def require_minimum_pyarrow_version() -> None:
         import pyarrow
 
         have_arrow = True
-    except ImportError as error:
+    except (ImportError, ModuleNotFoundError) as error:
         have_arrow = False
         raised_error = error
     if not have_arrow:
@@ -80,7 +80,7 @@ def pyarrow_version_less_than_minimum(minimum_pyarrow_version: str) -> bool:
 
     try:
         import pyarrow
-    except ImportError:
+    except (ImportError, ModuleNotFoundError):
         return False
 
     return LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version)
