@@ -264,6 +264,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAME: 'NAME';
 NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
 NANOSECOND: 'NANOSECOND';
@@ -444,6 +445,7 @@ COLON: ':';
 ARROW: '->';
 HENT_START: '/*+';
 HENT_END: '*/';
+QUESTION: '?';
 
 STRING_LITERAL
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

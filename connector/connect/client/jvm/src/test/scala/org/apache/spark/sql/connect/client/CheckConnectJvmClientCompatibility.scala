@@ -95,7 +95,7 @@ object CheckConnectJvmClientCompatibility {
     } catch {
       case e: Throwable =>
         println(e.getMessage)
-        resultWriter.write(s"ERROR: ${e.getMessage}")
+        resultWriter.write(s"ERROR: ${e.getMessage}\n")
     } finally {
       if (resultWriter != null) {
         resultWriter.close()
@@ -202,12 +202,6 @@ object CheckConnectJvmClientCompatibility {
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.KeyValueGroupedDataset.mapGroupsWithState"
-      ), // streaming
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.KeyValueGroupedDataset.flatMapGroupsWithState"
-      ), // streaming
-      ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.KeyValueGroupedDataset.this"),
 
@@ -225,6 +219,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udf"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udtf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.streams"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
       ProblemFilters.exclude[Problem](
@@ -232,6 +227,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
+      // TODO(SPARK-44068): Support positional parameters in Scala connect client
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
 
       // RuntimeConfig
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
@@ -239,9 +236,6 @@ object CheckConnectJvmClientCompatibility {
       // TypedColumn
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
       // DataStreamWriter
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.DataStreamWriter.foreach" // TODO(SPARK-43133)
-      ),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
       ),

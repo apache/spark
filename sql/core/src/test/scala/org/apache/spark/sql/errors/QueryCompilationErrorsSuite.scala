@@ -486,13 +486,14 @@ class QueryCompilationErrorsSuite
         sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
-          "proposal" -> "`__auto_generated_subquery_name`.`i`"),
+          "proposal" -> "`i`"),
         context = ExpectedContext(
           fragment = "v.i",
           start = 7,
           stop = 9))
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
     }
   }
 

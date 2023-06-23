@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.{File, FileWriter}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -25,10 +26,11 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.SQLHelper
+import org.apache.spark.sql.{ForeachWriter, Row, SparkSession, SQLHelper}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.window
+import org.apache.spark.util.Utils
 
 class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
@@ -163,12 +165,84 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       assert(!terminated)
 
       q.stop()
-      // TODO (SPARK-43032): uncomment below
-      // eventually(timeout(1.minute)) {
-      // q.awaitTermination()
-      // }
+      eventually(timeout(1.minute)) {
+        q.awaitTermination()
+      }
     }
   }
+
+  test("foreach Row") {
+    val writer = new TestForeachWriter[Row]
+
+    val df = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .load()
+
+    val query = df.writeStream
+      .foreach(writer)
+      .outputMode("update")
+      .start()
+
+    assert(query.isActive)
+    assert(query.exception.isEmpty)
+
+    query.stop()
+  }
+
+  test("foreach Int") {
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val writer = new TestForeachWriter[Int]
+
+    val df = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", "10")
+      .load()
+
+    val query = df
+      .selectExpr("CAST(value AS INT)")
+      .as[Int]
+      .writeStream
+      .foreach(writer)
+      .outputMode("update")
+      .start()
+
+    assert(query.isActive)
+    assert(query.exception.isEmpty)
+
+    query.stop()
+  }
+
+  // TODO[SPARK-43796]: Enable this test once ammonite client fixes the issue.
+  //  test("foreach Custom class") {
+  //    val session: SparkSession = spark
+  //    import session.implicits._
+  //
+  //    case class TestClass(value: Int) {
+  //      override def toString: String = value.toString
+  //    }
+  //
+  //    val writer = new TestForeachWriter[TestClass]
+  //    val df = spark.readStream
+  //      .format("rate")
+  //      .option("rowsPerSecond", "10")
+  //      .load()
+  //
+  //    val query = df
+  //      .selectExpr("CAST(value AS INT)")
+  //      .as[TestClass]
+  //      .writeStream
+  //      .foreach(writer)
+  //      .outputMode("update")
+  //      .start()
+  //
+  //    assert(query.isActive)
+  //    assert(query.exception.isEmpty)
+  //
+  //    query.stop()
+  //  }
 
   test("streaming query manager") {
     assert(spark.streams.active.isEmpty)
@@ -196,5 +270,26 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
     q.stop()
     assert(!q1.isActive)
+  }
+}
+
+class TestForeachWriter[T] extends ForeachWriter[T] {
+  var fileWriter: FileWriter = _
+  var path: File = _
+
+  def open(partitionId: Long, version: Long): Boolean = {
+    path = Utils.createTempDir()
+    fileWriter = new FileWriter(path, true)
+    true
+  }
+
+  def process(row: T): Unit = {
+    fileWriter.write(row.toString)
+    fileWriter.write("\n")
+  }
+
+  def close(errorOrNull: Throwable): Unit = {
+    fileWriter.close()
+    Utils.deleteRecursively(path)
   }
 }

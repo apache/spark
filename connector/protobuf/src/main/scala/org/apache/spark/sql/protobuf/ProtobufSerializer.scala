@@ -173,7 +173,7 @@ private[sql] class ProtobufSerializer(
       case (MapType(kt, vt, valueContainsNull), MESSAGE) =>
         var keyField: FieldDescriptor = null
         var valueField: FieldDescriptor = null
-        fieldDescriptor.getMessageType.getFields.asScala.map { field =>
+        fieldDescriptor.getMessageType.getFields.asScala.foreach { field =>
           field.getName match {
             case "key" =>
               keyField = field

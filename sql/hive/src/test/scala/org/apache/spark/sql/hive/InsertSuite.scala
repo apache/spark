@@ -39,7 +39,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils  with PrivateMethodTester  {
+    with SQLTestUtils with PrivateMethodTester {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -346,20 +346,29 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   testPartitionedTable("partitionBy() can't be used together with insertInto()") { tableName =>
-    val cause = intercept[AnalysisException] {
-      Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
-    }
-
-    assert(cause.getMessage.contains("insertInto() can't be used together with partitionBy()."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1309",
+      parameters = Map.empty
+    )
   }
 
   testPartitionedTable(
     "SPARK-16036: better error message when insert into a table with mismatch schema") {
     tableName =>
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
-      }
-      assert(e.message.contains("Cannot write to") && e.message.contains("too many data columns"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
+        },
+        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        parameters = Map(
+          "staticPartCols" -> "`b`, `c`",
+          "tableColumns" -> "`a`, `d`, `b`, `c`",
+          "dataColumns" -> "`1`, `2`, `3`",
+          "tableName" -> s"`spark_catalog`.`default`.`${tableName}`")
+      )
   }
 
   testPartitionedTable("SPARK-16037: INSERT statement should match columns by position") {
@@ -745,7 +754,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         sql(stmt)
       }
       checkErrorTableNotFound(e, "`nonexistent`",
-        ExpectedContext("TABLE nonexistent", stmt.length - "TABLE nonexistent".length,
+        ExpectedContext("nonexistent", stmt.length - "nonexistent".length,
           stmt.length - 1))
     }
   }
@@ -841,16 +850,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           |PARTITIONED BY (d string)
           """.stripMargin)
 
-      val e = intercept[AnalysisException] {
-        spark.sql(
-          """
-            |INSERT OVERWRITE TABLE t1 PARTITION(d='')
-            |SELECT 1
-          """.stripMargin)
-      }.getMessage
-
-      assert(!e.contains("get partition: Value for key d is null or empty"))
-      assert(e.contains("Partition spec is invalid"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """
+              |INSERT OVERWRITE TABLE t1 PARTITION(d='')
+              |SELECT 1
+            """.stripMargin)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        parameters = Map(
+          "details" -> "The spec ([d=Some()]) contains an empty partition column value")
+      )
     }
   }
 

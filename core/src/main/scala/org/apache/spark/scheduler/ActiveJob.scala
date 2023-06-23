@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.JobArtifactSet
 import org.apache.spark.util.CallSite
 
 /**
@@ -38,6 +39,7 @@ import org.apache.spark.util.CallSite
  *   ShuffleMapStage for submitMapStage).
  * @param callSite Where this job was initiated in the user's program (shown on UI).
  * @param listener A listener to notify if tasks in this job finish or the job fails.
+ * @param artifacts A set of artifacts that this job has may use.
  * @param properties Scheduling properties attached to the job, such as fair scheduler pool name.
  */
 private[spark] class ActiveJob(
@@ -45,6 +47,7 @@ private[spark] class ActiveJob(
     val finalStage: Stage,
     val callSite: CallSite,
     val listener: JobListener,
+    val artifacts: JobArtifactSet,
     val properties: Properties) {
 
   /**

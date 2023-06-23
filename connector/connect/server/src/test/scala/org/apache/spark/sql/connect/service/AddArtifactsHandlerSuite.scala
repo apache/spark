@@ -314,4 +314,85 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       handler.forceCleanUp()
     }
   }
+
+  private def createDummyArtifactRequests(name: String): Seq[proto.AddArtifactsRequest] = {
+    val bytes = ByteString.EMPTY
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId("c1")
+      .build()
+
+    val singleChunkArtifact = proto.AddArtifactsRequest.SingleChunkArtifact
+      .newBuilder()
+      .setName(name)
+      .setData(
+        proto.AddArtifactsRequest.ArtifactChunk
+          .newBuilder()
+          .setData(bytes)
+          // Set a dummy CRC value
+          .setCrc(12345)
+          .build())
+      .build()
+
+    val singleChunkArtifactRequest = AddArtifactsRequest
+      .newBuilder()
+      .setSessionId("abc")
+      .setUserContext(context)
+      .setBatch(
+        proto.AddArtifactsRequest.Batch.newBuilder().addArtifacts(singleChunkArtifact).build())
+      .build()
+
+    val beginChunkedArtifact = proto.AddArtifactsRequest.BeginChunkedArtifact
+      .newBuilder()
+      .setName(name)
+      .setNumChunks(1)
+      .setTotalBytes(1)
+      .setInitialChunk(
+        proto.AddArtifactsRequest.ArtifactChunk.newBuilder().setData(bytes).setCrc(12345).build())
+      .build()
+
+    val beginChunkArtifactRequest = AddArtifactsRequest
+      .newBuilder()
+      .setSessionId("abc")
+      .setUserContext(context)
+      .setBeginChunk(beginChunkedArtifact)
+      .build()
+
+    Seq(singleChunkArtifactRequest, beginChunkArtifactRequest)
+  }
+
+  test("Artifacts names are not allowed to be absolute paths") {
+    val promise = Promise[AddArtifactsResponse]
+    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
+    try {
+      val name = "/absolute/path/"
+      val request = createDummyArtifactRequests(name)
+      request.foreach { req =>
+        intercept[IllegalArgumentException] {
+          handler.onNext(req)
+        }
+      }
+      handler.onCompleted()
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("Artifact name/paths cannot reference parent/sibling/nephew directories") {
+    val promise = Promise[AddArtifactsResponse]
+    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
+    try {
+      val names = Seq("..", "../sibling", "../nephew/directory", "a/../../b", "x/../y/../..")
+      val request = names.flatMap(createDummyArtifactRequests)
+      request.foreach { req =>
+        intercept[IllegalArgumentException] {
+          handler.onNext(req)
+        }
+      }
+      handler.onCompleted()
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
 }

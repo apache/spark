@@ -33,7 +33,9 @@ import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome, Tag}
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.scalatest.time._ // scalastyle:ignore
 
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
@@ -69,6 +71,7 @@ abstract class SparkFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
+  with TimeLimits
   with Logging {
 // scalastyle:on
 
@@ -147,7 +150,10 @@ abstract class SparkFunSuite
     if (excluded.contains(testName)) {
       ignore(s"$testName (excluded)")(testBody)
     } else {
-      super.test(testName, testTags: _*)(testBody)
+      val timeout = sys.props.getOrElse("spark.test.timeout", "20").toLong
+      super.test(testName, testTags: _*)(
+        failAfter(Span(timeout, Minutes))(testBody)
+      )
     }
   }
 
@@ -291,6 +297,7 @@ abstract class SparkFunSuite
           logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
           logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
+        LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
       }
     }
   }

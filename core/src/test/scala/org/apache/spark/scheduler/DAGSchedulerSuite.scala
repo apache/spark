@@ -491,18 +491,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
       listener: JobListener = jobListener,
+      artifacts: JobArtifactSet = JobArtifactSet(sc),
       properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, artifacts,
+      properties))
     jobId
   }
 
   /** Submits a map stage to the scheduler and returns the job id. */
   private def submitMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
-      listener: JobListener = jobListener): Int = {
+      listener: JobListener = jobListener,
+      artifacts: JobArtifactSet = JobArtifactSet(sc)): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener, artifacts))
     jobId
   }
 

@@ -28,7 +28,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
@@ -63,8 +63,12 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         }
 
       val executeHolder = sessionHolder.createExecutePlanHolder(v)
+      session.sparkContext.addJobTag(executeHolder.jobTag)
+      session.sparkContext.setInterruptOnCancel(true)
+      // Also set the tag as the JobGroup for all the jobs in the query.
+      // TODO: In the long term, it should be encouraged to use job tag only.
       session.sparkContext.setJobGroup(
-        executeHolder.jobGroupId,
+        executeHolder.jobTag,
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
         interruptOnCancel = true)
 
@@ -83,21 +87,24 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
       try {
         v.getPlan.getOpTypeCase match {
-          case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-          case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+          case proto.Plan.OpTypeCase.COMMAND => handleCommand(sessionHolder, v)
+          case proto.Plan.OpTypeCase.ROOT => handlePlan(sessionHolder, v)
           case _ =>
             throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
         }
       } finally {
+        session.sparkContext.removeJobTag(executeHolder.jobTag)
+        session.sparkContext.clearJobGroup()
         sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }
   }
 
-  private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
+  private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
-    val planner = new SparkConnectPlanner(session)
-    val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
+    val planner = new SparkConnectPlanner(sessionHolder)
+    val dataframe =
+      Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
@@ -110,9 +117,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     responseObserver.onCompleted()
   }
 
-  private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
+  private def handleCommand(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(session)
+    val planner = new SparkConnectPlanner(sessionHolder)
     planner.process(
       command = command,
       userId = request.getUserContext.getUserId,

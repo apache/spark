@@ -21,21 +21,17 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.13</artifactId>
+    <artifactId>spark-parent_2.12</artifactId>
     <version>3.5.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-connect_2.13</artifactId>
+  <artifactId>spark-connect_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Connect Server</name>
   <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>connect</sbt.project.name>
-    <guava.version>31.0.1-jre</guava.version>
-    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-    <io.grpc.version>1.47.0</io.grpc.version>
-    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
   </properties>
 
   <dependencies>
@@ -156,16 +152,16 @@
         </exclusion>
       </exclusions>
     </dependency>
-    <!-- #if scala-2.13 -->
+    <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    <!-- #endif scala-2.13 -->
+    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${guava.version}</version>
+      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

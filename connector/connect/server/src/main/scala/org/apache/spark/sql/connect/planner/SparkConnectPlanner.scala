@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
+import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
@@ -35,20 +36,22 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -62,11 +65,12 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
-import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
@@ -77,7 +81,10 @@ final case class InvalidCommandInput(
     private val cause: Throwable = null)
     extends Exception(message, cause)
 
-class SparkConnectPlanner(val session: SparkSession) {
+class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
+
+  def session: SparkSession = sessionHolder.session
+
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
@@ -246,7 +253,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
     if (!args.isEmpty) {
-      ParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
+      NameParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else {
       parsedPlan
     }
@@ -404,15 +411,15 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
     val df = Dataset.ofRows(session, transformRelation(rel.getInput))
-    val corr = if (rel.hasMethod) {
-      df.stat.corr(rel.getCol1, rel.getCol2, rel.getMethod)
+    if (rel.hasMethod) {
+      StatFunctions
+        .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2), rel.getMethod)
+        .logicalPlan
     } else {
-      df.stat.corr(rel.getCol1, rel.getCol2)
+      StatFunctions
+        .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2))
+        .logicalPlan
     }
-
-    LocalRelation.fromProduct(
-      output = AttributeReference("corr", DoubleType, false)() :: Nil,
-      data = Tuple1.apply(corr) :: Nil)
   }
 
   private def transformStatApproxQuantile(rel: proto.StatApproxQuantile): LogicalPlan = {
@@ -565,16 +572,82 @@ class SparkConnectPlanner(val session: SparkSession) {
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
-    val mapped = new MapGroups(
-      udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
-      udf.inputDeserializer(ds.groupingAttributes),
-      ds.valueDeserializer,
-      ds.groupingAttributes,
-      ds.dataAttributes,
-      ds.sortOrder,
-      udf.outputObjAttr,
-      ds.analyzed)
-    SerializeFromObject(udf.outputNamedExpression, mapped)
+    if (rel.hasIsMapGroupsWithState) {
+      val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
+      val initialDs = if (hasInitialState) {
+        UntypedKeyValueGroupedDataset(
+          rel.getInitialInput,
+          rel.getInitialGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+      } else {
+        UntypedKeyValueGroupedDataset(
+          rel.getInput,
+          rel.getGroupingExpressionsList,
+          rel.getSortingExpressionsList)
+      }
+      val timeoutConf = if (!rel.hasTimeoutConf) {
+        GroupStateTimeout.NoTimeout
+      } else {
+        groupStateTimeoutFromString(rel.getTimeoutConf)
+      }
+      val outputMode = if (!rel.hasOutputMode) {
+        OutputMode.Update
+      } else {
+        InternalOutputModes(rel.getOutputMode)
+      }
+
+      val flatMapGroupsWithState = if (hasInitialState) {
+        new FlatMapGroupsWithState(
+          udf.function
+            .asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+          udf.inputDeserializer(ds.groupingAttributes),
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          udf.outputObjAttr,
+          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          outputMode,
+          rel.getIsMapGroupsWithState,
+          timeoutConf,
+          hasInitialState,
+          initialDs.groupingAttributes,
+          initialDs.dataAttributes,
+          initialDs.valueDeserializer,
+          initialDs.analyzed,
+          ds.analyzed)
+      } else {
+        new FlatMapGroupsWithState(
+          udf.function
+            .asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+          udf.inputDeserializer(ds.groupingAttributes),
+          ds.valueDeserializer,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          udf.outputObjAttr,
+          initialDs.vEncoder.asInstanceOf[ExpressionEncoder[Any]],
+          outputMode,
+          rel.getIsMapGroupsWithState,
+          timeoutConf,
+          hasInitialState,
+          ds.groupingAttributes,
+          ds.dataAttributes,
+          udf.inputDeserializer(ds.groupingAttributes),
+          LocalRelation(initialDs.vEncoder.schema.toAttributes), // empty data set
+          ds.analyzed)
+      }
+      SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
+    } else {
+      val mapped = new MapGroups(
+        udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
+        udf.inputDeserializer(ds.groupingAttributes),
+        ds.valueDeserializer,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        ds.sortOrder,
+        udf.outputObjAttr,
+        ds.analyzed)
+      SerializeFromObject(udf.outputNamedExpression, mapped)
+    }
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
@@ -1348,6 +1421,12 @@ class SparkConnectPlanner(val session: SparkSession) {
       SparkConnectArtifactManager.classLoaderWithArtifacts)
   }
 
+  private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
+    Utils.deserialize[ForeachWriterPacket](
+      fun.getPayload.toByteArray,
+      SparkConnectArtifactManager.classLoaderWithArtifacts)
+  }
+
   /**
    * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
    *
@@ -1512,6 +1591,18 @@ class SparkConnectPlanner(val session: SparkSession) {
         val ignoreNulls = extractBoolean(children(2), "ignoreNulls")
         Some(NthValue(children(0), children(1), ignoreNulls))
 
+      case "like" if fun.getArgumentsCount == 3 =>
+        // Like does not have a constructor which accepts Expression typed 'escapeChar'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val escapeChar = extractString(children(2), "escapeChar")
+        Some(Like(children(0), children(1), escapeChar.charAt(0)))
+
+      case "ilike" if fun.getArgumentsCount == 3 =>
+        // ILike does not have a constructor which accepts Expression typed 'escapeChar'
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val escapeChar = extractString(children(2), "escapeChar")
+        Some(ILike(children(0), children(1), escapeChar.charAt(0)))
+
       case "lag" if fun.getArgumentsCount == 4 =>
         // Lag does not have a constructor which accepts Expression typed 'ignoreNulls'
         val children = fun.getArgumentsList.asScala.map(transformExpression)
@@ -1626,6 +1717,45 @@ class SparkConnectPlanner(val session: SparkSession) {
       case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
         Some(DistributedSequenceID())
 
+      case "pandas_product" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val dropna = extractBoolean(children(1), "dropna")
+        Some(aggregate.PandasProduct(children(0), dropna).toAggregateExpression(false))
+
+      case "pandas_stddev" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val ddof = extractInteger(children(1), "ddof")
+        Some(aggregate.PandasStddev(children(0), ddof).toAggregateExpression(false))
+
+      case "pandas_skew" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(aggregate.PandasSkewness(children(0)).toAggregateExpression(false))
+
+      case "pandas_kurt" if fun.getArgumentsCount == 1 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        Some(aggregate.PandasKurtosis(children(0)).toAggregateExpression(false))
+
+      case "pandas_var" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val ddof = extractInteger(children(1), "ddof")
+        Some(aggregate.PandasVariance(children(0), ddof).toAggregateExpression(false))
+
+      case "pandas_covar" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val ddof = extractInteger(children(2), "ddof")
+        Some(aggregate.PandasCovar(children(0), children(1), ddof).toAggregateExpression(false))
+
+      case "pandas_mode" if fun.getArgumentsCount == 2 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val ignoreNA = extractBoolean(children(1), "ignoreNA")
+        Some(aggregate.PandasMode(children(0), ignoreNA).toAggregateExpression(false))
+
+      case "ewm" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val alpha = extractDouble(children(1), "alpha")
+        val ignoreNA = extractBoolean(children(2), "ignoreNA")
+        Some(EWM(children(0), alpha, ignoreNA))
+
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>
         val expr = transformExpression(fun.getArguments(0))
@@ -1684,6 +1814,16 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
     case Literal(bool: Boolean, BooleanType) => bool
     case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
+  }
+
+  private def extractDouble(expr: Expression, field: String): Double = expr match {
+    case Literal(double: Double, DoubleType) => double
+    case other => throw InvalidPlanInput(s"$field should be a literal double, but got $other")
+  }
+
+  private def extractInteger(expr: Expression, field: String): Int = expr match {
+    case Literal(int: Int, IntegerType) => int
+    case other => throw InvalidPlanInput(s"$field should be a literal integer, but got $other")
   }
 
   private def extractString(expr: Expression, field: String): String = expr match {
@@ -2445,10 +2585,24 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     if (writeOp.hasForeachWriter) {
-      val foreach = writeOp.getForeachWriter.getPythonWriter
-      val pythonFcn = transformPythonFunction(foreach)
-      writer.foreachImplementation(
-        new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]])
+      if (writeOp.getForeachWriter.hasPythonWriter) {
+        val foreach = writeOp.getForeachWriter.getPythonWriter
+        val pythonFcn = transformPythonFunction(foreach)
+        writer.foreachImplementation(
+          new PythonForeachWriter(pythonFcn, dataset.schema).asInstanceOf[ForeachWriter[Any]])
+      } else {
+        val foreachWriterPkt = unpackForeachWriter(writeOp.getForeachWriter.getScalaWriter)
+        val clientWriter = foreachWriterPkt.foreachWriter
+        if (foreachWriterPkt.datasetEncoder == null) {
+          // datasetEncoder is null means the client-side writer has type parameter Row,
+          // Since server-side dataset is always dataframe, here just use foreach directly.
+          writer.foreach(clientWriter.asInstanceOf[ForeachWriter[Row]])
+        } else {
+          val encoder = ExpressionEncoder(
+            foreachWriterPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]])
+          writer.foreachImplementation(clientWriter.asInstanceOf[ForeachWriter[Any]], encoder)
+        }
+      }
     }
 
     val query = writeOp.getPath match {
@@ -2575,15 +2729,13 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
-        if (command.getAwaitTermination.hasTimeoutMs) {
-          val terminated = query.awaitTermination(command.getAwaitTermination.getTimeoutMs)
-          respBuilder.getAwaitTerminationBuilder
-            .setTerminated(terminated)
+        val timeout = if (command.getAwaitTermination.hasTimeoutMs) {
+          Some(command.getAwaitTermination.getTimeoutMs)
         } else {
-          query.awaitTermination()
-          respBuilder.getAwaitTerminationBuilder
-            .setTerminated(true)
+          None
         }
+        val terminated = handleStreamingAwaitTermination(query, timeout)
+        respBuilder.getAwaitTerminationBuilder.setTerminated(terminated)
 
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
@@ -2595,6 +2747,48 @@ class SparkConnectPlanner(val session: SparkSession) {
         .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
         .build())
+  }
+
+  /**
+   * A helper function to handle streaming awaitTermination(). awaitTermination() can be a long
+   * running command. In this function, we periodically check if the RPC call has been cancelled.
+   * If so, we can stop the operation and release resources early.
+   * @param query
+   *   the query waits to be terminated
+   * @param timeoutOptionMs
+   *   optional. Timeout to wait for termination. If None, no timeout is set
+   * @return
+   *   if the query has terminated
+   */
+  private def handleStreamingAwaitTermination(
+      query: StreamingQuery,
+      timeoutOptionMs: Option[Long]): Boolean = {
+    // How often to check if RPC is cancelled and call awaitTermination()
+    val awaitTerminationIntervalMs = 10000
+    val startTimeMs = System.currentTimeMillis()
+
+    val timeoutTotalMs = timeoutOptionMs.getOrElse(Long.MaxValue)
+    var timeoutLeftMs = timeoutTotalMs
+    require(timeoutLeftMs > 0, "Timeout has to be positive")
+
+    val grpcContext = Context.current
+    while (!grpcContext.isCancelled) {
+      val awaitTimeMs = math.min(awaitTerminationIntervalMs, timeoutLeftMs)
+
+      val terminated = query.awaitTermination(awaitTimeMs)
+      if (terminated) {
+        return true
+      }
+
+      timeoutLeftMs = timeoutTotalMs - (System.currentTimeMillis() - startTimeMs)
+      if (timeoutLeftMs <= 0) {
+        return false
+      }
+    }
+
+    // gRPC is cancelled
+    logWarning("RPC context is cancelled when executing awaitTermination()")
+    throw new StatusRuntimeException(Status.CANCELLED)
   }
 
   private def buildStreamingQueryInstance(query: StreamingQuery): StreamingQueryInstance = {
@@ -2697,12 +2891,23 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformListDatabases(getListDatabases: proto.ListDatabases): LogicalPlan = {
-    session.catalog.listDatabases().logicalPlan
+    if (getListDatabases.hasPattern) {
+      session.catalog.listDatabases(getListDatabases.getPattern).logicalPlan
+    } else {
+      session.catalog.listDatabases().logicalPlan
+    }
   }
 
   private def transformListTables(getListTables: proto.ListTables): LogicalPlan = {
     if (getListTables.hasDbName) {
-      session.catalog.listTables(getListTables.getDbName).logicalPlan
+      if (getListTables.hasPattern) {
+        session.catalog.listTables(getListTables.getDbName, getListTables.getPattern).logicalPlan
+      } else {
+        session.catalog.listTables(getListTables.getDbName).logicalPlan
+      }
+    } else if (getListTables.hasPattern) {
+      val currentDatabase = session.catalog.currentDatabase
+      session.catalog.listTables(currentDatabase, getListTables.getPattern).logicalPlan
     } else {
       session.catalog.listTables().logicalPlan
     }
@@ -2710,7 +2915,16 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformListFunctions(getListFunctions: proto.ListFunctions): LogicalPlan = {
     if (getListFunctions.hasDbName) {
-      session.catalog.listFunctions(getListFunctions.getDbName).logicalPlan
+      if (getListFunctions.hasPattern) {
+        session.catalog
+          .listFunctions(getListFunctions.getDbName, getListFunctions.getPattern)
+          .logicalPlan
+      } else {
+        session.catalog.listFunctions(getListFunctions.getDbName).logicalPlan
+      }
+    } else if (getListFunctions.hasPattern) {
+      val currentDatabase = session.catalog.currentDatabase
+      session.catalog.listFunctions(currentDatabase, getListFunctions.getPattern).logicalPlan
     } else {
       session.catalog.listFunctions().logicalPlan
     }

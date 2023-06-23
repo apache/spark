@@ -35,10 +35,13 @@ class DeltaBasedUpdateAsDeleteAndInsertTableSuite extends UpdateTableSuiteBase {
         |{ "pk": 3, "salary": 120, "dep": 'hr' }
         |""".stripMargin)
 
-    val exception = intercept[AnalysisException] {
-      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
-    }
-    assert(exception.message.contains("Row ID attributes cannot be nullable"))
+    checkErrorMatchPVals(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+      },
+      errorClass = "NULLABLE_ROW_ID_ATTRIBUTES",
+      parameters = Map("nullableRowIdAttrs" -> "pk#\\d+")
+    )
   }
 
   test("update with assignments to row ID") {

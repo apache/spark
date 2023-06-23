@@ -613,6 +613,7 @@ class KubernetesSuite extends SparkFunSuite
     Eventually.eventually(TIMEOUT, INTERVAL) {
       assert(kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
         .withName(driverPodName)
         .get() == null)
     }

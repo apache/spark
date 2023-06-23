@@ -144,7 +144,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 Leslie Thompson	IT	5186	5917.75	5186.0	7381.25	8113.0
 Anthony Bow	Accounting	6627	8543.75	8435.0	9746.5	9998.0
@@ -344,7 +344,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<employee_name:string,department:string,salary:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 Leslie Thompson	IT	5186	5917.75	5186.0	7381.25	8113.0
 Anthony Bow	Accounting	6627	8543.75	8435.0	9746.5	9998.0
@@ -380,7 +380,7 @@ WHERE salary > 8900
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.5) WITHIN GROUP (ORDER BY v) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.5) WITHIN GROUP (ORDER BY v DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<employee_name:string,department:string,salary:int,median(salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.5) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(0.5) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_disc(0.5) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 Jeff Firrelli	Accounting	8992	9998.0	9998.0	9998.0	9998.0	9998.0
 Julie Firrelli	Sales	9181	9441.0	9441.0	9441.0	9441.0	9441.0
@@ -594,7 +594,7 @@ SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 -- !query schema
-struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval year to month,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval year to month>
+struct<percentile_cont(0.25) WITHIN GROUP (ORDER BY dt):interval year to month,percentile_cont(0.25) WITHIN GROUP (ORDER BY dt DESC):interval year to month>
 -- !query output
 0-10	2-6
 
@@ -608,7 +608,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY ym):interval day to second,percentile_cont(0.25) WITHIN GROUP (ORDER BY ym DESC):interval day to second>
 -- !query output
 0	0 00:00:10.000000000	0 00:00:30.000000000
 1	0 00:00:12.500000000	0 00:00:17.500000000
@@ -626,7 +626,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
+struct<k:int,percentile_cont(0.25) WITHIN GROUP (ORDER BY dt2):interval day to second,percentile_cont(0.25) WITHIN GROUP (ORDER BY dt2 DESC):interval day to second>
 -- !query output
 0	0 00:10:00.000000000	0 00:30:00.000000000
 1	0 00:12:30.000000000	0 00:17:30.000000000
@@ -641,7 +641,7 @@ SELECT
   percentile_disc(0.25) WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 -- !query schema
-struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval year to month,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval year to month>
+struct<percentile_disc(0.25) WITHIN GROUP (ORDER BY dt):interval year to month,percentile_disc(0.25) WITHIN GROUP (ORDER BY dt DESC):interval year to month>
 -- !query output
 0-10	2-6
 
@@ -655,7 +655,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY ym):interval day to second,percentile_disc(0.25) WITHIN GROUP (ORDER BY ym DESC):interval day to second>
 -- !query output
 0	0 00:00:10.000000000	0 00:00:30.000000000
 1	0 00:00:10.000000000	0 00:00:20.000000000
@@ -673,7 +673,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY v):interval day to second,percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC):interval day to second>
+struct<k:int,percentile_disc(0.25) WITHIN GROUP (ORDER BY dt2):interval day to second,percentile_disc(0.25) WITHIN GROUP (ORDER BY dt2 DESC):interval day to second>
 -- !query output
 0	0 00:10:00.000000000	0 00:30:00.000000000
 1	0 00:10:00.000000000	0 00:20:00.000000000
@@ -689,7 +689,7 @@ SELECT
   percentile_cont(0.5) WITHIN GROUP (ORDER BY dt)
 FROM intervals
 -- !query schema
-struct<median(dt):interval year to month,percentile(dt, 0.5, 1):interval year to month,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval year to month>
+struct<median(dt):interval year to month,percentile(dt, 0.5, 1):interval year to month,percentile_cont(0.5) WITHIN GROUP (ORDER BY dt):interval year to month>
 -- !query output
 1-8	1-8	1-8
 
@@ -704,7 +704,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,median(ym):interval day to second,percentile(ym, 0.5, 1):interval day to second,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval day to second>
+struct<k:int,median(ym):interval day to second,percentile(ym, 0.5, 1):interval day to second,percentile_cont(0.5) WITHIN GROUP (ORDER BY ym):interval day to second>
 -- !query output
 0	0 00:00:20.000000000	0 00:00:20.000000000	0 00:00:20.000000000
 1	0 00:00:15.000000000	0 00:00:15.000000000	0 00:00:15.000000000
@@ -723,7 +723,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,median(dt2):interval day to second,percentile(dt2, 0.5, 1):interval day to second,percentile_cont(0.5) WITHIN GROUP (ORDER BY v):interval day to second>
+struct<k:int,median(dt2):interval day to second,percentile(dt2, 0.5, 1):interval day to second,percentile_cont(0.5) WITHIN GROUP (ORDER BY dt2):interval day to second>
 -- !query output
 0	0 00:20:00.000000000	0 00:20:00.000000000	0 00:20:00.000000000
 1	0 00:15:00.000000000	0 00:15:00.000000000	0 00:15:00.000000000

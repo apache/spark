@@ -821,25 +821,35 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
 
     // Same children, structurally different metrics - fail
-    assertAnalysisError(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
-      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      Union(
+        CollectMetrics("evt1", count :: Nil, testRelation) ::
+          CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
+    )
 
     // Different children, same metrics - fail
     val b = $"b".string
     val tblB = LocalRelation(b)
-    assertAnalysisError(Union(
-      CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
-      "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      Union(
+        CollectMetrics("evt1", count :: Nil, testRelation) ::
+          CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
+    )
 
     // Subquery different tree - fail
     val subquery = Aggregate(Nil, sum :: Nil, CollectMetrics("evt1", count :: Nil, testRelation))
     val query = Project(
       b :: ScalarSubquery(subquery, Nil).as("sum") :: Nil,
       CollectMetrics("evt1", count :: Nil, tblB))
-    assertAnalysisError(query, "Multiple definitions of observed metrics" :: "evt1" :: Nil)
+    assertAnalysisErrorClass(
+      query,
+      expectedErrorClass = "DUPLICATED_METRICS_NAME",
+      expectedMessageParameters = Map("metricName" -> "evt1")
+    )
 
     // Aggregate with filter predicate - fail
     val sumWithFilter = sum.transform {
@@ -1360,7 +1370,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = ParameterizedQuery(
+    val actual1 = NameParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
       args = Map("limitA" -> Literal(10))).analyze
     CTERelationDef.curId.set(0)
@@ -1368,9 +1378,27 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = ParameterizedQuery(
+    val actual2 = NameParameterizedQuery(
       child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
       args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
+    CTERelationDef.curId.set(0)
+    val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
+    comparePlans(actual2, expected2)
+  }
+
+  test("SPARK-44066: bind positional parameters to literals") {
+    CTERelationDef.curId.set(0)
+    val actual1 = PosParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+      args = Array(Literal(10))).analyze
+    CTERelationDef.curId.set(0)
+    val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
+    comparePlans(actual1, expected1)
+    // Ignore unused arguments
+    CTERelationDef.curId.set(0)
+    val actual2 = PosParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+      args = Array(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
     comparePlans(actual2, expected2)
@@ -1511,6 +1539,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(refs.map(_.output).distinct.length == 2)
     }
 
+    withClue("CTE relation has duplicate aliases") {
+      val alias = Alias($"a", "x")()
+      val cteDef = CTERelationDef(testRelation.select(alias, alias).where($"x" === 1))
+      val cteRef = CTERelationRef(cteDef.id, false, Nil)
+      // Should not fail with the assertion failure: Found duplicate rewrite attributes.
+      WithCTE(cteRef.join(cteRef), Seq(cteDef)).analyze
+    }
+
     withClue("references in both CTE relation definition and main query") {
       val cteDef2 = CTERelationDef(cteRef.where($"a" > 2))
       val cteRef2 = CTERelationRef(cteDef2.id, false, Nil)
@@ -1552,5 +1588,32 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val attr = $"a".int.markAsQualifiedAccessOnly()
     val rel = LocalRelation(attr)
     checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
+  }
+
+  test("SPARK-43030: deduplicate relations with duplicate aliases") {
+    // Should not fail with the assertion failure: Found duplicate rewrite attributes.
+    val alias = Alias($"a", "x")()
+
+    withClue("project") {
+      val plan = testRelation.select(alias, alias).where($"x" === 1)
+      plan.join(plan).analyze
+    }
+
+    withClue("aggregate") {
+      val plan = testRelation.groupBy($"a")(alias, alias).where($"x" === 1)
+      plan.join(plan).analyze
+    }
+
+    withClue("window") {
+      val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+      val spec = windowSpec(Seq($"c"), Seq(), frame)
+      val plan = testRelation2
+        .window(
+          Seq(alias, alias, windowExpr(min($"b"), spec).as("min_b")),
+          Seq($"c"),
+          Seq())
+        .where($"x" === 1)
+      plan.join(plan).analyze
+    }
   }
 }

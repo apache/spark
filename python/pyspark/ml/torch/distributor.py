@@ -48,19 +48,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-
-
-def _get_active_session(is_remote: bool) -> SparkSession:
-    if not is_remote:
-        spark = SparkSession.getActiveSession()
-    else:
-        import pyspark.sql.connect.session
-
-        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
-
-    if spark is None:
-        raise RuntimeError("An active SparkSession is required for the distributor.")
-    return spark
+from pyspark.ml.util import _get_active_session
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
@@ -331,6 +319,7 @@ class TorchDistributor(Distributor):
     ...     # ...
     ...     torch.destroy_process_group()
     ...     return model # or anything else
+    ...
     >>> distributor = TorchDistributor(
     ...     num_processes=2,
     ...     local_mode=True,
@@ -357,6 +346,7 @@ class TorchDistributor(Distributor):
     ...     trainer.fit()
     ...     # ...
     ...     return trainer
+    ...
     >>> distributor = TorchDistributor(
     ...     num_processes=num_proc,
     ...     local_mode=True,
@@ -462,7 +452,22 @@ class TorchDistributor(Distributor):
                 decoded = line.decode()
                 tail.append(decoded)
                 if redirect_to_stdout:
-                    sys.stdout.write(decoded)
+                    if (
+                        log_streaming_client
+                        and not log_streaming_client.failed
+                        and (
+                            log_streaming_client.sock.getsockname()[0]
+                            == log_streaming_client.sock.getpeername()[0]
+                        )
+                    ):
+                        # If log_streaming_client and log_stream_server are in the same
+                        # node (typical case is spark local mode),
+                        # server side will redirect the log to STDOUT,
+                        # to avoid STDOUT outputs duplication, skip redirecting
+                        # logs to STDOUT in client side.
+                        pass
+                    else:
+                        sys.stdout.write(decoded)
                 if log_streaming_client:
                     log_streaming_client.send(decoded.rstrip())
             task.wait()
@@ -762,8 +767,8 @@ class TorchDistributor(Distributor):
             schema_file_path = os.path.join(save_dir, "schema.json")
             schema_json_string = json.dumps(input_schema_json)
 
-            with open(schema_file_path, "w") as f:  # type:ignore
-                f.write(schema_json_string)  # type:ignore
+            with open(schema_file_path, "w") as f:
+                f.write(schema_json_string)
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
             os.environ[SPARK_DATAFRAME_SCHEMA_FILE] = schema_file_path
@@ -953,7 +958,9 @@ class TorchDistributor(Distributor):
         )
 
 
-def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch: int = 2) -> Any:
+def _get_spark_partition_data_loader(
+    num_samples: int, batch_size: int, num_workers: int = 1, prefetch_factor: int = 2
+) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
     is the input argument of `TorchDistributor.train_on_dataframe`.
@@ -970,8 +977,11 @@ def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch
         it wraps round back to the first row.
     batch_size:
         How many samples per batch to load.
-    prefetch:
-        Number of batches loaded in advance.
+    num_workers:
+        How many subprocesses to use for data loading.
+        0 means that the data will be loaded in the main process.
+    prefetch_factor:
+        Number of batches loaded in advance by each worker
     """
     from pyspark.sql.types import StructType
     from pyspark.ml.torch.data import _SparkPartitionTorchDataset
@@ -985,4 +995,4 @@ def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    return DataLoader(dataset, batch_size, num_workers=1, prefetch_factor=prefetch)
+    return DataLoader(dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor)

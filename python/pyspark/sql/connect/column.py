@@ -73,7 +73,17 @@ def _bin_op(
 ) -> Callable[["Column", Any], "Column"]:
     def wrapped(self: "Column", other: Any) -> "Column":
         if other is None or isinstance(
-            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
+            other,
+            (
+                bool,
+                float,
+                int,
+                str,
+                datetime.datetime,
+                datetime.date,
+                decimal.Decimal,
+                datetime.timedelta,
+            ),
         ):
             other_expr = LiteralExpression._from_value(other)
         else:
@@ -467,12 +477,6 @@ class Column:
         )
 
     __bool__ = __nonzero__
-
-    @property
-    def _jc(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
-        )
 
 
 Column.__doc__ = PySparkColumn.__doc__

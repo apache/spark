@@ -45,30 +45,26 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
     def test_register_java_udaf(self):
         super(PythonUDFArrowTests, self).test_register_java_udaf()
 
-    @unittest.skip("Struct input types are not supported with Arrow optimization")
-    def test_udf_input_serialization_valuecompare_disabled(self):
-        super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
-
-    def test_nested_input_error(self):
-        with self.assertRaisesRegexp(Exception, "[NotImplementedError]"):
-            self.spark.range(1).selectExpr("struct(1, 2) as struct").select(
-                udf(lambda x: x)("struct")
-            ).collect()
+    # TODO(SPARK-43903): Standardize ArrayType conversion for Python UDF
+    @unittest.skip("Inconsistent ArrayType conversion with/without Arrow.")
+    def test_nested_array(self):
+        super(PythonUDFArrowTests, self).test_nested_array()
 
     def test_complex_input_types(self):
         row = (
             self.spark.range(1)
-            .selectExpr("array(1, 2, 3) as array", "map('a', 'b') as map")
+            .selectExpr("array(1, 2, 3) as array", "map('a', 'b') as map", "struct(1, 2) as struct")
             .select(
                 udf(lambda x: str(x))("array"),
                 udf(lambda x: str(x))("map"),
+                udf(lambda x: str(x))("struct"),
             )
             .first()
         )
 
-        # The input is NumPy array when the optimization is on.
-        self.assertEquals(row[0], "[1 2 3]")
+        self.assertEquals(row[0], "[1, 2, 3]")
         self.assertEquals(row[1], "{'a': 'b'}")
+        self.assertEquals(row[2], "Row(col1=1, col2=2)")
 
     def test_use_arrow(self):
         # useArrow=True
@@ -95,8 +91,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
 
-        # The input is a NumPy array when the Arrow optimization is on.
-        self.assertEquals(row_true[0], row_none[0])  # "[1 2 3]"
+        self.assertEquals(row_true[0], row_none[0])  # "[1, 2, 3]"
 
         # useArrow=False
         row_false = (
@@ -128,13 +123,22 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         # To verify that Arrow optimization is on
         self.assertEquals(
             df.selectExpr("str_repr(array) AS str_id").first()[0],
-            "[1 2 3]",  # The input is a NumPy array when the Arrow optimization is on
+            "[1, 2, 3]",  # The input is a NumPy array when the Arrow optimization is on
         )
 
         # To verify that a UserDefinedFunction is returned
         self.assertListEqual(
             df.selectExpr("str_repr(array) AS str_id").collect(),
             df.select(str_repr_func("array").alias("str_id")).collect(),
+        )
+
+    def test_nested_array_input(self):
+        df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
+        self.assertEquals(
+            df.select(
+                udf(lambda x: str(x), returnType="string", useArrow=True)("nested_array")
+            ).first()[0],
+            "[[1, 2], [3, 4]]",
         )
 
 
