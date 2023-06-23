@@ -147,7 +147,7 @@ def last_non_null(col: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions import _invoke_function_over_columns
 
-        return _invoke_function_over_columns(
+        return _invoke_function_over_columns(  # type: ignore[return-value]
             "last_non_null",
             col,  # type: ignore[arg-type]
         )
@@ -161,7 +161,7 @@ def null_index(col: Column) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions import _invoke_function_over_columns
 
-        return _invoke_function_over_columns(
+        return _invoke_function_over_columns(  # type: ignore[return-value]
             "null_index",
             col,  # type: ignore[arg-type]
         )
