@@ -364,8 +364,8 @@ case class ShuffledHashJoinExec(
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    // Specialize `doProduce` code for full outer join, because full outer join needs to
-    // iterate streamed and build side separately.
+    // Specialize `doProduce` code for full outer join and build-side outer join,
+    // because we need to iterate streamed and build side separately.
     val specializedProduce = joinType match {
       case FullOuter => true
       case LeftOuter if buildSide == BuildLeft => true
@@ -425,11 +425,11 @@ case class ShuffledHashJoinExec(
        """.stripMargin)
 
     val isFullOuterJoin = joinType == FullOuter
-    val joinWithUniqueKey = codegenFullOuterJoinWithUniqueKey(
+    val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
       streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow,
       isFullOuterJoin)
-    val joinWithNonUniqueKey = codegenFullOuterJoinWithNonUniqueKey(
+    val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
       streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow,
       isFullOuterJoin)
@@ -444,10 +444,10 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Generates the code for full outer join with unique join keys.
-   * This is code-gen version of `fullOuterJoinWithUniqueKey()`.
+   * Generates the code for build-side or full outer join with unique join keys.
+   * This is code-gen version of `buildSideOrFullOuterJoinUniqueKey()`.
    */
-  private def codegenFullOuterJoinWithUniqueKey(
+  private def codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx: CodegenContext,
       rows: (String, String),
       inputs: (String, String),
@@ -529,10 +529,10 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Generates the code for full outer join with non-unique join keys.
-   * This is code-gen version of `fullOuterJoinWithNonUniqueKey()`.
+   * Generates the code for build-side or full outer join with non-unique join keys.
+   * This is code-gen version of `buildSideOrFullOuterJoinNonUniqueKey()`.
    */
-  private def codegenFullOuterJoinWithNonUniqueKey(
+  private def codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx: CodegenContext,
       rows: (String, String),
       inputs: (String, String),
@@ -594,9 +594,10 @@ case class ShuffledHashJoinExec(
          |
          |  if (!$foundMatch) {
          |    $buildRow = null;
-         |    if ($isFullOuterJoin) {
-         |      $consumeFullOuterJoinRow();
-         |    }
+         |  }
+         |
+         |  if ($isFullOuterJoin) {
+         |    $consumeFullOuterJoinRow();
          |  }
          |
          |  if (shouldStop()) return;

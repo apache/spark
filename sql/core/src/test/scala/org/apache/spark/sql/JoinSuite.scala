@@ -1444,7 +1444,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-
   test("SPARK-34593: Preserve broadcast nested loop join partitioning and ordering") {
     withTable("t1", "t2", "t3", "t4", "t5") {
       spark.range(15).toDF("k").write.bucketBy(4, "k").saveAsTable("t1")
