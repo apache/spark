@@ -1645,7 +1645,7 @@ object functions {
   /**
    * Creates a struct with the given field names and values.
    *
-   * @group struct_funcs
+   * @group normal_funcs
    * @since 3.5.0
    */
   def named_struct(cols: Column*): Column = withExpr { CreateNamedStruct(cols.map(_.expr)) }
@@ -6349,7 +6349,7 @@ object functions {
    * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
    * any other valid JSON string, `NULL` or an invalid JSON.
    *
-   * @group json_funcs
+   * @group collection_funcs
    * @since 3.5.0
    */
   def json_array_length(jsonArray: Column): Column = withExpr {
@@ -6361,7 +6361,7 @@ object functions {
    * given, all the keys of the outermost object will be returned as an array. If it is any
    * other valid JSON string, an invalid JSON string or an empty string, the function returns null.
    *
-   * @group json_funcs
+   * @group collection_funcs
    * @since 3.5.0
    */
   def json_object_keys(json: Column): Column = withExpr {
