@@ -1973,6 +1973,12 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
+   * Whether the underlying Java version is at least 21.
+   */
+  val isJavaVersionAtLeast21 =
+    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+
+  /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
   val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
@@ -2279,6 +2285,23 @@ private[spark] object Utils extends Logging with SparkClassUtils {
           v1 > v2
         }
     }.map(threadInfoToThreadStackTrace)
+  }
+
+  /** Return a heap dump. Used to capture dumps for the web UI */
+  def getHeapHistogram(): Array[String] = {
+    // From Java 9+, we can use 'ProcessHandle.current().pid()'
+    val pid = getProcessName().split("@").head
+    val builder = new ProcessBuilder("jmap", "-histo:live", pid)
+    builder.redirectErrorStream(true)
+    val p = builder.start()
+    val r = new BufferedReader(new InputStreamReader(p.getInputStream()))
+    val rows = ArrayBuffer.empty[String]
+    var line = ""
+    while (line != null) {
+      if (line.nonEmpty) rows += line
+      line = r.readLine()
+    }
+    rows.toArray
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {

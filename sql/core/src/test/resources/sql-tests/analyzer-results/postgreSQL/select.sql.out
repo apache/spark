@@ -455,4 +455,5 @@ Project [k#x]
 -- !query
 drop table tmp
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tmp`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tmp
