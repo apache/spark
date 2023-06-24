@@ -2576,6 +2576,28 @@
       }
     }
   },
+  "UNSUPPORTED_MERGE_CONDITION" : {
+    "message" : [
+      "MERGE operation contains unsupported <condName> condition."
+    ],
+    "subClass" : {
+      "AGGREGATE" : {
+        "message" : [
+          "Aggregates are not allowed: <cond>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Non-deterministic expressions are not allowed: <cond>."
+        ]
+      },
+      "SUBQUERY" : {
+        "message" : [
+          "Subqueries are not allowed: <cond>."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
       "Can't overwrite the target that is also being read from."

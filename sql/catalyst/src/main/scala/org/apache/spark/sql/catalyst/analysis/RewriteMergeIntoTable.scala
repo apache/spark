@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Instruction, Keep, ROW_ID, Split}
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.OPERATION_COLUMN
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -49,6 +51,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
+          validateMergeIntoConditions(m)
+
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
           val insertAction = notMatchedActions.head.asInstanceOf[InsertAction]
           val filteredSource = insertAction.condition match {
@@ -80,6 +84,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
+          validateMergeIntoConditions(m)
+
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
           // and switch to using a regular append instead of a row-level MERGE operation
           // only unmatched source rows that match action conditions are appended to the table
@@ -116,6 +122,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _) =>
+          validateMergeIntoConditions(m)
           val table = buildOperationTable(tbl, MERGE, CaseInsensitiveStringMap.empty())
           table.operation match {
             case _: SupportsDelta =>
@@ -466,6 +473,31 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       case other =>
         throw new AnalysisException(s"Unexpected action: $other")
+    }
+  }
+
+  private def validateMergeIntoConditions(merge: MergeIntoTable): Unit = {
+    checkMergeIntoCondition("SEARCH", merge.mergeCondition)
+    val actions = merge.matchedActions ++ merge.notMatchedActions ++ merge.notMatchedBySourceActions
+    actions.foreach {
+      case DeleteAction(Some(cond)) => checkMergeIntoCondition("DELETE", cond)
+      case UpdateAction(Some(cond), _) => checkMergeIntoCondition("UPDATE", cond)
+      case InsertAction(Some(cond), _) => checkMergeIntoCondition("INSERT", cond)
+      case _ => // OK
+    }
+  }
+
+  private def checkMergeIntoCondition(condName: String, cond: Expression): Unit = {
+    if (!cond.deterministic) {
+      throw QueryCompilationErrors.nonDeterministicMergeCondition(condName, cond)
+    }
+
+    if (SubqueryExpression.hasSubquery(cond)) {
+      throw QueryCompilationErrors.subqueryNotAllowedInMergeCondition(condName, cond)
+    }
+
+    if (cond.exists(_.isInstanceOf[AggregateExpression])) {
+      throw QueryCompilationErrors.aggregationNotAllowedInMergeCondition(condName, cond)
     }
   }
 }

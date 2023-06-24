@@ -962,16 +962,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
-  <td><code>10</code></td>
-  <td>
-    Number of times that the driver will try to ascertain the loss reason for a specific executor.
-    The loss reason is used to ascertain whether the executor failure is due to a framework or an application error
-    which in turn decides whether the executor is removed and replaced, or placed into a failed state for debugging.
-  </td>
-  <td>2.3.0</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.submission.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
