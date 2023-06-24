@@ -310,8 +310,7 @@ private[parquet] class ParquetRowConverter(
           override def addInt(value: Int): Unit =
             updater.setLong(Integer.toUnsignedLong(value))
         }
-      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
-        _: AnsiIntervalType =>
+      case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
       case ByteType =>
@@ -391,6 +390,22 @@ private[parquet] class ParquetRowConverter(
             updater.setLong(timestampRebaseFunc(value))
           }
         }
+      case t: DayTimeIntervalType =>
+        parquetType.asPrimitiveType().getPrimitiveTypeName match {
+          case INT32 =>
+            new ParquetPrimitiveConverter (updater) {
+              override def addInt(value: Int): Unit = {
+                updater.setLong(DateTimeUtils.millisToMicros(value))
+              }
+            }
+          case INT64 =>
+            new ParquetPrimitiveConverter (updater)
+          case _ =>
+            throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
+              t, parquetType.toString)
+        }
+      case _: AnsiIntervalType =>
+        new ParquetPrimitiveConverter(updater)
 
       // As long as the parquet type is INT64 timestamp, whether logical annotation
       // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type

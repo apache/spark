@@ -1585,18 +1585,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("Time type") {
-    readParquetFile(testFile("test-data/timetype.parquet")) {
-      df => {
-        val valuesMili = df.select("whatTimeMili").collect()
-        assert(valuesMili.length == 2)
-        assert(valuesMili(0)(0) == null)
-        assert(valuesMili(1)(0) ==
-          Duration.ofHours(15).plusMinutes(10)
-            .plusSeconds(3).plusMillis(324))
-        val valuesMicro = df.select("whatTimeMicro").collect()
-        assert(valuesMicro(0)(0) == null)
-        assert(valuesMicro(1)(0) ==
-          Duration.ofHours(15).plusMinutes(10).plusSeconds(3).plusNanos(324311*1000))
+    Seq(true, false).foreach { vectorizedReaderEnabled =>
+      readParquetFile(testFile("test-data/timetype.parquet"), vectorizedReaderEnabled) {
+        df => {
+          val valuesMili = df.select("whatTimeMili").collect()
+          assert(valuesMili.length == 2)
+          assert(valuesMili(0) == Row(null))
+          assert(valuesMili(1) ==
+            Row(Duration.ofHours(15).plusMinutes(10)
+              .plusSeconds(3).plusMillis(324)))
+          val valuesMicro = df.select("whatTimeMicro").collect()
+          assert(valuesMicro(0) == Row(null))
+          assert(valuesMicro(1) == Row(
+            Duration.ofHours(15).plusMinutes(10).plusSeconds(3).plusNanos(324311 * 1000)))
+        }
       }
     }
   }
