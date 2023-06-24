@@ -24,8 +24,6 @@ import java.util
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
@@ -59,12 +57,24 @@ import org.apache.spark.util.Utils
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "connect/testOnly org.apache.spark.sql.connect.ProtoToParsedPlanTestSuite"
  * }}}
+ *
+ * If you need to clean the orphaned golden files, you need to set the SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1
+ * environment variable before running this test, e.g.:
+ * {{{
+ *   SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 build/sbt "connect/testOnly org.apache.spark.sql.connect.ProtoToParsedPlanTestSuite"
+ * }}}
+ * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups compatibility.
+ *
  */
 // scalastyle:on
 class ProtoToParsedPlanTestSuite
     extends SparkFunSuite
     with SharedSparkSession
     with ResourceHelper {
+
+  private val cleanOrphanedGoldenFiles: Boolean =
+    System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
+
   val url = "jdbc:h2:mem:testdb0"
   var conn: java.sql.Connection = null
 
@@ -93,18 +103,13 @@ class ProtoToParsedPlanTestSuite
           " theid INTEGER, \"Dept\" INTEGER)")
       .executeUpdate()
     conn.commit()
-
-    if (regenerateGoldenFiles) {
-      val goldenFile = goldenFilePath.toFile
-      if (goldenFile.exists()) {
-        Utils.deleteRecursively(goldenFile)
-      }
-      FileUtils.forceMkdir(goldenFile)
-    }
   }
 
   override def afterAll(): Unit = {
     conn.close()
+    if (cleanOrphanedGoldenFiles) {
+      cleanOrphanedGoldenFile()
+    }
     super.afterAll()
   }
 
@@ -203,6 +208,13 @@ class ProtoToParsedPlanTestSuite
               "SPARK_GENERATE_GOLDEN_FILES=1 environment variable set")
       }
     }
+  }
+
+  private def cleanOrphanedGoldenFile(): Unit = {
+    val orphans = Utils.recursiveList(goldenFilePath.toFile).
+      filter(g => g.getAbsolutePath.endsWith(".explain")).
+      filter(g => !testNames.contains(g.getName.stripSuffix(".explain")))
+    orphans.foreach(Utils.deleteRecursively)
   }
 
   private def removeMemoryAddress(expr: String): String = {
