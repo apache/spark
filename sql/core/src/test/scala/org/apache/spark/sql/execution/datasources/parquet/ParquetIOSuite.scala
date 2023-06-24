@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.time.{Duration, LocalDateTime}
 import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
+
 import com.google.common.primitives.UnsignedLong
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
@@ -36,6 +38,7 @@ import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.metadata.CompressionCodecName.GZIP
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
