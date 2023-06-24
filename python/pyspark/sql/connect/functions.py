@@ -3603,6 +3603,73 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
+def array_agg(col: "ColumnOrName") -> Column:
+    return  _invoke_function_over_columns("array_agg", col)
+
+
+array_agg.__doc__ = pysparkfuncs.array_agg.__doc__
+
+
+def array_size(col: "ColumnOrName") -> Column:
+    return  _invoke_function_over_columns("array_size", col)
+
+
+array_size.__doc__ = pysparkfuncs.array_size.__doc__
+
+
+def cardinality(col: "ColumnOrName") -> Column:
+    return  _invoke_function_over_columns("cardinality", col)
+
+
+cardinality.__doc__ = pysparkfuncs.cardinality.__doc__
+
+
+def count_min_sketch(
+        col: "ColumnOrName",
+        eps: "ColumnOrName",
+        confidence: "ColumnOrName",
+        seed: "ColumnOrName",
+) -> Column:
+    return  _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+
+
+count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
+
+
+def named_struct(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("named_struct", *cols)
+
+
+named_struct.__doc__ = pysparkfuncs.named_struct.__doc__
+
+
+def json_array_length(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_array_length", col)
+
+
+json_array_length.__doc__ = pysparkfuncs.json_array_length.__doc__
+
+
+def json_object_keys(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_object_keys", col)
+
+
+json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
+
+
+def mask(
+    col: "ColumnOrName",
+    upperChar: "ColumnOrName",
+    lowerChar: "ColumnOrName",
+    digitChar: "ColumnOrName",
+    otherChar: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns("mask", col, upperChar, lowerChar, digitChar, otherChar)
+
+
+mask.__doc__ = pysparkfuncs.mask.__doc__
+
+
 # User Defined Function
 
 
