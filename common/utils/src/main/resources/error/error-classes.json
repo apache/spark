@@ -1192,6 +1192,28 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_INLINE_TABLE" : {
+    "message" : [
+      "Invalid lambda function call."
+    ],
+    "subClass" : {
+      "CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE" : {
+        "message" : [
+          "cannot evaluate expression <sqlExpr> in inline table definition."
+        ]
+      },
+      "FAILED_SQL_EXPRESSION_EVALUATION" : {
+        "message" : [
+          "Failed to evaluate the SQL expression: <sqlExpr>. Please check your syntax and ensure all required tables and columns are available."
+        ]
+      },
+      "INCOMPATIBLE_TYPES_IN_INLINE_TABLE" : {
+        "message" : [
+          "incompatible types found in column <name> for inline table."
+        ]
+      }
+    }
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -1203,6 +1225,23 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ],
     "sqlState" : "22032"
+  },
+  "INVALID_LAMBDA_FUNCTION_CALL" : {
+    "message" : [
+      "Invalid lambda function call."
+    ],
+    "subClass" : {
+      "ARGUMENTS_NUMBER_MISMATCH" : {
+        "message" : [
+          "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
+        ]
+      },
+      "ARGUMENT_NAMES_EXISTS_SAME_SEMANTIC" : {
+        "message" : [
+          "Lambda function arguments should not have names that are semantically the same."
+        ]
+      }
+    }
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
@@ -1648,6 +1687,11 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
+    "message" : [
+      "'<name>' does not support more than one sources."
+    ]
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
