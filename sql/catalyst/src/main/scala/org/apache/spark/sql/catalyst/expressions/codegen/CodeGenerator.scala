@@ -25,7 +25,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 import org.codehaus.janino.ClassBodyEvaluator
@@ -1581,23 +1580,22 @@ object CodeGenerator extends Logging {
    * while other queries wait on the same code, so that those other queries don't get wrongly
    * aborted. See [[NonFateSharingCache]] for more details.
    */
-  private val cache = NonFateSharingCache(CacheBuilder.newBuilder()
-    .maximumSize(SQLConf.get.codegenCacheMaxEntries)
-    .build(
-      new CacheLoader[CodeAndComment, (GeneratedClass, ByteCodeStats)]() {
-        override def load(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
-          val startTime = System.nanoTime()
-          val result = doCompile(code)
-          val endTime = System.nanoTime()
-          val duration = endTime - startTime
-          val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
-          CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
-          CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-          logInfo(s"Code generated in $timeMs ms")
-          _compileTime.add(duration)
-          result
-        }
-      }))
+  private val cache = {
+    def loadFunc: CodeAndComment => (GeneratedClass, ByteCodeStats) = code => {
+      val startTime = System.nanoTime()
+      val result = doCompile(code)
+      val endTime = System.nanoTime()
+      val duration = endTime - startTime
+      val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
+      CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
+      CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
+      logInfo(s"Code generated in $timeMs ms")
+      _compileTime.add(duration)
+      result
+    }
+    NonFateSharingCache[CodeAndComment, (GeneratedClass, ByteCodeStats)](
+      loadFunc, SQLConf.get.codegenCacheMaxEntries)
+  }
 
   /**
    * Name of Java primitive data type
