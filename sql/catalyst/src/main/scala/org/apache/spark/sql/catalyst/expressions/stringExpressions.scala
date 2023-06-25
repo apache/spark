@@ -2173,7 +2173,7 @@ case class Levenshtein(
             messageParameters = Map(
               "inputName" -> "threshold",
               "inputType" -> toSQLType(IntegerType),
-              "inputExpr" -> toSQLExpr(threshold.get)))
+              "inputExpr" -> toSQLExpr(e)))
         case Some(e) if e.eval().asInstanceOf[Int] < 0 =>
           return DataTypeMismatch(
             errorSubClass = "VALUE_OUT_OF_RANGE",
