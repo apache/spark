@@ -818,9 +818,9 @@ private[spark] class ExecutorAllocationManager(
               // case, the task index is completed and we shouldn't remove it from
               // stageAttemptToTaskIndices. Otherwise, we will have a pending non-speculative task
               // for the task index (SPARK-30511)
-              val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+              val runningSpeculativeTasksMap = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
                 new mutable.HashMap[Int, Int])
-              if (map.getOrElse(taskIndex, 0) == 0) {
+              if (runningSpeculativeTasksMap.getOrElse(taskIndex, 0) == 0) {
                 stageAttemptToTaskIndices.get(stageAttempt).foreach {
                   _.remove(taskIndex)
                 }
