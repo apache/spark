@@ -188,7 +188,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   }
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
-    throw QueryExecutionErrors.unsupportedCreateNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedAttachNamespaceCommentError()
   }
 
   override def removeSchemaCommentQuery(schema: String): String = {
