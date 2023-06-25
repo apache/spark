@@ -489,8 +489,8 @@ object PreReadCheck extends (LogicalPlan => Unit) {
         val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
         if (numInputFileBlockSources > 1) {
           e.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2302",
-            messageParameters = Map("name" -> e.prettyName))
+            errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
+            messageParameters = Map("name" -> toSQLExpr(e)))
         } else {
           numInputFileBlockSources
         }

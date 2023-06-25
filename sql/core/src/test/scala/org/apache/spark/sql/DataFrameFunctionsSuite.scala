@@ -5175,7 +5175,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("zip_with(a1, a2, x -> x)")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2300",
+      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.ARGUMENTS_NUMBER_MISMATCH",
       parameters = Map(
         "namesSize" -> "1",
         "argInfoSize" -> "2"),
@@ -5183,6 +5183,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         fragment = "x -> x",
         start = 17,
         stop = 22)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("zip_with(a1, a2, (x, x) -> x)")
+      },
+      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.ARGUMENT_NAMES_EXISTS_SAME_SEMANTIC",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "(x, x) -> x",
+        start = 17,
+        stop = 27)
     )
 
     checkError(

@@ -72,7 +72,7 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
     case LambdaFunction(function, names, _) =>
       if (names.size != argInfo.size) {
         e.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2300",
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.ARGUMENTS_NUMBER_MISMATCH",
           messageParameters = Map(
             "namesSize" -> names.size.toString,
             "argInfoSize" -> argInfo.size.toString))
@@ -80,7 +80,7 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
       if (names.map(a => canonicalizer(a.name)).distinct.size < names.size) {
         e.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2301",
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.ARGUMENT_NAMES_EXISTS_SAME_SEMANTIC",
           messageParameters = Map.empty)
       }
 

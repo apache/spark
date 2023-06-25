@@ -75,8 +75,8 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
         // Note that nondeterministic expressions are not supported since they are not foldable.
         if (!e.resolved || !trimAliases(e).foldable) {
           e.failAnalysis(
-            errorClass = "_LEGACY_ERROR_TEMP_2304",
-            messageParameters = Map("sqlExpr" -> e.sql))
+            errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+            messageParameters = Map("sqlExpr" -> toSQLExpr(e)))
         }
       }
     }
@@ -96,7 +96,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
       val inputTypes = column.map(_.dataType)
       val tpe = TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
         table.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2303",
+          errorClass = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
           messageParameters = Map("name" -> name))
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
@@ -117,7 +117,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(
-              errorClass = "FAILED_SQL_EXPRESSION_EVALUATION",
+              errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
               messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
               cause = ex)
         }
