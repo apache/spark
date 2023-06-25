@@ -731,6 +731,7 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
+        stageAttemptToRunningSpeculativeTasks -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
 
         // Update the executor placement hints
@@ -758,9 +759,11 @@ private[spark] class ExecutorAllocationManager(
         if (taskStart.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
             new mutable.HashSet[Int]) += taskIndex
-          val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+          val runningSpeculativeTasksMap =
+            stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
             new mutable.HashMap[Int, Int])
-          map(taskIndex) = map.getOrElse(taskIndex, 0) + 1
+          runningSpeculativeTasksMap(taskIndex) =
+            runningSpeculativeTasksMap.getOrElse(taskIndex, 0) + 1
           stageAttemptToPendingSpeculativeTasks
             .get(stageAttempt).foreach(_.remove(taskIndex))
         } else {
@@ -788,9 +791,11 @@ private[spark] class ExecutorAllocationManager(
         }
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
-          val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+          val runningSpeculativeTasksMap =
+            stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
             new mutable.HashMap[Int, Int])
-          map(taskIndex) = map.getOrElse(taskIndex, 0) - 1
+          runningSpeculativeTasksMap(taskIndex) =
+            runningSpeculativeTasksMap.getOrElse(taskIndex, 0) - 1
         }
 
         taskEnd.reason match {
