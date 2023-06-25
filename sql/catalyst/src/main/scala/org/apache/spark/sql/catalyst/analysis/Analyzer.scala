@@ -3364,7 +3364,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           leftKeys.map(_.withNullability(true)))
       case FullOuter =>
         // in full outer join, joinCols should be non-null if there is.
-        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        val joinedCols = joinPairs.map { case (l, r) =>
+          Alias(Coalesce(Seq(l.withNullability(true), r.withNullability(true))), l.name)()
+        }
         (joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true)),
