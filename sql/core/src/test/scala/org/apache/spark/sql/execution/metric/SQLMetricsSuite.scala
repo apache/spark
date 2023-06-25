@@ -80,6 +80,33 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(metrics2("numOutputRows").value === 2)
   }
 
+  test("SPARK-43214: LocalTableScanExec metrics") {
+    val df1 = spark.createDataset(Seq(1, 2, 3))
+    val logical = df1.queryExecution.logical
+    require(logical.isInstanceOf[LocalRelation])
+    df1.collect()
+
+    val expected = Map("number of output rows" -> 3L)
+    testSparkPlanMetrics(df1.toDF(), 0, Map(
+      0L -> (("LocalTableScan", expected))))
+  }
+
+  test("SPARK-43214: CommandResultExec metrics") {
+    withTable("t", "t2") {
+      sql("CREATE TABLE t(id STRING) USING PARQUET")
+      sql("CREATE TABLE t2(id STRING) USING PARQUET")
+      val df = sql("SHOW TABLES")
+      val command = df.queryExecution.executedPlan.collect {
+        case cmd: CommandResultExec => cmd
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(command.size == 1)
+      val expected = Map("number of output rows" -> 2L)
+      testSparkPlanMetrics(df, 0, Map(
+        0L -> (("CommandResult", expected))))
+    }
+  }
+
   test("Filter metrics") {
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)

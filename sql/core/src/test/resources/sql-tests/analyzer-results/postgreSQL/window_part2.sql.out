@@ -467,10 +467,12 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 drop table empsalary
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`empsalary`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.empsalary
 
 
 -- !query
 drop table numerics
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`numerics`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.numerics

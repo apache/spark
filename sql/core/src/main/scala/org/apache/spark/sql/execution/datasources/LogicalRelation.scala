@@ -77,7 +77,9 @@ case class LogicalRelation(
   override def withMetadataColumns(): LogicalRelation = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      this.copy(output = output ++ newMetadata)
+      val newRelation = this.copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
     } else {
       this
     }

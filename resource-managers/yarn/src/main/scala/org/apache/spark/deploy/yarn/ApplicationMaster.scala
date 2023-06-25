@@ -36,7 +36,7 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
-import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark._
 import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
@@ -154,7 +154,7 @@ private[spark] class ApplicationMaster(
       val amJarRsrc = Records.newRecord(classOf[LocalResource])
       amJarRsrc.setType(rtype)
       amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
-      amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
+      amJarRsrc.setResource(URL.fromURI(uri))
       amJarRsrc.setTimestamp(timestamp.toLong)
       amJarRsrc.setSize(size.toLong)
 

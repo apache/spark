@@ -98,6 +98,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
       // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
       Some(StringType)
+    } else if (sqlType == Types.VARCHAR && typeName.equals("JSON")) {
+      // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
+      // Explicitly converts it into StringType here.
+      Some(StringType)
     } else None
   }
 

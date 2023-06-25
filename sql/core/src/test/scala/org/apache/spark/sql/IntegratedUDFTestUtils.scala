@@ -30,9 +30,10 @@ import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunct
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -191,6 +192,32 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
 
+  private def createPythonUDTF(funcName: String, pythonScript: String): Array[Byte] = {
+    if (!shouldTestPythonUDFs) {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
+    var binaryPandasFunc: Array[Byte] = null
+    withTempPath { codePath =>
+      Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+      withTempPath { path =>
+        Process(
+          Seq(
+            pythonExec,
+            "-c",
+            "from pyspark.serializers import CloudPickleSerializer; " +
+              s"f = open('$path', 'wb');" +
+              s"exec(open('$codePath', 'r').read());" +
+              "f.write(CloudPickleSerializer().dumps(" +
+              s"($funcName, returnType)))"),
+          None,
+          "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+        binaryPandasFunc = Files.readAllBytes(path.toPath)
+      }
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
+  }
+
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
@@ -279,8 +306,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   lazy val shouldTestPythonUDFs: Boolean = isPythonAvailable && isPySparkAvailable
 
+  // TODO(SPARK-44097) Renable PandasUDF Tests in Java 21
   lazy val shouldTestPandasUDFs: Boolean =
-    isPythonAvailable && isPandasAvailable && isPyArrowAvailable
+    isPythonAvailable && isPandasAvailable && isPyArrowAvailable && !Utils.isJavaVersionAtLeast21
 
   /**
    * A base trait for various UDFs defined in this object.
@@ -358,6 +386,25 @@ object IntegratedUDFTestUtils extends SQLHelper {
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
     val prettyName: String = "Regular Python UDF"
+  }
+
+  def createUserDefinedPythonTableFunction(
+      name: String,
+      pythonScript: String,
+      returnType: StructType,
+      deterministic: Boolean = true): UserDefinedPythonTableFunction = {
+    UserDefinedPythonTableFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = createPythonUDTF(name, pythonScript),
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      returnType = returnType,
+      udfDeterministic = deterministic)
   }
 
   /**
@@ -473,7 +520,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
       dataType = NullType,  // This is not respected.
-      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      pythonEvalType = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
       udfDeterministic = true)
 
     def apply(exprs: Column*): Column = udf(exprs: _*)

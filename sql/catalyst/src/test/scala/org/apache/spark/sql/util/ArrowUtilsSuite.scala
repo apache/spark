@@ -30,7 +30,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
   def roundtrip(dt: DataType): Unit = {
     dt match {
       case schema: StructType =>
-        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null)) === schema)
+        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, true)) === schema)
       case _ =>
         roundtrip(new StructType().add("value", dt))
     }
@@ -67,7 +67,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
 
     def roundtripWithTz(timeZoneId: String): Unit = {
       val schema = new StructType().add("value", TimestampType)
-      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true)
       val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
       assert(fieldType.getTimezone() === timeZoneId)
       assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
@@ -96,5 +96,26 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(new StructType().add(
       "struct",
       new StructType().add("i", IntegerType).add("arr", ArrayType(IntegerType))))
+  }
+
+  test("struct with duplicated field names") {
+
+    def check(dt: DataType, expected: DataType): Unit = {
+      val schema = new StructType().add("value", dt)
+      intercept[SparkUnsupportedOperationException] {
+        ArrowUtils.toArrowSchema(schema, null, true)
+      }
+      assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false))
+        === new StructType().add("value", expected))
+    }
+
+    roundtrip(new StructType().add("i", IntegerType).add("i", StringType))
+
+    check(new StructType().add("i", IntegerType).add("i", StringType),
+      new StructType().add("i_0", IntegerType).add("i_1", StringType))
+    check(ArrayType(new StructType().add("i", IntegerType).add("i", StringType)),
+      ArrayType(new StructType().add("i_0", IntegerType).add("i_1", StringType)))
+    check(MapType(StringType, new StructType().add("i", IntegerType).add("i", StringType)),
+      MapType(StringType, new StructType().add("i_0", IntegerType).add("i_1", StringType)))
   }
 }

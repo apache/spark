@@ -18,4 +18,5 @@
 from pyspark.sql.connect.streaming.query import StreamingQuery  # noqa: F401
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader  # noqa: F401
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter  # noqa: F401
+from pyspark.sql.connect.streaming.query import StreamingQueryManager  # noqa: F401
 from pyspark.errors import StreamingQueryException  # noqa: F401

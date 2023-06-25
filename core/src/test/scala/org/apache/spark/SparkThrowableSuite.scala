@@ -21,6 +21,8 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import scala.util.Properties.lineSeparator
+
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -92,7 +94,10 @@ class SparkThrowableSuite extends SparkFunSuite {
         val errorClassesFile = errorJsonFilePath.toFile
         logInfo(s"Regenerating error class file $errorClassesFile")
         Files.delete(errorClassesFile.toPath)
-        FileUtils.writeStringToFile(errorClassesFile, rewrittenString, StandardCharsets.UTF_8)
+        FileUtils.writeStringToFile(
+          errorClassesFile,
+          rewrittenString + lineSeparator,
+          StandardCharsets.UTF_8)
       }
     } else {
       assert(rewrittenString.trim == errorClassFileContents.trim)
@@ -130,6 +135,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
       .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)

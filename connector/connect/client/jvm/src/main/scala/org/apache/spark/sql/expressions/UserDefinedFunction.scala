@@ -101,7 +101,8 @@ case class ScalarUserDefinedFunction(
     override val deterministic: Boolean)
     extends UserDefinedFunction {
 
-  private[this] lazy val udf = {
+  // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
+  private[this] val udf = {
     val udfPacketBytes = Utils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()

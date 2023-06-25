@@ -79,6 +79,7 @@ DataFrame
     DataFrame.melt
     DataFrame.na
     DataFrame.observe
+    DataFrame.offset
     DataFrame.orderBy
     DataFrame.persist
     DataFrame.printSchema

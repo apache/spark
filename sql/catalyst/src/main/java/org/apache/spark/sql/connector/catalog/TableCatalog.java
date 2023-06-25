@@ -200,6 +200,14 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * If true, mark all the fields of the query schema as nullable when executing
+   * CREATE/REPLACE TABLE ... AS SELECT ... and creating the table.
+   */
+  default boolean useNullableQuerySchema() {
+    return true;
+  }
+
+  /**
    * Apply a set of {@link TableChange changes} to a table in the catalog.
    * <p>
    * Implementations may reject the requested changes. If any change is rejected, none of the

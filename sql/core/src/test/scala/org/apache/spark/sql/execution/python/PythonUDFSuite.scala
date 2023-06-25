@@ -103,4 +103,12 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       assert(executionMetrics.contains(metric))
     }
   }
+
+  test("PythonUDAF pretty name") {
+    assume(shouldTestPandasUDFs)
+    val udfName = "pandas_udf"
+    val df = spark.range(1)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
+    assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
 }

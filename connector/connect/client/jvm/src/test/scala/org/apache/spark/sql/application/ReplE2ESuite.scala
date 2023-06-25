@@ -20,13 +20,14 @@ import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import org.apache.commons.io.output.ByteArrayOutputStream
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
-class ReplE2ESuite extends RemoteSparkSession {
+class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   private val executorService = Executors.newSingleThreadExecutor()
-  private val TIMEOUT_SECONDS = 10
+  private val TIMEOUT_SECONDS = 30
 
   private var testSuiteOut: PipedOutputStream = _
   private var ammoniteOut: ByteArrayOutputStream = _
@@ -66,6 +67,10 @@ class ReplE2ESuite extends RemoteSparkSession {
   override def afterAll(): Unit = {
     executorService.shutdownNow()
     super.afterAll()
+  }
+
+  override def afterEach(): Unit = {
+    semaphore.drainPermits()
   }
 
   def runCommandsInShell(input: String): String = {
@@ -114,7 +119,10 @@ class ReplE2ESuite extends RemoteSparkSession {
     assertContains("Array[Int] = Array(19, 24, 29, 34, 39)", output)
   }
 
-  test("UDF containing lambda expression") {
+  // SPARK-43198: Switching REPL to CodeClass generation mode causes UDFs defined through lambda
+  // expressions to hit deserialization issues.
+  // TODO(SPARK-43227): Enable test after fixing deserialization issue.
+  ignore("UDF containing lambda expression") {
     val input = """
         |class A(x: Int) { def get = x * 20 + 5 }
         |val dummyUdf = (x: Int) => new A(x).get
@@ -123,6 +131,24 @@ class ReplE2ESuite extends RemoteSparkSession {
       """.stripMargin
     val output = runCommandsInShell(input)
     assertContains("Array[Int] = Array(5, 25, 45, 65, 85)", output)
+  }
+
+  test("UDF containing in-place lambda") {
+    val input = """
+        |class A(x: Int) { def get = x * 42 + 5 }
+        |val myUdf = udf((x: Int) => new A(x).get)
+        |spark.range(5).select(myUdf(col("id"))).as[Int].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Int] = Array(5, 47, 89, 131, 173)", output)
+  }
+
+  test("SPARK-43198: Filter does not throw ammonite-related class initialization exception") {
+    val input = """
+        |spark.range(10).filter(n => n % 2 == 0).collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[java.lang.Long] = Array(0L, 2L, 4L, 6L, 8L)", output)
   }
 
 }

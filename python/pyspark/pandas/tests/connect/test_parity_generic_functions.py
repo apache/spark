@@ -24,17 +24,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class GenericFunctionsParityTests(
     GenericFunctionsTestsMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43631): Enable Series.interpolate with Spark Connect.")
     def test_interpolate(self):
         super().test_interpolate()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_prod_precision(self):
-        super().test_prod_precision()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_stat_functions(self):
-        super().test_stat_functions()
 
 
 if __name__ == "__main__":

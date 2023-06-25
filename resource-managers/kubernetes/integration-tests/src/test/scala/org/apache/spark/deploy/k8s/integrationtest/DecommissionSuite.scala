@@ -156,7 +156,10 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
             PatienceConfiguration.Timeout(Span(120, Seconds)),
             PatienceConfiguration.Interval(Span(1, Seconds))) {
 
-            val currentPod = client.pods().withName(pod.getMetadata.getName).get
+            val currentPod = client.pods()
+              .inNamespace(kubernetesTestComponents.namespace)
+              .withName(pod.getMetadata.getName)
+              .get
             val labels = currentPod.getMetadata.getLabels.asScala
 
             labels should not be (null)

@@ -132,12 +132,33 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
     )
 
-    val e = intercept[AnalysisException](
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
-    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
+      errorClass = "INVALID_BOUNDARY.START",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`start`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMinValue" -> "-9223372036854775808L"))
+
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
+      errorClass = "INVALID_BOUNDARY.END",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`end`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMaxValue" -> "9223372036854775807L"))
   }
 
   test("range between should accept at most one ORDER BY expression when unbounded") {

@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 
 import jline.console.ConsoleReader
+import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
@@ -43,12 +44,14 @@ import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThr
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
-import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
@@ -235,7 +238,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    CliDriver.getCommandCompleter.foreach(reader.addCompleter)
+    getCommandCompleter.foreach(reader.addCompleter)
 
     val historyDirectory = System.getProperty("user.home")
 
@@ -336,6 +339,86 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       state.close()
     }
   }
+
+  private def getCommandCompleter(): Array[Completer] = {
+    // StringsCompleter matches against a pre-defined wordlist
+    // We start with an empty wordlist and build it up
+    val candidateStrings = new JArrayList[String]
+    // We add Spark SQL function names
+    // For functions that aren't infix operators, we add an open
+    // parenthesis at the end.
+    FunctionRegistry.builtin.listFunction().map(_.funcName).foreach { s =>
+      if (s.matches("[a-z_]+")) {
+        candidateStrings.add(s + "(")
+      } else {
+        candidateStrings.add(s)
+      }
+    }
+    // We add Spark SQL keywords, including lower-cased versions
+    SQLKeywordUtils.keywords.foreach { s =>
+      candidateStrings.add(s)
+      candidateStrings.add(s.toLowerCase(Locale.ROOT))
+    }
+
+    val strCompleter = new StringsCompleter(candidateStrings)
+    // Because we use parentheses in addition to whitespace
+    // as a keyword delimiter, we need to define a new ArgumentDelimiter
+    // that recognizes parenthesis as a delimiter.
+    val delim = new ArgumentCompleter.AbstractArgumentDelimiter() {
+      override def isDelimiterChar(buffer: CharSequence, pos: Int): Boolean = {
+        val c = buffer.charAt(pos)
+        Character.isWhitespace(c) || c == '(' || c == ')' || c == '[' || c == ']'
+      }
+    }
+    // The ArgumentCompleter allows us to match multiple tokens
+    // in the same line.
+    val argCompleter = new ArgumentCompleter(delim, strCompleter)
+    // By default ArgumentCompleter is in "strict" mode meaning
+    // a token is only auto-completed if all prior tokens
+    // match. We don't want that since there are valid tokens
+    // that are not in our wordlist (eg. table and column names)
+    argCompleter.setStrict(false)
+    // ArgumentCompleter always adds a space after a matched token.
+    // This is undesirable for function names because a space after
+    // the opening parenthesis is unnecessary (and uncommon) in Hive.
+    // We stack a custom Completer on top of our ArgumentCompleter
+    // to reverse this.
+    val customCompleter: Completer = new Completer() {
+      override def complete(buffer: String, offset: Int, completions: JList[CharSequence]): Int = {
+        val comp: JList[String] = completions.asInstanceOf[JList[String]]
+        val ret = argCompleter.complete(buffer, offset, completions)
+        // ConsoleReader will do the substitution if and only if there
+        // is exactly one valid completion, so we ignore other cases.
+        if (completions.size == 1 && comp.get(0).endsWith("( ")) comp.set(0, comp.get(0).trim)
+        ret
+      }
+    }
+
+    val confCompleter = new StringsCompleter(SQLConf.get.getAllDefinedConfs.map(_._1).asJava) {
+      override def complete(buffer: String, cursor: Int, clist: JList[CharSequence]): Int = {
+        super.complete(buffer, cursor, clist)
+      }
+    }
+
+    val setCompleter = new StringsCompleter("set", "Set", "SET") {
+      override def complete(buffer: String, cursor: Int, clist: JList[CharSequence]): Int = {
+        if (buffer != null && buffer.equalsIgnoreCase("set")) {
+          super.complete(buffer, cursor, clist)
+        } else {
+          -1
+        }
+      }
+    }
+
+    val propCompleter = new ArgumentCompleter(setCompleter, confCompleter) {
+      override def complete(buffer: String, offset: Int, completions: JList[CharSequence]): Int = {
+        val ret = super.complete(buffer, offset, completions)
+        if (completions.size == 1) completions.set(0, completions.get(0).asInstanceOf[String].trim)
+        ret
+      }
+    }
+    Array[Completer](propCompleter, customCompleter)
+  }
 }
 
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
@@ -371,6 +454,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   def printMasterAndAppId(): Unit = {
     val master = SparkSQLEnv.sparkContext.master
     val appId = SparkSQLEnv.sparkContext.applicationId
+    SparkSQLEnv.sparkContext.uiWebUrl.foreach {
+      webUrl => console.printInfo(s"Spark Web UI available at $webUrl")
+    }
     console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 

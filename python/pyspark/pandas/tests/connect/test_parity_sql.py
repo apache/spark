@@ -22,15 +22,17 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class SQLParityTests(SQLTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43664): Fix TABLE_OR_VIEW_NOT_FOUND from SQLParityTests.")
     def test_sql_with_index_col(self):
         super().test_sql_with_index_col()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("TODO(SPARK-43664): Fix TABLE_OR_VIEW_NOT_FOUND from SQLParityTests.")
     def test_sql_with_pandas_on_spark_objects(self):
         super().test_sql_with_pandas_on_spark_objects()
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip(
+        "TODO(SPARK-43665): Enable PandasSQLStringFormatter.vformat to work with Spark Connect."
+    )
     def test_sql_with_python_objects(self):
         super().test_sql_with_python_objects()
 
