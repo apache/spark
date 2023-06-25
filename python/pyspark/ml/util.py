@@ -659,7 +659,7 @@ class HasTrainingSummary(Generic[T]):
     .. versionadded:: 3.0.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def hasSummary(self) -> bool:
         """
@@ -668,7 +668,7 @@ class HasTrainingSummary(Generic[T]):
         """
         return cast("JavaWrapper", self)._call_java("hasSummary")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def summary(self) -> T:
         """

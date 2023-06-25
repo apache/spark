@@ -1873,6 +1873,70 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_add", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = withAggregateFunction {
+    Average(e.expr, EvalMode.TRY)
+  }
+
+  /**
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
+    UnresolvedFunction("try_divide", Seq(dividend.expr, divisor.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_multiply", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_subtract", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = withAggregateFunction {
+    Sum(e.expr, EvalMode.TRY)
+  }
+
+  /**
    * Creates a new struct column.
    * If the input column is a column in a `DataFrame`, or a derived column expression
    * that is named (i.e. aliased), its name would be retained as the StructField's name,
@@ -4046,33 +4110,259 @@ object functions {
   /**
    * Returns a boolean. The value is True if str ends with suffix.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both str or suffix must be of STRING type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
-   *   STRING and BINARY.
+   * Both str or suffix must be of STRING or BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def endswith(str: Column, suffix: Column): Column = withExpr {
-    EndsWith(str.expr, suffix.expr)
+    UnresolvedFunction(Seq("endswith"), Seq(str.expr, suffix.expr), isDistinct = false)
   }
 
   /**
    * Returns a boolean. The value is True if str starts with prefix.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both str or prefix must be of STRING type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
-   *   STRING and BINARY.
+   * Both str or prefix must be of STRING or BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def startswith(str: Column, prefix: Column): Column = withExpr {
-    StartsWith(str.expr, prefix.expr)
+    UnresolvedFunction(Seq("startswith"), Seq(str.expr, prefix.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`.
+   * If n is larger than 256 the result is equivalent to char(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char(n: Column): Column = withExpr {
+    Chr(n.expr)
+  }
+
+  /**
+   * Removes the leading and trailing space characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column): Column = withExpr {
+    new StringTrimBoth(str.expr)
+  }
+
+  /**
+   * Remove the leading and trailing `trim` characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column, trim: Column): Column = withExpr {
+    new StringTrimBoth(str.expr, trim.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, format: Column): Column = withExpr {
+    new TryToBinary(e.expr, format.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = withExpr {
+    new TryToBinary(e.expr)
+  }
+
+  /**
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = withExpr {
+    TryToNumber(e.expr, format.expr)
+  }
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data.
+   * The length of string data includes the trailing spaces.
+   * The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char_length(str: Column): Column = withExpr {
+    Length(str.expr)
+  }
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data.
+   * The length of string data includes the trailing spaces.
+   * The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def character_length(str: Column): Column = withExpr {
+    Length(str.expr)
+  }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`.
+   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def chr(n: Column): Column = withExpr {
+    Chr(n.expr)
+  }
+
+  /**
+   * Returns a boolean. The value is True if right is found inside left.
+   * Returns NULL if either input expression is NULL. Otherwise, returns False.
+   * Both left or right must be of STRING or BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def contains(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction(Seq("contains"), Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+   * The function returns NULL if the index exceeds the length of the array
+   * and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+   * it throws ArrayIndexOutOfBoundsException for invalid indices.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def elt(inputs: Column*): Column = withExpr {
+    Elt(inputs.map(_.expr))
+  }
+
+  /**
+   * Returns the index (1-based) of the given string (`str`) in the comma-delimited
+   * list (`strArray`). Returns 0, if the string was not found or if the given string (`str`)
+   * contains a comma.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def find_in_set(str: Column, strArray: Column): Column = withExpr {
+    FindInSet(str.expr, strArray.expr)
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    escapeChar.expr match {
+      case StringLiteral(v) if v.length == 1 =>
+        Like(str.expr, pattern.expr, v.charAt(0))
+      case _ =>
+        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
+    }
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column): Column = withExpr {
+    new Like(str.expr, pattern.expr)
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column = withExpr {
+    escapeChar.expr match {
+      case StringLiteral(v) if v.length == 1 =>
+        ILike(str.expr, pattern.expr, v.charAt(0))
+      case _ =>
+        throw QueryCompilationErrors.invalidEscapeChar(escapeChar.expr)
+    }
+  }
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column): Column = withExpr {
+    new ILike(str.expr, pattern.expr)
+  }
+
+  /**
+   * Returns `str` with all characters changed to lowercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def lcase(str: Column): Column = withExpr {
+    Lower(str.expr)
+  }
+
+  /**
+   * Returns `str` with all characters changed to uppercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ucase(str: Column): Column = withExpr {
+    Upper(str.expr)
+  }
+
+  /**
+   * Returns the leftmost `len`(`len` can be string type) characters from the string `str`,
+   * if `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def left(str: Column, len: Column): Column = withExpr {
+    Left(str.expr, len.expr)
+  }
+
+  /**
+   * Returns the rightmost `len`(`len` can be string type) characters from the string `str`,
+   * if `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def right(str: Column, len: Column): Column = withExpr {
+    Right(str.expr, len.expr)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4142,6 +4432,14 @@ object functions {
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
   /**
+   * Returns the current timestamp at the start of query evaluation.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def now(): Column = withExpr { Now() }
+
+  /**
    * Returns the current timestamp without time zone at the start of query evaluation
    * as a timestamp without time zone column.
    * All calls of localtimestamp within the same query return the same value.
@@ -4198,6 +4496,18 @@ object functions {
   def date_add(start: Column, days: Column): Column = withExpr { DateAdd(start.expr, days.expr) }
 
   /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def dateadd(start: Column, days: Column): Column = date_add(start, days)
+
+  /**
    * Returns the date that is `days` days before `start`
    *
    * @param start A date, timestamp or string. If a string, the data must be in a format that
@@ -4243,6 +4553,34 @@ object functions {
   def datediff(end: Column, start: Column): Column = withExpr { DateDiff(end.expr, start.expr) }
 
   /**
+   * Returns the number of days from `start` to `end`.
+   *
+   * Only considers the date part of the input. For example:
+   * {{{
+   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * // returns 1
+   * }}}
+   *
+   * @param end A date, timestamp or string. If a string, the data must be in a format that
+   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
+   *         a date. Negative if `end` is before `start`
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_diff(end: Column, start: Column): Column = datediff(end, start)
+
+  /**
+   * Create date from the number of `days` since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_from_unix_date(days: Column): Column = withExpr { DateFromUnixDate(days.expr) }
+
+  /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -4284,6 +4622,14 @@ object functions {
   def dayofmonth(e: Column): Column = withExpr { DayOfMonth(e.expr) }
 
   /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def day(e: Column): Column = dayofmonth(e)
+
+  /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -4298,6 +4644,47 @@ object functions {
    * @since 1.5.0
    */
   def hour(e: Column): Column = withExpr { Hour(e.expr) }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("extract", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `extract`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("date_part", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `EXTRACT`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("datepart", Seq(field.expr, source.expr), isDistinct = false)
+  }
 
   /**
    * Returns the last day of the month which the given date belongs to.
@@ -4319,6 +4706,14 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def weekday(e: Column): Column = withExpr { WeekDay(e.expr) }
 
   /**
    * @return A date created from year, month and day fields.
@@ -4532,6 +4927,30 @@ object functions {
    */
   def to_timestamp(s: Column, fmt: String): Column = withExpr {
     new ParseToTimestamp(s.expr, Literal(fmt))
+  }
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr, format.expr)
+  }
+
+  /**
+   * Parses the `s` to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr)
   }
 
   /**
@@ -4943,6 +5362,26 @@ object functions {
   }
 
   /**
+   * Creates timestamp from the number of milliseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_millis(e: Column): Column = withExpr {
+    MillisToTimestamp(e.expr)
+  }
+
+  /**
+   * Creates timestamp from the number of microseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_micros(e: Column): Column = withExpr {
+    MicrosToTimestamp(e.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *
@@ -5123,6 +5562,21 @@ object functions {
    */
   def element_at(column: Column, value: Any): Column = withExpr {
     ElementAt(column.expr, lit(value).expr)
+  }
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column = withExpr {
+    new TryElementAt(column.expr, value.expr)
   }
 
   /**
@@ -6342,6 +6796,34 @@ object functions {
    * @since 3.0.0
    */
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the `sourceTz` time zone to `targetTz`.
+   *
+   * @param sourceTz the time zone for the input timestamp. If it is missed,
+   *                 the current session time zone is used as the source time zone.
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column = withExpr {
+    ConvertTimezone(sourceTz.expr, targetTz.expr, sourceTs.expr)
+  }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the current time zone to `targetTz`.
+   *
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(targetTz: Column, sourceTs: Column): Column = withExpr {
+    new ConvertTimezone(targetTz.expr, sourceTs.expr)
+  }
 
   /**
    * Make DayTimeIntervalType duration from days, hours, mins and secs.

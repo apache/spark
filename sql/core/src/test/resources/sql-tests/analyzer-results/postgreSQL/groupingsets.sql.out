@@ -663,22 +663,26 @@ DropTempViewCommand gstest1
 -- !query
 DROP TABLE gstest2
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`gstest2`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gstest2
 
 
 -- !query
 DROP TABLE gstest3
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`gstest3`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gstest3
 
 
 -- !query
 DROP TABLE gstest4
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`gstest4`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gstest4
 
 
 -- !query
 DROP TABLE gstest_empty
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`gstest_empty`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gstest_empty
