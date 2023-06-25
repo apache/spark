@@ -947,6 +947,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       }
     }
   }
+
+  test("sql() with positional parameters") {
+    val result0 = spark.sql("select 1", Array.empty).collect()
+    assert(result0.length == 1 && result0(0).getInt(0) === 1)
+
+    val result1 = spark.sql("select ?", Array(1)).collect()
+    assert(result1.length == 1 && result1(0).getInt(0) === 1)
+
+    val result2 = spark.sql("select ?, ?", Array(1, "abc")).collect()
+    assert(result2.length == 1)
+    assert(result2(0).getInt(0) === 1)
+    assert(result2(0).getString(1) === "abc")
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
