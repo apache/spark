@@ -184,7 +184,7 @@
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
     <snappy.version>1.1.10.1</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.15</commons-codec.version>
+    <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
     <commons-io.version>2.13.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -222,7 +222,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.7.0</kubernetes-client.version>
+    <kubernetes-client.version>6.7.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -2782,6 +2782,17 @@
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
+                  <enforceBytecodeVersion>
+                    <maxJdkVersion>${java.version}</maxJdkVersion>
+                    <ignoredScopes>test</ignoredScopes>
+                    <ignoredScopes>provided</ignoredScopes>
+                    <excludes>
+                      <!--
+                        TODO(SPARK-44032): Remove the exclusion of threeten-extra when orc-core fixes the violation
+                      -->
+                      <exclude>org.threeten:threeten-extra</exclude>
+                    </excludes>
+                  </enforceBytecodeVersion>
                 </rules>
               </configuration>
             </execution>
@@ -2797,6 +2808,13 @@
               </configuration>
             </execution>
           </executions>
+          <dependencies>
+            <dependency>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>extra-enforcer-rules</artifactId>
+              <version>1.7.0</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>

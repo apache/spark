@@ -26,7 +26,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, Map}
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -548,9 +548,10 @@ class ExecutorSuite extends SparkFunSuite
       // and takes a long time to finish because file download is slow:
       val slowLibraryDownloadThread = new Thread(() => {
         executor.updateDependencies(
-          Map.empty,
-          Map.empty,
-          Map.empty,
+          immutable.Map.empty,
+          immutable.Map.empty,
+          immutable.Map.empty,
+          executor.defaultSessionState,
           Some(startLatch),
           Some(endLatch))
       })
@@ -563,9 +564,10 @@ class ExecutorSuite extends SparkFunSuite
       // dependency update:
       val blockedLibraryDownloadThread = new Thread(() => {
         executor.updateDependencies(
-          Map.empty,
-          Map.empty,
-          Map.empty)
+          immutable.Map.empty,
+          immutable.Map.empty,
+          immutable.Map.empty,
+          executor.defaultSessionState)
       })
       blockedLibraryDownloadThread.start()
       eventually(timeout(10.seconds), interval(100.millis)) {
@@ -621,6 +623,7 @@ class ExecutorSuite extends SparkFunSuite
       numPartitions = 1,
       locs = Seq(),
       outputId = 0,
+      JobArtifactSet(),
       localProperties = new Properties(),
       serializedTaskMetrics = serializedTaskMetrics
     )
@@ -636,9 +639,7 @@ class ExecutorSuite extends SparkFunSuite
       name = "",
       index = 0,
       partitionId = 0,
-      addedFiles = Map[String, Long](),
-      addedJars = Map[String, Long](),
-      addedArchives = Map[String, Long](),
+      JobArtifactSet(),
       properties = new Properties,
       cpus = 1,
       resources = immutable.Map[String, ResourceInformation](),

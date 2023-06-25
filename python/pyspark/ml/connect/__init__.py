@@ -16,3 +16,27 @@
 #
 
 """Spark Connect Python Client - ML module"""
+
+from pyspark.ml.connect.base import (
+    Estimator,
+    Transformer,
+    Model,
+)
+
+from pyspark.ml.connect import (
+    feature,
+    evaluation,
+)
+
+from pyspark.ml.connect.pipeline import Pipeline, PipelineModel
+
+__all__ = [
+    "Estimator",
+    "Transformer",
+    "Estimator",
+    "Model",
+    "feature",
+    "evaluation",
+    "Pipeline",
+    "PipelineModel",
+]

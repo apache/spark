@@ -350,7 +350,9 @@ class UDTFTestsMixin(ReusedSQLTestCase):
 
         random_udtf = udtf(RandomUDTF, returnType="x: int").asNondeterministic()
         # TODO(SPARK-43966): support non-deterministic UDTFs
-        with self.assertRaisesRegex(AnalysisException, "nondeterministic expressions"):
+        with self.assertRaisesRegex(
+            AnalysisException, "The operator expects a deterministic expression"
+        ):
             random_udtf(lit(1)).collect()
 
     def test_udtf_with_nondeterministic_input(self):
@@ -362,7 +364,9 @@ class UDTFTestsMixin(ReusedSQLTestCase):
                 yield a + 1,
 
         # TODO(SPARK-43966): support non-deterministic UDTFs
-        with self.assertRaisesRegex(AnalysisException, "nondeterministic expressions"):
+        with self.assertRaisesRegex(
+            AnalysisException, " The operator expects a deterministic expression"
+        ):
             TestUDTF(rand(0) * 100).collect()
 
     def test_udtf_no_eval(self):

@@ -16,13 +16,20 @@
  */
 package org.apache.spark.sql
 
+import java.sql.Timestamp
 import java.util.Arrays
 
 import io.grpc.StatusRuntimeException
 
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.sql.types._
+
+case class ClickEvent(id: String, timestamp: Timestamp)
+
+case class ClickState(id: String, count: Int)
 
 /**
  * All tests in this class requires client UDF artifacts synced with the server.
@@ -446,5 +453,105 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     val keys = grouped.keyAs[String].keys.sort($"value")
 
     checkDataset(keys, "1", "2", "10", "20")
+  }
+
+  test("flatMapGroupsWithState") {
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+        Iterator(ClickState(key, values.size))
+      }
+
+    val session: SparkSession = spark
+    import session.implicits._
+    val values = Seq(
+      ClickEvent("a", new Timestamp(12345)),
+      ClickEvent("a", new Timestamp(12346)),
+      ClickEvent("a", new Timestamp(12347)),
+      ClickEvent("b", new Timestamp(12348)),
+      ClickEvent("b", new Timestamp(12349)),
+      ClickEvent("c", new Timestamp(12350)))
+      .toDS()
+      .groupByKey(_.id)
+      .flatMapGroupsWithState(Append, GroupStateTimeout.NoTimeout)(stateFunc)
+
+    checkDataset(values, ClickState("a", 3), ClickState("b", 2), ClickState("c", 1))
+  }
+
+  test("flatMapGroupsWithState - with initial state") {
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        val currState = state.getOption.getOrElse(ClickState(key, 0))
+        Iterator(ClickState(key, currState.count + values.size))
+      }
+
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val initialStateDS = Seq(ClickState("a", 2), ClickState("b", 1)).toDS()
+    val initialState = initialStateDS.groupByKey(_.id).mapValues(x => x)
+
+    val values = Seq(
+      ClickEvent("a", new Timestamp(12345)),
+      ClickEvent("a", new Timestamp(12346)),
+      ClickEvent("a", new Timestamp(12347)),
+      ClickEvent("b", new Timestamp(12348)),
+      ClickEvent("b", new Timestamp(12349)),
+      ClickEvent("c", new Timestamp(12350)))
+      .toDS()
+      .groupByKey(_.id)
+      .flatMapGroupsWithState(Append, GroupStateTimeout.NoTimeout, initialState)(stateFunc)
+
+    checkDataset(values, ClickState("a", 5), ClickState("b", 3), ClickState("c", 1))
+  }
+
+  test("mapGroupsWithState") {
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+        ClickState(key, values.size)
+      }
+
+    val session: SparkSession = spark
+    import session.implicits._
+    val values = Seq(
+      ClickEvent("a", new Timestamp(12345)),
+      ClickEvent("a", new Timestamp(12346)),
+      ClickEvent("a", new Timestamp(12347)),
+      ClickEvent("b", new Timestamp(12348)),
+      ClickEvent("b", new Timestamp(12349)),
+      ClickEvent("c", new Timestamp(12350)))
+      .toDS()
+      .groupByKey(_.id)
+      .mapGroupsWithState(GroupStateTimeout.NoTimeout)(stateFunc)
+
+    checkDataset(values, ClickState("a", 3), ClickState("b", 2), ClickState("c", 1))
+  }
+
+  test("mapGroupsWithState - with initial state") {
+    val stateFunc =
+      (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
+        val currState = state.getOption.getOrElse(ClickState(key, 0))
+        ClickState(key, currState.count + values.size)
+      }
+
+    val session: SparkSession = spark
+    import session.implicits._
+
+    val initialStateDS = Seq(ClickState("a", 2), ClickState("b", 1)).toDS()
+    val initialState = initialStateDS.groupByKey(_.id).mapValues(x => x)
+
+    val values = Seq(
+      ClickEvent("a", new Timestamp(12345)),
+      ClickEvent("a", new Timestamp(12346)),
+      ClickEvent("a", new Timestamp(12347)),
+      ClickEvent("b", new Timestamp(12348)),
+      ClickEvent("b", new Timestamp(12349)),
+      ClickEvent("c", new Timestamp(12350)))
+      .toDS()
+      .groupByKey(_.id)
+      .mapGroupsWithState(GroupStateTimeout.NoTimeout, initialState)(stateFunc)
+
+    checkDataset(values, ClickState("a", 5), ClickState("b", 3), ClickState("c", 1))
   }
 }
