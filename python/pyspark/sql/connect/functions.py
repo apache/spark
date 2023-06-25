@@ -2252,12 +2252,14 @@ substring_index.__doc__ = pysparkfuncs.substring_index.__doc__
 
 
 def levenshtein(
-    left: "ColumnOrName", right: "ColumnOrName", threshold: Optional[int] = None
+    left: "ColumnOrName",
+    right: "ColumnOrName",
+    threshold: Optional["ColumnOrName"] = None,
 ) -> Column:
     if threshold is None:
         return _invoke_function_over_columns("levenshtein", left, right)
     else:
-        return _invoke_function("levenshtein", _to_col(left), _to_col(right), lit(threshold))
+        return _invoke_function_over_columns("levenshtein", left, right, threshold)
 
 
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__

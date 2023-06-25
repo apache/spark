@@ -3467,8 +3467,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def levenshtein(l: Column, r: Column, threshold: Int): Column = withExpr {
-    Levenshtein(l.expr, r.expr, Some(Literal(threshold)))
+  def levenshtein(l: Column, r: Column, threshold: Column): Column = withExpr {
+    Levenshtein(l.expr, r.expr, Some(threshold.expr))
   }
 
   /**

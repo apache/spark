@@ -3417,8 +3417,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  def levenshtein(l: Column, r: Column, threshold: Int): Column =
-    Column.fn("levenshtein", l, r, lit(threshold))
+  def levenshtein(l: Column, r: Column, threshold: Column): Column =
+    Column.fn("levenshtein", l, r, threshold)
 
   /**
    * Computes the Levenshtein distance of the two given string columns.

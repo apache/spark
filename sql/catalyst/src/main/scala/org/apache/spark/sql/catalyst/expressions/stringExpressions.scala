@@ -2164,9 +2164,28 @@ case class Levenshtein(
     if (children.length > 3 || children.length < 2) {
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq(2, 3), children.length)
-    } else {
-      super.checkInputDataTypes()
     }
+    if (children.length == 3) {
+      threshold match {
+        case Some(e) if !e.foldable =>
+          return DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "threshold",
+              "inputType" -> toSQLType(IntegerType),
+              "inputExpr" -> toSQLExpr(threshold.get)))
+        case Some(e) if e.eval().asInstanceOf[Int] < 0 =>
+          return DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> toSQLId("threshold"),
+              "valueRange" -> s"[0, ${Int.MaxValue}]",
+              "currentValue" -> toSQLValue(e.eval().asInstanceOf[Int], IntegerType))
+          )
+        case _ =>
+      }
+    }
+    super.checkInputDataTypes()
   }
 
   override def inputTypes: Seq[AbstractDataType] = threshold match {

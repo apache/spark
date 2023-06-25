@@ -1610,7 +1610,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("levenshtein with threshold") {
-    fn.levenshtein(fn.col("g"), lit("bob"), 2)
+    fn.levenshtein(fn.col("g"), lit("bob"), lit(2))
   }
 
   functionTest("locate") {

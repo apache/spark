@@ -1925,8 +1925,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.levenshtein(sdf.b, sdf.c)).toPandas(),
         )
         self.assert_eq(
-            cdf.select(CF.levenshtein(cdf.b, cdf.c, 1)).toPandas(),
-            sdf.select(SF.levenshtein(sdf.b, sdf.c, 1)).toPandas(),
+            cdf.select(CF.levenshtein(cdf.b, cdf.c, CF.lit(1))).toPandas(),
+            sdf.select(SF.levenshtein(sdf.b, sdf.c, SF.lit(1))).toPandas(),
         )
 
         self.assert_eq(

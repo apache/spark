@@ -8850,7 +8850,9 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
 
 @try_remote_functions
 def levenshtein(
-    left: "ColumnOrName", right: "ColumnOrName", threshold: Optional[int] = None
+    left: "ColumnOrName",
+    right: "ColumnOrName",
+    threshold: Optional["ColumnOrName"] = None,
 ) -> Column:
     """Computes the Levenshtein distance of the two given strings.
 
@@ -8865,7 +8867,7 @@ def levenshtein(
         first column value.
     right : :class:`~pyspark.sql.Column` or str
         second column value.
-    threshold : int, optional
+    threshold : :class:`~pyspark.sql.Column` or str, optional
         if set when the levenshtein distance of the two given strings
         less than or equal to a given threshold then return result distance, or -1
 
@@ -8879,18 +8881,16 @@ def levenshtein(
 
     Examples
     --------
-    >>> df0 = spark.createDataFrame([('kitten', 'sitting',)], ['l', 'r'])
-    >>> df0.select(levenshtein('l', 'r').alias('d')).collect()
+    >>> df = spark.createDataFrame([['kitten', 'sitting',]], ['l', 'r'])
+    >>> df.select(levenshtein(df.l, df.r).alias('d')).collect()
     [Row(d=3)]
-    >>> df0.select(levenshtein('l', 'r', 2).alias('d')).collect()
+    >>> df.select(levenshtein(df.l, df.r, lit(2)).alias('d')).collect()
     [Row(d=-1)]
     """
     if threshold is None:
         return _invoke_function_over_columns("levenshtein", left, right)
     else:
-        return _invoke_function(
-            "levenshtein", _to_java_column(left), _to_java_column(right), threshold
-        )
+        return _invoke_function_over_columns("levenshtein", left, right, threshold)
 
 
 @try_remote_functions

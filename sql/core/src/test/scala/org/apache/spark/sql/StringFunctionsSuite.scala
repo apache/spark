@@ -126,21 +126,49 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("string Levenshtein distance") {
-    val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
+    val df = Seq(("kitten", "sitting", 1), ("frog", "fog", 2)).toDF("l", "r", "d")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
     checkAnswer(df.select(levenshtein($"l", lit(null))), Seq(Row(null), Row(null)))
     checkAnswer(df.selectExpr("levenshtein(l, null)"), Seq(Row(null), Row(null)))
 
-    checkAnswer(df.select(levenshtein($"l", $"r", 3)), Seq(Row(3), Row(1)))
+    checkAnswer(df.select(levenshtein($"l", $"r", lit(3))), Seq(Row(3), Row(1)))
     checkAnswer(df.selectExpr("levenshtein(l, r, 3)"), Seq(Row(3), Row(1)))
-    checkAnswer(df.select(levenshtein(lit(null), $"r", 3)), Seq(Row(null), Row(null)))
+    checkAnswer(df.select(levenshtein(lit(null), $"r", lit(3))), Seq(Row(null), Row(null)))
     checkAnswer(df.selectExpr("levenshtein(null, r, 3)"), Seq(Row(null), Row(null)))
 
-    checkAnswer(df.select(levenshtein($"l", $"r", 0)), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.select(levenshtein($"l", $"r", lit(0))), Seq(Row(-1), Row(-1)))
     checkAnswer(df.selectExpr("levenshtein(l, r, 0)"), Seq(Row(-1), Row(-1)))
-    checkAnswer(df.select(levenshtein($"l", lit(null), 0)), Seq(Row(null), Row(null)))
+    checkAnswer(df.select(levenshtein($"l", lit(null), lit(0))), Seq(Row(null), Row(null)))
     checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
+
+    checkAnswer(df.selectExpr("levenshtein(l, r, null)"), Seq(Row(null), Row(null)))
+    checkAnswer(df.select(levenshtein($"l", $"r", lit(null))), Seq(Row(null), Row(null)))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("levenshtein(l, r, d)").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "inputName" -> "threshold",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"d\"",
+        "sqlExpr" -> "\"levenshtein(l, r, d)\""),
+      context = ExpectedContext(fragment = "levenshtein(l, r, d)", start = 0, stop = 19)
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("levenshtein(l, r, -1)").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "exprName" -> "`threshold`",
+        "valueRange" -> "[0, 2147483647]",
+        "currentValue" -> "-1",
+        "sqlExpr" -> "\"levenshtein(l, r, -1)\""),
+      context = ExpectedContext(fragment = "levenshtein(l, r, -1)", start = 0, stop = 20)
+    )
   }
 
   test("string rlike / regexp / regexp_like") {
