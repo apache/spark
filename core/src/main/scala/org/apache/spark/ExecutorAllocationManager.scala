@@ -651,6 +651,8 @@ private[spark] class ExecutorAllocationManager(
     // Map from each stageAttempt to a set of pending speculative task indexes
     private val stageAttemptToPendingSpeculativeTasks =
       new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
+    private val stageAttemptToRunningSpeculativeTasks =
+      new mutable.HashMap[StageAttempt, mutable.HashMap[Int, Int]]
 
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
@@ -756,6 +758,13 @@ private[spark] class ExecutorAllocationManager(
         if (taskStart.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
             new mutable.HashSet[Int]) += taskIndex
+          val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+            new mutable.HashMap[Int, Int])
+          map(taskIndex) = map.getOrElse(taskIndex, 0) + 1
+          if (map(taskIndex) == 2) {
+            stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
+              new mutable.HashSet[Int]) += taskIndex
+          }
           stageAttemptToPendingSpeculativeTasks
             .get(stageAttempt).foreach(_.remove(taskIndex))
         } else {
@@ -783,6 +792,9 @@ private[spark] class ExecutorAllocationManager(
         }
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
+          val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+            new mutable.HashMap[Int, Int])
+          map(taskIndex) = map.getOrElse(taskIndex, 0) - 1
         }
 
         taskEnd.reason match {
@@ -805,7 +817,19 @@ private[spark] class ExecutorAllocationManager(
               // case, the task index is completed and we shouldn't remove it from
               // stageAttemptToTaskIndices. Otherwise, we will have a pending non-speculative task
               // for the task index (SPARK-30511)
-              stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
+              val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+                new mutable.HashMap[Int, Int])
+              if (map.getOrElse(taskIndex, 0) == 0) {
+                stageAttemptToTaskIndices.get(stageAttempt).foreach {
+                  _.remove(taskIndex)
+                }
+              }
+            } else {
+              val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
+                new mutable.HashMap[Int, Int])
+              if (map.getOrElse(taskIndex, 0) == 0) {
+                stageAttemptToTaskIndices.get(stageAttempt).foreach {_.remove(taskIndex)}
+              }
             }
         }
       }

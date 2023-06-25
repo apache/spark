@@ -1780,6 +1780,105 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
+  test("SPARK-MI: Fix a bug where the number of executors is calculated incorrectly " +
+    "when the task fails and it is speculated that the task is still executing") {
+    val clock = new ManualClock()
+    val manager = createManager(createConf(0, 10, 0), clock)
+
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
+    clock.advance(1000000)
+    val taskInfo0 = createTaskInfo(0, 0, "executor-0")
+    val taskInfo1 = createTaskInfo(1, 1, "executor-1")
+    val taskInfo0_1 = createTaskInfo(0, 0, "executor-0_1", true)
+    val taskInfo1_1 = createTaskInfo(1, 1, "executor-1_1", true)
+    val taskInfo0_2 = createTaskInfo(0, 0, "executor-0_2", true)
+    val taskInfo1_2 = createTaskInfo(1, 1, "executor-1_2", true)
+    post(SparkListenerTaskStart(1, 0, taskInfo0))
+    post(SparkListenerTaskStart(1, 0, taskInfo1))
+    // Verify that we're capped at number of tasks including the speculative ones in the stage
+    // post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 0))
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded
+    ) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded
+    ) === 1)
+    post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 0))
+    post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 1))
+    post(SparkListenerTaskStart(1, 0, taskInfo0_1))
+    post(SparkListenerTaskStart(1, 0, taskInfo1_1))
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+
+
+    val taskEndReason = ExceptionFailure(null, null, null, null, None)
+    post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo0, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo1, new ExecutorMetrics, null))
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === -2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+
+    post(SparkListenerTaskStart(1, 0, taskInfo0_2))
+    post(SparkListenerTaskStart(1, 0, taskInfo1_2))
+    // Verify that running a task doesn't affect the target
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo0_1, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo1_1, new ExecutorMetrics, null))
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === -2)
+
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo0_2, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo1_2, new ExecutorMetrics, null))
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+  }
+
   private def createConf(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
