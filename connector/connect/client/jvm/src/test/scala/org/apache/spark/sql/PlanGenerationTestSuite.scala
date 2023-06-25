@@ -62,12 +62,13 @@ import org.apache.spark.util.Utils
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "connect-client-jvm/testOnly org.apache.spark.sql.PlanGenerationTestSuite"
  * }}}
  *
- * If you need to clean the orphaned golden files, you need to set the SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1
- * environment variable before running this test, e.g.:
+ * If you need to clean the orphaned golden files, you need to set the
+ * SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 environment variable before running this test, e.g.:
  * {{{
  *   SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 build/sbt "connect-client-jvm/testOnly org.apache.spark.sql.PlanGenerationTestSuite"
  * }}}
- * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups compatibility.
+ * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups
+ * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
  * `connector/connect/server` module
@@ -130,11 +131,14 @@ class PlanGenerationTestSuite
 
   private def cleanOrphanedGoldenFile(): Unit = {
     val allTestNames = testNames.map(_.replace(' ', '_'))
-    val orphans = Utils.recursiveList(queryFilePath.toFile).
-      filter(g => g.getAbsolutePath.endsWith(".proto.bin") ||
-        g.getAbsolutePath.endsWith(".json")).
-      filter(g => !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
-        !allTestNames.contains(g.getName.stripSuffix(".json")))
+    val orphans = Utils
+      .recursiveList(queryFilePath.toFile)
+      .filter(g =>
+        g.getAbsolutePath.endsWith(".proto.bin") ||
+          g.getAbsolutePath.endsWith(".json"))
+      .filter(g =>
+        !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
+          !allTestNames.contains(g.getName.stripSuffix(".json")))
     orphans.foreach(Utils.deleteRecursively)
   }
 

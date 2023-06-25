@@ -58,13 +58,13 @@ import org.apache.spark.util.Utils
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "connect/testOnly org.apache.spark.sql.connect.ProtoToParsedPlanTestSuite"
  * }}}
  *
- * If you need to clean the orphaned golden files, you need to set the SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1
- * environment variable before running this test, e.g.:
+ * If you need to clean the orphaned golden files, you need to set the
+ * SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 environment variable before running this test, e.g.:
  * {{{
  *   SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 build/sbt "connect/testOnly org.apache.spark.sql.connect.ProtoToParsedPlanTestSuite"
  * }}}
- * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups compatibility.
- *
+ * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups
+ * compatibility.
  */
 // scalastyle:on
 class ProtoToParsedPlanTestSuite
@@ -211,9 +211,10 @@ class ProtoToParsedPlanTestSuite
   }
 
   private def cleanOrphanedGoldenFile(): Unit = {
-    val orphans = Utils.recursiveList(goldenFilePath.toFile).
-      filter(g => g.getAbsolutePath.endsWith(".explain")).
-      filter(g => !testNames.contains(g.getName.stripSuffix(".explain")))
+    val orphans = Utils
+      .recursiveList(goldenFilePath.toFile)
+      .filter(g => g.getAbsolutePath.endsWith(".explain"))
+      .filter(g => !testNames.contains(g.getName.stripSuffix(".explain")))
     orphans.foreach(Utils.deleteRecursively)
   }
 
