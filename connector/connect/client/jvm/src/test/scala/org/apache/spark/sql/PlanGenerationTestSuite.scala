@@ -2698,8 +2698,24 @@ class PlanGenerationTestSuite
     fn.json_object_keys(fn.col("g"))
   }
 
+  functionTest("mask with specific upperChar lowerChar digitChar otherChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'), fn.lit('*'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'))
+  }
+
+  functionTest("mask with specific upperChar") {
+    fn.mask(fn.col("g"), fn.lit('X'))
+  }
+
   functionTest("mask") {
-    fn.mask(fn.col("g"), lit('X'), lit('x'), lit('n'), lit('*'))
+    fn.mask(fn.col("g"))
   }
 
   test("groupby agg") {

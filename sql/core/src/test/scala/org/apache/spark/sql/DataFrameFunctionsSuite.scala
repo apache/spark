@@ -5592,6 +5592,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("mask function") {
     val df = Seq("AbCD123-@$#", "abcd-EFGH-8765-4321").toDF("a")
 
+    checkAnswer(df.selectExpr("mask(a)"),
+      Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a")),
+      Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, 'Y')"),
+      Seq(Row("YxYYnnn-@$#"), Row("xxxx-YYYY-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a", lit('Y'))),
+      Seq(Row("YxYYnnn-@$#"), Row("xxxx-YYYY-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, 'Y', 'y')"),
+      Seq(Row("YyYYnnn-@$#"), Row("yyyy-YYYY-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a", lit('Y'), lit('y'))),
+      Seq(Row("YyYYnnn-@$#"), Row("yyyy-YYYY-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, 'Y', 'y', 'd')"),
+      Seq(Row("YyYYddd-@$#"), Row("yyyy-YYYY-dddd-dddd")))
+    checkAnswer(df.select(mask($"a", lit('Y'), lit('y'), lit('d'))),
+      Seq(Row("YyYYddd-@$#"), Row("yyyy-YYYY-dddd-dddd")))
+
     checkAnswer(df.selectExpr("mask(a, 'X', 'x', 'n', null)"),
       Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
     checkAnswer(df.select(mask($"a", lit('X'), lit('x'), lit('n'), lit(null))),

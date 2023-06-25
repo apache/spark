@@ -3604,33 +3604,33 @@ nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
 
 
 def array_agg(col: "ColumnOrName") -> Column:
-    return  _invoke_function_over_columns("array_agg", col)
+    return _invoke_function_over_columns("array_agg", col)
 
 
 array_agg.__doc__ = pysparkfuncs.array_agg.__doc__
 
 
 def array_size(col: "ColumnOrName") -> Column:
-    return  _invoke_function_over_columns("array_size", col)
+    return _invoke_function_over_columns("array_size", col)
 
 
 array_size.__doc__ = pysparkfuncs.array_size.__doc__
 
 
 def cardinality(col: "ColumnOrName") -> Column:
-    return  _invoke_function_over_columns("cardinality", col)
+    return _invoke_function_over_columns("cardinality", col)
 
 
 cardinality.__doc__ = pysparkfuncs.cardinality.__doc__
 
 
 def count_min_sketch(
-        col: "ColumnOrName",
-        eps: "ColumnOrName",
-        confidence: "ColumnOrName",
-        seed: "ColumnOrName",
+    col: "ColumnOrName",
+    eps: "ColumnOrName",
+    confidence: "ColumnOrName",
+    seed: "ColumnOrName",
 ) -> Column:
-    return  _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
 
 
 count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
@@ -3659,12 +3659,19 @@ json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
 
 def mask(
     col: "ColumnOrName",
-    upperChar: "ColumnOrName",
-    lowerChar: "ColumnOrName",
-    digitChar: "ColumnOrName",
-    otherChar: "ColumnOrName",
+    upperChar: Optional["ColumnOrName"] = None,
+    lowerChar: Optional["ColumnOrName"] = None,
+    digitChar: Optional["ColumnOrName"] = None,
+    otherChar: Optional["ColumnOrName"] = None,
 ) -> Column:
-    return _invoke_function_over_columns("mask", col, upperChar, lowerChar, digitChar, otherChar)
+    _upperChar = lit("X") if upperChar is None else upperChar
+    _lowerChar = lit("x") if lowerChar is None else lowerChar
+    _digitChar = lit("n") if digitChar is None else digitChar
+    _otherChar = lit(None) if otherChar is None else otherChar
+
+    return _invoke_function_over_columns(
+        "mask", col, _upperChar, _lowerChar, _digitChar, _otherChar
+    )
 
 
 mask.__doc__ = pysparkfuncs.mask.__doc__

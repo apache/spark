@@ -18,6 +18,22 @@
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }
+        }, {
+          "literal": {
+            "string": "X"
+          }
+        }, {
+          "literal": {
+            "string": "x"
+          }
+        }, {
+          "literal": {
+            "string": "n"
+          }
+        }, {
+          "literal": {
+            "string": "*"
+          }
         }]
       }
     }]

@@ -14596,10 +14596,10 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 @try_remote_functions
 def mask(
     col: "ColumnOrName",
-    upperChar: "ColumnOrName",
-    lowerChar: "ColumnOrName",
-    digitChar: "ColumnOrName",
-    otherChar: "ColumnOrName",
+    upperChar: Optional["ColumnOrName"] = None,
+    lowerChar: Optional["ColumnOrName"] = None,
+    digitChar: Optional["ColumnOrName"] = None,
+    otherChar: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     Masks the given string value. This can be useful for creating copies of tables with sensitive
@@ -14627,10 +14627,25 @@ def mask(
     Examples
     --------
     >>> df = spark.createDataFrame([("AbCD123-@$#",), ("abcd-EFGH-8765-4321",)], ['data'])
-    >>> df.select(mask(df.data, lit('X'), lit('x'), lit('n'), lit(None)).alias('r')).collect()
+    >>> df.select(mask(df.data).alias('r')).collect()
     [Row(r='XxXXnnn-@$#'), Row(r='xxxx-XXXX-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y')).alias('r')).collect()
+    [Row(r='YxYYnnn-@$#'), Row(r='xxxx-YYYY-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y')).alias('r')).collect()
+    [Row(r='YyYYnnn-@$#'), Row(r='yyyy-YYYY-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y'), lit('d')).alias('r')).collect()
+    [Row(r='YyYYddd-@$#'), Row(r='yyyy-YYYY-dddd-dddd')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y'), lit('d'), lit('*')).alias('r')).collect()
+    [Row(r='YyYYddd****'), Row(r='yyyy*YYYY*dddd*dddd')]
     """
-    return _invoke_function_over_columns("mask", col, upperChar, lowerChar,digitChar, otherChar)
+
+    _upperChar = lit("X") if upperChar is None else upperChar
+    _lowerChar = lit("x") if lowerChar is None else lowerChar
+    _digitChar = lit("n") if digitChar is None else digitChar
+    _otherChar = lit(None) if otherChar is None else otherChar
+    return _invoke_function_over_columns(
+        "mask", col, _upperChar, _lowerChar, _digitChar, _otherChar
+    )
 
 
 # ---------------------------- User Defined Function ----------------------------------
