@@ -1194,7 +1194,7 @@
   },
   "INVALID_INLINE_TABLE" : {
     "message" : [
-      "Invalid lambda function call."
+      "Invalid inline table."
     ],
     "subClass" : {
       "CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE" : {
