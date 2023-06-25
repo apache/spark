@@ -761,10 +761,6 @@ private[spark] class ExecutorAllocationManager(
           val map = stageAttemptToRunningSpeculativeTasks.getOrElseUpdate(stageAttempt,
             new mutable.HashMap[Int, Int])
           map(taskIndex) = map.getOrElse(taskIndex, 0) + 1
-          if (map(taskIndex) == 2) {
-            stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
-              new mutable.HashSet[Int]) += taskIndex
-          }
           stageAttemptToPendingSpeculativeTasks
             .get(stageAttempt).foreach(_.remove(taskIndex))
         } else {
