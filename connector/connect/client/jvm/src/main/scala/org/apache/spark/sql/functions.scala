@@ -1287,8 +1287,9 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   *       on the order of the rows which may be non-deterministic after a shuffle.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
    * @group agg_funcs
    * @since 3.5.0
    */
@@ -1297,18 +1298,15 @@ object functions {
   /**
    * This function returns a count-min sketch of a column with the given esp, confidence and seed.
    * A count-min sketch is a probabilistic data structure used for summarizing streams of data in
-   * sub-linear space, which is useful for equality predicates and join size estimation.
-   * The result returned by the function is an array of bytes, which should be deserialized to a
+   * sub-linear space, which is useful for equality predicates and join size estimation. The
+   * result returned by the function is an array of bytes, which should be deserialized to a
    * `CountMinSketch` before usage.
    *
    * @group agg_funcs
    * @since 3.5.0
    */
-  def count_min_sketch(
-    e: Column,
-    eps: Column,
-    confidence: Column,
-    seed: Column): Column = Column.fn("count_min_sketch", e, eps, confidence, seed)
+  def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
+    Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -4242,22 +4240,27 @@ object functions {
    * Masks the given string value. This can be useful for creating copies of tables with sensitive
    * information removed.
    *
-   * @param input     string value to mask. Supported types: STRING, VARCHAR, CHAR
-   * @param upperChar character to replace upper-case characters with. Specify NULL to retain original character.
-   * @param lowerChar character to replace lower-case characters with. Specify NULL to retain original character.
-   * @param digitChar character to replace digit characters with. Specify NULL to retain original character.
-   * @param otherChar character to replace all other characters with. Specify NULL to retain original character.
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
    * @group string_funcs
    * @since 3.5.0
    */
   // scalastyle:on line.size.limit
   def mask(
-    input: Column,
-    upperChar: Column,
-    lowerChar: Column,
-    digitChar: Column,
-    otherChar: Column): Column = Column.fn(
-    "mask", input, upperChar, lowerChar, digitChar, otherChar)
+      input: Column,
+      upperChar: Column,
+      lowerChar: Column,
+      digitChar: Column,
+      otherChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
@@ -6753,8 +6756,8 @@ object functions {
   def cardinality(e: Column): Column = Column.fn("cardinality", e)
 
   /**
-   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
-   * any other valid JSON string, `NULL` or an invalid JSON.
+   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of any
+   * other valid JSON string, `NULL` or an invalid JSON.
    *
    * @group collection_funcs
    * @since 3.5.0
@@ -6763,8 +6766,8 @@ object functions {
 
   /**
    * Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
-   * given, all the keys of the outermost object will be returned as an array. If it is any
-   * other valid JSON string, an invalid JSON string or an empty string, the function returns null.
+   * given, all the keys of the outermost object will be returned as an array. If it is any other
+   * valid JSON string, an invalid JSON string or an empty string, the function returns null.
    *
    * @group collection_funcs
    * @since 3.5.0
