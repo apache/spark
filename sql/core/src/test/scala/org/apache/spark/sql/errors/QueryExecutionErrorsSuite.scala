@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
@@ -409,13 +410,17 @@ class QueryExecutionErrorsSuite
       spark.sql("select luckyCharOfWord(word, index) from words").collect()
     }
     assert(e.getCause.isInstanceOf[SparkException])
+    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/0x[0-9a-f]+\\)`"
+    } else {
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map(
-        "functionName" ->
-          "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`",
+        "functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
@@ -430,11 +435,16 @@ class QueryExecutionErrorsSuite
       words.select(luckyCharOfWord($"word", $"index")).collect()
     }
     assert(e.getCause.isInstanceOf[SparkException])
+    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
+      "`QueryExecutionErrorsSuite\\$\\$Lambda/0x[0-9a-f]+`"
+    } else {
+      "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      parameters = Map("functionName" -> "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`",
+      parameters = Map("functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
