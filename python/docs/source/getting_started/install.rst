@@ -131,7 +131,7 @@ to install Spark, for example, as below:
 
 .. code-block:: bash
 
-    tar xzvf spark-3.4.0-bin-hadoop3.tgz
+    tar xzvf spark-3.5.0-bin-hadoop3.tgz
 
 Ensure the ``SPARK_HOME`` environment variable points to the directory where the tar file has been extracted.
 Update ``PYTHONPATH`` environment variable such that it can find the PySpark and Py4J under ``SPARK_HOME/python/lib``.
@@ -139,7 +139,7 @@ One example of doing this is shown below:
 
 .. code-block:: bash
 
-    cd spark-3.4.0-bin-hadoop3
+    cd spark-3.5.0-bin-hadoop3
     export SPARK_HOME=`pwd`
     export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
 
