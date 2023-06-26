@@ -1780,7 +1780,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
-  test("SPARK-MI: Fix a bug where the number of executors is calculated incorrectly " +
+  test("SPARK-44179: Fix a bug where the number of executors is calculated incorrectly " +
     "when the task fails and it is speculated that the task is still executing") {
     val clock = new ManualClock()
     val manager = createManager(createConf(0, 10, 0), clock)
@@ -1798,8 +1798,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val taskInfo1_2 = createTaskInfo(1, 1, "executor-1_2", true)
     post(SparkListenerTaskStart(1, 0, taskInfo0))
     post(SparkListenerTaskStart(1, 0, taskInfo1))
-    // Verify that we're capped at number of tasks including the speculative ones in the stage
-    // post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 0))
 
     assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
@@ -1825,7 +1823,6 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
 
-
     val taskEndReason = ExceptionFailure(null, null, null, null, None)
     post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo0, new ExecutorMetrics, null))
     post(SparkListenerTaskEnd(1, 0, null, taskEndReason, taskInfo1, new ExecutorMetrics, null))
@@ -1837,10 +1834,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
 
-
     post(SparkListenerTaskStart(1, 0, taskInfo0_2))
     post(SparkListenerTaskStart(1, 0, taskInfo1_2))
-    // Verify that running a task doesn't affect the target
 
     assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
