@@ -392,25 +392,6 @@ For usage with pyspark.sql, the minimum supported versions of Pandas is 1.0.5 an
 Higher versions may be used, however, compatibility and data correctness can not be guaranteed and should
 be verified by the user.
 
-Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
-compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark
-users with versions 2.3.x and 2.4.x that have manually upgraded PyArrow to 0.15.0. The following
-can be added to ``conf/spark-env.sh`` to use the legacy Arrow IPC format:
-
-.. code-block:: bash
-
-    ARROW_PRE_0_15_IPC_FORMAT=1
-
-
-This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that
-is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
-described in `SPARK-29367 <https://issues.apache.org/jira/browse/SPARK-29367>`_ when running
-``pandas_udf``\s or :meth:`DataFrame.toPandas` with Arrow enabled. More information about the Arrow IPC change can
-be read on the Arrow 0.15.0 release `blog <https://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140>`_.
-
 Setting Arrow ``self_destruct`` for memory savings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
