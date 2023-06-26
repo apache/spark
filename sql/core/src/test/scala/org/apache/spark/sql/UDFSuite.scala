@@ -1060,4 +1060,11 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }.getCause.getCause
     assert(e.isInstanceOf[java.lang.ArithmeticException])
   }
+
+  test("SPARK-43099: UDF className is correctly populated") {
+    spark.udf.register("dummyUDF", (x: Int) => x + 1)
+    val expressionInfo = spark.sessionState.catalog
+      .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
+    assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
+  }
 }

@@ -112,7 +112,7 @@ class Observation:
         return DataFrame(observed_df, df.sparkSession)
 
     # Note that decorated property only works with Python 3.9+ which Spark Connect requires.
-    @property  # type: ignore[misc]
+    @property
     @try_remote_observation
     def get(self) -> Dict[str, Any]:
         """Get the observed metrics.

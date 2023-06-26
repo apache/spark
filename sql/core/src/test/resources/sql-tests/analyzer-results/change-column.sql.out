@@ -255,7 +255,8 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DROP TABLE test_change
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`test_change`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_change
 
 
 -- !query

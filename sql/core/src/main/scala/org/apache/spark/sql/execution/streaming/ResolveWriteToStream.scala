@@ -82,8 +82,15 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
           s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
           s" true. Important to know deleting temp checkpoint folder is best effort.")
         // SPARK-42676 - Write temp checkpoints for streaming queries to local filesystem
-        // even if default FS is set differently
-        "file://" + tempDir
+        // even if default FS is set differently.
+        // This is a band-aid fix. Ideally we should convert `tempDir` to URIs, but there
+        // are many legacy behaviors related to this.
+        if (Utils.isWindows) {
+          // For Windows local path, we can't treat that as a URI with file scheme.
+          tempDir
+        } else {
+          "file://" + tempDir
+        }
       } else {
         throw QueryCompilationErrors.checkpointLocationNotSpecifiedError()
       }

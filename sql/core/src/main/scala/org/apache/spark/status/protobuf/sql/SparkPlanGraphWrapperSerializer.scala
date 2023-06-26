@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf.sql
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPlanGraphEdge, SparkPlanGraphNode, SparkPlanGraphNodeWrapper, SparkPlanGraphWrapper}
 import org.apache.spark.status.protobuf.ProtobufSerDe
@@ -25,7 +25,8 @@ import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-class SparkPlanGraphWrapperSerializer extends ProtobufSerDe[SparkPlanGraphWrapper] {
+private[protobuf] class SparkPlanGraphWrapperSerializer
+  extends ProtobufSerDe[SparkPlanGraphWrapper] {
 
   override def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()

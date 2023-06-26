@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 
 
@@ -63,8 +64,9 @@ private case object TeradataDialect extends JdbcDialect {
   }
 
   // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/wysTNUMsP~0aGzksLCl1kg
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"RENAME TABLE $oldTable TO $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   override def getLimitClause(limit: Integer): String = {

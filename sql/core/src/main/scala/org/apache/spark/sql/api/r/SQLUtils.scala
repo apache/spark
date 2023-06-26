@@ -247,7 +247,7 @@ private[sql] object SQLUtils extends Logging {
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
       val context = TaskContext.get()
-      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, context)
+      ArrowConverters.fromBatchIterator(iter, schema, timeZoneId, true, context)
     }
     sparkSession.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }

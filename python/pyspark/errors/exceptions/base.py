@@ -102,13 +102,19 @@ class AnalysisException(PySparkException):
     """
 
 
+class SessionNotSameException(PySparkException):
+    """
+    Performed the same operation on different SparkSession.
+    """
+
+
 class TempTableAlreadyExistsException(AnalysisException):
     """
     Failed to create temp view since it is already exists.
     """
 
 
-class ParseException(PySparkException):
+class ParseException(AnalysisException):
     """
     Failed to parse a SQL command.
     """
@@ -117,6 +123,36 @@ class ParseException(PySparkException):
 class IllegalArgumentException(PySparkException):
     """
     Passed an illegal or inappropriate argument.
+    """
+
+
+class ArithmeticException(PySparkException):
+    """
+    Arithmetic exception thrown from Spark with an error class.
+    """
+
+
+class UnsupportedOperationException(PySparkException):
+    """
+    Unsupported operation exception thrown from Spark with an error class.
+    """
+
+
+class ArrayIndexOutOfBoundsException(PySparkException):
+    """
+    Array index out of bounds exception thrown from Spark with an error class.
+    """
+
+
+class DateTimeException(PySparkException):
+    """
+    Datetime exception thrown from Spark with an error class.
+    """
+
+
+class NumberFormatException(IllegalArgumentException):
+    """
+    Number format exception thrown from Spark with an error class.
     """
 
 
@@ -138,15 +174,21 @@ class PythonException(PySparkException):
     """
 
 
-class UnknownException(PySparkException):
+class SparkRuntimeException(PySparkException):
     """
-    None of the above exceptions.
+    Runtime exception thrown from Spark with an error class.
     """
 
 
 class SparkUpgradeException(PySparkException):
     """
     Exception thrown because of Spark upgrade.
+    """
+
+
+class UnknownException(PySparkException):
+    """
+    None of the above exceptions.
     """
 
 
@@ -165,4 +207,22 @@ class PySparkTypeError(PySparkException, TypeError):
 class PySparkAttributeError(PySparkException, AttributeError):
     """
     Wrapper class for AttributeError to support error classes.
+    """
+
+
+class PySparkRuntimeError(PySparkException, RuntimeError):
+    """
+    Wrapper class for RuntimeError to support error classes.
+    """
+
+
+class PySparkAssertionError(PySparkException, AssertionError):
+    """
+    Wrapper class for AssertionError to support error classes.
+    """
+
+
+class PySparkNotImplementedError(PySparkException, NotImplementedError):
+    """
+    Wrapper class for NotImplementedError to support error classes.
     """

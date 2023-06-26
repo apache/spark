@@ -18,6 +18,7 @@
 from distutils.version import LooseVersion
 import itertools
 import inspect
+import unittest
 
 import pandas as pd
 import numpy as np
@@ -31,7 +32,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
+class NamespaceTestsMixin:
     def test_from_pandas(self):
         pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5]})
         psdf = ps.from_pandas(pdf)
@@ -189,6 +190,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
         self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43709): Enable NamespaceTests.test_date_range for pandas 2.0.0.",
+    )
     def test_date_range(self):
         self.assert_eq(
             ps.date_range(start="1/1/2018", end="1/08/2018"),
@@ -614,6 +619,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
                 "The method.*pd.*{}.*not implemented yet.".format(name),
             ):
                 getattr(ps, name)()
+
+
+class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

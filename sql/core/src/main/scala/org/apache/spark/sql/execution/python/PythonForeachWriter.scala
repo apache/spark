@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, Utils}
 
@@ -45,7 +46,11 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
   }
 
   private lazy val pythonRunner = {
-    PythonRunner(func)
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func)))) {
+      override val pythonExec: String =
+        SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+          funcs.head.funcs.head.pythonExec)
+    }
   }
 
   private lazy val outputIterator =

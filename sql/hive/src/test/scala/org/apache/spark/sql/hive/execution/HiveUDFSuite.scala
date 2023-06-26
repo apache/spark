@@ -738,7 +738,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           e,
           "FAILED_EXECUTE_UDF",
           parameters = Map(
-            "functionName" -> s"${classOf[GenericUDFAssertTrue].getName}",
+            "functionName" ->
+              "`org`.`apache`.`hadoop`.`hive`.`ql`.`udf`.`generic`.`GenericUDFAssertTrue`",
             "signature" -> "boolean",
             "result" -> "void"))
       }
@@ -768,7 +769,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           exception = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException],
           errorClass = "FAILED_EXECUTE_UDF",
           parameters = Map(
-            "functionName" -> s"${classOf[SimpleUDFAssertTrue].getName}",
+            "functionName" ->
+              "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",
             "signature" -> "boolean",
             "result" -> "boolean"
           )

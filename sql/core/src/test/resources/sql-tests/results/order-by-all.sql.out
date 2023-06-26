@@ -190,7 +190,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`all`",
-    "proposal" : "`T`.`age`, `T`.`name`, `T`.`dept`, `T`.`salary`"
+    "proposal" : "`age`, `name`, `dept`, `salary`"
   },
   "queryContext" : [ {
     "objectType" : "",
