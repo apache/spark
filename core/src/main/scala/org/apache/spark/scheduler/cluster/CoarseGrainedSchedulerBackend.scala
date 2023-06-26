@@ -318,6 +318,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(true)
         stop()
 
+      case UpdateExecutorsLogLevel(logLevel) =>
+        logInfo(s"Asking each executor to refresh the log level to $logLevel")
+        for ((_, executorData) <- executorDataMap) {
+          executorData.executorEndpoint.send(UpdateExecutorLogLevel(logLevel))
+        }
+        context.reply(true)
+
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
         for ((_, executorData) <- executorDataMap) {
@@ -342,7 +349,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case RetrieveSparkAppConfig(resourceProfileId) =>
         val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
         val reply = SparkAppConfig(
-          sparkProperties,
+          getLatestSparkConfig,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
           rp)
@@ -352,6 +359,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case e =>
         logError(s"Received unexpected ask ${e}")
+    }
+
+    private def getLatestSparkConfig: Seq[(String, String)] = {
+      val conf = scheduler.sc.conf
+      if (conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
+        conf.get(SPARK_LOG_LEVEL).map(sparkProperties :+ (SPARK_LOG_LEVEL.key, _))
+          .getOrElse(sparkProperties)
+      } else {
+        sparkProperties
+      }
     }
 
     // Make fake resource offers on all executors
@@ -650,6 +667,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     } catch {
       case e: Exception =>
         throw SparkCoreErrors.stopStandaloneSchedulerDriverEndpointError(e)
+    }
+  }
+
+  override def updateLogLevel(logLevel: String): Unit = {
+    if (driverEndpoint != null) {
+      driverEndpoint.ask[Boolean](UpdateExecutorsLogLevel(logLevel))
     }
   }
 

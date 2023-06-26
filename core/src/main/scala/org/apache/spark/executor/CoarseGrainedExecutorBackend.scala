@@ -27,6 +27,7 @@ import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import io.netty.util.internal.PlatformDependent
+import org.apache.logging.log4j.Level
 import org.json4s.DefaultFormats
 
 import org.apache.spark._
@@ -177,6 +178,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
       }
+    case UpdateExecutorLogLevel(newLogLevel) =>
+      updateLogLevel(newLogLevel)
 
     case LaunchTask(data) =>
       if (executor == null) {
@@ -473,6 +476,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
+
+      if (driverConf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {
+        // Set the current log level of driver in Executor
+        driverConf.get(SPARK_LOG_LEVEL).foreach(l => updateLogLevel(l))
+      }
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.
@@ -558,6 +566,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       resourcesFileOpt, resourceProfileId)
   }
 
+  private def updateLogLevel(newLogLevel: String): Unit = {
+    if (newLogLevel != Utils.getLogLevel) {
+      Utils.setLogLevel(Level.toLevel(newLogLevel))
+    }
+  }
   private def printUsageAndExit(classNameForEntry: String): Unit = {
     // scalastyle:off println
     System.err.println(
