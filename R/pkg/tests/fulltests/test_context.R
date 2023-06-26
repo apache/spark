@@ -105,11 +105,12 @@ test_that("job tag functions can be called", {
   sc <- sparkR.sparkContext(master = sparkRTestMaster)
   clearJobTags()
   addJobTag("A")
-  getJobTags() # TODO - how to check return value
+  expectedTags = getJobTags()
   removeJobTag("A")
   cancelJobsWithTag("A")
 
   sparkR.session.stop()
+  expect_true(expectedTags == list("A"))
   expect_true(TRUE)
 })
 

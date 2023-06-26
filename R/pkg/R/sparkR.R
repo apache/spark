@@ -606,8 +606,7 @@ removeJobTag <- function(tag) {
 #' @note getJobTags since 3.5.0
 getJobTags <- function() {
   sc <- getSparkContext()
-  invisible(callJMethod(sc, "getJobTags"))
-  # TODO: how to return the Scala Set to R??
+  callJMethod(sc, "getJobTags")
 }
 
 #' Clear the current thread's job tags.
