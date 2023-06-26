@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -89,8 +90,12 @@ object QueryPlanningTracker {
   }
 }
 
-
-class QueryPlanningTracker {
+/**
+ * @param readyForExecutionCallback Called when the query has been analysed and is ready for
+ *                                  execution see setReadyForExecution
+ */
+class QueryPlanningTracker(
+    readyForExecutionCallback: (QueryPlanningTracker, LogicalPlan) => Unit = (_, _) => ()) {
 
   import QueryPlanningTracker._
 
@@ -100,6 +105,8 @@ class QueryPlanningTracker {
 
   // From a phase to its start time and end time, in ms.
   private val phasesMap = new java.util.HashMap[String, PhaseSummary]
+
+  private var readyForExecution = false
 
   /**
    * Measure the start and end time of a phase. Note that if this function is called multiple
@@ -118,6 +125,20 @@ class QueryPlanningTracker {
       phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     }
     ret
+  }
+
+  /**
+   * Set when the query has been analysed and is ready for execution.
+   * This is after analysis for eager commands and after planning
+   * for other queries.
+   * see @link org.apache.spark.sql.execution.CommandExecutionMode
+   */
+  def setReadyForExecution(analyzedPlan: LogicalPlan): Unit = {
+    if (readyForExecution) {
+      throw new IllegalStateException("Cannot setReadyForExecution more than once")
+    }
+    readyForExecution = true
+    readyForExecutionCallback(this, analyzedPlan)
   }
 
   /**

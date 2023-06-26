@@ -71,9 +71,15 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
-    // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+  lazy val analyzed: LogicalPlan = {
+    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+      // We can't clone `logical` here, which will reset the `_analyzed` flag.
+      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    }
+    if (isEager(plan)) {
+      tracker.setReadyForExecution(plan)
+    }
+    plan
   }
 
   lazy val commandExecuted: LogicalPlan = mode match {
@@ -169,12 +175,18 @@ class QueryExecution(
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()
-    executePhase(QueryPlanningTracker.PLANNING) {
+    val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
       QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
     }
+    if (!isEager(analyzed)) {
+      tracker.setReadyForExecution(analyzed)
+    }
+    plan
   }
+
+  def assertExecutedPlanPrepared(): Unit = executedPlan
 
   /**
    * Internal version of the RDD. Avoids copies and has no schema.
@@ -336,6 +348,13 @@ class QueryExecution(
    */
   private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
+  }
+
+  private def isEager(plan: LogicalPlan): Boolean = {
+    logical.find {
+      case _: Command => true
+      case _ => false
+    }.isDefined && mode != CommandExecutionMode.SKIP
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

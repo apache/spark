@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution
 
 import scala.io.Source
 
-import org.apache.spark.sql.{AnalysisException, FastOperator}
+import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -244,7 +245,11 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-35378: Eagerly execute non-root Command") {
-    def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(spark, logicalPlan)
+    val mockCallback = MockCallbackEagerCommand()
+    def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(
+      spark,
+      logicalPlan,
+      new QueryPlanningTracker(mockCallback.callback))
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
     val showTablesQe = qe(showTables)
@@ -252,6 +257,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
     val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+    assert(mockCallback.tracker != null)
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
     val projectQe = qe(project)
@@ -263,6 +269,28 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+    assert(mockCallback.tracker != null)
+  }
+
+  test("SPARK-44145: non eagerly executed command setReadyForExecution") {
+    val mockCallback = MockCallback()
+
+    val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+    val showTablesQe = new QueryExecution(
+      spark,
+      showTables,
+      new QueryPlanningTracker(mockCallback.callback),
+      CommandExecutionMode.SKIP)
+    showTablesQe.assertExecutedPlanPrepared()
+    assert(mockCallback.tracker != null)
+  }
+
+  test("SPARK-44145: Plan setReadyForExecution") {
+    val mockCallback = MockCallback()
+    val plan: LogicalPlan = org.apache.spark.sql.catalyst.plans.logical.Range(0, 1, 1, 1)
+    val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(mockCallback.callback))
+    df.queryExecution.assertExecutedPlanPrepared()
+    assert(mockCallback.tracker != null)
   }
 
   test("SPARK-35378: Return UnsafeRow in CommandResultExecCheck execute methods") {
@@ -288,6 +316,20 @@ class QueryExecutionSuite extends SharedSparkSession {
             s"Specify maxFields = $maxFields doesn't take effect when explainMode is $modeName")
         }
       }
+    }
+  }
+
+  case class MockCallbackEagerCommand(var tracker: QueryPlanningTracker = null) {
+    def callback(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
+      tracker = trackerFromCallback
+      assert(tracker.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
+      assert(!tracker.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
+    }
+  }
+  case class MockCallback(var tracker: QueryPlanningTracker = null) {
+    def callback(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
+      tracker = trackerFromCallback
+      assert(tracker.phases.keySet.contains(QueryPlanningTracker.PLANNING))
     }
   }
 }
