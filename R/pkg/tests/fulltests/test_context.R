@@ -105,7 +105,7 @@ test_that("job tag functions can be called", {
   sc <- sparkR.sparkContext(master = sparkRTestMaster)
   clearJobTags()
   addJobTag("A")
-  expectedTags = getJobTags()
+  expectedTags <- getJobTags()
   removeJobTag("A")
   cancelJobsWithTag("A")
 
