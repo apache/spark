@@ -528,7 +528,7 @@ class MetastoreDataSourcesSuite extends QueryTest
           val e = intercept[AnalysisException] {
               sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
             }
-          checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`createdJsonTable`")
+          checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`createdjsontable`")
         }
 
         // Data should not be deleted.
