@@ -50,7 +50,8 @@ trait FunctionRegistryBase[T] {
   final def registerFunction(
       name: FunctionIdentifier, builder: FunctionBuilder, source: String): Unit = {
     val info = new ExpressionInfo(
-      builder.getClass.getCanonicalName,
+      // SPARK-43099: getCanonicalName would return null on JDK15+
+      Option(builder.getClass.getCanonicalName).getOrElse(builder.getClass.getName),
       name.database.orNull,
       name.funcName,
       null,
@@ -506,6 +507,8 @@ object FunctionRegistry {
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
     expression[Mode]("mode"),
+    expression[HllSketchAgg]("hll_sketch_agg"),
+    expression[HllUnionAgg]("hll_union_agg"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -528,6 +531,7 @@ object FunctionRegistry {
     expression[ToNumber]("to_number"),
     expression[TryToNumber]("try_to_number"),
     expression[ToCharacter]("to_char"),
+    expression[ToCharacter]("to_varchar", setAlias = true, Some("3.5.0")),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -742,6 +746,8 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[HllSketchEstimate]("hll_sketch_estimate"),
+    expression[HllUnion]("hll_union"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -993,7 +999,8 @@ object TableFunctionRegistry {
     generator[JsonTuple]("json_tuple"),
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
-    generator[Stack]("stack")
+    generator[Stack]("stack"),
+    generator[SQLKeywords]("sql_keywords")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

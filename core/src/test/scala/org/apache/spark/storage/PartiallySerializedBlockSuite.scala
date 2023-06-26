@@ -58,18 +58,22 @@ class PartiallySerializedBlockSuite
       numItemsToBuffer: Int): PartiallySerializedBlock[T] = {
 
     val bbos: ChunkedByteBufferOutputStream = {
-      val spy = Mockito.spy(new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
+      val spy = Mockito.spy[ChunkedByteBufferOutputStream](
+        new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
       Mockito.doAnswer { (invocationOnMock: InvocationOnMock) =>
-        Mockito.spy(invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
+        Mockito.spy[ChunkedByteBuffer](
+          invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
       }.when(spy).toChunkedByteBuffer
       spy
     }
 
     val serializer = serializerManager
       .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
-    val redirectableOutputStream = Mockito.spy(new RedirectableOutputStream)
+    val redirectableOutputStream = Mockito.spy[RedirectableOutputStream](
+      new RedirectableOutputStream)
     redirectableOutputStream.setOutputStream(bbos)
-    val serializationStream = Mockito.spy(serializer.serializeStream(redirectableOutputStream))
+    val serializationStream = Mockito.spy[SerializationStream](
+      serializer.serializeStream(redirectableOutputStream))
 
     (1 to numItemsToBuffer).foreach { _ =>
       assert(iter.hasNext)
@@ -170,7 +174,7 @@ class PartiallySerializedBlockSuite
 
     test(s"$testCaseName with finishWritingToStream() and numBuffered = $numItemsToBuffer") {
       val partiallySerializedBlock = partiallyUnroll(items.iterator, numItemsToBuffer)
-      val bbos = Mockito.spy(new ByteBufferOutputStream())
+      val bbos = Mockito.spy[ByteBufferOutputStream](new ByteBufferOutputStream())
       partiallySerializedBlock.finishWritingToStream(bbos)
 
       Mockito.verify(memoryStore).releaseUnrollMemoryForThisTask(

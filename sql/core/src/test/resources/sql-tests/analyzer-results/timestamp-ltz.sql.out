@@ -15,7 +15,7 @@ Project [to_timestamp_ltz(cast(null as string), None, TimestampType, Some(Americ
 -- !query
 select to_timestamp_ltz(to_date(null)), to_timestamp_ltz(to_date('2016-12-31'))
 -- !query analysis
-Project [to_timestamp_ltz(to_date(cast(null as string), None, Some(America/Los_Angeles)), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_date(NULL))#x, to_timestamp_ltz(to_date(2016-12-31, None, Some(America/Los_Angeles)), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_date(2016-12-31))#x]
+Project [to_timestamp_ltz(to_date(cast(null as string), None, Some(America/Los_Angeles), false), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_date(NULL))#x, to_timestamp_ltz(to_date(2016-12-31, None, Some(America/Los_Angeles), false), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_date(2016-12-31))#x]
 +- OneRowRelation
 
 

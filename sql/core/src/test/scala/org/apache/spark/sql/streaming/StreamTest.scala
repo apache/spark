@@ -373,6 +373,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
       }
 
       override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryIdle(event: QueryIdleEvent): Unit = {}
       override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
     }
     sparkSession.streams.addListener(listener)

@@ -27,6 +27,8 @@ import traceback
 from types import TracebackType
 from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple
 
+from pyspark.errors import PySparkRuntimeError
+
 from py4j.clientserver import ClientServer
 
 __all__: List[str] = []
@@ -80,8 +82,11 @@ def fail_on_stopiteration(f: Callable) -> Callable:
         try:
             return f(*args, **kwargs)
         except StopIteration as exc:
-            raise RuntimeError(
-                "Caught StopIteration thrown from user's code; failing the task", exc
+            raise PySparkRuntimeError(
+                error_class="STOP_ITERATION_OCCURRED",
+                message_parameters={
+                    "exc": str(exc),
+                },
             )
 
     return wrapper
@@ -152,7 +157,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
         ...
       File "/.../pyspark/util.py", line ...
         ...
-    RuntimeError: ...
+    pyspark.errors.exceptions.base.PySparkRuntimeError: ...
     >>> "pyspark/util.py" in exc_info
     True
 
@@ -168,7 +173,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     ...         traceback.format_exception(
     ...             type(e), e, try_simplify_traceback(skip_doctest_traceback(tb))))
     >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-    RuntimeError: ...
+    pyspark.errors.exceptions.base.PySparkRuntimeError: ...
     >>> "pyspark/util.py" in exc_info
     False
 

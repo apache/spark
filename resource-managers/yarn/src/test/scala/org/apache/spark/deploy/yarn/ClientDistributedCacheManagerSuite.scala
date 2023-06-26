@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.LocalResource
 import org.apache.hadoop.yarn.api.records.LocalResourceType
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
-import org.apache.hadoop.yarn.util.ConverterUtils
 import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -80,7 +79,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource.getResource()) === destPath)
+    assert(resource.getResource().toPath === destPath)
     assert(resource.getTimestamp() === 0)
     assert(resource.getSize() === 0)
     assert(resource.getType() === LocalResourceType.FILE)
@@ -102,7 +101,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, false)
     val resource2 = localResources("link2")
     assert(resource2.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource2.getResource()) === destPath2)
+    assert(resource2.getResource().toPath === destPath2)
     assert(resource2.getTimestamp() === 10)
     assert(resource2.getSize() === 20)
     assert(resource2.getType() === LocalResourceType.FILE)
@@ -158,7 +157,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, true)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource.getResource()) === destPath)
+    assert(resource.getResource().toPath === destPath)
     assert(resource.getTimestamp() === 10)
     assert(resource.getSize() === 20)
     assert(resource.getType() === LocalResourceType.ARCHIVE)
@@ -187,7 +186,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource.getResource()) === destPath)
+    assert(resource.getResource().toPath === destPath)
     assert(resource.getTimestamp() === 10)
     assert(resource.getSize() === 20)
     assert(resource.getType() === LocalResourceType.ARCHIVE)

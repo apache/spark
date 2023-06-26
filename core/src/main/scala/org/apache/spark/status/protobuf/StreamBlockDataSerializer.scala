@@ -21,7 +21,7 @@ import org.apache.spark.status.StreamBlockData
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
+private[protobuf] class StreamBlockDataSerializer extends ProtobufSerDe[StreamBlockData] {
 
   override def serialize(data: StreamBlockData): Array[Byte] = {
     val builder = StoreTypes.StreamBlockData.newBuilder()

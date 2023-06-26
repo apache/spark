@@ -114,25 +114,28 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.setErrorHandler(new SparkParserErrorStrategy())
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
 
+    // https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
+    // Save a great deal of time on correct inputs by using a two-stage parsing strategy.
     try {
       try {
-        // first, try parsing with potentially faster SLL mode
+        // first, try parsing with potentially faster SLL mode w/ SparkParserBailErrorStrategy
+        parser.setErrorHandler(new SparkParserBailErrorStrategy())
         parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
         toResult(parser)
       }
       catch {
         case e: ParseCancellationException =>
-          // if we fail, parse with LL mode
+          // if we fail, parse with LL mode w/ SparkParserErrorStrategy
           tokenStream.seek(0) // rewind input stream
           parser.reset()
 
           // Try Again.
+          parser.setErrorHandler(new SparkParserErrorStrategy())
           parser.getInterpreter.setPredictionMode(PredictionMode.LL)
           toResult(parser)
       }

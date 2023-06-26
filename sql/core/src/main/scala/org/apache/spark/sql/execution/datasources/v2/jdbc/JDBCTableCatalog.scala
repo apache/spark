@@ -66,7 +66,7 @@ class JDBCTableCatalog extends TableCatalog
     JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
       val rs = conn.getMetaData
-        .getTables(null, schemaPattern, "%", Array("TABLE"));
+        .getTables(null, schemaPattern, "%", Array("TABLE"))
       new Iterator[Identifier] {
         def hasNext = rs.next()
         def next() = Identifier.of(namespace, rs.getString("TABLE_NAME"))
@@ -99,7 +99,7 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(oldIdent.namespace())
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(s"Failed table renaming from $oldIdent to $newIdent", dialect) {
-        JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+        JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
   }

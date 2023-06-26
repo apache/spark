@@ -44,6 +44,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     val sec = kubernetesTestComponents
       .kubernetesClient
       .secrets()
+      .inNamespace(kubernetesTestComponents.namespace)
       .createOrReplace(envSecret)
   }
 
@@ -51,6 +52,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .secrets()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(ENV_SECRET_NAME)
       .delete()
   }

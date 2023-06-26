@@ -38,6 +38,7 @@ import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 /** Class to check custom state types */
@@ -45,6 +46,7 @@ case class RunningCount(count: Long)
 
 case class Result(key: Long, count: Int)
 
+@SlowSQLTest
 class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -1101,3 +1103,7 @@ object FlatMapGroupsWithStateSuite {
     throw new TestFailedException("Could get watermark when not expected", 20)
   }
 }
+
+@SlowSQLTest
+class RocksDBStateStoreFlatMapGroupsWithStateSuite
+  extends FlatMapGroupsWithStateSuite with RocksDBStateStoreTest

@@ -626,6 +626,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("SPARK-43782: conf to override log level") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set(SPARK_LOG_LEVEL, "ERROR"))
+    assert(LogManager.getRootLogger().getLevel === Level.ERROR)
+    sc.stop()
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set(SPARK_LOG_LEVEL, "TRACE"))
+    assert(LogManager.getRootLogger().getLevel === Level.TRACE)
+    sc.stop()
+  }
+
   test("register and deregister Spark listener from SparkContext") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     val sparkListener1 = new SparkListener { }
@@ -945,7 +957,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("No executor resource configs were not specified for the following " +
+    assert(error.contains("No executor resource configs were specified for the following " +
       "task configs: gpu"))
   }
 

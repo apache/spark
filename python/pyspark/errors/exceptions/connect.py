@@ -21,11 +21,17 @@ from typing import Dict, Optional, TYPE_CHECKING
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
     IllegalArgumentException as BaseIllegalArgumentException,
+    ArithmeticException as BaseArithmeticException,
+    UnsupportedOperationException as BaseUnsupportedOperationException,
+    ArrayIndexOutOfBoundsException as BaseArrayIndexOutOfBoundsException,
+    DateTimeException as BaseDateTimeException,
+    NumberFormatException as BaseNumberFormatException,
     ParseException as BaseParseException,
     PySparkException,
     PythonException as BasePythonException,
     StreamingQueryException as BaseStreamingQueryException,
     QueryExecutionException as BaseQueryExecutionException,
+    SparkRuntimeException as BaseSparkRuntimeException,
     SparkUpgradeException as BaseSparkUpgradeException,
 )
 
@@ -44,6 +50,10 @@ def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
 
+    if "stackTrace" in info.metadata:
+        stackTrace = info.metadata["stackTrace"]
+        message += f"\n\nJVM stacktrace:\n{stackTrace}"
+
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(message)
     # Order matters. ParseException inherits AnalysisException.
@@ -53,8 +63,21 @@ def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
         return StreamingQueryException(message)
     elif "org.apache.spark.sql.execution.QueryExecutionException" in classes:
         return QueryExecutionException(message)
+    # Order matters. NumberFormatException inherits IllegalArgumentException.
+    elif "java.lang.NumberFormatException" in classes:
+        return NumberFormatException(message)
     elif "java.lang.IllegalArgumentException" in classes:
         return IllegalArgumentException(message)
+    elif "java.lang.ArithmeticException" in classes:
+        return ArithmeticException(message)
+    elif "java.lang.UnsupportedOperationException" in classes:
+        return UnsupportedOperationException(message)
+    elif "java.lang.ArrayIndexOutOfBoundsException" in classes:
+        return ArrayIndexOutOfBoundsException(message)
+    elif "java.time.DateTimeException" in classes:
+        return DateTimeException(message)
+    elif "org.apache.spark.SparkRuntimeException" in classes:
+        return SparkRuntimeException(message)
     elif "org.apache.spark.SparkUpgradeException" in classes:
         return SparkUpgradeException(message)
     elif "org.apache.spark.api.python.PythonException" in classes:
@@ -91,41 +114,77 @@ class SparkConnectGrpcException(SparkConnectException):
 
 class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
     """
-    Failed to analyze a SQL query plan from Spark Connect server.
+    Failed to analyze a SQL query plan, thrown from Spark Connect.
     """
 
 
-class ParseException(SparkConnectGrpcException, BaseParseException):
+class ParseException(AnalysisException, BaseParseException):
     """
-    Failed to parse a SQL command from Spark Connect server.
+    Failed to parse a SQL command, thrown from Spark Connect.
     """
 
 
 class IllegalArgumentException(SparkConnectGrpcException, BaseIllegalArgumentException):
     """
-    Passed an illegal or inappropriate argument from Spark Connect server.
+    Passed an illegal or inappropriate argument, thrown from Spark Connect.
     """
 
 
 class StreamingQueryException(SparkConnectGrpcException, BaseStreamingQueryException):
     """
-    Exception that stopped a :class:`StreamingQuery` from Spark Connect server.
+    Exception that stopped a :class:`StreamingQuery` thrown from Spark Connect.
     """
 
 
 class QueryExecutionException(SparkConnectGrpcException, BaseQueryExecutionException):
     """
-    Failed to execute a query from Spark Connect server.
-    """
-
-
-class SparkUpgradeException(SparkConnectGrpcException, BaseSparkUpgradeException):
-    """
-    Exception thrown because of Spark upgrade from Spark Connect
+    Failed to execute a query, thrown from Spark Connect.
     """
 
 
 class PythonException(SparkConnectGrpcException, BasePythonException):
     """
-    Exceptions thrown from Spark Connect server.
+    Exceptions thrown from Spark Connect.
+    """
+
+
+class ArithmeticException(SparkConnectGrpcException, BaseArithmeticException):
+    """
+    Arithmetic exception thrown from Spark Connect.
+    """
+
+
+class UnsupportedOperationException(SparkConnectGrpcException, BaseUnsupportedOperationException):
+    """
+    Unsupported operation exception thrown from Spark Connect.
+    """
+
+
+class ArrayIndexOutOfBoundsException(SparkConnectGrpcException, BaseArrayIndexOutOfBoundsException):
+    """
+    Array index out of bounds exception thrown from Spark Connect.
+    """
+
+
+class DateTimeException(SparkConnectGrpcException, BaseDateTimeException):
+    """
+    Datetime exception thrown from Spark Connect.
+    """
+
+
+class NumberFormatException(IllegalArgumentException, BaseNumberFormatException):
+    """
+    Number format exception thrown from Spark Connect.
+    """
+
+
+class SparkRuntimeException(SparkConnectGrpcException, BaseSparkRuntimeException):
+    """
+    Runtime exception thrown from Spark Connect.
+    """
+
+
+class SparkUpgradeException(SparkConnectGrpcException, BaseSparkUpgradeException):
+    """
+    Exception thrown because of Spark upgrade from Spark Connect.
     """

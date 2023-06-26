@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.{Map => JMap}
 
-object Utils {
+private[protobuf] object Utils {
   def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
     Some(result())
   } else {

@@ -427,6 +427,7 @@ class DynamicPartitionDataConcurrentWriter(
       if (status.outputWriter != null) {
         try {
           status.outputWriter.close()
+          statsTrackers.foreach(_.closeFile(status.outputWriter.path()))
         } finally {
           status.outputWriter = null
         }

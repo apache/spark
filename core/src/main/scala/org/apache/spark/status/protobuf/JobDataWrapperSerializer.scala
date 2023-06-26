@@ -19,13 +19,13 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 
-class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
+private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
 
   override def serialize(j: JobDataWrapper): Array[Byte] = {
     val jobData = serializeJobData(j.info)
@@ -71,6 +71,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
     }
     jobData.stageIds.foreach(id => jobDataBuilder.addStageIds(id.toLong))
     jobData.jobGroup.foreach(jobDataBuilder.setJobGroup)
+    jobData.jobTags.foreach(jobDataBuilder.addJobTags)
     jobData.killedTasksSummary.foreach { entry =>
       jobDataBuilder.putKillTasksSummary(entry._1, entry._2)
     }
@@ -93,6 +94,7 @@ class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
       completionTime = completionTime,
       stageIds = info.getStageIdsList.asScala.map(_.toInt),
       jobGroup = jobGroup,
+      jobTags = info.getJobTagsList.asScala,
       status = status,
       numTasks = info.getNumTasks,
       numActiveTasks = info.getNumActiveTasks,

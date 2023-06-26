@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
@@ -89,6 +90,9 @@ private[yarn] class YarnAllocator(
   // completed.
   @GuardedBy("this")
   private val releasedContainers = collection.mutable.HashSet[ContainerId]()
+
+  @GuardedBy("this")
+  private val launchingExecutorContainerIds = collection.mutable.HashSet[ContainerId]()
 
   @GuardedBy("this")
   private val runningExecutorsPerResourceProfileId = new HashMap[Int, mutable.Set[String]]()
@@ -158,7 +162,7 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
-  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
+  private[spark] val failureTracker = new ExecutorFailureTracker(sparkConf, clock)
 
   private val allocatorNodeHealthTracker =
     new YarnAllocatorNodeHealthTracker(sparkConf, amClient, failureTracker)
@@ -457,11 +461,7 @@ private[yarn] class YarnAllocator(
     // resources on those nodes for earlier allocateResource calls, so notifying driver
     // to put those executors in decommissioning state
     allocateResponse.getUpdatedNodes.asScala.filter (node =>
-      // SPARK-39491: Hadoop 2.7 does not support `NodeState.DECOMMISSIONING`,
-      // there change to use string comparison instead for compilation.
-      // Should revert to `node.getNodeState == NodeState.DECOMMISSIONING` when
-      // Hadoop 2.7 is no longer supported.
-      node.getNodeState.toString.equals("DECOMMISSIONING") &&
+      node.getNodeState == NodeState.DECOMMISSIONING &&
         !decommissioningNodesCache.containsKey(getHostAddress(node)))
       .foreach { node =>
         val host = getHostAddress(node)
@@ -510,10 +510,9 @@ private[yarn] class YarnAllocator(
           var requestContainerMessage = s"Will request $missing executor container(s) for " +
             s" ResourceProfile Id: $rpId, each with " +
             s"${resource.getVirtualCores} core(s) and " +
-            s"${resource.getMemory} MB memory."
-          if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-            ResourceRequestHelper.isYarnCustomResourcesNonEmpty(resource)) {
-            requestContainerMessage ++= s" with custom resources: " + resource.toString
+            s"${resource.getMemorySize} MB memory."
+          if (resource.getResources().nonEmpty) {
+            requestContainerMessage ++= s" with custom resources: $resource"
           }
           logInfo(requestContainerMessage)
         }
@@ -738,22 +737,9 @@ private[yarn] class YarnAllocator(
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       val yarnResourceForRpId = rpIdToYarnResource.get(rpId)
-      assert(container.getResource.getMemory >= yarnResourceForRpId.getMemory)
+      assert(container.getResource.getMemorySize >= yarnResourceForRpId.getMemorySize)
       logInfo(s"Launching container $containerId on host $executorHostname " +
         s"for executor with ID $executorId for ResourceProfile Id $rpId")
-
-      def updateInternalState(): Unit = synchronized {
-        getOrUpdateRunningExecutorForRPId(rpId).add(executorId)
-        getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
-        executorIdToContainer(executorId) = container
-        containerIdToExecutorIdAndResourceProfileId(container.getId) = (executorId, rpId)
-
-        val localallocatedHostToContainersMap = getOrUpdateAllocatedHostToContainersMapForRPId(rpId)
-        val containerSet = localallocatedHostToContainersMap.getOrElseUpdate(executorHostname,
-          new HashSet[ContainerId])
-        containerSet += containerId
-        allocatedContainerToHostMap.put(containerId, executorHostname)
-      }
 
       val rp = rpIdToResourceProfile(rpId)
       val defaultResources = ResourceProfile.getDefaultProfileExecutorResources(sparkConf)
@@ -767,6 +753,7 @@ private[yarn] class YarnAllocator(
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
       if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
+        launchingExecutorContainerIds.add(containerId)
         if (launchContainers) {
           launcherPool.execute(() => {
             try {
@@ -784,10 +771,11 @@ private[yarn] class YarnAllocator(
                 localResources,
                 rp.id
               ).run()
-              updateInternalState()
+              updateInternalState(rpId, executorId, container)
             } catch {
               case e: Throwable =>
                 getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
+                launchingExecutorContainerIds.remove(containerId)
                 if (NonFatal(e)) {
                   logError(s"Failed to launch executor $executorId on container $containerId", e)
                   // Assigned container should be released immediately
@@ -800,7 +788,7 @@ private[yarn] class YarnAllocator(
           })
         } else {
           // For test only
-          updateInternalState()
+          updateInternalState(rpId, executorId, container)
         }
       } else {
         logInfo(("Skip launching executorRunnable as running executors count: %d " +
@@ -810,11 +798,31 @@ private[yarn] class YarnAllocator(
     }
   }
 
+  private def updateInternalState(rpId: Int, executorId: String,
+      container: Container): Unit = synchronized {
+    val containerId = container.getId
+    if (launchingExecutorContainerIds.contains(containerId)) {
+      getOrUpdateRunningExecutorForRPId(rpId).add(executorId)
+      executorIdToContainer(executorId) = container
+      containerIdToExecutorIdAndResourceProfileId(containerId) = (executorId, rpId)
+
+      val localallocatedHostToContainersMap = getOrUpdateAllocatedHostToContainersMapForRPId(rpId)
+      val executorHostname = container.getNodeId.getHost
+      val containerSet = localallocatedHostToContainersMap.getOrElseUpdate(executorHostname,
+        new HashSet[ContainerId])
+      containerSet += containerId
+      allocatedContainerToHostMap.put(containerId, executorHostname)
+      launchingExecutorContainerIds.remove(containerId)
+    }
+    getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
+  }
+
   // Visible for testing.
   private[yarn] def processCompletedContainers(
       completedContainers: Seq[ContainerStatus]): Unit = synchronized {
     for (completedContainer <- completedContainers) {
       val containerId = completedContainer.getContainerId
+      launchingExecutorContainerIds.remove(containerId)
       val (_, rpId) = containerIdToExecutorIdAndResourceProfileId.getOrElse(containerId,
         ("", DEFAULT_RESOURCE_PROFILE_ID))
       val alreadyReleased = releasedContainers.remove(containerId)

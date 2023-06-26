@@ -43,7 +43,7 @@ private[spark] object SparkCoreErrors {
 
   def eofExceptionWhileReadPortNumberError(
       daemonModule: String,
-      daemonExitValue: Option[Int] = null): Throwable = {
+      daemonExitValue: Option[Int] = None): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3001",
       messageParameters = Map(
@@ -465,5 +465,17 @@ private[spark] object SparkCoreErrors {
       Map(
         "requestedBytes" -> requestedBytes.toString,
         "receivedBytes" -> receivedBytes.toString).asJava)
+  }
+
+  private def quoteByDefault(elem: String): String = {
+    "\"" + elem + "\""
+  }
+
+  def toConf(conf: String): String = {
+    quoteByDefault(conf)
+  }
+
+  def toConfVal(conf: String): String = {
+    quoteByDefault(conf)
   }
 }

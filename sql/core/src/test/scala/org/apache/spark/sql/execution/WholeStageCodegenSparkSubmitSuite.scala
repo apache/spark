@@ -27,10 +27,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.functions.{array, col, count, lit}
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.ResetSystemProperties
 
 // Due to the need to set driver's extraJavaOptions, this test needs to use actual SparkSubmit.
+@ExtendedSQLTest
 class WholeStageCodegenSparkSubmitSuite extends SparkSubmitTestUtils
   with Matchers
   with BeforeAndAfterEach

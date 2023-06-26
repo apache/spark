@@ -23,6 +23,7 @@ import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
@@ -172,7 +173,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   }
 
 
-  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  // SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle jdbc-am""
+  test("SPARK-12941: String datatypes to be mapped to CLOB in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -286,11 +288,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
-      val e = intercept[java.sql.SQLException] {
-        val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-        dfRead.collect()
-      }.getMessage
-      assert(e.contains("Unrecognized SQL type -101"))
+      checkError(
+        exception = intercept[SparkSQLException] {
+          sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties).collect()
+        },
+        errorClass = "UNRECOGNIZED_SQL_TYPE",
+        parameters = Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "-101"))
     }
   }
 

@@ -131,7 +131,7 @@ trait HashJoin extends JoinCodegenSupport {
   @transient protected lazy val streamedBoundKeys =
     bindReferences(HashJoin.rewriteKeyExpr(streamedKeys), streamedOutput)
 
-  protected def buildSideKeyGenerator(): Projection =
+  protected def buildSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(buildBoundKeys)
 
   protected def streamSideKeyGenerator(): UnsafeProjection =

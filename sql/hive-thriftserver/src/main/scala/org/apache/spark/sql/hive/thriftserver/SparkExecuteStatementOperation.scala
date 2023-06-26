@@ -32,6 +32,7 @@ import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TP
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
@@ -333,6 +334,8 @@ object SparkExecuteStatementOperation {
     case _: ArrayType => TTypeId.ARRAY_TYPE
     case _: MapType => TTypeId.MAP_TYPE
     case _: StructType => TTypeId.STRUCT_TYPE
+    case _: CharType => TTypeId.CHAR_TYPE
+    case _: VarcharType => TTypeId.VARCHAR_TYPE
     case other =>
       throw new IllegalArgumentException(s"Unrecognized type name: ${other.catalogString}")
   }
@@ -344,6 +347,9 @@ object SparkExecuteStatementOperation {
         Map(
           TCLIServiceConstants.PRECISION -> TTypeQualifierValue.i32Value(d.precision),
           TCLIServiceConstants.SCALE -> TTypeQualifierValue.i32Value(d.scale)).asJava
+      case _: VarcharType | _: CharType =>
+        Map(TCLIServiceConstants.CHARACTER_MAXIMUM_LENGTH ->
+          TTypeQualifierValue.i32Value(typ.defaultSize)).asJava
       case _ => Collections.emptyMap[String, TTypeQualifierValue]()
     }
     ret.setQualifiers(qualifiers)
@@ -369,7 +375,7 @@ object SparkExecuteStatementOperation {
 
   def toTTableSchema(schema: StructType): TTableSchema = {
     val tTableSchema = new TTableSchema()
-    schema.zipWithIndex.foreach { case (f, i) =>
+    CharVarcharUtils.getRawSchema(schema).zipWithIndex.foreach { case (f, i) =>
       tTableSchema.addToColumns(toTColumnDesc(f, i))
     }
     tTableSchema

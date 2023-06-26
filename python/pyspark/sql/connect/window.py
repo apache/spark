@@ -32,6 +32,7 @@ from pyspark.sql.connect.types import (
     JVM_LONG_MAX,
 )
 from pyspark.sql.window import Window as PySparkWindow, WindowSpec as PySparkWindowSpec
+from pyspark.errors import PySparkTypeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -94,12 +95,14 @@ class WindowSpec:
                     if isinstance(c, (str, Column)):
                         _cols.append(c)
                     else:
-                        raise TypeError(
-                            f"cols must be str or Column or list, but got {type(c).__name__} {c}"
+                        raise PySparkTypeError(
+                            error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                            message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                         )
             else:
-                raise TypeError(
-                    f"cols must be str or Column or list, but got {type(col).__name__} {col}"
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
                 )
 
         newPartitionSpec: List[Expression] = []
@@ -125,12 +128,14 @@ class WindowSpec:
                     if isinstance(c, (str, Column)):
                         _cols.append(c)
                     else:
-                        raise TypeError(
-                            f"cols must be str or Column or list, but got {type(c).__name__} {c}"
+                        raise PySparkTypeError(
+                            error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                            message_parameters={"arg_name": "cols", "arg_type": type(c).__name__},
                         )
             else:
-                raise TypeError(
-                    f"cols must be str or Column or list, but got {type(col).__name__} {col}"
+                raise PySparkTypeError(
+                    error_class="NOT_COLUMN_OR_LIST_OR_STR",
+                    message_parameters={"arg_name": "cols", "arg_type": type(col).__name__},
                 )
 
         newOrderSpec: List[SortOrder] = []

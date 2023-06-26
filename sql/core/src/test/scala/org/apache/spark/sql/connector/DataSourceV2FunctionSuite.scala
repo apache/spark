@@ -446,8 +446,17 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(BadBoundFunction))
 
-    assert(intercept[AnalysisException](sql("SELECT testcat.ns.strlen('abc')"))
-      .getMessage.contains("does not implement ScalarFunction or AggregateFunction"))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql("SELECT testcat.ns.strlen('abc')")),
+      errorClass = "INVALID_UDF_IMPLEMENTATION",
+      parameters = Map(
+        "funcName" -> "`bad_bound_func`"),
+      context = ExpectedContext(
+        fragment = "testcat.ns.strlen('abc')",
+        start = 7,
+        stop = 30)
+    )
   }
 
   test("aggregate function: lookup int average") {
