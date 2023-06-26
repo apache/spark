@@ -1707,7 +1707,11 @@ object SubqueryAlias {
       child: LogicalPlan): SubqueryAlias = {
     SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
+
+  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  def generateSubqueryName(): String = s"__auto_generated_subquery_name_${curId.getAndIncrement()}"
 }
+
 /**
  * Sample the dataset.
  *

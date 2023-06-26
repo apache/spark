@@ -788,8 +788,18 @@ inlineTable
     : VALUES expression (COMMA expression)* tableAlias
     ;
 
+functionTableRelationArgument
+    : TABLE identifierReference
+    | TABLE LEFT_PAREN query RIGHT_PAREN
+    ;
+
+functionTableArgument
+    : expression
+    | functionTableRelationArgument
+    ;
+
 functionTable
-    : funcName=functionName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tableAlias
+    : funcName=functionName LEFT_PAREN (functionTableArgument (COMMA functionTableArgument)*)? RIGHT_PAREN tableAlias
     ;
 
 tableAlias

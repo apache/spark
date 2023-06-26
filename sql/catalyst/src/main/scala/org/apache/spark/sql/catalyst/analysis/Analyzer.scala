@@ -2058,7 +2058,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
           try {
-            resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
+            val resolvedFunc = resolveBuiltinOrTempTableFunction(u.name, u.functionArgs).getOrElse {
               val CatalogAndIdentifier(catalog, ident) = expandIdentifier(u.name)
               if (CatalogV2Util.isSessionCatalog(catalog)) {
                 v1SessionCatalog.resolvePersistentTableFunction(
@@ -2067,6 +2067,26 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 throw QueryCompilationErrors.missingCatalogAbilityError(
                   catalog, "table-valued functions")
               }
+            }
+
+            val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
+            val tvf = resolvedFunc.transformAllExpressionsWithPruning(
+              _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
+              case t: FunctionTableRelationArgumentExpression =>
+                val alias = SubqueryAlias.generateSubqueryName
+                tableArgs.append(SubqueryAlias(alias, t.evaluable))
+                UnresolvedAttribute(Seq(alias, "c"))
+            }
+            if (tableArgs.nonEmpty) {
+              val alias = SubqueryAlias.generateSubqueryName
+              Project(
+                Seq(UnresolvedStar(Some(Seq(alias)))),
+                LateralJoin(
+                  tableArgs.reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
+                  LateralSubquery(SubqueryAlias(alias, tvf)), Inner, None)
+              )
+            } else {
+              tvf
             }
           } catch {
             case _: NoSuchFunctionException =>
@@ -2416,6 +2436,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
+        case a @ FunctionTableRelationArgumentExpression(sub, _, exprId) if !sub.resolved =>
+          resolveSubQuery(a, outer)(FunctionTableRelationArgumentExpression(_, _, exprId))
       }
     }
 
@@ -2436,6 +2458,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         resolveSubQueries(r, r)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
         resolveSubQueries(j, j)
+      case tvf: UnresolvedTableValuedFunction =>
+        resolveSubQueries(tvf, tvf)
       case s: SupportsSubquery if s.childrenResolved =>
         resolveSubQueries(s, s)
     }
