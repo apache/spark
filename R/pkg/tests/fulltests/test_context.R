@@ -103,14 +103,16 @@ test_that("job group functions can be called", {
 
 test_that("job tag functions can be called", {
   sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  addJobTag("B")
   clearJobTags()
+  expect_true(identical(getJobTags(), list())
   addJobTag("A")
-  expectedTags <- getJobTags()
+  expect_true(identical(getJobTags(), list("A"))
   removeJobTag("A")
+  expect_true(identical(getJobTags(), list())
   cancelJobsWithTag("A")
 
   sparkR.session.stop()
-  expect_true(expectedTags == list("A"))
   expect_true(TRUE)
 })
 
