@@ -27,7 +27,7 @@ on:
         required: true
         default: '*'
       jdk:
-        description: 'JDK version: 8, 11 or 17'
+        description: 'JDK version: 8, 11, 17 or 21'
         required: true
         default: '8'
       scala:
