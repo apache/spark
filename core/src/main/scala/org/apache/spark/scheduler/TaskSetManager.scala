@@ -63,11 +63,6 @@ private[spark] class TaskSetManager(
 
   private val conf = sched.sc.conf
 
-  // SPARK-21563 make a copy of the jars/files so they are consistent across the TaskSet
-  private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
-  private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
-  private val addedArchives = HashMap[String, Long](sched.sc.addedArchives.toSeq: _*)
-
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
   // Serializer for closures and tasks.
@@ -568,9 +563,7 @@ private[spark] class TaskSetManager(
       tName,
       index,
       task.partitionId,
-      addedFiles,
-      addedJars,
-      addedArchives,
+      task.artifacts,
       task.localProperties,
       taskCpus,
       taskResourceAssignments,

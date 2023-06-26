@@ -3832,12 +3832,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
   "sqlState" : "21S01",
   "messageParameters" : {
-    "dataColumns" : "'id', 'id', 'val', 'val', '(val * val)'",
-    "reason" : "too many data columns",
-    "tableColumns" : "'id1', 'id2', 'result'",
+    "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
+    "tableColumns" : "`id1`, `id2`, `result`",
     "tableName" : "`spark_catalog`.`default`.`num_result`"
   }
 }

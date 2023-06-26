@@ -290,6 +290,12 @@ The following options control the authentication of Web UIs:
 <table class="table table-striped">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
+  <td><code>spark.ui.allowFramingFrom</code></td>
+  <td><code>SAMEORIGIN</code></td>
+  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>1.6.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>

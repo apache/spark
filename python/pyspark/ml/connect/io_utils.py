@@ -36,7 +36,7 @@ _META_DATA_FILE_NAME = "metadata.json"
 def _copy_file_from_local_to_fs(local_path: str, dest_path: str) -> None:
     session = _get_active_session(is_remote())
     if is_remote():
-        session.copyFromLocalToFs(local_path, dest_path)  # type: ignore[attr-defined]
+        session.copyFromLocalToFs(local_path, dest_path)
     else:
         jvm = session.sparkContext._gateway.jvm  # type: ignore[union-attr]
         jvm.org.apache.spark.ml.python.MLUtil.copyFileFromLocalToFs(local_path, dest_path)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -526,19 +526,6 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
       Row(2) :: Nil)
-  }
-
-  test("update with nondeterministic conditions") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
-
-    val e = intercept[AnalysisException] {
-      sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
-    }
-    assert(e.message.contains("nondeterministic expressions are only allowed"))
   }
 
   test("update with default values") {

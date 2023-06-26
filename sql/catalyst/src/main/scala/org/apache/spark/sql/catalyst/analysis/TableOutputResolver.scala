@@ -67,7 +67,7 @@ object TableOutputResolver {
       val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
       val queryOutputCols = if (fillDefaultValue) {
         query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         }
       } else {
         query.output
@@ -185,7 +185,7 @@ object TableOutputResolver {
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
         val defaultExpr = if (fillDefaultValue) {
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         } else {
           None
         }

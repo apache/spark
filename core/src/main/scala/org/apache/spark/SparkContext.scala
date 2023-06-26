@@ -68,7 +68,7 @@ import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
-import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
+import org.apache.spark.storage.BlockManagerMessages.{TriggerHeapHistogram, TriggerThreadDump}
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
 import org.apache.spark.util.logging.DriverLogger
@@ -746,6 +746,30 @@ class SparkContext(config: SparkConf) extends Logging {
     } catch {
       case e: Exception =>
         logError(s"Exception getting thread dump from executor $executorId", e)
+        None
+    }
+  }
+
+  /**
+   * Called by the web UI to obtain executor heap histogram.
+   */
+  private[spark] def getExecutorHeapHistogram(executorId: String): Option[Array[String]] = {
+    try {
+      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+        Some(Utils.getHeapHistogram())
+      } else {
+        env.blockManager.master.getExecutorEndpointRef(executorId) match {
+          case Some(endpointRef) =>
+            Some(endpointRef.askSync[Array[String]](TriggerHeapHistogram))
+          case None =>
+            logWarning(s"Executor $executorId might already have stopped and " +
+              "can not request heap histogram from it.")
+            None
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Exception getting heap histogram from executor $executorId", e)
         None
     }
   }
