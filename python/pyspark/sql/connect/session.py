@@ -612,47 +612,20 @@ class SparkSession:
         assert result is not None
         return result
 
-    # SparkConnect-specific API
     @property
     def client(self) -> "SparkConnectClient":
-        """
-        Gives access to the Spark Connect client. In normal cases this is not necessary to be used
-        and only relevant for testing.
-
-        .. versionadded:: 3.4.0
-
-        Returns
-        -------
-        :class:`SparkConnectClient`
-        """
         return self._client
+
+    client.__doc__ = PySparkSession.client.__doc__
 
     def addArtifacts(
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
-        """
-        Add artifact(s) to the client session. Currently only local files are supported.
-
-        .. versionadded:: 3.5.0
-
-        Parameters
-        ----------
-        *path : tuple of str
-            Artifact's URIs to add.
-        pyfile : bool
-            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
-            The pyfiles are directly inserted into the path when executing Python functions
-            in executors.
-        archive : bool
-            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
-            The archives are unpacked on the executor side automatically.
-        file : bool
-            Add a file to be downloaded with this Spark job on every node.
-            The ``path`` passed can only be a local file for now.
-        """
         if sum([file, pyfile, archive]) > 1:
             raise ValueError("'pyfile', 'archive' and/or 'file' cannot be True together.")
         self._client.add_artifacts(*path, pyfile=pyfile, archive=archive, file=file)
+
+    addArtifacts.__doc__ = PySparkSession.addArtifacts.__doc__
 
     addArtifact = addArtifacts
 
@@ -664,25 +637,6 @@ class SparkSession:
         return self._client.cache_artifact(serialized)
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
-        """
-        Copy file from local to cloud storage file system.
-        If the file already exits in destination path, old file is overwritten.
-
-        Parameters
-        ----------
-        local_path: str
-            Path to a local file. Directories are not supported.
-            The path can be either an absolute path or a relative path.
-
-        dest_path: str
-            The cloud storage path to the destination the file will
-            be copied to.
-            The path must be an an absolute path.
-
-        Notes
-        -----
-        This API is a developer API.
-        """
         if urllib.parse.urlparse(dest_path).scheme:
             raise ValueError(
                 "`spark_session.copyFromLocalToFs` API only allows `dest_path` to be a path "
@@ -690,6 +644,8 @@ class SparkSession:
                 "determine the destination file system."
             )
         self._client.copy_from_local_to_fs(local_path, dest_path)
+
+    copyFromLocalToFs.__doc__ = PySparkSession.copyFromLocalToFs.__doc__
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

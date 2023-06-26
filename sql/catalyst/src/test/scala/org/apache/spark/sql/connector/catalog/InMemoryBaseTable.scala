@@ -292,12 +292,31 @@ abstract class InMemoryBaseTable(
     new InMemoryScanBuilder(schema)
   }
 
+  private def canEvaluate(filter: Filter): Boolean = {
+    if (partitioning.length == 1 && partitioning.head.references.length == 1) {
+      filter match {
+        case In(attrName, _) if attrName == partitioning.head.references.head.toString => true
+        case _ => false
+      }
+    } else {
+      false
+    }
+  }
+
   class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
       with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
+    private var postScanFilters: Array[Filter] = Array.empty
+    private var evaluableFilters: Array[Filter] = Array.empty
+    private var _pushedFilters: Array[Filter] = Array.empty
 
-    override def build: Scan =
-      InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+    override def build: Scan = {
+      val scan = InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+      if (evaluableFilters.nonEmpty) {
+        scan.filter(evaluableFilters)
+      }
+      scan
+    }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
       // The required schema could contain conflict-renamed metadata columns, so we need to match
@@ -310,11 +329,12 @@ abstract class InMemoryBaseTable(
       schema = StructType(prunedFields)
     }
 
-    private var _pushedFilters: Array[Filter] = Array.empty
-
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+      val (evaluableFilters, postScanFilters) = filters.partition(canEvaluate)
+      this.evaluableFilters = evaluableFilters
+      this.postScanFilters = postScanFilters
       this._pushedFilters = filters
-      this._pushedFilters
+      postScanFilters
     }
 
     override def pushedFilters(): Array[Filter] = this._pushedFilters
