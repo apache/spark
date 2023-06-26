@@ -5568,27 +5568,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("json_array_length function") {
-    val df = Seq(null, "[]", "[1, 2, 3]", "{\"key\": 1}", "invalid json")
-      .toDF("a")
-
-    val expected = Seq(Row(null), Row(0), Row(3), Row(null), Row(null))
-
-    checkAnswer(df.selectExpr("json_array_length(a)"), expected)
-    checkAnswer(df.select(json_array_length($"a")), expected)
-  }
-
-  test("json_object_keys function") {
-    val df = Seq(null, "{}", "{\"key1\":1, \"key2\": 2}", "[1, 2, 3]", "invalid json")
-      .toDF("a")
-
-    val expected = Seq(Row(null), Row(Seq.empty),
-      Row(Seq("key1", "key2")), Row(null), Row(null))
-
-    checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
-    checkAnswer(df.select(json_object_keys($"a")), expected)
-  }
-
   test("mask function") {
     val df = Seq("AbCD123-@$#", "abcd-EFGH-8765-4321").toDF("a")
 

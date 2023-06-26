@@ -369,11 +369,10 @@ object functions {
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
   /**
-   * This function returns a count-min sketch of a column with the given esp, confidence and seed.
-   * A count-min sketch is a probabilistic data structure used for summarizing streams of data in
-   * sub-linear space, which is useful for equality predicates and join size estimation.
-   * The result returned by the function is an array of bytes, which should be deserialized to a
-   * `CountMinSketch` before usage.
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result
+   * is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
+   * Count-min sketch is a probabilistic data structure used for cardinality estimation using
+   * sub-linear space.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -6459,8 +6458,8 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
-   * Masks the given string value. The function replaces upper-case, lower-case characters
-   * with specific characters, and numbers with 'n'.
+   * Masks the given string value. The function replaces upper-case and lower-case characters with
+   * the characters specified respectively, and numbers with 'n'.
    * This can be useful for creating copies of tables with sensitive information removed.
    *
    * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
@@ -6478,7 +6477,7 @@ object functions {
   // scalastyle:off line.size.limit
   /**
    * Masks the given string value. The function replaces upper-case, lower-case characters and
-   * numbers with specific characters.
+   * numbers with the characters specified respectively.
    * This can be useful for creating copies of tables with sensitive information removed.
    *
    * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
