@@ -2373,9 +2373,9 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
-      "ATTACH_NAMESPACE_COMMENT" : {
+      "COMMENT_NAMESPACE" : {
         "message" : [
-          "Attach namespace comment."
+          "Attach a comment to the namespace <namespace>."
         ]
       },
       "CATALOG_OPERATION" : {
@@ -2395,7 +2395,7 @@
       },
       "DROP_NAMESPACE_RESTRICT" : {
         "message" : [
-          "Drop namespace restrict."
+          "Drop the namespace <namespace>."
         ]
       },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
@@ -2480,7 +2480,7 @@
       },
       "REMOVE_NAMESPACE_COMMENT" : {
         "message" : [
-          "Remove namespace comment."
+          "Remove a comment from the namespace <namespace>."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
