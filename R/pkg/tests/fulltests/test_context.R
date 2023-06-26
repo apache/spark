@@ -95,6 +95,19 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
+  setInterruptOnCancel(true)
+
+  sparkR.session.stop()
+  expect_true(TRUE)
+})
+
+test_that("job tag functions can be called", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  clearJobTags()
+  addJobTag("A")
+  getJobTags() # TODO - how to check return value
+  removeJobTag("A")
+  cancelJobsWithTag("A")
 
   sparkR.session.stop()
   expect_true(TRUE)
