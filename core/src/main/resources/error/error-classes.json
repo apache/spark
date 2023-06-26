@@ -2373,11 +2373,6 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
-      "COMMENT_NAMESPACE" : {
-        "message" : [
-          "Attach a comment to the namespace <namespace>."
-        ]
-      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
@@ -2386,6 +2381,11 @@
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
+        ]
+      },
+      "COMMENT_NAMESPACE" : {
+        "message" : [
+          "Attach a comment to the namespace <namespace>."
         ]
       },
       "DESC_TABLE_COLUMN_PARTITION" : {
