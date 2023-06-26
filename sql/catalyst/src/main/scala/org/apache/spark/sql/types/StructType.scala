@@ -381,7 +381,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     findFieldInStruct(this, fieldNames, Nil)
   }
 
-  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
+  protected[sql] def toAttributes: Seq[AttributeReference] =
+    map(field => DataTypeUtils.toAttribute(field))
 
   def treeString: String = treeString(Int.MaxValue)
 
