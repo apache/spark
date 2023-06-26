@@ -99,13 +99,15 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     // we fail the query if the partitioning information is specified.
     case c @ CreateTableV1(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
-        failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
-          "when creating and will be inferred at runtime")
+        throw new AnalysisException(
+          errorClass = "SPECIFY_BUCKETING_IS_NOT_ALLOWED",
+          messageParameters = Map.empty
+        )
       }
       if (tableDesc.partitionColumnNames.nonEmpty) {
-        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
-          "not defined. When the table schema is not provided, schema and partition columns " +
-          "will be inferred.")
+        throw new AnalysisException(
+          errorClass = "SPECIFY_PARTITION_IS_NOT_ALLOWED",
+          messageParameters = Map.empty)
       }
       c
 
@@ -316,7 +318,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkColumnNameDuplication(normalizedPartitionCols, conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      failAnalysis("Cannot use all columns for partition columns")
+      throw new AnalysisException(
+        errorClass = "ALL_FOR_PARTITION_COLUMNS_IS_NOT_ALLOWED",
+        messageParameters = Map.empty)
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {

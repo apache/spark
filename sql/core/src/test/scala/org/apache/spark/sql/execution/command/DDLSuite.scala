@@ -429,7 +429,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
         checkError(
           exception = intercept[AnalysisException](sql(sqlCreateTable)),
-          errorClass = null,
+          errorClass = "SPECIFY_PARTITION_IS_NOT_ALLOWED",
           parameters = Map.empty
         )
       } else {
@@ -2247,8 +2247,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           exception = intercept[SparkException] {
             sql(s"ADD FILE $testDir")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
+          parameters = Map("path" -> s"file:${testDir.getCanonicalPath}/")
         )
       }
     }

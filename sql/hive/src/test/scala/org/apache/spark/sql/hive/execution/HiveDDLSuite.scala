@@ -2875,9 +2875,6 @@ class HiveDDLSuite
   }
 
   test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
-    val expectedMsg = "Cannot create a table having a nested column whose name contains invalid " +
-      "characters (',', ':', ';') in Hive metastore."
-
     Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
       withTable("t") {
         checkError(
@@ -2888,8 +2885,11 @@ class HiveDDLSuite
               .format("hive")
               .saveAsTable("t")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "INVALID_COLUMN_NAME",
+          parameters = Map(
+            "invalidChars" -> "',', ':', ';'",
+            "tableName" -> "`spark_catalog`.`default`.`t`",
+            "columnName" -> s"`$nestedColumnName`")
         )
       }
     }
@@ -3362,7 +3362,7 @@ class HiveDDLSuite
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c1) STORED AS PARQUET")
       },
-      errorClass = null,
+      errorClass = "ALL_FOR_PARTITION_COLUMNS_IS_NOT_ALLOWED",
       parameters = Map.empty
     )
   }
