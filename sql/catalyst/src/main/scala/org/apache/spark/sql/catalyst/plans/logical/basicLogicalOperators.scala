@@ -296,8 +296,6 @@ case class Generate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Generate =
     copy(child = newChild)
-
-  override lazy val references: AttributeSet = generator.references
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)

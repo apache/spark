@@ -2270,8 +2270,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  */
 
 object RewriteExceptAll extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(EXCEPT), ruleId) {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
     case Except(left, right, true) =>
       assert(left.output.size == right.output.size)
 
@@ -2285,15 +2284,16 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
       val aggOutputColumns = left.output ++ Seq(aggSumCol)
       val aggregatePlan = Aggregate(left.output, aggOutputColumns, unionPlan)
       val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
+      val newAttr = left.output.map(a => a.newInstance())
       val genRowPlan = Generate(
         ReplicateRows(Seq(aggSumCol.toAttribute) ++ left.output),
         unrequiredChildIndex = Nil,
         outer = false,
         qualifier = None,
-        left.output,
+        newAttr,
         filteredAggPlan
       )
-      Project(left.output, genRowPlan)
+      (Project(newAttr, genRowPlan), left.output.zip(newAttr))
   }
 }
 
