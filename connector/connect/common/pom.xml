@@ -59,6 +59,12 @@
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty</artifactId>
             <version>${io.grpc.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>

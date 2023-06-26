@@ -213,6 +213,7 @@
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <netty.version>4.1.92.Final</netty.version>
+    <gson.version>2.10.1</gson.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -677,6 +678,11 @@
         <groupId>${leveldbjni.group}</groupId>
         <artifactId>leveldbjni-all</artifactId>
         <version>1.8</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>${gson.version}</version>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
@@ -2153,6 +2159,10 @@
           <exclusion>
             <groupId>org.pentaho</groupId>
             <artifactId>pentaho-aggdesigner-algorithm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
           </exclusion>
           <!-- End of Hive 2.3 exclusion -->
         </exclusions>
