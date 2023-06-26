@@ -594,10 +594,9 @@ case class ShuffledHashJoinExec(
          |
          |  if (!$foundMatch) {
          |    $buildRow = null;
-         |  }
-         |
-         |  if ($isFullOuterJoin) {
-         |    $consumeFullOuterJoinRow();
+         |    if ($isFullOuterJoin) {
+         |      $consumeFullOuterJoinRow();
+         |    }
          |  }
          |
          |  if (shouldStop()) return;

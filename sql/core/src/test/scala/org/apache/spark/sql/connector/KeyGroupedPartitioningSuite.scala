@@ -931,6 +931,43 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("szehon-test") {
+    val tbl1 = "tbl1"
+    val tbl2 = "tbl2"
+    val partitions = Array(identity("id"), identity("data"))
+    createTable("tbl1", schema, partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', cast('2020-01-02' as timestamp)), " +
+      "(3, 'cc', cast('2020-02-03' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"), identity("name"))
+    createTable(purchases, purchases_schema, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 19.5, cast('2020-02-01' as timestamp)), " +
+      "(4, 30.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = sql("SELECT id, name, i.price as purchase_price, p.price as sale_price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+          "ON i.id = p.item_id ORDER BY id, purchase_price, sale_price")
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+            "pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
   test("data source partitioning + dynamic partition filtering") {
     withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
