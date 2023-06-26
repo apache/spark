@@ -154,6 +154,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDFRegistration$"),
 
@@ -225,6 +226,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
+      // TODO(SPARK-44068): Support positional parameters in Scala connect client
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
 
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
@@ -322,12 +325,22 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[ReversedMissingMethodProblem](
         "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
       ),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
 
       // New public APIs added in the client
+      // ScalarUserDefinedFunction
+      ProblemFilters
+        .exclude[MissingClassProblem]("org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"
+      ),
+
+      // Dataset
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.Dataset.plan"), // developer API
+      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.Dataset.encoder"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.Dataset.collectResult"),
+
       // RuntimeConfig
       ProblemFilters.exclude[MissingTypesProblem](
         "org.apache.spark.sql.RuntimeConfig" // Client version extends Logging

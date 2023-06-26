@@ -92,7 +92,7 @@ sealed abstract class UserDefinedFunction {
 /**
  * Holder class for a scalar user-defined function and it's input/output encoder(s).
  */
-private[sql] case class ScalarUserDefinedFunction(
+case class ScalarUserDefinedFunction(
     function: AnyRef,
     inputEncoders: Seq[AgnosticEncoder[_]],
     outputEncoder: AgnosticEncoder[_],
@@ -134,7 +134,7 @@ private[sql] case class ScalarUserDefinedFunction(
   override def asNondeterministic(): ScalarUserDefinedFunction = copy(deterministic = false)
 }
 
-private[sql] object ScalarUserDefinedFunction {
+object ScalarUserDefinedFunction {
   private[sql] def apply(
       function: AnyRef,
       returnType: TypeTag[_],

@@ -48,7 +48,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *   An unique identifier of the session which the artifact manager belongs to.
  * @param channel
  */
-private[sql] class ArtifactManager(
+class ArtifactManager(
     userContext: proto.UserContext,
     sessionId: String,
     channel: ManagedChannel) {
@@ -321,7 +321,7 @@ class Artifact private (val path: Path, val storage: LocalData) {
   }
 }
 
-private[sql] object Artifact {
+object Artifact {
   val CLASS_PREFIX: Path = Paths.get("classes")
   val JAR_PREFIX: Path = Paths.get("jars")
   val CACHE_PREFIX: Path = Paths.get("cache")

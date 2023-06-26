@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
-private[sql] object LiteralValueProtoConverter {
+object LiteralValueProtoConverter {
 
   /**
    * Transforms literal value to the `proto.Expression.Literal.Builder`.

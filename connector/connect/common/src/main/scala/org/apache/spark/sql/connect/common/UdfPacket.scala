@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
  *   An [[AgnosticEncoder]] for the output of the UDF
  */
 @SerialVersionUID(8866761834651399125L)
-private[sql] case class UdfPacket(
+case class UdfPacket(
     function: AnyRef,
     inputEncoders: Seq[AgnosticEncoder[_]],
     outputEncoder: AgnosticEncoder[_])
