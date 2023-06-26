@@ -549,3 +549,25 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
     }
   }
 }
+
+/**
+ * A rule to qualify relative locations with warehouse path before it breaks in catalog
+ * operation and data reading and writing.
+ *
+ * @param catalog the session catalog
+ */
+case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case c @ CreateTableV1(tableDesc, _, _) if !c.locationQualifiedOrAbsent =>
+      val qualifiedTableIdent = catalog.qualifyIdentifier(tableDesc.identifier)
+      val loc = tableDesc.storage.locationUri.get
+      val db = qualifiedTableIdent.database.get
+      val newLocation = catalog.makeQualifiedTablePath(loc, db)
+      val newTable = tableDesc.copy(
+        identifier = qualifiedTableIdent,
+        storage = tableDesc.storage.copy(locationUri = Some(newLocation))
+      )
+      c.copy(tableDesc = newTable)
+  }
+}
