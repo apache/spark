@@ -29,12 +29,6 @@ abstract class DataTypeExpression(val dataType: DataType) {
   private[sql] def unapply(e: Expression): Boolean = e.dataType == dataType
 }
 
-abstract class AtomicTypeExpression(override val dataType: DataType)
-  extends DataTypeExpression(dataType)
-
-abstract class DatetimeTypeExpression(override val dataType: DataType)
-  extends AtomicTypeExpression(dataType)
-
 case object BooleanTypeExpression extends DataTypeExpression(BooleanType)
 case object StringTypeExpression extends DataTypeExpression(StringType)
 case object TimestampTypeExpression extends DataTypeExpression(TimestampType)
