@@ -84,4 +84,6 @@ public interface SupportsRuntimeFiltering extends Scan {
   default int getPushedBroadcastFiltersCount() {
     return 0;
   }
+
+  default void callbackBeforeOpeningIterator() {}
 }

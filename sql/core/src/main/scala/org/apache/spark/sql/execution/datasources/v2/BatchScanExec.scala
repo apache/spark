@@ -94,7 +94,7 @@ case class BatchScanExec(
       if (dataSourceFilters.nonEmpty) {
         filterableScan.filter(dataSourceFilters.toArray)
       }
-
+      filterableScan.callbackBeforeOpeningIterator()
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 
