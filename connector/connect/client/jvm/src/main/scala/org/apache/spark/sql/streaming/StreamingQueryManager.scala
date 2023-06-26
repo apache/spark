@@ -21,11 +21,15 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 
+import com.google.protobuf.ByteString
+
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.common.StreamingListenerPacket
+import org.apache.spark.util.Utils
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -123,6 +127,45 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    */
   def resetTerminated(): Unit = {
     executeManagerCmd(_.setResetTerminated(true))
+  }
+
+  /**
+   * Register a [[StreamingQueryListener]] to receive up-calls for life cycle events of
+   * [[StreamingQuery]].
+   *
+   * @since 3.5.0
+   */
+  def addListener(listener: StreamingQueryListener): Unit = {
+    executeManagerCmd(
+      _.getAddListenerBuilder
+        .setListenerPayload(ByteString.copyFrom(Utils
+          .serialize(StreamingListenerPacket(listener)))))
+  }
+
+  /**
+   * Deregister a [[StreamingQueryListener]].
+   *
+   * @since 3.5.0
+   */
+  def removeListener(listener: StreamingQueryListener): Unit = {
+    executeManagerCmd(
+      _.getRemoveListenerBuilder
+        .setListenerPayload(ByteString.copyFrom(Utils
+          .serialize(StreamingListenerPacket(listener)))))
+  }
+
+  /**
+   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
+   *
+   * @since 3.5.0
+   */
+  def listListeners(): Array[StreamingQueryListener] = {
+    executeManagerCmd(_.setListListeners(true)).getListListeners.getListenersList.asScala.map {
+      listener =>
+        Utils.deserialize[StreamingListenerPacket](listener.getListenerPayload.toByteArray,
+            Utils.getContextOrSparkClassLoader).listener
+          .asInstanceOf[StreamingQueryListener]
+    }.toArray
   }
 
   private def executeManagerCmd(
