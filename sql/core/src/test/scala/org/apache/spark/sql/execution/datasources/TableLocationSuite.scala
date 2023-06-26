@@ -25,7 +25,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class TableLocationSuite extends QueryTest with SharedSparkSession {
 
-  test("relative LOCATION in CTAS should be qualified with warehouse") {
+  test("SPARK-44185: relative LOCATION in CTAS should be qualified with warehouse") {
     withSQLConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> "false") {
       withTable("ctas1", "ctas2") {
         sql("CREATE TABLE ctas1 USING parquet AS SELECT 1 AS ID")
@@ -41,7 +41,7 @@ class TableLocationSuite extends QueryTest with SharedSparkSession {
   }
 
 
-  test("relative LOCATION with Append SaveMode shall check the qualified path") {
+  test("SPARK-44185: relative LOCATION with Append SaveMode shall check the qualified path") {
     withTable("ctas1", "ctas2") {
       sql("CREATE TABLE ctas1 USING parquet AS SELECT 1L AS ID")
       spark.range(10)
@@ -54,11 +54,12 @@ class TableLocationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("abc") {
+  test("SPARK-44185: relative LOCATION in CREATE TABLE shall lookup the path qualified with" +
+    " warehouse for consistency") {
     withTable("ct2", "ct1") {
       try {
         sql("CREATE TABLE ct1 USING parquet SELECT 1 AS ID")
-        // TODO: INSERT OVERWRITE DIRECTORY shall be qualified with current working
+        // TODO(SPARK-44185): INSERT OVERWRITE DIRECTORY shall be qualified with current working
         //   directory(AS-IS) or with warehouse path?
         sql("INSERT OVERWRITE DIRECTORY 'ct1' USING parquet " + "SELECT 1 AS ID1, 2 AS ID2")
 
@@ -74,5 +75,4 @@ class TableLocationSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
-
 }
