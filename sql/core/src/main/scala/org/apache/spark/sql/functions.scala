@@ -3351,6 +3351,298 @@ object functions {
    */
   def user(): Column = withExpr { CurrentUser() }
 
+  /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def uuid(): Column = withExpr { new Uuid() }
+
+  /**
+   * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
+   * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
+   * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization
+   * vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12
+   * bytes for GCM. If not provided, a random vector will be generated and prepended to the
+   * output. Optional additional authenticated data (AAD) is only supported for GCM. If provided
+   * for encryption, the identical AAD value must be provided for decryption. The default mode is
+   * GCM.
+   *
+   * @param input
+   *   The binary value to encrypt.
+   * @param key
+   *   The passphrase to use to encrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param iv
+   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
+   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column,
+      aad: Column): Column = withExpr {
+    AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr, aad.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input` using AES in `mode` with `padding`. Key lengths of 16,
+   * 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB',
+   * 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional additional authenticated data (AAD) is
+   * only supported for GCM. If provided for encryption, the identical AAD value must be provided
+   * for decryption. The default mode is GCM.
+   *
+   * @param input
+   *   The binary value to decrypt.
+   * @param key
+   *   The passphrase to use to decrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      aad: Column): Column = withExpr {
+    AesDecrypt(input.expr, key.expr, mode.expr, padding.expr, aad.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a sha1 hash value as a hex string of the `col`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def sha(col: Column): Column = withExpr {
+    Sha1(col.expr)
+  }
+
+  /**
+   * Returns the length of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_length(): Column = withExpr {
+    InputFileBlockLength()
+  }
+
+  /**
+   * Returns the start offset of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_start(): Column = withExpr {
+    InputFileBlockStart()
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def reflect(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def java_method(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Returns the Spark version. The string contains 2 fields, the first being a release version
+   * and the second being a git revision.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def version(): Column = withExpr {
+    SparkVersion()
+  }
+
+  /**
+   * Return DDL-formatted type string for the data type of the input.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def typeof(col: Column): Column = withExpr {
+    TypeOf(col.expr)
+  }
+
+  /**
+   * Separates `col1`, ..., `colk` into `n` rows. Uses column names col0, col1, etc. by default
+   * unless specified otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def stack(cols: Column*): Column = withExpr {
+    Stack(cols.map(_.expr))
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(seed: Column): Column = withExpr {
+    Rand(seed.expr)
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(): Column = withExpr {
+    new Rand()
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

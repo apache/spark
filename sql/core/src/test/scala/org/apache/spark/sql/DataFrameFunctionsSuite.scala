@@ -75,11 +75,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "udaf", "udf" // create function statement in sql
     )
 
-    val excludedSqlFunctions = Set(
-      "random", "sha",
-      // aliases for existing functions
-      "reflect", "java_method" // Only needed in SQL
-    )
+    val excludedSqlFunctions = Set.empty[String]
 
     val expectedOnlyDataFrameFunctions = Set(
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
