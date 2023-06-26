@@ -1937,6 +1937,32 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(mockBlockTransferService.tempFileManager === store.remoteBlockTempFileManager)
   }
 
+  test("SPARK-43221: the BlockManager with the persisted block is preferred.") {
+    master.updateBlockInfo(BlockManagerId("exec-0", "host1", 100), BlockId("test_1"),
+      StorageLevel.MEMORY_ONLY, 128, 0)
+    master.updateBlockInfo(BlockManagerId("exec-1", "host1", 101), BlockId("test_1"),
+      StorageLevel.DISK_ONLY, 0, 128)
+    master.updateBlockInfo(BlockManagerId("exec-2", "host1", 102), BlockId("test_1"),
+      StorageLevel.MEMORY_ONLY, 128, 0)
+    master.updateBlockInfo(BlockManagerId("exec-3", "host1", 103), BlockId("test_1"),
+      StorageLevel.MEMORY_ONLY, 128, 0)
+
+    val locationsAndStatusOption = master.getLocationsAndStatus(BlockId("test_1"), "host1")
+
+    assert(locationsAndStatusOption.get.status.memSize == 0)
+    assert(locationsAndStatusOption.get.status.diskSize == 128)
+
+    master.removeExecutor("exec-1")
+    assert(locationsAndStatusOption.get.status.memSize == 128)
+    assert(locationsAndStatusOption.get.status.diskSize == 0)
+
+    master.updateBlockInfo(BlockManagerId("exec-4", "host1", 104), BlockId("test_1"),
+      StorageLevel.DISK_ONLY, 0, 128)
+    val renewLocationsAndStatusOption = master.getLocationsAndStatus(BlockId("test_1"), "host1")
+    assert(locationsAndStatusOption.get.status.memSize == 0)
+    assert(locationsAndStatusOption.get.status.diskSize == 128)
+  }
+
   test("query locations of blockIds") {
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
     val blockLocations = Seq(BlockManagerId("1", "host1", 100), BlockManagerId("2", "host2", 200))
