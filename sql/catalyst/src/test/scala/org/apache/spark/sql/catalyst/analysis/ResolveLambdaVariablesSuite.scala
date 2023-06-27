@@ -87,7 +87,11 @@ class ResolveLambdaVariablesSuite extends PlanTest {
     val p = plan(ArrayTransform(values1,
       LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")) + lv(Symbol("z")),
         lv(Symbol("x")) :: lv(Symbol("y")) :: lv(Symbol("z")) :: Nil)))
-    val msg = intercept[AnalysisException](Analyzer.execute(p)).getMessage
-    assert(msg.contains("does not match the number of arguments expected"))
+
+    checkError(
+      exception = intercept[AnalysisException](Analyzer.execute(p)),
+      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
+      parameters = Map("expectedNumArgs" -> "3", "actualNumArgs" -> "1")
+    )
   }
 }
