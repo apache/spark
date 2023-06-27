@@ -66,13 +66,9 @@ object IntegralTypeExpression {
   }
 }
 
-object DecimalExtractor {
+object DecimalExpression {
   def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
     case t: DecimalType => Some((t.precision, t.scale))
     case _ => None
   }
-}
-
-object DecimalExpression {
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
 }
