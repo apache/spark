@@ -409,13 +409,17 @@ class QueryExecutionErrorsSuite
       spark.sql("select luckyCharOfWord(word, index) from words").collect()
     }
     assert(e.getCause.isInstanceOf[SparkException])
+    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/\\w+\\)`"
+    } else {
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map(
-        "functionName" ->
-          "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`",
+        "functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)
@@ -430,11 +434,16 @@ class QueryExecutionErrorsSuite
       words.select(luckyCharOfWord($"word", $"index")).collect()
     }
     assert(e.getCause.isInstanceOf[SparkException])
+    val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
+      "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
+    } else {
+      "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`"
+    }
 
     checkError(
       exception = e.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_EXECUTE_UDF",
-      parameters = Map("functionName" -> "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`",
+      parameters = Map("functionName" -> functionNameRegex,
         "signature" -> "string, int",
         "result" -> "string"),
       matchPVals = true)

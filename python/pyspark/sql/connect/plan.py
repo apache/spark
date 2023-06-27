@@ -1019,12 +1019,15 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, query: str, args: Optional[Union[Dict[str, Any], List]] = None) -> None:
         super().__init__(None)
 
         if args is not None:
-            for k, v in args.items():
-                assert isinstance(k, str)
+            if isinstance(args, Dict):
+                for k, v in args.items():
+                    assert isinstance(k, str)
+            else:
+                assert isinstance(args, List)
 
         self._query = query
         self._args = args
@@ -1034,8 +1037,16 @@ class SQL(LogicalPlan):
         plan.sql.query = self._query
 
         if self._args is not None and len(self._args) > 0:
-            for k, v in self._args.items():
-                plan.sql.args[k].CopyFrom(LiteralExpression._from_value(v).to_plan(session).literal)
+            if isinstance(self._args, Dict):
+                for k, v in self._args.items():
+                    plan.sql.args[k].CopyFrom(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
+            else:
+                for v in self._args:
+                    plan.sql.pos_args.append(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
 
         return plan
 
@@ -1043,10 +1054,17 @@ class SQL(LogicalPlan):
         cmd = proto.Command()
         cmd.sql_command.sql = self._query
         if self._args is not None and len(self._args) > 0:
-            for k, v in self._args.items():
-                cmd.sql_command.args[k].CopyFrom(
-                    LiteralExpression._from_value(v).to_plan(session).literal
-                )
+            if isinstance(self._args, Dict):
+                for k, v in self._args.items():
+                    cmd.sql_command.args[k].CopyFrom(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
+            else:
+                for v in self._args:
+                    cmd.sql_command.pos_args.append(
+                        LiteralExpression._from_value(v).to_plan(session).literal
+                    )
+
         return cmd
 
 
