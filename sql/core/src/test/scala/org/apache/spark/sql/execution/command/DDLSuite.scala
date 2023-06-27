@@ -1316,19 +1316,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE jsonTable
-             |USING org.apache.spark.sql.json
-             |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
-             |)
-             |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
-           """.stripMargin)
-        }
-        assert(e.message == "Cannot specify bucketing information if the table schema is not " +
-          "specified when creating and will be inferred at runtime")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""
+                 |CREATE TABLE jsonTable
+                 |USING org.apache.spark.sql.json
+                 |OPTIONS (
+                 |  path '${tempDir.getCanonicalPath}'
+                 |)
+                 |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
+               """.stripMargin)
+          },
+          errorClass = "SPECIFY_BUCKETING_IS_NOT_ALLOWED",
+          parameters = Map.empty
+        )
       }
     }
   }
