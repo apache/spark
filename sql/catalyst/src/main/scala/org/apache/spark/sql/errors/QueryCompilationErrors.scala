@@ -2992,10 +2992,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     )
   }
 
-<<<<<<< HEAD
-  def cannotParseIntervalError(intervalString: String, e: Throwable): Throwable = {
-    val threshold = if (intervalString == null) "" else intervalString
-=======
   def resolveException(colName: String, fields: Array[String]): AnalysisException = {
     QueryCompilationErrors.unresolvedColumnWithSuggestionError(
       colName,
@@ -3005,7 +3001,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
     val threshold = if (delayThreshold == null) "" else delayThreshold
->>>>>>> 94fee867c4 (JoinWith)
     new AnalysisException(
       errorClass = "CANNOT_PARSE_INTERVAL",
       messageParameters = Map("intervalString" -> toSQLValue(threshold, StringType)),
