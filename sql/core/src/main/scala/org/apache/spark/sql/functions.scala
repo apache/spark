@@ -8367,6 +8367,7 @@ object functions {
    * @param cols the expression parameters of function
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def call_function(funcName: String, cols: Column*): Column =
     withExpr { UnresolvedFunction(funcName, cols.map(_.expr), false) }
 
@@ -8378,6 +8379,7 @@ object functions {
    * @param isDistinct the distinct for aggregate functions
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def call_function(funcName: String, isDistinct: Boolean, cols: Column*): Column =
     withExpr { UnresolvedFunction(funcName, cols.map(_.expr), isDistinct) }
 
