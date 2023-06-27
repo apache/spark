@@ -222,7 +222,7 @@ class PySparkErrorTestUtils:
         )
 
 
-def assert_spark_schema_equality(
+def assertSparkSchemaEquality(
         s1: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
         s2: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
 ):
@@ -231,7 +231,7 @@ def assert_spark_schema_equality(
         raise AssertionError(msg)
 
 
-def assert_spark_df_equality(
+def assertSparkDFEquality(
         left: PySparkDataFrame, right: PySparkDataFrame, ignore_row_order: bool = True
 ):
     def assert_rows_equality(rows1, rows2):
@@ -247,11 +247,11 @@ def assert_spark_df_equality(
     left = reduce(lambda acc, fn: fn(acc), transforms, left)
     right = reduce(lambda acc, fn: fn(acc), transforms, right)
 
-    assert_spark_schema_equality(left.schema, right.schema)
+    assertSparkSchemaEquality(left.schema, right.schema)
     assert_rows_equality(left.collect(), right.collect())
 
 
-def assert_df_equality(
+def assertDFEquality(
         left: Union[
             PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
         ],
@@ -260,10 +260,10 @@ def assert_df_equality(
         ],
 ):
 
-    from pyspark.testing.pandasutils import assert_pandas_df_equality
+    from pyspark.testing.pandasutils import assertPandasDFEquality
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
-        assert_pandas_df_equality(left, right)
+        assertPandasDFEquality(left, right)
 
     elif isinstance(left, PySparkDataFrame) and isinstance(right, PySparkDataFrame):
-        assert_spark_df_equality(left, right)
+        assertSparkDFEquality(left, right)

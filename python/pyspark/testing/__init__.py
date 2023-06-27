@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-__all__ = ["assert_spark_schema_equality", "assert_df_equality"]
+__all__ = ["assertSparkDFEquality", "assertDFEquality"]

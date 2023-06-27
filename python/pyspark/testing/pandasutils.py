@@ -58,7 +58,7 @@ from pandas.core.dtypes.common import is_numeric_dtype
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
 
-def assert_pandas_df_equality(left, right, check_exact=True):
+def assertPandasDFEquality(left, right, check_exact=True):
     import pandas as pd
     from pandas.core.dtypes.common import is_numeric_dtype
     from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
@@ -145,7 +145,7 @@ class PandasOnSparkTestUtils:
         return lambda x: getattr(x, func)()
 
     def assertPandasEqual(self, left, right, check_exact):
-        assert_pandas_df_equality(left, right, check_exact)
+        assertPandasDFEquality(left, right, check_exact)
 
     def assertPandasAlmostEqual(self, left, right):
         """

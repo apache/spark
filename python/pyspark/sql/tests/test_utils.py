@@ -23,7 +23,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assert_df_equality
+from pyspark.testing.utils import assertDFEquality
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.connectutils import ReusedConnectTestCase
 import pyspark.sql.functions as F
@@ -41,7 +41,7 @@ class UtilsTestsMixin:
             data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
         )
 
-        assert_df_equality(df1, df2)
+        assertDFEquality(df1, df2)
 
     def test_assert_pyspark_df_equal(self):
         df1 = self.spark.createDataFrame(
@@ -59,7 +59,7 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assert_df_equality(df1, df2)
+        assertDFEquality(df1, df2)
 
     def remove_non_word_characters(self, col):
         return F.regexp_replace(col, "[^\\w\\s]+", "")
@@ -75,7 +75,7 @@ class UtilsTestsMixin:
         expected_data = [("jo&&se", "jose"), ("**li**", "li"), ("#::luisa", "luisa"), (None, None)]
         expected_df = self.spark.createDataFrame(expected_data, ["name", "clean_name"])
 
-        assert_df_equality(actual_df, expected_df)
+        assertDFEquality(actual_df, expected_df)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
