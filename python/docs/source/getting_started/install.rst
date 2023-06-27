@@ -129,17 +129,17 @@ PySpark is included in the distributions available at the `Apache Spark website 
 You can download a distribution you want from the site. After that, uncompress the tar file into the directory where you want
 to install Spark, for example, as below:
 
-.. code-block:: bash
+.. parsed-literal::
 
-    tar xzvf spark-3.5.0-bin-hadoop3.tgz
+    tar xzvf spark-\ |release|\-bin-hadoop3.tgz
 
 Ensure the ``SPARK_HOME`` environment variable points to the directory where the tar file has been extracted.
 Update ``PYTHONPATH`` environment variable such that it can find the PySpark and Py4J under ``SPARK_HOME/python/lib``.
 One example of doing this is shown below:
 
-.. code-block:: bash
+.. parsed-literal::
 
-    cd spark-3.5.0-bin-hadoop3
+    cd spark-\ |release|\-bin-hadoop3
     export SPARK_HOME=`pwd`
     export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
 
