@@ -121,12 +121,11 @@ class SparkConnectService(debug: Boolean)
       observer: StreamObserver[V],
       userId: String,
       sessionId: String,
-      planHolder: Option[ExecutePlanHolder] = None): PartialFunction[Throwable, Unit] = {
-    val sessionHolder = planHolder
-      .map(_.sessionHolder)
-      .getOrElse(SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId))
-    val session = sessionHolder.session
+      events: Option[RequestEvents] = None): PartialFunction[Throwable, Unit] = {
+    val session =
+      SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId)
+        .session
     val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED)
 
     val partial: PartialFunction[Throwable, (Throwable, Throwable)] = {
@@ -153,7 +152,7 @@ class SparkConnectService(debug: Boolean)
     partial
       .andThen { case (original, wrapped) =>
         logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", original)
-        planHolder.foreach(_.events.postFailed(wrapped.getMessage))
+        events.foreach(_.postFailed(wrapped.getMessage))
         observer.onError(wrapped)
       }
   }
@@ -171,22 +170,21 @@ class SparkConnectService(debug: Boolean)
   override def executePlan(
       request: proto.ExecutePlanRequest,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    var planHolder = Option.empty[ExecutePlanHolder]
+    var events = Option.empty[RequestEvents]
     try {
       val sessionHolder =
         SparkConnectService
           .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
-      planHolder = Some(sessionHolder.createExecutePlanHolder(request))
-      new SparkConnectStreamHandler(responseObserver).handle(planHolder.get)
+      val planHolder = sessionHolder.createExecutePlanHolder(request)
+      events = Some(planHolder.events)
+      new SparkConnectStreamHandler(responseObserver).handle(planHolder)
     } catch {
       handleError(
         "execute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId,
-        planHolder)
-    } finally {
-      planHolder.foreach(_.removeFromSessionHolder())
+        events)
     }
   }
 
@@ -342,7 +340,9 @@ object SparkConnectService {
     userSessionMapping.get(
       (userId, sessionId),
       () => {
-        SessionHolder(userId, sessionId, newIsolatedSession())
+        val holder = SessionHolder(userId, sessionId, newIsolatedSession())
+        holder.initializeSession()
+        holder
       })
   }
 

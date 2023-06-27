@@ -116,7 +116,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       .setPlan(plan)
       .setUserContext(context)
       .build()
-    ExecutePlanHolder("requestId", sessionHolder, request)
+    sessionHolder.createExecutePlanHolder(request)
   }
 }
 

@@ -42,7 +42,6 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     extends Logging {
 
   val events: SessionEvents = SessionEvents(this, new SystemClock())
-  events.postStarted()
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
 
@@ -100,6 +99,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * A [[ClassLoader]] for jar/class file resources specific to this SparkConnect session.
    */
   def classloader: ClassLoader = artifactManager.classloader
+
+  private[connect] def initializeSession(): Unit = {
+    events.postStarted()
+  }
 
   /**
    * Expire this session and trigger state cleanup mechanisms.

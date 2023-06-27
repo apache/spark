@@ -39,7 +39,6 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
-
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
@@ -68,7 +67,6 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryProgress, Trigger}
@@ -2326,17 +2324,16 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     // Eagerly execute commands of the provided SQL string.
     val args = getSqlCommand.getArgsMap
     val posArgs = getSqlCommand.getPosArgsList
+    val tracker = new QueryPlanningTracker(Some(planHolder.events))
     val df = if (!args.isEmpty) {
-      session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap)
+      session.sql(getSqlCommand.getSql, args.asScala.mapValues(transformLiteral).toMap, tracker)
     } else if (!posArgs.isEmpty) {
-      session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray)
+      session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
     } else {
-      session.sql(getSqlCommand.getSql)
+      session.sql(getSqlCommand.getSql, Map.empty[String, Any], tracker)
     }
-    planHolder.events.postParsed(Some(df))
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
-    planHolder.events.postFinished()
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows
@@ -2381,6 +2378,9 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
               .newBuilder()
               .setData(ByteString.copyFrom(bytes))))
     } else {
+      // Trigger assertExecutedPlanPrepared to ensure post ReadyForExecution before finished
+      // executedPlan is currently called by createMetricsResponse below
+      df.queryExecution.assertExecutedPlanPrepared()
       result.setRelation(
         proto.Relation
           .newBuilder()
@@ -2391,106 +2391,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
               .putAllArgs(getSqlCommand.getArgsMap)
               .addAllPosArgs(getSqlCommand.getPosArgsList)))
     }
+    planHolder.events.postFinished()
     // Exactly one SQL Command Result Batch
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setSessionId(sessionHolder.sessionId)
+        .setSessionId(sessionId)
         .setSqlCommandResult(result)
         .build())
 
     // Send Metrics
     responseObserver.onNext(SparkConnectStreamHandler.createMetricsResponse(sessionId, df))
-  }
-
-  /**
-   * Executes a SQL query substituting named parameters by the given arguments, returning the
-   * result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * Copied from @org.apache.spark.sql.SparkSession.sql, but with additional callback triggered
-   * after an eager command has been analyzed, but before it has been executed.
-   *
-   * @param sqlText
-   *   A SQL statement with named parameters to execute.
-   * @param args
-   *   A map of parameter names to Java/Scala objects that can be converted to SQL literal
-   *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
-   *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
-   *   can be also a `Column` of literal expression, in that case it is taken as is.
-   * @param analyzedCallback
-   *   Callback triggered before an eager command has been analyzed, but before it has been
-   *   executed.
-   */
-  def datasetFromSql(
-      sqlText: String,
-      args: Map[String, Any],
-      analyzedCallback: QueryExecution => Unit = _ => ()): DataFrame = {
-    val tracker = new QueryPlanningTracker
-    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-      val parsedPlan = sessionHolder.session.sessionState.sqlParser.parsePlan(sqlText)
-      if (args.nonEmpty) {
-        ParameterizedQuery(parsedPlan, args.mapValues(lit(_).expr).toMap)
-      } else {
-        parsedPlan
-      }
-    }
-    datasetFromRows(plan, analyzedCallback, Some(tracker))
-  }
-
-  /**
-   * Copied from @link org.apache.spark.sql.Dataset.ofRows, but with additional callback triggered
-   * after an eager command has been analyzed, but before it has been executed.
-   *
-   * @param plan
-   *   Plan to execute
-   * @param tracker
-   *   A simple utility for tracking runtime and associated stats in query planning. Specified
-   *   when planning tasks precedes analysis (i.e. parsing)
-   * @param analyzedCallback
-   *   Callback triggered before an eager command has been analyzed, but before it has been
-   *   executed.
-   */
-  def datasetFromRows(
-      plan: LogicalPlan,
-      analyzedCallback: QueryExecution => Unit = _ => (),
-      tracker: Option[QueryPlanningTracker] = None): Dataset[Row] = {
-    val qe =
-      new QueryExecution(sessionHolder.session, plan, tracker.getOrElse(new QueryPlanningTracker))
-    qe.assertAnalyzed()
-    analyzedCallback(qe)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
-  }
-
-  /**
-   * Calls @link org.apache.spark.sql.connect.service.RequestEvents.postParsed after analysis for
-   * commands and after planning for other queries. Will eagerly execute commands, see @link
-   * org.apache.spark.sql.execution.CommandExecutionMode
-   *
-   * @param qe
-   *   Query to execute
-   * @param planHolder
-   *   Holder of the query to execute
-   */
-  def analyzedCallback(planHolder: ExecutePlanHolder): QueryExecution => Unit = {
-    def callback(qe: QueryExecution): Unit = {
-      val isEagerlyExecuted = qe.analyzed.find {
-        case _: Command => true
-        case _ => false
-      }.isDefined
-      val isStreaming = qe.analyzed.isStreaming
-      if (isEagerlyExecuted || isStreaming) {
-        // assertExecutedPlanPrepared will eagerly execute the command,
-        // record the compilationEndTime first.
-        planHolder.events.postParsed(Some(qe))
-      } else {
-        qe.assertExecutedPlanPrepared()
-        // Record the compilationEndTime in case the query was not (eagerly) executed by
-        // assertExecutedPlanPrepared
-        planHolder.events.postParsed(Some(qe))
-      }
-    }
-    callback
   }
 
   private def handleRegisterUserDefinedFunction(
@@ -2505,7 +2416,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
     }
-    planHolder.events.postParsedAndFinished()
+    planHolder.events.postAnalyzedAndFinished()
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -2545,7 +2456,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       .find(_.nonEmpty)
       .flatten
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
-    planHolder.events.postParsedAndFinished()
+    planHolder.events.postAnalyzedAndFinished()
   }
 
   private def handleCreateViewCommand(
@@ -2572,8 +2483,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       replace = createView.getReplace,
       viewType = viewType)
 
-    val df = datasetFromRows(plan, analyzedCallback(planHolder))
-    df.queryExecution.commandExecuted
+    val tracker = new QueryPlanningTracker(Some(planHolder.events))
+    Dataset.ofRows(session, plan, tracker).queryExecution.commandExecuted
     planHolder.events.postFinished()
   }
 
@@ -2592,7 +2503,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = datasetFromRows(plan, analyzedCallback(planHolder))
+    val tracker = new QueryPlanningTracker(Some(planHolder.events))
+    val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.write
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
@@ -2665,7 +2577,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val dataset = datasetFromRows(plan, analyzedCallback(planHolder))
+    val tracker = new QueryPlanningTracker(Some(planHolder.events))
+    val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
 
@@ -2724,7 +2637,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       responseObserver: StreamObserver[ExecutePlanResponse],
       planHolder: ExecutePlanHolder): Unit = {
     val plan = transformRelation(writeOp.getInput)
-    val dataset = datasetFromRows(plan, analyzedCallback(planHolder))
+    val tracker = new QueryPlanningTracker(Some(planHolder.events))
+    val dataset = Dataset.ofRows(session, plan, tracker)
+    // Write operations do not trigger ReadyForExecution. Trigger manually
+    planHolder.events.postReadyForExecution()
 
     val writer = dataset.writeStream
 
@@ -2832,7 +2748,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case None =>
         throw new IllegalArgumentException(s"Streaming query $id is not found")
     }
-    planHolder.events.postParsed()
+    planHolder.events.postAnalyzedAndReadyForExecution()
 
     command.getCommandCase match {
       case StreamingQueryCommand.CommandCase.STATUS =>
@@ -2982,7 +2898,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       command: StreamingQueryManagerCommand,
       responseObserver: StreamObserver[ExecutePlanResponse],
       planHolder: ExecutePlanHolder): Unit = {
-    planHolder.events.postParsed()
+    planHolder.events.postAnalyzedAndReadyForExecution()
 
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
 
@@ -3029,7 +2945,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   def handleGetResourcesCommand(
       responseObserver: StreamObserver[proto.ExecutePlanResponse],
       planHolder: ExecutePlanHolder): Unit = {
-    planHolder.events.postParsedAndFinished()
+    planHolder.events.postAnalyzedAndFinished()
     responseObserver.onNext(
       proto.ExecutePlanResponse
         .newBuilder()

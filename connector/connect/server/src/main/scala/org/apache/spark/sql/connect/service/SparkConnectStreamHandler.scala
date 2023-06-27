@@ -28,8 +28,8 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -44,24 +44,26 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
 
-  def handle(v: ExecutePlanHolder): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
-    val request = v.request
-    val session = v.sessionHolder.session
+  def handle(executeHolder: ExecutePlanHolder): Unit = {
+    val v = executeHolder.request
+    val sessionHolder = executeHolder.sessionHolder
 
-    session.withActive {
+    sessionHolder.withSession { session =>
+      // Add debug information to the query execution so that the jobs are traceable.
       val debugString =
         try {
           Utils.redact(
             session.sessionState.conf.stringRedactionPattern,
-            ProtoUtils.abbreviate(request).toString)
+            ProtoUtils.abbreviate(v).toString)
         } catch {
           case NonFatal(e) =>
             logWarning("Fail to extract debug information", e)
             "UNKNOWN"
         }
 
-      session.sparkContext.addJobTag(v.jobTag)
+      session.sparkContext.addJobTag(executeHolder.jobTag)
       session.sparkContext.setInterruptOnCancel(true)
+      executeHolder.events.postStarted()
 
       try {
         // Add debug information to the query execution so that the jobs are traceable.
@@ -77,16 +79,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       }
 
       try {
-        request.getPlan.getOpTypeCase match {
-          case proto.Plan.OpTypeCase.COMMAND => handleCommand(v)
-          case proto.Plan.OpTypeCase.ROOT => handlePlan(v)
+        v.getPlan.getOpTypeCase match {
+          case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder)
+          case proto.Plan.OpTypeCase.ROOT => handlePlan(executeHolder)
           case _ =>
             throw new UnsupportedOperationException(
-              s"${request.getPlan.getOpTypeCase} not supported.")
+              s"${v.getPlan.getOpTypeCase} not supported.")
         }
       } finally {
-        session.sparkContext.removeJobTag(v.jobTag)
-        session.sparkContext.clearJobGroup()
+        session.sparkContext.removeJobTag(executeHolder.jobTag)
+        sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }
   }
@@ -96,9 +98,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val sessionHolder = planHolder.sessionHolder
     val planner = new SparkConnectPlanner(sessionHolder)
     val request = planHolder.request
-    val dataframe = planner.datasetFromRows(
+    val tracker = new QueryPlanningTracker(Some(planHolder.events))
+    val dataframe = Dataset.ofRows(
+      sessionHolder.session,
       planner.transformRelation(request.getPlan.getRoot),
-      planner.analyzedCallback(planHolder))
+      tracker)
     responseObserver.onNext(
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, planHolder)
