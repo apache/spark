@@ -1708,8 +1708,9 @@ object SubqueryAlias {
     SubqueryAlias(AliasIdentifier(multipartIdentifier.last, multipartIdentifier.init), child)
   }
 
-  private val curId = new java.util.concurrent.atomic.AtomicLong()
-  def generateSubqueryName(): String = s"__auto_generated_subquery_name_${curId.getAndIncrement()}"
+  def generateSubqueryName(suffix: String = ""): String = {
+    s"__auto_generated_subquery_name$suffix"
+  }
 }
 
 /**

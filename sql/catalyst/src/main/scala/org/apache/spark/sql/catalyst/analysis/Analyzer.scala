@@ -2073,12 +2073,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val tvf = resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
               case t: FunctionTableRelationArgumentExpression =>
-                val alias = SubqueryAlias.generateSubqueryName
+                val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
-              val alias = SubqueryAlias.generateSubqueryName
+              val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
               Project(
                 Seq(UnresolvedStar(Some(Seq(alias)))),
                 LateralJoin(
