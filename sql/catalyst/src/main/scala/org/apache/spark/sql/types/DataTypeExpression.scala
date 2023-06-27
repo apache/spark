@@ -65,3 +65,8 @@ object IntegralTypeExpression {
     e.dataType.isInstanceOf[IntegralType]
   }
 }
+
+object AnyTimestampTypeExpression {
+  def unapply(e: Expression): Boolean =
+    e.dataType.isInstanceOf[TimestampType] || e.dataType.isInstanceOf[TimestampNTZType]
+}
