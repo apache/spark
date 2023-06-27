@@ -29,6 +29,7 @@ import org.apache.spark.sql.{DataFrameReader, QueryTest}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -655,5 +656,32 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
     assert(df.logicalPlan.collect {
       case _: DataSourceV2Relation => true
     }.nonEmpty)
+  }
+
+  test("test MSK IAM auth") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
+
+    val e = intercept[StreamingQueryException] {
+      val query = spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", "b-2.msktesting.com:9098")
+        .option("subscribe", "nihal-msk-iam-test")
+        .option("startingOffsets", "earliest")
+        .option("kafka.sasl.mechanism", "AWS_MSK_IAM")
+        .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
+        .option("kafka.security.protocol", "SASL_SSL")
+        .option("kafka.sasl.client.callback.handler.class", "software." +
+          "amazon.msk.auth.iam.IAMClientCallbackHandler")
+        .load()
+        .writeStream
+        .format("console")
+        .start()
+      query.processAllAvailable()
+    }
+    TestUtils.assertExceptionMsg(e, "Failed to create new KafkaAdminClient")
   }
 }
