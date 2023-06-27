@@ -467,11 +467,16 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    aes_decrypt
+    aes_encrypt
     current_catalog
     current_database
     current_schema
     current_user
+    input_file_block_length
+    input_file_block_start
     md5
+    sha
     sha1
     sha2
     crc32
@@ -479,9 +484,16 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    reflect
     hll_sketch_estimate
     hll_union
+    java_method
+    random
+    stack
+    typeof
     user
+    uuid
+    version
 
 Predicate Functions
 -------------------

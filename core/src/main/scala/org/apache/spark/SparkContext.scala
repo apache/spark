@@ -195,6 +195,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
+  logInfo(s"OS info ${System.getProperty("os.name")}, ${System.getProperty("os.version")}, " +
+    s"${System.getProperty("os.arch")}")
+  logInfo(s"Java version ${System.getProperty("java.version")}")
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
