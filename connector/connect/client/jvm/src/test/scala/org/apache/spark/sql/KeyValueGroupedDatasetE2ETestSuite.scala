@@ -79,6 +79,32 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     assert(values == Arrays.asList[Double](0, 1))
   }
 
+  test("groupByKey, keyAs - duplicates") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val result = spark
+      .range(10)
+      .as[Long]
+      .groupByKey(id => K2(id % 2, id % 4))
+      .keyAs[K1]
+      .flatMapGroups((_, it) => Seq(it.toSeq.size))
+      .collect()
+    assert(result.sorted === Seq(2, 2, 3, 3))
+  }
+
+  test("groupByKey, keyAs, keys - duplicates") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val result = spark
+      .range(10)
+      .as[Long]
+      .groupByKey(id => K2(id % 2, id % 4))
+      .keyAs[K1]
+      .keys
+      .collect()
+    assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
+  }
+
   test("keyAs - flatGroupMap") {
     val values = spark
       .range(10)
@@ -555,3 +581,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     checkDataset(values, ClickState("a", 5), ClickState("b", 3), ClickState("c", 1))
   }
 }
+
+case class K1(a: Long)
+case class K2(a: Long, b: Long)
