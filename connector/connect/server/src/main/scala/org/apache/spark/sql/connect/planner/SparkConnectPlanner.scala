@@ -46,6 +46,7 @@ import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
@@ -861,15 +862,17 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         encoder: AgnosticEncoder[_],
         errorType: String,
         inputAttrs: Option[Seq[Attribute]] = None): ExpressionEncoder[_] = {
-      // First try to find the encoder with reflection, if failed
-      // fall back to a row encoder with input schema when the schema is provided.
-      Try(ExpressionEncoder(encoder)).getOrElse(
+      // TODO: handle nested unbound row encoders
+      if (encoder == UnboundRowEncoder) {
         inputAttrs
           .map(attrs =>
             ExpressionEncoder(RowEncoder.encoderFor(StructType(attrs.map(a =>
               StructField(a.name, a.dataType, a.nullable))))))
           .getOrElse(
-            throw InvalidPlanInput(s"Row is not a supported $errorType type for this UDF.")))
+            throw InvalidPlanInput(s"Row is not a supported $errorType type for this UDF."))
+      } else {
+        ExpressionEncoder(encoder)
+      }
     }
   }
 
