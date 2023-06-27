@@ -63,8 +63,9 @@ class TableLocationSuite extends QueryTest with SharedSparkSession {
         //   directory(AS-IS) or with warehouse path?
         sql("INSERT OVERWRITE DIRECTORY 'ct1' USING parquet " + "SELECT 1 AS ID1, 2 AS ID2")
 
-        // table 'ct2' should not use 'current working directory'/ct1 to infer schema and
-        // `warehouse path`/xx..x/ct1 to read data, which shall be consistent to each other.
+        // When schema is absent, ct2's infered from data files. Here table 'ct2' should not
+        // use 'current working directory'/ct1 to infer and `warehouse path`/xx..x/ct1 to read
+        // data, which shall be consistent to each other.
         sql("CREATE TABLE ct2 USING parquet LOCATION 'ct1'")
         checkAnswer(spark.table("ct1"), spark.table("ct2"))
       } finally {
