@@ -94,7 +94,9 @@ public class ParquetVectorUpdaterFactory {
           }
         } else if (sparkType instanceof YearMonthIntervalType) {
           return new IntegerUpdater();
-        } else if (sparkType instanceof DayTimeIntervalType) {
+        } else if (sparkType instanceof DayTimeIntervalType &&
+                ((DayTimeIntervalType) sparkType).startField() == DayTimeIntervalType.HOUR() &&
+                ((DayTimeIntervalType) sparkType).endField() == DayTimeIntervalType.SECOND() ) {
           return new IntAsMicrosUpdater();
         }
         break;

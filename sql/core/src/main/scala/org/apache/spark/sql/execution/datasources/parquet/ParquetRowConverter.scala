@@ -390,7 +390,8 @@ private[parquet] class ParquetRowConverter(
             updater.setLong(timestampRebaseFunc(value))
           }
         }
-      case t: DayTimeIntervalType =>
+      case t: DayTimeIntervalType
+        if t.startField == DayTimeIntervalType.HOUR && t.endField == DayTimeIntervalType.SECOND =>
         parquetType.asPrimitiveType().getPrimitiveTypeName match {
           case INT32 =>
             new ParquetPrimitiveConverter (updater) {
