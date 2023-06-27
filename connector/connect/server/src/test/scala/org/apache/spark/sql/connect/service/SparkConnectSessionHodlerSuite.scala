@@ -43,7 +43,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assert(expectedDf2 == df2)
   }
 
-  test("DataFrame cache: should throw when dataframe is not found") {
+  test("DataFrame cache: Should throw when dataframe is not found") {
     val sessionHolder = SessionHolder.forTesting(spark)
     import sessionHolder.session.implicits._
 
