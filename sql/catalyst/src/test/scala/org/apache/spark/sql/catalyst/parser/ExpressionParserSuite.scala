@@ -335,20 +335,16 @@ class ExpressionParserSuite extends AnalysisTest {
       $"encode".function(NamedArgumentExpression("value", Literal("abc")),
       NamedArgumentExpression("charset", Literal("utf-8"))))
     assertEqual("encode('abc', charset => 'utf-8')",
-                $"encode".function(Literal("abc"),
-                  NamedArgumentExpression("charset", Literal("utf-8"))))
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
     assertEqual("encode(charset => 'utf-8', 'abc')",
-                $"encode".function(
-                  NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
+      $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
     assertEqual("encode('abc', charset => 'utf' || '-8')",
-                $"encode".function(Literal("abc"),
-                  NamedArgumentExpression("charset",
-                    Concat(Literal("utf") :: Literal("-8") :: Nil))))
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
+        Concat(Literal("utf") :: Literal("-8") :: Nil))))
     val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
     assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
-                $"encode".function(
-                  NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
-                  NamedArgumentExpression("charset", Literal("utf-8"))))
+      $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+        NamedArgumentExpression("charset", Literal("utf-8"))))
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
