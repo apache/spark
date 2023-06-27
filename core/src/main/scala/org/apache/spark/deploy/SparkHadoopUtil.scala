@@ -340,6 +340,26 @@ private[spark] class SparkHadoopUtil extends Logging {
     ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
   }
 
+
+  def getIssueDate(kind: String, identifier: AbstractDelegationTokenIdentifier): Long = {
+    val now = System.currentTimeMillis()
+    val issueDate = identifier.getIssueDate
+    if (issueDate > now) {
+      logWarning(s"Token $kind has set up issue date later than current time. (provided: " +
+        s"$issueDate / current timestamp: $now) Please make sure clocks are in sync between " +
+        "machines. If the issue is not a clock mismatch, consult token implementor to check " +
+        "whether issue date is valid.")
+      issueDate
+    } else if (issueDate > 0L) {
+      issueDate
+    } else {
+      logWarning(s"Token $kind has not set up issue date properly. (provided: $issueDate) " +
+        s"Using current timestamp ($now) as issue date instead. Consult token implementor to fix " +
+        "the behavior.")
+      now
+    }
+  }
+
 }
 
 private[spark] object SparkHadoopUtil extends Logging {

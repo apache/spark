@@ -23,9 +23,9 @@ import java.security.PrivilegedExceptionAction
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.thrift.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
@@ -40,6 +40,8 @@ import org.apache.spark.util.Utils
 
 private[spark] class HiveDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
+
+  private var tokenRenewalInterval: Option[Long] = null
 
   override def serviceName: String = "hive"
 
@@ -87,6 +89,7 @@ private[spark] class HiveDelegationTokenProvider
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
+      var nextRenewalDate: Option[Long] = None
       val conf = hiveConf(hadoopConf)
 
       val principalKey = "hive.metastore.kerberos.principal"
@@ -107,9 +110,22 @@ private[spark] class HiveDelegationTokenProvider
         hive2Token.decodeFromUrlString(tokenStr)
         logDebug(s"Get Token from hive metastore: ${hive2Token.toString}")
         creds.addToken(tokenAlias, hive2Token)
+
+        val tokenIdentifier = hive2Token.decodeIdentifier()
+
+        if (tokenRenewalInterval == null) {
+          tokenRenewalInterval = getTokenRenewalInterval(tokenIdentifier, hive, tokenStr)
+        }
+
+        // Get the time of next renewal.
+        nextRenewalDate = tokenRenewalInterval.flatMap { interval =>
+             getTokenRenewalDate(tokenIdentifier, interval)
+        }
+
       }
 
-      None
+      nextRenewalDate
+
     } catch {
       case NonFatal(e) =>
         logWarning(Utils.createFailedToGetTokenMessage(serviceName, e))
@@ -122,6 +138,34 @@ private[spark] class HiveDelegationTokenProvider
         Hive.closeCurrent()
       }
     }
+  }
+
+  private def getTokenRenewalInterval(
+         tokenIdentifier: DelegationTokenIdentifier,
+         hive: Hive,
+         tokenStr: String) = {
+    var interval = 0L
+    logDebug(s"Got Delegation token is $tokenIdentifier")
+    val newExpiration = hive.getMSC.renewDelegationToken(tokenStr)
+    val tokenKind = tokenIdentifier.getKind.toString
+    interval = newExpiration - SparkHadoopUtil.get.getIssueDate(tokenKind, tokenIdentifier)
+    logInfo(s"Renewal interval is $interval for token $tokenKind")
+    Option(interval)
+  }
+
+  private def getTokenRenewalDate(
+          tokenIdentifier: DelegationTokenIdentifier,
+          renewalInterval: Long): Option[Long] = {
+    if (renewalInterval < 0) {
+      logWarning("Negative renewal interval so no renewal date is calculated")
+      return Option.empty
+    }
+
+    val tokenKind = tokenIdentifier.getKind.toString
+    val date = SparkHadoopUtil.get.getIssueDate(tokenKind, tokenIdentifier) + renewalInterval
+    logDebug(s"Renewal date is $date for token $tokenKind")
+    Option(date)
+
   }
 
   /**

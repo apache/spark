@@ -28,6 +28,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.security.HadoopDelegationTokenProvider
@@ -69,7 +70,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
               .decodeIdentifier()
               .asInstanceOf[AbstractDelegationTokenIdentifier]
             val tokenKind = token.getKind.toString
-            getIssueDate(tokenKind, identifier) + interval
+            SparkHadoopUtil.get.getIssueDate(tokenKind, identifier) + interval
           }
         if (nextRenewalDates.isEmpty) None else Some(nextRenewalDates.min)
       }
@@ -144,31 +145,12 @@ private[deploy] class HadoopFSDelegationTokenProvider
         val newExpiration = token.renew(hadoopConf)
         val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
         val tokenKind = token.getKind.toString
-        val interval = newExpiration - getIssueDate(tokenKind, identifier)
+        val interval = newExpiration - SparkHadoopUtil.get.getIssueDate(tokenKind, identifier)
         logInfo(s"Renewal interval is $interval for token $tokenKind")
         interval
       }.toOption
     }
     if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
-  }
-
-  private def getIssueDate(kind: String, identifier: AbstractDelegationTokenIdentifier): Long = {
-    val now = System.currentTimeMillis()
-    val issueDate = identifier.getIssueDate
-    if (issueDate > now) {
-      logWarning(s"Token $kind has set up issue date later than current time. (provided: " +
-        s"$issueDate / current timestamp: $now) Please make sure clocks are in sync between " +
-        "machines. If the issue is not a clock mismatch, consult token implementor to check " +
-        "whether issue date is valid.")
-      issueDate
-    } else if (issueDate > 0L) {
-      issueDate
-    } else {
-      logWarning(s"Token $kind has not set up issue date properly. (provided: $issueDate) " +
-        s"Using current timestamp ($now) as issue date instead. Consult token implementor to fix " +
-        "the behavior.")
-      now
-    }
   }
 }
 
