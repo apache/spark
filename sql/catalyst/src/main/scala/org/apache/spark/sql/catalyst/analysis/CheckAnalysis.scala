@@ -1080,7 +1080,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * duplicates metric definition.
    */
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsUpWithNewOutput {
+    plan.transformUpWithNewOutput {
       case p: Project if p.projectList.size == p.child.output.size =>
         val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
           case (left: Alias, right: Attribute) =>
