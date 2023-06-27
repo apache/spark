@@ -23,10 +23,11 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
 
-private[spark] object PythonUtils {
+private[spark] object PythonUtils extends Logging {
   val PY4J_ZIP_NAME = "py4j-0.10.9.7-src.zip"
 
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
@@ -92,5 +93,56 @@ private[spark] object PythonUtils {
 
   def getSparkBufferSize(sc: JavaSparkContext): Int = {
     sc.conf.get(org.apache.spark.internal.config.BUFFER_SIZE)
+  }
+
+  def logPythonInfo(pythonExec: String): Unit = {
+    if (SparkEnv.get.conf.get(org.apache.spark.internal.config.Python.PYTHON_LOG_INFO)) {
+      import scala.sys.process._
+      def runCommand(process: ProcessBuilder): Option[String] = {
+        try {
+          val stdout = new StringBuilder
+          val processLogger = ProcessLogger(line => stdout.append(line).append(" "), _ => ())
+          if (process.run(processLogger).exitValue() == 0) {
+            Some(stdout.toString.trim)
+          } else {
+            None
+          }
+        } catch {
+          case _: Throwable => None
+        }
+      }
+
+      val pythonVersionCMD = Seq(pythonExec, "-VV")
+      val PYTHONPATH = "PYTHONPATH"
+      val pythonPath = PythonUtils.mergePythonPaths(
+        PythonUtils.sparkPythonPath,
+        sys.env.getOrElse(PYTHONPATH, ""))
+      val environment = Map(PYTHONPATH -> pythonPath)
+      logInfo(s"Python path $pythonPath")
+
+      val processPythonVer = Process(pythonVersionCMD, None, environment.toSeq: _*)
+      val output = runCommand(processPythonVer)
+      logInfo(s"Python version: ${output.getOrElse("Unable to determine")}")
+
+      val pythonCode =
+        """
+          |import pkg_resources
+          |
+          |installed_packages = pkg_resources.working_set
+          |installed_packages_list = sorted(["%s:%s" % (i.key, i.version)
+          |                                 for i in installed_packages])
+          |
+          |for package in installed_packages_list:
+          |    print(package)
+          |""".stripMargin
+
+      val listPackagesCMD = Process(Seq(pythonExec, "-c", pythonCode))
+      val listOfPackages = runCommand(listPackagesCMD)
+
+      def formatOutput(output: String): String = {
+        output.replaceAll("\\s+", ", ")
+      }
+      listOfPackages.foreach(x => logInfo(s"List of Python packages :- ${formatOutput(x)}"))
+    }
   }
 }
