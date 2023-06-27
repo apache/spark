@@ -1418,6 +1418,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> def func(person):
         ...     print(person.name)
+        ...
         >>> df.foreach(func)
         """
         self.rdd.foreach(f)
@@ -1442,6 +1443,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> def func(itr):
         ...     for person in itr:
         ...         print(person.name)
+        ...
         >>> df.foreachPartition(func)
         """
         self.rdd.foreachPartition(f)  # type: ignore[arg-type]
@@ -5334,8 +5336,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
         >>> def cast_all_to_int(input_df):
         ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        ...
         >>> def sort_columns_asc(input_df):
         ...     return input_df.select(*sorted(input_df.columns))
+        ...
         >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
         +-----+---+
         |float|int|

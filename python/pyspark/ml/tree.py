@@ -46,19 +46,19 @@ class _DecisionTreeModel(JavaPredictionModel[T]):
     .. versionadded:: 1.5.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def numNodes(self) -> int:
         """Return number of nodes of the decision tree."""
         return self._call_java("numNodes")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def depth(self) -> int:
         """Return depth of the decision tree."""
         return self._call_java("depth")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def toDebugString(self) -> str:
         """Full description of model."""
@@ -218,31 +218,31 @@ class _TreeEnsembleModel(JavaPredictionModel[T]):
     Represents a tree ensemble model.
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def trees(self) -> Sequence["_DecisionTreeModel"]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [_DecisionTreeModel(m) for m in list(self._call_java("trees"))]
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def getNumTrees(self) -> int:
         """Number of trees in ensemble."""
         return self._call_java("getNumTrees")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def treeWeights(self) -> List[float]:
         """Return the weights for each tree"""
         return list(self._call_java("javaTreeWeights"))
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def totalNumNodes(self) -> int:
         """Total number of nodes, summed over all trees in the ensemble."""
         return self._call_java("totalNumNodes")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def toDebugString(self) -> str:
         """Full description of model."""

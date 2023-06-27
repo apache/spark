@@ -20,7 +20,7 @@ openpyxl
 coverage
 
 # Linter
-mypy==0.920
+mypy==0.982
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.

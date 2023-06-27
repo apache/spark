@@ -728,8 +728,8 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM v")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1333",
-        parameters = Map("viewText" -> "DROP VIEW v", "tableName" -> "spark_catalog.default.v")
+        errorClass = "INVALID_VIEW_TEXT",
+        parameters = Map("viewText" -> "DROP VIEW v", "viewName" -> "`spark_catalog`.`default`.`v`")
       )
     }
   }

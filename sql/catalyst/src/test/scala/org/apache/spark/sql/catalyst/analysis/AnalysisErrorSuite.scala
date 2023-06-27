@@ -95,10 +95,7 @@ case class TestFunction(
     copy(children = newChildren)
 }
 
-case class UnresolvedTestPlan() extends LeafNode {
-  override lazy val resolved = false
-  override def output: Seq[Attribute] = Nil
-}
+case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
 class AnalysisErrorSuite extends AnalysisTest {
   import TestRelations._
@@ -1126,9 +1123,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       "Scalar subquery must return only one column, but got 2" :: Nil)
 
     // t2.* cannot be resolved and the error should be the initial analysis exception.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
-      "cannot resolve 't2.*' given input columns ''" :: Nil
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
     )
   }
 

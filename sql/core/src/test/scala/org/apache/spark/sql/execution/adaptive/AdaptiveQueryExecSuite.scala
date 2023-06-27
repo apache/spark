@@ -46,8 +46,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class AdaptiveQueryExecSuite
   extends QueryTest
   with SharedSparkSession

@@ -20,15 +20,23 @@
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
+var heapHistogramEnabled = false;
 
 /* eslint-disable no-unused-vars */
 function setThreadDumpEnabled(val) {
   threadDumpEnabled = val;
 }
+function setHeapHistogramEnabled(val) {
+  heapHistogramEnabled = val;
+}
 /* eslint-enable no-unused-vars */
 
 function getThreadDumpEnabled() {
   return threadDumpEnabled;
+}
+
+function getHeapHistogramEnabled() {
+  return heapHistogramEnabled;
 }
 
 function formatLossReason(removeReason) {
@@ -552,6 +560,12 @@ $(document).ready(function () {
               }
             },
             {
+              name: 'heapHistogramCol',
+              data: 'id', render: function (data, type) {
+                return type === 'display' ? ("<a href='heapHistogram/?executorId=" + data + "'>Heap Histogram</a>") : data;
+              }
+            },
+            {
               data: 'removeReason',
               render: formatLossReason
             }
@@ -566,7 +580,7 @@ $(document).ready(function () {
             {"visible": false, "targets": 10},
             {"visible": false, "targets": 13},
             {"visible": false, "targets": 14},
-            {"visible": false, "targets": 25}
+            {"visible": false, "targets": 26}
           ],
           "deferRender": true
         };
@@ -574,6 +588,7 @@ $(document).ready(function () {
         execDataTable = $(selector).DataTable(conf);
         execDataTable.column('executorLogsCol:name').visible(logsExist(response));
         execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
+        execDataTable.column('heapHistogramCol:name').visible(getHeapHistogramEnabled());
         $('#active-executors [data-toggle="tooltip"]').tooltip();
     
         // This section should be visible once API gives the response.
@@ -721,7 +736,7 @@ $(document).ready(function () {
           "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
           "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
           "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
-          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
+          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='26'> Exec Loss Reason</div>" +
           "</div>");
 
         reselectCheckboxesBasedOnTaskTableState();

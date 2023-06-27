@@ -36,10 +36,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
+@ExtendedSQLTest
 class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -73,14 +75,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "udaf", "udf" // create function statement in sql
     )
 
-    val excludedSqlFunctions = Set(
-      "random",
-      "array_agg", "char_length", "character_length",
-      "lcase", "position", "printf", "substr", "ucase", "day", "cardinality", "sha",
-      "getbit",
-      // aliases for existing functions
-      "reflect", "java_method" // Only needed in SQL
-    )
+    val excludedSqlFunctions = Set("array_agg", "cardinality")
 
     val expectedOnlyDataFrameFunctions = Set(
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
@@ -273,6 +268,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       testData2.select(bitwiseNOT($"a"), bitwise_not($"a")),
       testData2.collect().toSeq.map(r => Row(~r.getInt(0), ~r.getInt(0))))
+  }
+
+  test("bit_count") {
+    checkAnswer(testData2.select(bit_count($"a")), testData2.selectExpr("bit_count(a)"))
+  }
+
+  test("bit_get") {
+    checkAnswer(
+      testData2.select(bit_get($"a", lit(0)), bit_get($"a", lit(1)), bit_get($"a", lit(2))),
+      testData2.selectExpr("bit_get(a, 0)", "bit_get(a, 1)", "bit_get(a, 2)"))
+  }
+
+  test("getbit") {
+    checkAnswer(
+      testData2.select(getbit($"a", lit(0)), getbit($"a", lit(1)), getbit($"a", lit(2))),
+      testData2.selectExpr("getbit(a, 0)", "getbit(a, 1)", "getbit(a, 2)"))
   }
 
   test("bin") {

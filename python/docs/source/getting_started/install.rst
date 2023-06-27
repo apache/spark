@@ -157,7 +157,7 @@ Package                    Minimum supported version Note
 ========================== ========================= ======================================================================================
 `py4j`                     0.10.9.7                  Required
 `pandas`                   1.0.5                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  1.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`                  4.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    1.15                      Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
 `grpc`                     1.48.1                    Required for Spark Connect
 `grpcio-status`            1.48.1                    Required for Spark Connect
@@ -168,10 +168,3 @@ Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
 to |downloading|_.
 
-Note for AArch64 (ARM64) users: PyArrow is required by PySpark SQL, but PyArrow support for AArch64
-is introduced in PyArrow 4.0.0. If PySpark installation fails on AArch64 due to PyArrow
-installation errors, you can install PyArrow >= 4.0.0 as below:
-
-.. code-block:: bash
-
-    pip install "pyarrow>=4.0.0" --prefer-binary

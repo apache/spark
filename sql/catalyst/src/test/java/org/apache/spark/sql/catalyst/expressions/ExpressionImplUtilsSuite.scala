@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -285,6 +287,12 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
     }
   }
 
+  // JDK-8267125 changes tag error message at Java 18
+  val msgTagMismatch = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+    "Tag mismatch!"
+  } else {
+    "Tag mismatch"
+  }
   val corruptedCiphertexts = Seq(
     // This is truncated
     TestCase(
@@ -310,7 +318,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> "Tag mismatch!"
+        "detailMessage" -> msgTagMismatch
       )
     ),
     // Valid ciphertext, wrong AAD
@@ -324,7 +332,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       errorParamsMap = Map(
         "parameter" -> "`expr`, `key`",
         "functionName" -> "`aes_encrypt`/`aes_decrypt`",
-        "detailMessage" -> "Tag mismatch!"
+        "detailMessage" -> msgTagMismatch
       )
     )
   )

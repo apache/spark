@@ -39,7 +39,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils  with PrivateMethodTester  {
+    with SQLTestUtils with PrivateMethodTester {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -364,11 +364,10 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         },
         errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
         parameters = Map(
-          "staticPartCols" -> "'b', 'c'",
-          "tableColumns" -> "'a', 'd', 'b', 'c'",
-          "reason" -> "too many data columns",
-          "dataColumns" -> "'1', '2', '3'",
-          "tableName" -> s"`spark_catalog`.`default`.`$tableName`")
+          "staticPartCols" -> "`b`, `c`",
+          "tableColumns" -> "`a`, `d`, `b`, `c`",
+          "dataColumns" -> "`1`, `2`, `3`",
+          "tableName" -> s"`spark_catalog`.`default`.`${tableName}`")
       )
   }
 
