@@ -1296,10 +1296,10 @@ object functions {
   def array_agg(e: Column): Column = Column.fn("array_agg", e)
 
   /**
-   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result
-   * is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
-   * Count-min sketch is a probabilistic data structure used for cardinality estimation using
-   * sub-linear space.
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
+   * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
+   * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
+   * space.
    *
    * @group agg_funcs
    * @since 3.5.0
