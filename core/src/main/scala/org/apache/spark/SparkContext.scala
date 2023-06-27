@@ -877,7 +877,11 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkContext.throwIfInvalidTag(tag)
     val existingTags = getJobTags()
     val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
-    setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+    if (newTags.isEmpty) {
+      clearJobTags()
+    } else {
+      setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+    }
   }
 
   /**
@@ -889,6 +893,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
+      .filter(!_.isEmpty) // empty string tag should not happen, but be defensive
   }
 
   /**
