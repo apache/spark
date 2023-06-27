@@ -2749,10 +2749,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
-  def unsupportedDropNamespaceRestrictError(
+  def unsupportedDropNamespaceError(
       namespace: String): SparkSQLFeatureNotSupportedException = {
     new SparkSQLFeatureNotSupportedException(
-      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE_RESTRICT",
+      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE",
       messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 

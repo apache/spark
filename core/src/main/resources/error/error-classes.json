@@ -2393,7 +2393,7 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
-      "DROP_NAMESPACE_RESTRICT" : {
+      "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
         ]

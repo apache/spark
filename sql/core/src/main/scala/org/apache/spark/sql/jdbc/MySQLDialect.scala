@@ -296,7 +296,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     if (cascade) {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     } else {
-      throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError(schema)
+      throw QueryExecutionErrors.unsupportedDropNamespaceError(schema)
     }
   }
 

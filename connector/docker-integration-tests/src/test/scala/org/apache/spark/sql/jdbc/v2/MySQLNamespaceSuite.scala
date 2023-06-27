@@ -101,7 +101,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
       exception = intercept[SparkSQLFeatureNotSupportedException] {
         catalog.dropNamespace(Array("foo"), cascade = false)
       },
-      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE_RESTRICT",
+      errorClass = "UNSUPPORTED_FEATURE.DROP_NAMESPACE",
       parameters = Map("namespace" -> "`foo`")
     )
     catalog.dropNamespace(Array("foo"), cascade = true)
