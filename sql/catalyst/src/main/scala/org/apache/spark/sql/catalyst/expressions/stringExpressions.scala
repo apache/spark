@@ -2166,13 +2166,16 @@ case class Levenshtein(
         toSQLId(prettyName), Seq(2, 3), children.length)
     }
     threshold match {
-      case Some(e) if e.foldable && e.eval().asInstanceOf[Int] < 0 =>
-        return DataTypeMismatch(
-          errorSubClass = "VALUE_OUT_OF_RANGE",
-          messageParameters = Map(
-            "exprName" -> toSQLId("threshold"),
-            "valueRange" -> s"[0, ${Int.MaxValue}]",
-            "currentValue" -> toSQLValue(e.eval().asInstanceOf[Int], IntegerType)))
+      case Some(e) if e.foldable =>
+        val v = e.eval().asInstanceOf[Int]
+        if (v < 0) {
+           return DataTypeMismatch(
+             errorSubClass = "VALUE_OUT_OF_RANGE",
+             messageParameters = Map(
+               "exprName" -> toSQLId("threshold"),
+               "valueRange" -> s"[0, ${Int.MaxValue}]",
+               "currentValue" -> toSQLValue(v, IntegerType)))
+        }
       case _ =>
     }
     super.checkInputDataTypes()
