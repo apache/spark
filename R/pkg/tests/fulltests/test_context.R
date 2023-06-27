@@ -95,7 +95,7 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
-  setInterruptOnCancel(true)
+  setInterruptOnCancel(TRUE)
 
   sparkR.session.stop()
   expect_true(TRUE)
