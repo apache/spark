@@ -228,7 +228,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       // TODO(SPARK-44068): Support positional parameters in Scala connect client
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sql"),
-
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
       // SparkSession#implicits
@@ -329,15 +328,17 @@ object CheckConnectJvmClientCompatibility {
       // New public APIs added in the client
       // ScalarUserDefinedFunction
       ProblemFilters
-        .exclude[MissingClassProblem]("org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
+        .exclude[MissingClassProblem](
+          "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"
-      ),
+        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
 
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.Dataset.plan"), // developer API
-      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.Dataset.encoder"),
+        "org.apache.spark.sql.Dataset.plan"
+      ), // developer API
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.collectResult"),
 
