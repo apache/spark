@@ -2736,6 +2736,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "format" -> format))
   }
 
+  def invalidThresholdError(threshold: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "THRESHOLD_VALUE_OUT_OF_RANGE",
+      messageParameters = Map("currentValue" -> toSQLValue(threshold, IntegerType)))
+  }
+
   def unsupportedMultipleBucketTransformsError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE.MULTIPLE_BUCKET_TRANSFORMS",

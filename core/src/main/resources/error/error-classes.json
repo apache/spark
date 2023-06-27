@@ -2101,6 +2101,11 @@
     ],
     "sqlState" : "428EK"
   },
+  "THRESHOLD_VALUE_OUT_OF_RANGE" : {
+    "message" : [
+      "The threshold value must be between [0, 2147483647] (current value = <currentValue>)."
+    ]
+  },
   "TOO_MANY_ARRAY_ELEMENTS" : {
     "message" : [
       "Cannot initialize array with <numElements> elements of size <size>."

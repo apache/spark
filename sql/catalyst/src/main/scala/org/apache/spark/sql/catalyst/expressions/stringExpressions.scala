@@ -2165,25 +2165,15 @@ case class Levenshtein(
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq(2, 3), children.length)
     }
-    if (children.length == 3) {
-      threshold match {
-        case Some(e) if !e.foldable =>
-          return DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> "threshold",
-              "inputType" -> toSQLType(IntegerType),
-              "inputExpr" -> toSQLExpr(e)))
-        case Some(e) if e.eval().asInstanceOf[Int] < 0 =>
-          return DataTypeMismatch(
-            errorSubClass = "VALUE_OUT_OF_RANGE",
-            messageParameters = Map(
-              "exprName" -> toSQLId("threshold"),
-              "valueRange" -> s"[0, ${Int.MaxValue}]",
-              "currentValue" -> toSQLValue(e.eval().asInstanceOf[Int], IntegerType))
-          )
-        case _ =>
-      }
+    threshold match {
+      case Some(e) if e.foldable && e.eval().asInstanceOf[Int] < 0 =>
+        return DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("threshold"),
+            "valueRange" -> s"[0, ${Int.MaxValue}]",
+            "currentValue" -> toSQLValue(e.eval().asInstanceOf[Int], IntegerType)))
+      case _ =>
     }
     super.checkInputDataTypes()
   }
@@ -2221,6 +2211,10 @@ case class Levenshtein(
     val thresholdEval = threshold.map(_.eval(input))
     thresholdEval match {
       case Some(v) =>
+        val vInt = v.asInstanceOf[Int]
+        if (vInt < 0) {
+          throw QueryExecutionErrors.invalidThresholdError(vInt)
+        }
         leftEval.asInstanceOf[UTF8String].levenshteinDistance(rightEval.asInstanceOf[UTF8String],
           v.asInstanceOf[Int])
       case _ =>
@@ -2242,6 +2236,12 @@ case class Levenshtein(
     val leftGen = children.head.genCode(ctx)
     val rightGen = children(1).genCode(ctx)
     val thresholdGen = thresholdExpr.genCode(ctx)
+    val thresholdCheckCode =
+      s"""
+        |if (${thresholdGen.value} < 0) {
+        |  throw QueryExecutionErrors.invalidThresholdError(${thresholdGen.value});
+        |}
+       """.stripMargin
     val resultCode = s"${ev.value} = ${leftGen.value}.levenshteinDistance(" +
       s"${rightGen.value}, ${thresholdGen.value});"
     if (nullable) {
@@ -2249,6 +2249,7 @@ case class Levenshtein(
         rightGen.code + ctx.nullSafeExec(children(1).nullable, rightGen.isNull) {
           thresholdGen.code + ctx.nullSafeExec(thresholdExpr.nullable, thresholdGen.isNull) {
             s"""
+              $thresholdCheckCode
               ${ev.isNull} = false;
               $resultCode
              """
@@ -2263,6 +2264,7 @@ case class Levenshtein(
       val eval = leftGen.code + rightGen.code + thresholdGen.code
       ev.copy(code = code"""
         $eval
+        $thresholdCheckCode
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }

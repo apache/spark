@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -126,7 +126,8 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("string Levenshtein distance") {
-    val df = Seq(("kitten", "sitting", 1), ("frog", "fog", 2)).toDF("l", "r", "d")
+    val df = Seq(("kitten", "sitting", -1), ("frog", "fog", 2)).toDF("l", "r", "d")
+
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
     checkAnswer(df.select(levenshtein($"l", lit(null))), Seq(Row(null), Row(null)))
@@ -146,17 +147,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(levenshtein($"l", $"r", lit(null))), Seq(Row(null), Row(null)))
 
     checkError(
-      exception = intercept[AnalysisException] {
-        df.selectExpr("levenshtein(l, r, d)").collect()
-      },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-      parameters = Map(
-        "inputName" -> "threshold",
-        "inputType" -> "\"INT\"",
-        "inputExpr" -> "\"d\"",
-        "sqlExpr" -> "\"levenshtein(l, r, d)\""),
-      context = ExpectedContext(fragment = "levenshtein(l, r, d)", start = 0, stop = 19)
+      exception = intercept[SparkException] {
+         df.selectExpr("levenshtein(l, r, d)").collect()
+      }.getCause.asInstanceOf[SparkIllegalArgumentException],
+      errorClass = "THRESHOLD_VALUE_OUT_OF_RANGE",
+      parameters = Map("currentValue" -> "-1")
     )
+
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("levenshtein(l, r, -1)").collect()
