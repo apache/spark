@@ -404,6 +404,22 @@ private[spark] object SerDe {
             writeKeyValue(dos, k1.asInstanceOf[Object], v1.asInstanceOf[Object], jvmObjectTracker)
           }
 
+        // Handle Set - write as list
+        case v: java.util.Set[_] =>
+          writeType(dos, "list")
+          writeInt(dos, v.size)
+          val iter = v.iterator
+          while (iter.hasNext) {
+            val elem = iter.next()
+            writeObject(dos, elem.asInstanceOf[Object], jvmObjectTracker)
+          }
+        case v: scala.collection.Set[_] =>
+          writeType(dos, "list")
+          writeInt(dos, v.size)
+          v.foreach { elem =>
+            writeObject(dos, elem.asInstanceOf[Object], jvmObjectTracker)
+          }
+
         case _ =>
           val sqlWriteSucceeded = sqlWriteObject != null && sqlWriteObject(dos, value)
           if (!sqlWriteSucceeded) {
