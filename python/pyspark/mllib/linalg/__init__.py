@@ -1617,7 +1617,7 @@ class QRDecomposition(Generic[QT, RT]):
         self._Q = Q
         self._R = R
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def Q(self) -> QT:
         """
@@ -1626,7 +1626,7 @@ class QRDecomposition(Generic[QT, RT]):
         """
         return self._Q
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def R(self) -> RT:
         """

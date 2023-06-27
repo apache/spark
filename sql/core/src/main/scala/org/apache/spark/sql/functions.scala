@@ -1873,6 +1873,70 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_add", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = withAggregateFunction {
+    Average(e.expr, EvalMode.TRY)
+  }
+
+  /**
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(dividend: Column, divisor: Column): Column = withExpr {
+    UnresolvedFunction("try_divide", Seq(dividend.expr, divisor.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_multiply", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = withExpr {
+    UnresolvedFunction("try_subtract", Seq(left.expr, right.expr), isDistinct = false)
+  }
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = withAggregateFunction {
+    Sum(e.expr, EvalMode.TRY)
+  }
+
+  /**
    * Creates a new struct column.
    * If the input column is a column in a `DataFrame`, or a derived column expression
    * that is named (i.e. aliased), its name would be retained as the StructField's name,
@@ -3262,6 +3326,298 @@ object functions {
    */
   def user(): Column = withExpr { CurrentUser() }
 
+  /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def uuid(): Column = withExpr { new Uuid() }
+
+  /**
+   * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
+   * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
+   * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization
+   * vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12
+   * bytes for GCM. If not provided, a random vector will be generated and prepended to the
+   * output. Optional additional authenticated data (AAD) is only supported for GCM. If provided
+   * for encryption, the identical AAD value must be provided for decryption. The default mode is
+   * GCM.
+   *
+   * @param input
+   *   The binary value to encrypt.
+   * @param key
+   *   The passphrase to use to encrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param iv
+   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
+   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column,
+      aad: Column): Column = withExpr {
+    AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr, aad.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr, iv.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column): Column = withExpr {
+    new AesEncrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input` using AES in `mode` with `padding`. Key lengths of 16,
+   * 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB',
+   * 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional additional authenticated data (AAD) is
+   * only supported for GCM. If provided for encryption, the identical AAD value must be provided
+   * for decryption. The default mode is GCM.
+   *
+   * @param input
+   *   The binary value to decrypt.
+   * @param key
+   *   The passphrase to use to decrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      aad: Column): Column = withExpr {
+    AesDecrypt(input.expr, key.expr, mode.expr, padding.expr, aad.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr, padding.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column, mode: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr, mode.expr)
+  }
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column): Column = withExpr {
+    new AesDecrypt(input.expr, key.expr)
+  }
+
+  /**
+   * Returns a sha1 hash value as a hex string of the `col`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def sha(col: Column): Column = withExpr {
+    Sha1(col.expr)
+  }
+
+  /**
+   * Returns the length of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_length(): Column = withExpr {
+    InputFileBlockLength()
+  }
+
+  /**
+   * Returns the start offset of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_start(): Column = withExpr {
+    InputFileBlockStart()
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def reflect(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def java_method(cols: Column*): Column = withExpr {
+    CallMethodViaReflection(cols.map(_.expr))
+  }
+
+  /**
+   * Returns the Spark version. The string contains 2 fields, the first being a release version
+   * and the second being a git revision.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def version(): Column = withExpr {
+    SparkVersion()
+  }
+
+  /**
+   * Return DDL-formatted type string for the data type of the input.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def typeof(col: Column): Column = withExpr {
+    TypeOf(col.expr)
+  }
+
+  /**
+   * Separates `col1`, ..., `colk` into `n` rows. Uses column names col0, col1, etc. by default
+   * unless specified otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def stack(cols: Column*): Column = withExpr {
+    Stack(cols.map(_.expr))
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(seed: Column): Column = withExpr {
+    Rand(seed.expr)
+  }
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(): Column = withExpr {
+    new Rand()
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -4046,33 +4402,25 @@ object functions {
   /**
    * Returns a boolean. The value is True if str ends with suffix.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both str or suffix must be of STRING type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
-   *   STRING and BINARY.
+   * Both str or suffix must be of STRING or BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def endswith(str: Column, suffix: Column): Column = withExpr {
-    EndsWith(str.expr, suffix.expr)
+    UnresolvedFunction(Seq("endswith"), Seq(str.expr, suffix.expr), isDistinct = false)
   }
 
   /**
    * Returns a boolean. The value is True if str starts with prefix.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both str or prefix must be of STRING type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `endswith` in SQL supports both
-   *   STRING and BINARY.
+   * Both str or prefix must be of STRING or BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def startswith(str: Column, prefix: Column): Column = withExpr {
-    StartsWith(str.expr, prefix.expr)
+    UnresolvedFunction(Seq("startswith"), Seq(str.expr, prefix.expr), isDistinct = false)
   }
 
   /**
@@ -4104,6 +4452,40 @@ object functions {
    */
   def btrim(str: Column, trim: Column): Column = withExpr {
     new StringTrimBoth(str.expr, trim.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, format: Column): Column = withExpr {
+    new TryToBinary(e.expr, format.expr)
+  }
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = withExpr {
+    new TryToBinary(e.expr)
+  }
+
+  /**
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = withExpr {
+    TryToNumber(e.expr, format.expr)
   }
 
   /**
@@ -4144,17 +4526,13 @@ object functions {
   /**
    * Returns a boolean. The value is True if right is found inside left.
    * Returns NULL if either input expression is NULL. Otherwise, returns False.
-   * Both left or right must be of STRING type.
-   *
-   * @note
-   *   Only STRING type is supported in this function, while `contains` in SQL supports both
-   *   STRING and BINARY.
+   * Both left or right must be of STRING or BINARY type.
    *
    * @group string_funcs
    * @since 3.5.0
    */
   def contains(left: Column, right: Column): Column = withExpr {
-    Contains(left.expr, right.expr)
+    UnresolvedFunction(Seq("contains"), Seq(left.expr, right.expr), isDistinct = false)
   }
 
   /**
@@ -4344,6 +4722,14 @@ object functions {
    * @since 1.5.0
    */
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
+
+  /**
+   * Returns the current timestamp at the start of query evaluation.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def now(): Column = withExpr { Now() }
 
   /**
    * Returns the current timestamp without time zone at the start of query evaluation
@@ -4552,6 +4938,47 @@ object functions {
   def hour(e: Column): Column = withExpr { Hour(e.expr) }
 
   /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("extract", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `extract`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("date_part", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field selects which part of the source should be extracted, and supported string values
+   *              are as same as the fields of the equivalent function `EXTRACT`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @return a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = withExpr {
+    UnresolvedFunction("datepart", Seq(field.expr, source.expr), isDistinct = false)
+  }
+
+  /**
    * Returns the last day of the month which the given date belongs to.
    * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
    * month in July 2015.
@@ -4571,6 +4998,14 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def weekday(e: Column): Column = withExpr { WeekDay(e.expr) }
 
   /**
    * @return A date created from year, month and day fields.
@@ -4784,6 +5219,30 @@ object functions {
    */
   def to_timestamp(s: Column, fmt: String): Column = withExpr {
     new ParseToTimestamp(s.expr, Literal(fmt))
+  }
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr, format.expr)
+  }
+
+  /**
+   * Parses the `s` to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = withExpr {
+    new ParseToTimestamp(s.expr)
   }
 
   /**
@@ -5195,6 +5654,26 @@ object functions {
   }
 
   /**
+   * Creates timestamp from the number of milliseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_millis(e: Column): Column = withExpr {
+    MillisToTimestamp(e.expr)
+  }
+
+  /**
+   * Creates timestamp from the number of microseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_micros(e: Column): Column = withExpr {
+    MicrosToTimestamp(e.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *
@@ -5375,6 +5854,21 @@ object functions {
    */
   def element_at(column: Column, value: Any): Column = withExpr {
     ElementAt(column.expr, lit(value).expr)
+  }
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column = withExpr {
+    new TryElementAt(column.expr, value.expr)
   }
 
   /**
@@ -6594,6 +7088,34 @@ object functions {
    * @since 3.0.0
    */
   def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the `sourceTz` time zone to `targetTz`.
+   *
+   * @param sourceTz the time zone for the input timestamp. If it is missed,
+   *                 the current session time zone is used as the source time zone.
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column = withExpr {
+    ConvertTimezone(sourceTz.expr, targetTz.expr, sourceTs.expr)
+  }
+
+  /**
+   * Converts the timestamp without time zone `sourceTs`
+   * from the current time zone to `targetTz`.
+   *
+   * @param targetTz the time zone to which the input timestamp should be converted.
+   * @param sourceTs a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(targetTz: Column, sourceTs: Column): Column = withExpr {
+    new ConvertTimezone(targetTz.expr, sourceTs.expr)
+  }
 
   /**
    * Make DayTimeIntervalType duration from days, hours, mins and secs.

@@ -1822,8 +1822,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = intercept[AnalysisException]{
             sql("SELECT abc.* FROM nestedStructTable")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1051",
-          parameters = Map("targetString" -> "abc", "columns" -> "record"),
+          errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+          parameters = Map("targetString" -> "`abc`", "columns" -> "`record`"),
           context = ExpectedContext(fragment = "abc.*", start = 7, stop = 11))
       }
 
@@ -1911,16 +1911,16 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         exception = intercept[AnalysisException] {
           sql("SELECT a.* FROM temp_table_no_cols a")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
-        parameters = Map("targetString" -> "a", "columns" -> ""),
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        parameters = Map("targetString" -> "`a`", "columns" -> ""),
         context = ExpectedContext(fragment = "a.*", start = 7, stop = 9))
 
       checkError(
         exception = intercept[AnalysisException] {
           dfNoCols.select($"b.*")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1051",
-        parameters = Map("targetString" -> "b", "columns" -> ""))
+        errorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+        parameters = Map("targetString" -> "`b`", "columns" -> ""))
     }
   }
 

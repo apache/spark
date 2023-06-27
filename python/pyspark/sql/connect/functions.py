@@ -843,6 +843,48 @@ def sqrt(col: "ColumnOrName") -> Column:
 sqrt.__doc__ = pysparkfuncs.sqrt.__doc__
 
 
+def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_add", left, right)
+
+
+try_add.__doc__ = pysparkfuncs.try_add.__doc__
+
+
+def try_avg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_avg", col)
+
+
+try_avg.__doc__ = pysparkfuncs.try_avg.__doc__
+
+
+def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_divide", left, right)
+
+
+try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
+
+
+def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_multiply", left, right)
+
+
+try_multiply.__doc__ = pysparkfuncs.try_multiply.__doc__
+
+
+def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_subtract", left, right)
+
+
+try_subtract.__doc__ = pysparkfuncs.try_subtract.__doc__
+
+
+def try_sum(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_sum", col)
+
+
+try_sum.__doc__ = pysparkfuncs.try_sum.__doc__
+
+
 def tan(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("tan", col)
 
@@ -1636,6 +1678,13 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
 
 element_at.__doc__ = pysparkfuncs.element_at.__doc__
+
+
+def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_element_at", col, extraction)
+
+
+try_element_at.__doc__ = pysparkfuncs.try_element_at.__doc__
 
 
 def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
@@ -2497,6 +2546,23 @@ def char(col: "ColumnOrName") -> Column:
 char.__doc__ = pysparkfuncs.char.__doc__
 
 
+def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("try_to_binary", col, format)
+    else:
+        return _invoke_function_over_columns("try_to_binary", col)
+
+
+try_to_binary.__doc__ = pysparkfuncs.try_to_binary.__doc__
+
+
+def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_to_number", col, format)
+
+
+try_to_number.__doc__ = pysparkfuncs.try_to_number.__doc__
+
+
 def btrim(str: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
     if trim is not None:
         return _invoke_function_over_columns("btrim", str, trim)
@@ -2628,6 +2694,13 @@ def current_timestamp() -> Column:
 current_timestamp.__doc__ = pysparkfuncs.current_timestamp.__doc__
 
 
+def now() -> Column:
+    return _invoke_function("current_timestamp")
+
+
+now.__doc__ = pysparkfuncs.now.__doc__
+
+
 def current_timezone() -> Column:
     return _invoke_function("current_timezone")
 
@@ -2724,6 +2797,34 @@ def weekofyear(col: "ColumnOrName") -> Column:
 
 
 weekofyear.__doc__ = pysparkfuncs.weekofyear.__doc__
+
+
+def weekday(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("weekday", col)
+
+
+weekday.__doc__ = pysparkfuncs.weekday.__doc__
+
+
+def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("extract", field, source)
+
+
+extract.__doc__ = pysparkfuncs.extract.__doc__
+
+
+def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("date_part", field, source)
+
+
+extract.__doc__ = pysparkfuncs.extract.__doc__
+
+
+def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("datepart", field, source)
+
+
+extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
@@ -2849,6 +2950,16 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is not None:
+        return _invoke_function_over_columns("try_to_timestamp", col, format)
+    else:
+        return _invoke_function_over_columns("try_to_timestamp", col)
+
+
+try_to_timestamp.__doc__ = pysparkfuncs.try_to_timestamp.__doc__
 
 
 def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
@@ -2993,6 +3104,20 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
+
+
+def timestamp_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_millis", col)
+
+
+timestamp_millis.__doc__ = pysparkfuncs.timestamp_millis.__doc__
+
+
+def timestamp_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_micros", col)
+
+
+timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
 
 
 def window(
@@ -3157,6 +3282,18 @@ def hours(col: "ColumnOrName") -> Column:
 
 
 hours.__doc__ = pysparkfuncs.hours.__doc__
+
+
+def convert_timezone(
+    sourceTz: Optional[Column], targetTz: Column, sourceTs: "ColumnOrName"
+) -> Column:
+    if sourceTz is None:
+        return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
+    else:
+        return _invoke_function_over_columns("convert_timezone", sourceTz, targetTz, sourceTs)
+
+
+convert_timezone.__doc__ = pysparkfuncs.convert_timezone.__doc__
 
 
 def make_dt_interval(
@@ -3464,6 +3601,117 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
+
+
+def uuid() -> Column:
+    return _invoke_function_over_columns("uuid")
+
+
+uuid.__doc__ = pysparkfuncs.uuid.__doc__
+
+
+def aes_encrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    iv: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _iv = lit("") if iv is None else _to_col(iv)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("aes_encrypt", input, key, _mode, _padding, _iv, _aad)
+
+
+aes_encrypt.__doc__ = pysparkfuncs.aes_encrypt.__doc__
+
+
+def aes_decrypt(
+    input: "ColumnOrName",
+    key: "ColumnOrName",
+    mode: Optional["ColumnOrName"] = None,
+    padding: Optional["ColumnOrName"] = None,
+    aad: Optional["ColumnOrName"] = None,
+) -> Column:
+    _mode = lit("GCM") if mode is None else _to_col(mode)
+    _padding = lit("DEFAULT") if padding is None else _to_col(padding)
+    _aad = lit("") if aad is None else _to_col(aad)
+
+    return _invoke_function_over_columns("aes_decrypt", input, key, _mode, _padding, _aad)
+
+
+aes_decrypt.__doc__ = pysparkfuncs.aes_decrypt.__doc__
+
+
+def sha(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("sha", col)
+
+
+sha.__doc__ = pysparkfuncs.sha.__doc__
+
+
+def input_file_block_length() -> Column:
+    return _invoke_function_over_columns("input_file_block_length")
+
+
+input_file_block_length.__doc__ = pysparkfuncs.input_file_block_length.__doc__
+
+
+def input_file_block_start() -> Column:
+    return _invoke_function_over_columns("input_file_block_start")
+
+
+input_file_block_start.__doc__ = pysparkfuncs.input_file_block_start.__doc__
+
+
+def reflect(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("reflect", *cols)
+
+
+reflect.__doc__ = pysparkfuncs.reflect.__doc__
+
+
+def java_method(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("java_method", *cols)
+
+
+java_method.__doc__ = pysparkfuncs.java_method.__doc__
+
+
+def version() -> Column:
+    return _invoke_function_over_columns("version")
+
+
+version.__doc__ = pysparkfuncs.version.__doc__
+
+
+def typeof(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("typeof", col)
+
+
+typeof.__doc__ = pysparkfuncs.typeof.__doc__
+
+
+def stack(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("stack", *cols)
+
+
+stack.__doc__ = pysparkfuncs.stack.__doc__
+
+
+def random(
+    seed: Optional["ColumnOrName"] = None,
+) -> Column:
+    if seed is not None:
+        return _invoke_function_over_columns("random", seed)
+    else:
+        return _invoke_function_over_columns("random")
+
+
+random.__doc__ = pysparkfuncs.random.__doc__
 
 
 # User Defined Function

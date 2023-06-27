@@ -104,6 +104,14 @@ Math Functions
     tan
     tanh
     toDegrees
+    try_add
+    try_avg
+    try_divide
+    try_multiply
+    try_subtract
+    try_sum
+    try_to_binary
+    try_to_number
     degrees
     toRadians
     radians
@@ -116,6 +124,7 @@ Datetime Functions
     :toctree: api/
 
     add_months
+    convert_timezone
     curdate
     current_date
     current_timestamp
@@ -129,9 +138,12 @@ Datetime Functions
     dateadd
     datediff
     day
+    date_part
+    datepart
     dayofmonth
     dayofweek
     dayofyear
+    extract
     second
     weekofyear
     year
@@ -150,6 +162,7 @@ Datetime Functions
     next_day
     hour
     make_date
+    now
     from_unixtime
     unix_timestamp
     to_unix_timestamp
@@ -160,9 +173,13 @@ Datetime Functions
     trunc
     from_utc_timestamp
     to_utc_timestamp
+    weekday
     window
     session_window
+    timestamp_micros
+    timestamp_millis
     timestamp_seconds
+    try_to_timestamp
     unix_date
     unix_micros
     unix_millis
@@ -238,6 +255,7 @@ Collection Functions
     schema_of_csv
     str_to_map
     to_csv
+    try_element_at
 
 
 Partition Transformation Functions
@@ -449,11 +467,16 @@ Misc Functions
 .. autosummary::
     :toctree: api/
 
+    aes_decrypt
+    aes_encrypt
     current_catalog
     current_database
     current_schema
     current_user
+    input_file_block_length
+    input_file_block_start
     md5
+    sha
     sha1
     sha2
     crc32
@@ -461,9 +484,16 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    reflect
     hll_sketch_estimate
     hll_union
+    java_method
+    random
+    stack
+    typeof
     user
+    uuid
+    version
 
 Predicate Functions
 -------------------
