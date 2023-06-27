@@ -713,10 +713,49 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def clearJobGroup(): Unit = sc.clearJobGroup()
 
   /**
+   * Set the behavior of job cancellation from jobs started in this thread.
+   *
+   * @param interruptOnCancel If true, then job cancellation will result in `Thread.interrupt()`
+   * being called on the job's executor threads. This is useful to help ensure that the tasks
+   * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
+   * may respond to Thread.interrupt() by marking nodes as dead.
+   */
+  def setInterruptOnCancel(interruptOnCancel: Boolean): Unit =
+    sc.setInterruptOnCancel(interruptOnCancel)
+
+  /**
+   * Add a tag to be assigned to all the jobs started by this thread.
+   *
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   */
+  def addJobTag(tag: String): Unit = sc.addJobTag(tag)
+
+  /**
+   * Remove a tag previously added to be assigned to all the jobs started by this thread.
+   * Noop if such a tag was not added earlier.
+   *
+   * @param tag The tag to be removed. Cannot contain ',' (comma) character.
+   */
+  def removeJobTag(tag: String): Unit = sc.removeJobTag(tag)
+
+  /** Get the tags that are currently set to be assigned to all the jobs started by this thread. */
+  def getJobTags(): util.Set[String] = sc.getJobTags.asJava
+
+  /** Clear the current thread's job tags. */
+  def clearJobTags(): Unit = sc.clearJobTags()
+
+  /**
    * Cancel active jobs for the specified group. See
    * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
    */
   def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   */
+  def cancelJobsWithTag(tag: String): Unit = sc.cancelJobsWithTag(tag)
 
   /** Cancel all jobs that have been scheduled or are running. */
   def cancelAllJobs(): Unit = sc.cancelAllJobs()
