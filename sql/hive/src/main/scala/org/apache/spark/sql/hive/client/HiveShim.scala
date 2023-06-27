@@ -1180,6 +1180,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           })
         }
 
+        recordHiveCall()
         val allPartitionNames = hive.getPartitionNames(
           table.getDbName, table.getTableName, -1).asScala
         val partNames = allPartitionNames.filter { p =>
