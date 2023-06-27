@@ -624,6 +624,22 @@ clearJobTags <- function() {
   invisible(callJMethod(sc, "clearJobTags"))
 }
 
+#' Cancel active jobs that have the specified tag.
+#'
+#' @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+#' @rdname cancelJobsWithTag
+#' @name cancelJobsWithTag
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' cancelJobsWithTag("myTag")
+#'}
+#' @note cancelJobGroup since 3.5.0
+cancelJobsWithTag <- function(tag) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "cancelJobsWithTag", tag))
+}
+
 #' Set a human readable description of the current job.
 #'
 #' Set a description that is shown as a job description in UI.
