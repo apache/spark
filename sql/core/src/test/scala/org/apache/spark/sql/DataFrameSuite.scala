@@ -3625,7 +3625,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
 
-  test("SPARK-44206: SparkSession.selectExpr use Session.active") {
+  test("SPARK-44206: SparkSession.selectExpr scope Session.active") {
     val clone = spark.cloneSession()
     clone.conf.set("spark.sql.legacy.interval.enabled", "true")
     val df1 = clone.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b").collect()
