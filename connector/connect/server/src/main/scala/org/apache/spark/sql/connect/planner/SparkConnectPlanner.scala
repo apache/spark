@@ -794,8 +794,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   }
 
   private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
-    SparkConnectService.cachedDataFrameManager
-      .get(session, rel.getRelationId)
+    sessionHolder
+      .getDataFrameOrThrow(rel.getRelationId)
       .logicalPlan
   }
 
