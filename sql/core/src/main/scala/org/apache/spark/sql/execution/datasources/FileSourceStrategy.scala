@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
 import org.apache.spark.util.collection.BitSet
@@ -263,12 +264,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             // NOTE: Readers require the internal column to be nullable because it's not part of the
             // file's public schema. The projection below will restore the correct nullability for
             // the column while constructing the final metadata struct.
-            val attr = field.copy(internalName, nullable = true).toAttribute
+            val attr = DataTypeUtils.toAttribute(field.copy(internalName, nullable = true))
             metadataColumnsByName.put(field.name, attr)
             generatedMetadataColumns += attr
 
           case FileSourceConstantMetadataStructField(field) =>
-            val attr = field.toAttribute
+            val attr = DataTypeUtils.toAttribute(field)
             metadataColumnsByName.put(field.name, attr)
             constantMetadataColumns += attr
 

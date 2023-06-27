@@ -1223,9 +1223,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         pdf = self.connect.sql("SELECT 1").toPandas()
         self.assertEqual(1, len(pdf.index))
 
-    def test_sql_with_args(self):
+    def test_sql_with_named_args(self):
         df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
         df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
+    def test_sql_with_pos_args(self):
+        df = self.connect.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
+        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
