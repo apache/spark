@@ -244,28 +244,29 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         val promoteType = findWiderTypeForString(left.dataType, right.dataType).get
         b.withNewChildren(Seq(castExpr(left, promoteType), castExpr(right, promoteType)))
 
-      case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
-      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
+      case Abs(e @ StringTypeExpression(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
+      case m @ UnaryMinus(e @ StringTypeExpression(), _) =>
+        m.withNewChildren(Seq(Cast(e, DoubleType)))
+      case UnaryPositive(e @ StringTypeExpression()) => UnaryPositive(Cast(e, DoubleType))
 
-      case d @ DateAdd(left @ StringType(), _) =>
+      case d @ DateAdd(left @ StringTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(_, right @ StringType()) =>
+      case d @ DateAdd(_, right @ StringTypeExpression()) =>
         d.copy(days = Cast(right, IntegerType))
-      case d @ DateSub(left @ StringType(), _) =>
+      case d @ DateSub(left @ StringTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(_, right @ StringType()) =>
+      case d @ DateSub(_, right @ StringTypeExpression()) =>
         d.copy(days = Cast(right, IntegerType))
 
-      case s @ SubtractDates(left @ StringType(), _, _) =>
+      case s @ SubtractDates(left @ StringTypeExpression(), _, _) =>
         s.copy(left = Cast(s.left, DateType))
-      case s @ SubtractDates(_, right @ StringType(), _) =>
+      case s @ SubtractDates(_, right @ StringTypeExpression(), _) =>
         s.copy(right = Cast(s.right, DateType))
-      case t @ TimeAdd(left @ StringType(), _, _) =>
+      case t @ TimeAdd(left @ StringTypeExpression(), _, _) =>
         t.copy(start = Cast(t.start, TimestampType))
-      case t @ SubtractTimestamps(left @ StringType(), _, _, _) =>
+      case t @ SubtractTimestamps(left @ StringTypeExpression(), _, _, _) =>
         t.copy(left = Cast(t.left, t.right.dataType))
-      case t @ SubtractTimestamps(_, right @ StringType(), _, _) =>
+      case t @ SubtractTimestamps(_, right @ StringTypeExpression(), _, _) =>
         t.copy(right = Cast(right, t.left.dataType))
     }
   }
@@ -296,9 +297,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case d @ DateAdd(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampType(), _, _) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+      case s @ SubtractTimestamps(AnyTimestampType(), DateTypeExpression(), _, _) =>
         s.copy(right = Cast(s.right, s.left.dataType))
       case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
         if s.left.dataType != s.right.dataType =>

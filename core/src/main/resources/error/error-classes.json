@@ -2383,9 +2383,19 @@
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
         ]
       },
+      "COMMENT_NAMESPACE" : {
+        "message" : [
+          "Attach a comment to the namespace <namespace>."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
+        ]
+      },
+      "DROP_NAMESPACE" : {
+        "message" : [
+          "Drop the namespace <namespace>."
         ]
       },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
@@ -2466,6 +2476,11 @@
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "REMOVE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Remove a comment from the namespace <namespace>."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
@@ -2572,6 +2587,28 @@
       "READ_FROM" : {
         "message" : [
           "The target relation <relationId> is also being read from."
+        ]
+      }
+    }
+  },
+  "UNSUPPORTED_MERGE_CONDITION" : {
+    "message" : [
+      "MERGE operation contains unsupported <condName> condition."
+    ],
+    "subClass" : {
+      "AGGREGATE" : {
+        "message" : [
+          "Aggregates are not allowed: <cond>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Non-deterministic expressions are not allowed: <cond>."
+        ]
+      },
+      "SUBQUERY" : {
+        "message" : [
+          "Subqueries are not allowed: <cond>."
         ]
       }
     }
@@ -2838,11 +2875,6 @@
   "_LEGACY_ERROR_TEMP_0035" : {
     "message" : [
       "Operation not allowed: <message>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0036" : {
-    "message" : [
-      "Expected `NOSCAN` instead of `<ctx>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0037" : {
@@ -4089,11 +4121,6 @@
       "Unable to find the column `<colName>` given [<actualColumns>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1304" : {
-    "message" : [
-      "Unexpected type <className> of the relation <tableName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1305" : {
     "message" : [
       "Unsupported TableChange <change> in JDBC catalog."
@@ -4223,16 +4250,6 @@
   "_LEGACY_ERROR_TEMP_1340" : {
     "message" : [
       "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1341" : {
-    "message" : [
-      "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1342" : {
-    "message" : [
-      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
     ]
   },
   "_LEGACY_ERROR_TEMP_1343" : {
@@ -4537,11 +4554,6 @@
   "_LEGACY_ERROR_TEMP_2071" : {
     "message" : [
       "Commit denied for partition <partId> (task <taskId>, attempt <attemptId>, stage <stageId>.<stageAttempt>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2072" : {
-    "message" : [
-      "Table implementation does not support writes: <ident>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2073" : {
@@ -5478,26 +5490,6 @@
   "_LEGACY_ERROR_TEMP_2278" : {
     "message" : [
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2279" : {
-    "message" : [
-      "Multiple bucket transforms are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2280" : {
-    "message" : [
-      "Create namespace comment is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2281" : {
-    "message" : [
-      "Remove namespace comment is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2282" : {
-    "message" : [
-      "Drop namespace restrict is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2300" : {
