@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 
@@ -77,8 +78,8 @@ object DecimalPrecision extends TypeCoercionRule {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e
 
-    case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
-    e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+    case b @ BinaryComparison(e1 @ DecimalExtractor(p1, s1),
+    e2 @ DecimalExtractor(p2, s2)) if p1 != p2 || s1 != s2 =>
       val resultType = widerDecimalType(p1, s1, p2, s2)
       val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
       val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
@@ -201,20 +202,20 @@ object DecimalPrecision extends TypeCoercionRule {
         case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
             l.dataType.isInstanceOf[IntegralType] &&
             literalPickMinimumPrecision =>
-          b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
+          b.makeCopy(Array(Cast(l, DataTypeUtils.fromLiteral(l)), r))
         case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
             r.dataType.isInstanceOf[IntegralType] &&
             literalPickMinimumPrecision =>
-          b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
+          b.makeCopy(Array(l, Cast(r, DataTypeUtils.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case (l @ IntegralTypeExpression(), r @ DecimalType.Expression(_, _)) =>
+        case (l @ IntegralTypeExpression(), r @ DecimalExtractor(_, _)) =>
           b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
-        case (l @ DecimalType.Expression(_, _), r @ IntegralTypeExpression()) =>
+        case (l @ DecimalExtractor(_, _), r @ IntegralTypeExpression()) =>
           b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
-        case (l, r @ DecimalType.Expression(_, _)) if isFloat(l.dataType) =>
+        case (l, r @ DecimalExtractor(_, _)) if isFloat(l.dataType) =>
           b.makeCopy(Array(l, Cast(r, DoubleType)))
-        case (l @ DecimalType.Expression(_, _), r) if isFloat(r.dataType) =>
+        case (l @ DecimalExtractor(_, _), r) if isFloat(r.dataType) =>
           b.makeCopy(Array(Cast(l, DoubleType), r))
         case _ => b
       }
