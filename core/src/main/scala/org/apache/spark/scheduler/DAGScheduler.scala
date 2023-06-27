@@ -1119,6 +1119,13 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * Force finish job that is running or waiting in the queue.
+   */
+  def forceFinshJob(jobId: Int, reason: Option[String]): Unit = {
+    eventProcessLoop.post(ForceFinishJob(jobId, reason))
+  }
+
+  /**
    * Receives notification about shuffle push for a given shuffle from one map
    * task has completed
    */
@@ -2721,6 +2728,20 @@ private[spark] class DAGScheduler(
     }
   }
 
+  private[scheduler] def handleForceFinishJob(jobId: Int, reason: Option[String]): Unit = {
+    if (!jobIdToStageIds.contains(jobId)) {
+      logDebug("Trying to cancel unregistered job " + jobId)
+    } else {
+      val job = jobIdToActiveJob(jobId)
+      if (cancelRunningIndependentStages(job, "Unnecessary Stage", false)) {
+        cleanupStateForJobAndIndependentStages(job)
+        listenerBus.post(SparkListenerJobForceFinish(job.jobId, clock.getTimeMillis()))
+        listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+        job.listener.forceFinish(reason)
+      }
+    }
+  }
+
   /**
    * Marks a stage as finished and removes it from the list of running stages.
    */
@@ -2798,7 +2819,10 @@ private[spark] class DAGScheduler(
   }
 
   /** Cancel all independent, running stages that are only used by this job. */
-  private def cancelRunningIndependentStages(job: ActiveJob, reason: String): Boolean = {
+  private def cancelRunningIndependentStages(
+      job: ActiveJob,
+      reason: String,
+      byError: Boolean = true): Boolean = {
     var ableToCancelStages = true
     val stages = jobIdToStageIds(job.jobId)
     if (stages.isEmpty) {
@@ -2819,7 +2843,7 @@ private[spark] class DAGScheduler(
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
-              markStageAsFinished(stage, Some(reason))
+              markStageAsFinished(stage, if (byError) Some(reason) else None)
             } catch {
               case e: UnsupportedOperationException =>
                 logWarning(s"Could not cancel tasks for stage $stageId", e)
@@ -2999,6 +3023,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case JobCancelled(jobId, reason) =>
       dagScheduler.handleJobCancellation(jobId, reason)
+
+    case ForceFinishJob(jobId, reason) =>
+      dagScheduler.handleForceFinishJob(jobId, reason)
 
     case JobGroupCancelled(groupId) =>
       dagScheduler.handleJobGroupCancelled(groupId)

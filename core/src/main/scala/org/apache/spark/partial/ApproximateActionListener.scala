@@ -56,6 +56,10 @@ private[spark] class ApproximateActionListener[T, U, R](
     }
   }
 
+  override def forceFinish(result: Option[String]): Unit = {
+    finishedTasks = totalTasks
+  }
+
   override def jobFailed(exception: Exception): Unit = {
     synchronized {
       failure = Some(exception)
@@ -73,7 +77,7 @@ private[spark] class ApproximateActionListener[T, U, R](
       val time = System.currentTimeMillis()
       if (failure.isDefined) {
         throw failure.get
-      } else if (finishedTasks == totalTasks) {
+      } else if (finishedTasks >= totalTasks) {
         return new PartialResult(evaluator.currentResult(), true)
       } else if (time >= finishTime) {
         resultObject = Some(new PartialResult(evaluator.currentResult(), false))

@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 object LogicalQueryStageStrategy extends Strategy {
 
   private def isBroadcastStage(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => true
+    case LogicalQueryStage(_, _, _: BroadcastQueryStageExec) => true
     case _ => false
   }
 

@@ -49,10 +49,10 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   //   - positive value means an estimated row count which can be over-estimated
   //   - none means the plan has not materialized or the plan can not be estimated
   private def getEstimatedRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
-    case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
+    case LogicalQueryStage(_, _, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
 
-    case LogicalQueryStage(_, agg: BaseAggregateExec) if agg.groupingExpressions.nonEmpty &&
+    case LogicalQueryStage(_, _, agg: BaseAggregateExec) if agg.groupingExpressions.nonEmpty &&
       agg.child.isInstanceOf[QueryStageExec] =>
       val stage = agg.child.asInstanceOf[QueryStageExec]
       if (stage.isMaterialized) {
@@ -65,7 +65,7 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   }
 
   private def isRelationWithAllNullKeys(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, stage: BroadcastQueryStageExec) if stage.isMaterialized =>
+    case LogicalQueryStage(_, _, stage: BroadcastQueryStageExec) if stage.isMaterialized =>
       stage.broadcast.relationFuture.get().value == HashedRelationWithAllNullKeys
     case _ => false
   }
@@ -76,7 +76,7 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   }
 
   override protected def userSpecifiedRepartition(p: LogicalPlan): Boolean = p match {
-    case LogicalQueryStage(_, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _))
+    case LogicalQueryStage(_, _, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _))
       if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
         shuffle.shuffleOrigin == REPARTITION_BY_NUM => true
     case _ => false

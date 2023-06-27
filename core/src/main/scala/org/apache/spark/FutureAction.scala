@@ -111,13 +111,17 @@ trait FutureAction[T] extends Future[T] {
  */
 @DeveloperApi
 class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
-  extends FutureAction[T] {
+  extends FutureAction[T] with SupportForceFinish {
 
   @volatile private var _cancelled: Boolean = false
 
   override def cancel(): Unit = {
     _cancelled = true
     jobWaiter.cancel()
+  }
+
+  override def forceFinish(): Unit = {
+    jobWaiter.forceFinish()
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
@@ -172,6 +176,13 @@ trait JobSubmitter {
     resultFunc: => R): FutureAction[R]
 }
 
+trait SupportForceFinish {
+  /**
+   * Force finish the execution of this action.
+   */
+  def forceFinish(): Unit
+}
+
 
 /**
  * A [[FutureAction]] for actions that could trigger multiple Spark jobs. Examples include take,
@@ -180,7 +191,7 @@ trait JobSubmitter {
  */
 @DeveloperApi
 class ComplexFutureAction[T](run : JobSubmitter => Future[T])
-  extends FutureAction[T] { self =>
+  extends FutureAction[T] with SupportForceFinish { self =>
 
   @volatile private var _cancelled = false
 
@@ -193,6 +204,14 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
     _cancelled = true
     p.tryFailure(new SparkException("Action has been cancelled"))
     subActions.foreach(_.cancel())
+  }
+
+  override def forceFinish(): Unit = {
+    subActions.foreach {
+      case s: SupportForceFinish =>
+        s.forceFinish()
+      case _ =>
+    }
   }
 
   private def jobSubmitter = new JobSubmitter {

@@ -57,14 +57,14 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
       isLeft: Boolean): Option[JoinStrategyHint] = {
     val plan = if (isLeft) join.left else join.right
     plan match {
-      case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
+      case LogicalQueryStage(_, _, stage: ShuffleQueryStageExec) if stage.isMaterialized
         && stage.mapStats.isDefined =>
 
         val manyEmptyInPlan = hasManyEmptyPartitions(stage.mapStats.get)
         val canBroadcastPlan = (isLeft && canBuildBroadcastLeft(join.joinType)) ||
           (!isLeft && canBuildBroadcastRight(join.joinType))
         val manyEmptyInOther = (if (isLeft) join.right else join.left) match {
-          case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
+          case LogicalQueryStage(_, _, stage: ShuffleQueryStageExec) if stage.isMaterialized
             && stage.mapStats.isDefined => hasManyEmptyPartitions(stage.mapStats.get)
           case _ => false
         }

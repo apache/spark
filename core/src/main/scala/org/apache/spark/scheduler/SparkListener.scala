@@ -104,6 +104,10 @@ case class SparkListenerJobEnd(
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerJobForceFinish(jobId: Int, time: Long)
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerEnvironmentUpdate(
     environmentDetails: Map[String, collection.Seq[(String, String)]])
   extends SparkListenerEvent

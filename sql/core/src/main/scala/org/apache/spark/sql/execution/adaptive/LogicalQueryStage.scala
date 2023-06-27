@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 // TODO we can potentially include only [[QueryStageExec]] in this class if we make the aggregation
 // planning aware of partitioning.
 case class LogicalQueryStage(
+    stageId: Int,
     logicalPlan: LogicalPlan,
     physicalPlan: SparkPlan) extends LeafNode {
 

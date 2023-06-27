@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.Future
 
-import org.apache.spark.{FutureAction, MapOutputStatistics}
+import org.apache.spark.{FutureAction, MapOutputStatistics, SupportForceFinish}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -62,6 +62,11 @@ abstract class QueryStageExec extends LeafExecNode {
   }
 
   protected def doMaterialize(): Future[Any]
+
+  /**
+   * force the query stage to finish, and clean up any intermediate data if necessary.
+   */
+  def forceFinish(): Unit
 
   /**
    * Returns the runtime statistics after stage materialization.
@@ -213,6 +218,14 @@ case class ShuffleQueryStageExec(
   }
 
   override def getRuntimeStatistics: Statistics = shuffle.runtimeStatistics
+
+  override def forceFinish(): Unit = {
+    shuffleFuture match {
+      case action: SupportForceFinish if !action.isCompleted =>
+        action.forceFinish()
+      case _ =>
+    }
+  }
 }
 
 /**
@@ -255,6 +268,10 @@ case class BroadcastQueryStageExec(
     }
   }
 
+  override def forceFinish(): Unit = {
+    // TODO support force finish job group
+  }
+
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
 }
 
@@ -287,6 +304,14 @@ case class TableCacheQueryStageExec(
         (_: Int, _: Unit) => (),
         ()
       )
+    }
+  }
+
+  override def forceFinish(): Unit = {
+    future match {
+      case action: SupportForceFinish if !action.isCompleted =>
+        action.forceFinish()
+      case _ =>
     }
   }
 

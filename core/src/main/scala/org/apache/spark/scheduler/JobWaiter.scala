@@ -63,6 +63,15 @@ private[spark] class JobWaiter[T](
     }
   }
 
+  override def forceFinish(result: Option[String]): Unit = {
+    jobPromise.success(())
+  }
+
+  def forceFinish(): Unit = {
+    dagScheduler.forceFinshJob(jobId, Some("Unnecessary stage"))
+  }
+
+
   override def jobFailed(exception: Exception): Unit = {
     if (!jobPromise.tryFailure(exception)) {
       logWarning("Ignore failure", exception)

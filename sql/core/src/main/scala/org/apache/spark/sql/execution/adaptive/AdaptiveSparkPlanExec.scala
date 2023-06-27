@@ -247,6 +247,19 @@ case class AdaptiveSparkPlanExec(
 
   def finalPhysicalPlan: SparkPlan = withFinalPlanUpdate(identity)
 
+  private def cancelUselessUnfinishedStage(
+    newLogicalPlan: LogicalPlan,
+    stagesToReplace: Seq[QueryStageExec]): Set[Int] = {
+    var uselessStageMap = stagesToReplace.map(s => s.id -> s).toMap
+    newLogicalPlan.foreachUp {
+      case stage: LogicalQueryStage if uselessStageMap.contains(stage.stageId) =>
+        uselessStageMap = uselessStageMap - stage.stageId
+      case _ =>
+    }
+    uselessStageMap.values.foreach(_.forceFinish())
+    uselessStageMap.keySet
+  }
+
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (isFinalPlan) return currentPhysicalPlan
 
@@ -262,6 +275,7 @@ case class AdaptiveSparkPlanExec(
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
+      val uselessStagesId = mutable.Set.empty[Int]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
@@ -309,7 +323,7 @@ case class AdaptiveSparkPlanExec(
           case StageSuccess(stage, res) =>
             stage.resultOption.set(Some(res))
           case StageFailure(stage, ex) =>
-            errors.append(ex)
+            if (!uselessStagesId.contains(stage.id)) errors.append(ex)
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -341,6 +355,7 @@ case class AdaptiveSparkPlanExec(
             cleanUpTempTags(newPhysicalPlan)
             currentPhysicalPlan = newPhysicalPlan
             currentLogicalPlan = newLogicalPlan
+            uselessStagesId ++= cancelUselessUnfinishedStage(newLogicalPlan, stagesToReplace)
             stagesToReplace = Seq.empty[QueryStageExec]
           }
         }
@@ -678,7 +693,7 @@ case class AdaptiveSparkPlanExec(
         // can be overwritten through re-planning processes.
         setTempTagRecursive(physicalNode.get, logicalNode)
         // Replace the corresponding logical node with LogicalQueryStage
-        val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
+        val newLogicalNode = LogicalQueryStage(stage.id, logicalNode, physicalNode.get)
         val newLogicalPlan = logicalPlan.transformDown {
           case p if p.eq(logicalNode) => newLogicalNode
         }

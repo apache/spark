@@ -25,7 +25,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobForceFinish, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -723,6 +723,25 @@ class AdaptiveQueryExecSuite
         val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
         assert(bhj.size == 1)
       }
+    }
+  }
+
+  test("SPARK-43999: force finish useless stage") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      var forceEndCount = 0
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+              event match {
+                case SparkListenerJobForceFinish(_, _) =>
+                  forceEndCount += 1
+                case _ =>
+              }
+        }
+      }
+      spark.sparkContext.addSparkListener(listener)
+      runAdaptiveAndVerifyResult(
+        "SELECT * FROM emptyTestData t1 LEFT OUTER JOIN testData t2 ON t1.key = t2.key")
+      assert(forceEndCount == 1)
     }
   }
 

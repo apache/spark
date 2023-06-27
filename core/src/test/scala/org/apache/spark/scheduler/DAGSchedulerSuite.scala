@@ -315,6 +315,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   var failure: Exception = _
   val jobListener = new JobListener() {
     override def taskSucceeded(index: Int, result: Any) = results.put(index, result)
+    override def forceFinish(result: Option[String]): Unit = {}
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
@@ -323,6 +324,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val results = new HashMap[Int, Any]
     var failure: Exception = null
     override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def forceFinish(result: Option[String]): Unit = {}
     override def jobFailed(exception: Exception): Unit = { failure = exception }
   }
 
@@ -517,6 +519,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   /** Sends JobCancelled to the DAG scheduler. */
   private def cancel(jobId: Int): Unit = {
     runEvent(JobCancelled(jobId, None))
+  }
+
+  /** Sends ForceFinishJob to the DAG scheduler. */
+  private def forceFinishJob(jobId: Int): Unit = {
+    runEvent(ForceFinishJob(jobId, None))
   }
 
   /** Make some tasks in task set success and check results. */
@@ -715,6 +722,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     var failureReason: Option[Exception] = None
     val fakeListener = new JobListener() {
       override def taskSucceeded(partition: Int, value: Any): Unit = numResults += 1
+      override def forceFinish(result: Option[String]): Unit = {}
       override def jobFailed(exception: Exception): Unit = {
         failureReason = Some(exception)
       }
@@ -842,6 +850,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     cancel(jobId)
     assert(failure.getMessage === s"Job $jobId cancelled ")
     assert(sparkListener.failedStages === Seq(0))
+    assertDataStructuresEmpty()
+  }
+
+  test("trivial job force finish") {
+    val rdd = new MyRDD(sc, 1, Nil)
+    val jobId = submit(rdd, Array(0))
+    forceFinishJob(jobId)
+    assert(sparkListener.failedStages === Seq())
+    assert(sparkListener.successfulStages === Set(0))
     assertDataStructuresEmpty()
   }
 
@@ -1929,6 +1946,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     class FailureRecordingJobListener() extends JobListener {
       var failureMessage: String = _
       override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def forceFinish(result: Option[String]): Unit = {}
       override def jobFailed(exception: Exception): Unit = { failureMessage = exception.getMessage }
     }
     val listener1 = new FailureRecordingJobListener()
