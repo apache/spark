@@ -730,7 +730,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
               sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
             },
             errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
-            parameters = Map("name" -> s""""$f()""""),
+            parameters = Map("expr" -> s""""$f()""""),
             context = ExpectedContext(
               fragment = s"$f()",
               start = 10,
@@ -749,7 +749,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
                 sql(stmt)
               },
               errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
-              parameters = Map("name" -> """"input_file_name()""""),
+              parameters = Map("expr" -> """"input_file_name()""""),
               context = ExpectedContext(
                 fragment = s"input_file_name()",
                 start = 10,

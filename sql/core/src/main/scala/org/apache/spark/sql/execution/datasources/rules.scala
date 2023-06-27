@@ -490,7 +490,7 @@ object PreReadCheck extends (LogicalPlan => Unit) {
         if (numInputFileBlockSources > 1) {
           e.failAnalysis(
             errorClass = "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION",
-            messageParameters = Map("name" -> toSQLExpr(e)))
+            messageParameters = Map("expr" -> toSQLExpr(e)))
         } else {
           numInputFileBlockSources
         }

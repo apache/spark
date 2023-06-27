@@ -1199,7 +1199,7 @@
     "subClass" : {
       "CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE" : {
         "message" : [
-          "cannot evaluate expression <sqlExpr> in inline table definition."
+          "Cannot evaluate the expression <expr> in inline table definition."
         ]
       },
       "FAILED_SQL_EXPRESSION_EVALUATION" : {
@@ -1209,7 +1209,7 @@
       },
       "INCOMPATIBLE_TYPES_IN_INLINE_TABLE" : {
         "message" : [
-          "incompatible types found in column <name> for inline table."
+          "Incompatible types found in column <name> for inline table."
         ]
       }
     }
@@ -1231,14 +1231,14 @@
       "Invalid lambda function call."
     ],
     "subClass" : {
-      "ARGUMENTS_NUMBER_MISMATCH" : {
-        "message" : [
-          "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
-        ]
-      },
       "ARGUMENT_NAMES_EXISTS_SAME_SEMANTIC" : {
         "message" : [
           "Lambda function arguments should not have names that are semantically the same."
+        ]
+      },
+      "NUM_ARGS_MISMATCH" : {
+        "message" : [
+          "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
         ]
       }
     }
@@ -1690,7 +1690,7 @@
   },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
-      "'<name>' does not support more than one sources."
+      "The expression <expr> does not support more than one source."
     ]
   },
   "MULTI_UDF_INTERFACE_ERROR" : {

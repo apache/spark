@@ -76,7 +76,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
         if (!e.resolved || !trimAliases(e).foldable) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-            messageParameters = Map("sqlExpr" -> toSQLExpr(e)))
+            messageParameters = Map("expr" -> toSQLExpr(e)))
         }
       }
     }

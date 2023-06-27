@@ -113,7 +113,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "messageParameters" : {
-    "sqlExpr" : "\"rand(5)\""
+    "expr" : "\"rand(5)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -224,7 +224,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "messageParameters" : {
-    "sqlExpr" : "\"count(1)\""
+    "expr" : "\"count(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
