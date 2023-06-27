@@ -1661,7 +1661,7 @@
   },
   "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
     "message" : [
-      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set spark.sql.allowNamedFunctionArguments to true to turn on feature."
+      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ]
   },
   "NESTED_AGGREGATE_FUNCTION" : {
