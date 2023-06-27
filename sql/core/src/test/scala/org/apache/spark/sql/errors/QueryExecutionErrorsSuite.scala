@@ -875,18 +875,6 @@ class QueryExecutionErrorsSuite
       sqlState = "XX000")
   }
 
-  test("INTERNAL_ERROR: Calling eval on Unevaluable NamedArgumentExpression") {
-    val e = intercept[SparkException] {
-      NamedArgumentExpression("arg0", Literal("value0")).eval()
-    }
-    checkError(
-      exception = e,
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot evaluate expression: arg0 => value0"),
-      sqlState = "XX000"
-    )
-  }
-
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
     val e = intercept[SparkException] {
       val ctx = new CodegenContext

@@ -1527,7 +1527,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
   }
 
-  private def extractExpression(expr: FunctionArgumentContext, funcName: String) : Expression = {
+  private def extractNamedArgument(expr: FunctionArgumentContext, funcName: String) : Expression = {
     Option(expr.namedArgumentExpression).map { n =>
       if (conf.getConf(SQLConf.ALLOW_NAMED_FUNCTION_ARGUMENTS)) {
         NamedArgumentExpression(n.key.getText, expression(n.value))
@@ -1570,7 +1570,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
         }
         val args = func.functionArgument.asScala.map { e =>
-          extractExpression(e, func.functionName.getText)
+          extractNamedArgument(e, func.functionName.getText)
         }.toSeq
 
         val tvf = UnresolvedTableValuedFunction(ident, args)
@@ -2204,7 +2204,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
     val arguments = ctx.argument.asScala.map { e =>
-      extractExpression(e, name)
+      extractNamedArgument(e, name)
     }.toSeq match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
