@@ -5637,40 +5637,6 @@
       "Cannot change nullable column to non-nullable: <fieldName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2433" : {
-    "message" : [
-      "Only a single table generating function is allowed in a SELECT clause, found:",
-      "<sqlExprs>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2434" : {
-    "message" : [
-      "Failure when resolving conflicting references in Join:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2435" : {
-    "message" : [
-      "Failure when resolving conflicting references in Intersect:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2436" : {
-    "message" : [
-      "Failure when resolving conflicting references in Except:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2437" : {
-    "message" : [
-      "Failure when resolving conflicting references in AsOfJoin:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2446" : {
     "message" : [
       "Operation not allowed: <cmd> only works on table with location provided: <tableIdentWithDB>"
