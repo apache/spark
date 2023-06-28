@@ -3601,6 +3601,14 @@ class DataFrameSuite extends QueryTest
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
+
+  test("SPARK-44206: Dataset.selectExpr scope Session.active") {
+    val _spark = spark.newSession()
+    _spark.conf.set("spark.sql.legacy.interval.enabled", "true")
+    val df1 = _spark.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b")
+    val df2 = _spark.sql("select '2023-01-01' as a").selectExpr("a + INTERVAL 1 YEAR as b")
+    checkAnswer(df1, df2)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
