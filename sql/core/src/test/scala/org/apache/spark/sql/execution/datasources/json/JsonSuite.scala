@@ -3231,13 +3231,13 @@ abstract class JsonSuite
     val schema = new StructType(Array(StructField("a", IntegerType),
       StructField("b", StringType), StructField("_corrupt_record", StringType)))
 
-    val result = spark.read.option("mode", "PERMISSIVE").option("multiline", "true").schema(schema)
-      .json(Seq(data).toDS()).collect()
+    val result = spark.read
+      .option("mode", "PERMISSIVE")
+      .option("multiline", "true")
+      .schema(schema)
+      .json(Seq(data).toDS())
 
-    assert(result.length == 2)
-    assert(result(0).getString(0) == null)
-    assert(result(0).getString(1) == "correct")
-    assert(result(0).getString(2) == data)
+    checkAnswer(result, Seq(Row(null, "correct", data), Row(null, "correct", data)))
   }
 
   test("SPARK-36536: use casting when datetime pattern is not set") {
