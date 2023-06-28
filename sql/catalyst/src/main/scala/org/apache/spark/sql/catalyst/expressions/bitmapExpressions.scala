@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
 
 @ExpressionDescription(
@@ -196,9 +197,13 @@ case class BitmapConstructAgg(child: Expression,
     if (position != null) {
       val bitmap = buffer.getBinary(mutableAggBufferOffset)
       val bitPosition = position.asInstanceOf[Long]
+
+      if (bitPosition < 0 || bitPosition >= (8 * bitmap.length)) {
+        throw QueryExecutionErrors.invalidBitmapPositionError(bitPosition, bitmap.length)
+      }
+
       val bytePosition = (bitPosition / 8).toInt
       val bit = (bitPosition % 8).toInt
-
       bitmap.update(bytePosition, (bitmap(bytePosition) | (1 << bit)).toByte)
     }
   }
