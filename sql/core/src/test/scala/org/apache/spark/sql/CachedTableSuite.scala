@@ -23,7 +23,6 @@ import java.time.{Duration, LocalDateTime, Period}
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 import org.apache.commons.io.FileUtils
-import org.apache.hadoop.fs.Path
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
@@ -33,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{CacheManager, ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1681,24 +1680,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         sql("CACHE TABLE cached_t as SELECT udf(id) FROM VALUES (1), (2) t(id)")
         checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
-    }
-  }
-
-  test("SPARK-44199: isSubDirectory tests") {
-    val cacheManager = spark.sharedState.cacheManager
-    val testCases = Map[(String, String), Boolean](
-      ("s3://bucket/a/b", "s3://bucket/a/b/c") -> true,
-      ("s3://bucket/a/b/c", "s3://bucket/a/b/c") -> true,
-      ("s3://bucket/a/b/c", "s3://bucket/a/b") -> false,
-      ("s3://bucket/a/z/c", "s3://bucket/a/b/c") -> false,
-      ("s3://bucket/a/b/c", "abfs://bucket/a/b/c") -> false,
-    )
-    testCases.foreach { test =>
-      val result = cacheManager.isSubDir(
-        new Path(test._1._1),
-        new Path(test._1._2)
-      )
-      assert(result == test._2)
     }
   }
 }

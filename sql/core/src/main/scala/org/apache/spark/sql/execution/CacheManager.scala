@@ -382,7 +382,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def isSubDir(qualifiedPathParent: Path, qualifiedPathChild: Path): Boolean = {
     Iterator.iterate(qualifiedPathChild)(_.getParent)
       .takeWhile(_ != null)
-      .exists(_.toString.equals(qualifiedPathParent.toString))
+      .exists(_.equals(qualifiedPathParent))
   }
 
   /**
