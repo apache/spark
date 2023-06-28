@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
@@ -510,19 +512,24 @@ object UnsupportedOperationChecker extends Logging {
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
         case Window(windowExpression, _, _, child) if child.isStreaming =>
-          val windowFuncs = windowExpression.flatMap { e =>
+          val windowFunc = windowExpression.flatMap { e =>
             e.collect {
-              case we: WindowExpression =>
-                s"'${we.windowFunction}' as column '${e.toAttribute.sql}'"
+              case we: WindowExpression => toSQLStmt(we.windowFunction.toString)
               }
+          }.mkString(", ")
+          val columnName = windowExpression.flatMap { e =>
+            e.collect {
+              case we: WindowExpression => toSQLId(e.toAttribute.sql)
+            }
           }.mkString(", ")
           val windowSpec = windowExpression.flatMap { e =>
             e.collect {
-              case we: WindowExpression => we.windowSpec.sql
+              case we: WindowExpression => toSQLStmt(we.windowSpec.sql)
             }
           }.mkString(", ")
           throw QueryExecutionErrors.nonTimeWindowNotSupportedInStreamingError(
-            windowFuncs,
+            windowFunc,
+            columnName,
             windowSpec,
             subPlan.origin)
 

@@ -706,10 +706,11 @@ class StreamSuite extends StreamTest {
       e,
       "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
       parameters = Map(
-        "windowFunc" -> "'row_number()' as column 'rn_col'",
+        "windowFunc" -> "ROW_NUMBER()",
+        "columnName" -> "`rn_col`",
         "windowSpec" ->
-          ("'(PARTITION BY col1 ORDER BY col2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
-          "AND CURRENT ROW)'")))
+          ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
+          "AND CURRENT ROW)")))
   }
 
 
