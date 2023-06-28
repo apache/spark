@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column as PySparkColumn
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -54,7 +54,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 # For supporting Spark Connect
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -482,26 +482,16 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-            return column_op(Column.__eq__)(left, right)  # type: ignore[arg-type]
+            Column = get_column_class()
+            return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        return column_op(Column.__ne__)(left, right)  # type: ignore[arg-type]
+        Column = get_column_class()
+        return column_op(Column.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)

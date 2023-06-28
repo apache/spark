@@ -36,7 +36,7 @@ import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext,
+import org.apache.spark.{JobArtifactSet, LocalSparkContext, SparkConf, SparkContext,
   SparkFunSuite}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.executor.MesosExecutorBackend
@@ -262,9 +262,7 @@ class MesosFineGrainedSchedulerBackendSuite
       name = "n1",
       index = 0,
       partitionId = 0,
-      addedFiles = mutable.Map.empty[String, Long],
-      addedJars = mutable.Map.empty[String, Long],
-      addedArchives = mutable.Map.empty[String, Long],
+      artifacts = JobArtifactSet(),
       properties = new Properties(),
       cpus = 1,
       resources = immutable.Map.empty[String, ResourceInformation],
@@ -377,9 +375,7 @@ class MesosFineGrainedSchedulerBackendSuite
       name = "n1",
       index = 0,
       partitionId = 0,
-      addedFiles = mutable.Map.empty[String, Long],
-      addedJars = mutable.Map.empty[String, Long],
-      addedArchives = mutable.Map.empty[String, Long],
+      artifacts = JobArtifactSet(),
       properties = new Properties(),
       cpus = 1,
       resources = immutable.Map.empty[String, ResourceInformation],

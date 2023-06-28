@@ -614,10 +614,11 @@ pyspark_ml = Module(
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
         "pyspark.ml.torch.tests.test_data_loader",
-        "pyspark.mlv2.tests.test_summarizer",
-        "pyspark.mlv2.tests.test_evaluation",
-        "pyspark.mlv2.tests.test_feature",
-        "pyspark.mlv2.tests.test_classification",
+        "pyspark.ml.tests.connect.test_legacy_mode_summarizer",
+        "pyspark.ml.tests.connect.test_legacy_mode_evaluation",
+        "pyspark.ml.tests.connect.test_legacy_mode_feature",
+        "pyspark.ml.tests.connect.test_legacy_mode_classification",
+        "pyspark.ml.tests.connect.test_legacy_mode_pipeline",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -858,10 +859,11 @@ pyspark_connect = Module(
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",
-        "pyspark.mlv2.tests.connect.test_parity_summarizer",
-        "pyspark.mlv2.tests.connect.test_parity_evaluation",
-        "pyspark.mlv2.tests.connect.test_parity_feature",
-        "pyspark.mlv2.tests.connect.test_parity_classification",
+        "pyspark.ml.tests.connect.test_connect_summarizer",
+        "pyspark.ml.tests.connect.test_connect_evaluation",
+        "pyspark.ml.tests.connect.test_connect_feature",
+        "pyspark.ml.tests.connect.test_connect_classification",
+        "pyspark.ml.tests.connect.test_connect_pipeline",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

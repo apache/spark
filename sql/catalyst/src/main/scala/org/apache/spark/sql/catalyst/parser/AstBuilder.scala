@@ -66,31 +66,44 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   protected def withIdentClause(
       ctx: IdentifierReferenceContext,
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
-    withIdentClause(
-      ctx.expression,
-      () => visitMultipartIdentifier(ctx.multipartIdentifier),
-      builder)
-  }
-
-  protected def withIdentClause(
-      ctx: ExpressionContext,
-      getIdent: () => Seq[String],
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
-    if (ctx != null) {
-      PlanWithUnresolvedIdentifier(withOrigin(ctx) { expression(ctx) }, builder)
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
     } else {
-      builder.apply(getIdent())
+      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
     }
   }
 
   protected def withIdentClause(
-      ctx: ExpressionContext,
-      getIdent: () => Seq[String],
+      ctx: IdentifierReferenceContext,
       builder: Seq[String] => Expression): Expression = {
-    if (ctx != null) {
-      ExpressionWithUnresolvedIdentifier(withOrigin(ctx) { expression(ctx) }, builder)
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      ExpressionWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
     } else {
-      builder.apply(getIdent())
+      builder.apply(visitMultipartIdentifier(ctx.multipartIdentifier))
+    }
+  }
+
+  protected def withFuncIdentClause(
+      ctx: FunctionNameContext,
+      builder: Seq[String] => LogicalPlan): LogicalPlan = {
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+    } else {
+      builder.apply(getFunctionMultiparts(ctx))
+    }
+  }
+
+  protected def withFuncIdentClause(
+      ctx: FunctionNameContext,
+      builder: Seq[String] => Expression): Expression = {
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      ExpressionWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, builder)
+    } else {
+      builder.apply(getFunctionMultiparts(ctx))
     }
   }
 
@@ -1538,21 +1551,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       Seq.empty
     }
 
-    withIdentClause(
-      func.functionName.expression,
-      () => getFunctionMultiparts(func.functionName),
-      name => {
-        if (name.length > 1) {
-          throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
-        }
-
-        val tvf = UnresolvedTableValuedFunction(name, func.expression.asScala.map(expression).toSeq)
-
-        val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(name, tvf, aliases) else tvf
-
-        tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+    withFuncIdentClause(func.functionName, ident => {
+      if (ident.length > 1) {
+        throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
       }
-    )
+
+      val tvf = UnresolvedTableValuedFunction(ident, func.expression.asScala.map(expression).toSeq)
+
+      val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+
+      tvfAliases.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
+    })
   }
 
   /**
@@ -2189,9 +2198,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
     val funcCtx = ctx.functionName
-    val func = withIdentClause(funcCtx.expression, () => getFunctionMultiparts(funcCtx), ident => {
-      UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls)
-    })
+    val func = withFuncIdentClause(
+      funcCtx,
+      ident => UnresolvedFunction(ident, arguments, isDistinct, filter, ignoreNulls)
+    )
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -5103,7 +5113,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   /**
    * Create a named parameter which represents a literal with a non-bound value and unknown type.
    * */
-  override def visitParameterLiteral(ctx: ParameterLiteralContext): Expression = withOrigin(ctx) {
-    Parameter(ctx.identifier().getText)
+  override def visitNamedParameterLiteral(
+      ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
+    NamedParameter(ctx.identifier().getText)
+  }
+
+  /**
+   * Create a positional parameter which represents a literal
+   * with a non-bound value and unknown type.
+   * */
+  override def visitPosParameterLiteral(
+      ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
+    PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
   }
 }

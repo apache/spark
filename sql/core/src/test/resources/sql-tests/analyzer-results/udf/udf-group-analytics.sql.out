@@ -205,7 +205,7 @@ SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, udf
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2445",
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

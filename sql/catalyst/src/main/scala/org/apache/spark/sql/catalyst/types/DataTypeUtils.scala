@@ -17,11 +17,11 @@
 package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType}
 
 object DataTypeUtils {
   /**
@@ -212,5 +212,11 @@ object DataTypeUtils {
         false
     }
   }
+
+  /**
+   * Convert a StructField to a AttributeReference.
+   */
+  def toAttribute(field: StructField): AttributeReference =
+    AttributeReference(field.name, field.dataType, field.nullable, field.metadata)()
 }
 

@@ -99,4 +99,5 @@ DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-09-01, hr=5], true,
 -- !query
 DROP TABLE t
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`t`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t

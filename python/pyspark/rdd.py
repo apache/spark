@@ -829,6 +829,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
         >>> def f(iterator): yield sum(iterator)
+        ...
         >>> rdd.mapPartitions(f).collect()
         [3, 7]
         """
@@ -874,6 +875,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(splitIndex, iterator): yield splitIndex
+        ...
         >>> rdd.mapPartitionsWithIndex(f).sum()
         6
         """
@@ -917,6 +919,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(splitIndex, iterator): yield splitIndex
+        ...
         >>> rdd.mapPartitionsWithSplit(f).sum()
         6
         """
@@ -1748,6 +1751,7 @@ class RDD(Generic[T_co]):
         Examples
         --------
         >>> def f(x): print(x)
+        ...
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
         f = fail_on_stopiteration(f)
@@ -1781,6 +1785,7 @@ class RDD(Generic[T_co]):
         >>> def f(iterator):
         ...     for x in iterator:
         ...          print(x)
+        ...
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
         """
 
@@ -4207,6 +4212,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
         >>> def f(x): return x
+        ...
         >>> rdd.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
@@ -4243,6 +4249,7 @@ class RDD(Generic[T_co]):
         --------
         >>> rdd = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
         >>> def f(x): return len(x)
+        ...
         >>> rdd.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
@@ -5321,6 +5328,7 @@ class RDDBarrier(Generic[T]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
         >>> def f(iterator): yield sum(iterator)
+        ...
         >>> barrier = rdd.barrier()
         >>> barrier
         <pyspark.rdd.RDDBarrier ...>
@@ -5372,6 +5380,7 @@ class RDDBarrier(Generic[T]):
         --------
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(splitIndex, iterator): yield splitIndex
+        ...
         >>> barrier = rdd.barrier()
         >>> barrier
         <pyspark.rdd.RDDBarrier ...>

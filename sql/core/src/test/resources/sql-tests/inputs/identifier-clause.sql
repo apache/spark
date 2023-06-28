@@ -17,7 +17,7 @@ SELECT IDENTIFIER('c' || '1') FROM VALUES(1) AS T(c1);
 
 -- Table references
 CREATE SCHEMA IF NOT EXISTS s;
-CREATE TABLE s.tab(c1 INT) USING PARQUET;
+CREATE TABLE s.tab(c1 INT) USING CSV;
 USE SCHEMA s;
 
 INSERT INTO IDENTIFIER('ta' || 'b') VALUES(1);
@@ -40,22 +40,22 @@ SELECT IDENTIFIER('abs')(-1);
 SELECT * FROM IDENTIFIER('ra' || 'nge')(0, 1);
 
 -- Table DDL
-CREATE TABLE IDENTIFIER('tab')(c1 INT) USING parquet;
+CREATE TABLE IDENTIFIER('tab')(c1 INT) USING CSV;
 DROP TABLE IF EXISTS IDENTIFIER('ta' || 'b');
 
 CREATE SCHEMA identifier_clauses;
 USE identifier_clauses;
-CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING parquet;
+CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING CSV;
 DROP TABLE IF EXISTS IDENTIFIER('identifier_clauses.' || 'tab');
-CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet;
-REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet;
+CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV;
+REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV;
 CACHE TABLE IDENTIFIER('ta' || 'b');
 UNCACHE TABLE IDENTIFIER('ta' || 'b');
 DROP TABLE IF EXISTS IDENTIFIER('ta' || 'b');
 USE default;
 DROP SCHEMA identifier_clauses;
 
-CREATE TABLE tab(c1 INT) USING parquet;
+CREATE TABLE tab(c1 INT) USING CSV;
 INSERT INTO tab VALUES (1);
 SELECT c1 FROM tab;
 DESCRIBE IDENTIFIER('ta' || 'b');
@@ -135,7 +135,7 @@ SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS
 WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v);
 INSERT INTO tab(IDENTIFIER('c1')) VALUES(1);
 CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1);
-CREATE TABLE tab(IDENTIFIER('c1') INT) USING parquet;
+CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV;
 
 
 

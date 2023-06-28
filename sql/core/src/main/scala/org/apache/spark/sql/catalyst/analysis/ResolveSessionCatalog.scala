@@ -211,7 +211,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case DropTable(ResolvedV1Identifier(ident), ifExists, purge) =>
+    case DropTable(ResolvedV1Identifier(ident), ifExists, purge) if conf.useV1Command =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
     // v1 DROP TABLE supports temp view.
