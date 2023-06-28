@@ -33,6 +33,7 @@ from contextlib import contextmanager
 import subprocess
 import sys
 import json
+import traceback
 
 PYTHON_EXE = sys.executable
 AEXPY_EXE = [PYTHON_EXE, "-m", "aexpy", "-vvv"]
@@ -111,37 +112,50 @@ def extract(branch: str, srcDir: Path, logFile: TextIOWrapper = None):
 
 
 def diff(old: str, new: str = CURRENT_CODE):
-    logPath = CACHE_DIR / f"log-{old}-{new}.log"
-    with open(logPath, "w", encoding="utf-8") as log:
-        with checkout(old, log) as src1:
-            log.write(f"Extract API of {old}...\n")
-            extract1 = extract(old, src1, log)
-            with checkout(new) as src2:
-                log.write(f"Extract API of {new}...\n")
-                extract2 = extract(new, src2, log)
+    distDir = CACHE_DIR / "dist" / new / f"with-{old}"
+    if not distDir.exists():
+        os.makedirs(distDir)
+    logPath = distDir / f"log.log"
+    try:
+        with open(logPath, "w", encoding="utf-8") as log:
+            with checkout(old, log) as src1:
+                log.write(f"Extract API of {old}...\n")
+                extract1 = extract(old, src1, log)
+                with checkout(new) as src2:
+                    log.write(f"Extract API of {new}...\n")
+                    extract2 = extract(new, src2, log)
 
-                log.write(f"Diff APIs...\n")
-                diff = CACHE_DIR / f"diff-{old}-{new}.json"
-                runAexPy(
-                    [
-                        "diff",
-                        str(extract1.resolve()),
-                        str(extract2.resolve()),
-                        "-o",
-                        str(diff.resolve()),
-                    ],
-                    log,
-                )
+                    log.write(f"Diff APIs...\n")
+                    diff = distDir / f"diff.json"
+                    runAexPy(
+                        [
+                            "diff",
+                            str(extract1.resolve()),
+                            str(extract2.resolve()),
+                            "-o",
+                            str(diff.resolve()),
+                        ],
+                        log,
+                    )
 
-                log.write(f"Generate changes...\n")
-                report = CACHE_DIR / f"report-{old}-{new}.json"
-                runAexPy(["report", str(diff.resolve()), "-o", str(report.resolve())], log)
+                    log.write(f"Generate changes...\n")
+                    report = distDir / f"report.json"
+                    runAexPy(["report", str(diff.resolve()), "-o", str(report.resolve())], log)
 
-                result = json.loads(report.read_text("utf-8"))
+                    result = json.loads(report.read_text("utf-8"))
 
-                log.write(f"Result: {result}\n")
+                    log.write(f"Result: {result}\n")
 
-                return result["content"]
+                    content = result["content"]
+                    (distDir / "report.txt").write_text(content, encoding="utf-8")
+
+                    log.write(f"\n{content}\n")
+
+                    return content
+    except Exception as ex:
+        traceback.print_exception(ex)
+        print(f"An error occured, view log at {logPath.resolve()} .")
+        exit(1)
 
 
 def main():
