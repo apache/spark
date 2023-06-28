@@ -410,6 +410,21 @@ class UDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
+    def test_udtf_with_int_and_table_argument_query(self):
+        class TestUDTF:
+            def eval(self, i: int, row: Row):
+                if row["id"] > i:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                "SELECT * FROM test_udtf(5, TABLE (SELECT id FROM range(0, 8)))"
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
     def test_udtf_with_table_argument_identifier(self):
         class TestUDTF:
             def eval(self, row: Row):
@@ -423,6 +438,22 @@ class UDTFTestsMixin:
             self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
             self.assertEqual(
                 self.spark.sql("SELECT * FROM test_udtf(TABLE v)").collect(),
+                [Row(a=6), Row(a=7)],
+            )
+
+    def test_udtf_with_int_and_table_argument_identifier(self):
+        class TestUDTF:
+            def eval(self, i: int, row: Row):
+                if row["id"] > i:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+
+        with self.tempView("v"):
+            self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
+            self.assertEqual(
+                self.spark.sql("SELECT * FROM test_udtf(5, TABLE v)").collect(),
                 [Row(a=6), Row(a=7)],
             )
 
@@ -504,6 +535,26 @@ class UDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
+    @unittest.skip("TODO(SPARK-44233): Fix the subquery resolution.")
+    def test_udtf_with_table_argument_lateral_join(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                SELECT * FROM
+                  range(0, 8) AS t,
+                  LATERAL test_udtf(TABLE t)
+                """
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
     def test_udtf_with_table_argument_multiple(self):
         class TestUDTF:
             def eval(self, a: Row, b: Row):
@@ -511,23 +562,37 @@ class UDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="a: int, b: int")
         self.spark.udtf.register("test_udtf", func)
-        self.assertEqual(
-            self.spark.sql(
-                """
-                SELECT * FROM test_udtf(
-                  TABLE (SELECT id FROM range(0, 2)),
-                  TABLE (SELECT id FROM range(0, 3)))
-                """
-            ).collect(),
-            [
-                Row(a=0, b=0),
-                Row(a=1, b=0),
-                Row(a=0, b=1),
-                Row(a=1, b=1),
-                Row(a=0, b=2),
-                Row(a=1, b=2),
-            ],
-        )
+
+        with self.sql_conf({"spark.sql.allowMultipleTableArguments.enabled": False}):
+            with self.assertRaisesRegex(
+                AnalysisException, "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS"
+            ):
+                self.spark.sql(
+                    """
+                    SELECT * FROM test_udtf(
+                      TABLE (SELECT id FROM range(0, 2)),
+                      TABLE (SELECT id FROM range(0, 3)))
+                    """
+                ).collect()
+
+        with self.sql_conf({"spark.sql.allowMultipleTableArguments.enabled": True}):
+            self.assertEqual(
+                self.spark.sql(
+                    """
+                    SELECT * FROM test_udtf(
+                      TABLE (SELECT id FROM range(0, 2)),
+                      TABLE (SELECT id FROM range(0, 3)))
+                    """
+                ).collect(),
+                [
+                    Row(a=0, b=0),
+                    Row(a=1, b=0),
+                    Row(a=0, b=1),
+                    Row(a=1, b=1),
+                    Row(a=0, b=2),
+                    Row(a=1, b=2),
+                ],
+            )
 
 
 class UDTFTests(UDTFTestsMixin, ReusedSQLTestCase):
