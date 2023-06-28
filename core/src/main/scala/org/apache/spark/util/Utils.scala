@@ -2291,15 +2291,16 @@ private[spark] object Utils extends Logging with SparkClassUtils {
   def getHeapHistogram(): Array[String] = {
     // From Java 9+, we can use 'ProcessHandle.current().pid()'
     val pid = getProcessName().split("@").head
-    val builder = new ProcessBuilder("jmap", "-histo:live", pid)
-    builder.redirectErrorStream(true)
+    val jmap = System.getProperty("java.home") + "/bin/jmap"
+    val builder = new ProcessBuilder(jmap, "-histo:live", pid)
     val p = builder.start()
-    val r = new BufferedReader(new InputStreamReader(p.getInputStream()))
     val rows = ArrayBuffer.empty[String]
-    var line = ""
-    while (line != null) {
-      if (line.nonEmpty) rows += line
-      line = r.readLine()
+    Utils.tryWithResource(new BufferedReader(new InputStreamReader(p.getInputStream()))) { r =>
+      var line = ""
+      while (line != null) {
+        if (line.nonEmpty) rows += line
+        line = r.readLine()
+      }
     }
     rows.toArray
   }

@@ -13,18 +13,14 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "regexp_instr",
+        "functionName": "aes_encrypt",
         "arguments": [{
           "unresolvedAttribute": {
             "unparsedIdentifier": "g"
           }
         }, {
-          "literal": {
-            "string": "\\d+(a|b|m)"
-          }
-        }, {
-          "literal": {
-            "integer": 1
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }
