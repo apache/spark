@@ -193,7 +193,7 @@ object HllSketchAgg {
   def checkLgK(lgConfigK: Int): Unit = {
     if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
       throw QueryExecutionErrors.hllInvalidLgK(function = "hll_sketch_agg",
-        min = minLgConfigK.toString, max = maxLgConfigK.toString, value = lgConfigK.toString)
+        min = minLgConfigK, max = maxLgConfigK, value = lgConfigK.toString)
     }
   }
 }
@@ -285,7 +285,7 @@ case class HllUnionAgg(
   }
 
   /**
-   * Helper method to compare lgConfigKs and throw an exception if 'allowDifferentLgConfigK' isn't
+   * Helper method to compare lgConfigKs and throw an exception if `allowDifferentLgConfigK` isn't
    * true and configs don't match.
    *
    * @param left An lgConfigK value

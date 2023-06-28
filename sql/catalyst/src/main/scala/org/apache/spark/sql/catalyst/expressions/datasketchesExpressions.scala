@@ -119,7 +119,7 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
     if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
       throw QueryExecutionErrors.hllUnionDifferentLgK(
-        sketch1.getLgConfigK, sketch2.getLgConfigK, function = "hll_union")
+        sketch1.getLgConfigK, sketch2.getLgConfigK, function = prettyName)
     }
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)

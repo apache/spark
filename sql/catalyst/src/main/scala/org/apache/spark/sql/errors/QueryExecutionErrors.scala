@@ -2852,13 +2852,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "enumString" -> enumString))
   }
 
-  def hllInvalidLgK(function: String, min: String, max: String, value: String): Throwable = {
+  def hllInvalidLgK(function: String, min: Int, max: Int, value: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_LG_K",
       messageParameters = Map(
         "function" -> toSQLId(function),
-        "min" -> min,
-        "max" -> max,
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
         "value" -> value))
   }
 
