@@ -89,6 +89,9 @@ object AgnosticEncoders {
       valueContainsNull)
   }
 
+  // The encoder's top level data type is a struct type and can be flattened to a row.
+  trait RowStructEncoder
+
   case class EncoderField(
       name: String,
       enc: AgnosticEncoder[_],
@@ -103,7 +106,7 @@ object AgnosticEncoders {
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
       fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] {
+    extends AgnosticEncoder[K] with RowStructEncoder {
     override def isPrimitive: Boolean = false
     override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
@@ -111,16 +114,9 @@ object AgnosticEncoders {
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
-    private[sql] def tuple(
-        encoders: Seq[AgnosticEncoder[_]],
-        fieldNullables: Option[Seq[Boolean]] = None): AgnosticEncoder[_] = {
+    private[sql] def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
       val fields = encoders.zipWithIndex.map {
-        case (e, id) =>
-          EncoderField(
-            s"_${id + 1}",
-            e,
-            fieldNullables.map(nullables => nullables(id)).getOrElse(e.nullable),
-            Metadata.empty)
+        case (e, id) => EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
       }
       val cls = cachedCls.computeIfAbsent(encoders.size,
         _ => Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
@@ -132,7 +128,7 @@ object AgnosticEncoders {
     }
   }
 
-  abstract class BaseRowEncoder extends AgnosticEncoder[Row] {
+  abstract class BaseRowEncoder extends AgnosticEncoder[Row] with RowStructEncoder {
     override def isPrimitive: Boolean = false
     override def dataType: DataType = schema
     override def clsTag: ClassTag[Row] = classTag[Row]
@@ -149,7 +145,7 @@ object AgnosticEncoders {
   case class JavaBeanEncoder[K](
       override val clsTag: ClassTag[K],
       fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] {
+    extends AgnosticEncoder[K] with RowStructEncoder {
     override def isPrimitive: Boolean = false
     override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema

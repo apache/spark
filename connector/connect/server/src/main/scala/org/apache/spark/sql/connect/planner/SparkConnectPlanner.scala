@@ -2069,17 +2069,24 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
   private def transformJoinWith(rel: proto.Join): LogicalPlan = {
     val joined =
       session.sessionState.executePlan(transformJoin(rel)).analyzed.asInstanceOf[logical.Join]
+    val (isLeftRowStruct, isRightRowStruct) = rel.getInputType match {
+      case proto.Join.InputType.NO_ROW_STRUCT => (false, false)
+      case proto.Join.InputType.LEFT_ROW_STRUCT => (true, false)
+      case proto.Join.InputType.RIGHT_ROW_STRUCT => (false, true)
+      case proto.Join.InputType.BOTH_ROW_STRUCT => (true, true)
+      case _ => throw InvalidPlanInput(s"Input type ${rel.getInputType} is not supported")
+    }
 
     JoinWith.typedJoinWith(
       joined,
       session.sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
       session.sessionState.analyzer.resolver,
-      rel.getIsLeftRowStruct,
-      rel.getIsRightRowStruct)
+      isLeftRowStruct,
+      isRightRowStruct)
   }
 
   private def transformJoinOrJoinWith(rel: proto.Join): LogicalPlan = {
-    if (rel.hasIsLeftRowStruct && rel.hasIsRightRowStruct) {
+    if (rel.hasInputType) {
       transformJoinWith(rel)
     } else {
       transformJoin(rel)

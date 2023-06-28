@@ -964,13 +964,34 @@ class Join(google.protobuf.message.Message):
     JOIN_TYPE_LEFT_SEMI: Join.JoinType.ValueType  # 6
     JOIN_TYPE_CROSS: Join.JoinType.ValueType  # 7
 
+    class _InputType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _InputTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Join._InputType.ValueType],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        INPUT_TYPE_UNSPECIFIED: Join._InputType.ValueType  # 0
+        NO_ROW_STRUCT: Join._InputType.ValueType  # 1
+        LEFT_ROW_STRUCT: Join._InputType.ValueType  # 2
+        RIGHT_ROW_STRUCT: Join._InputType.ValueType  # 3
+        BOTH_ROW_STRUCT: Join._InputType.ValueType  # 4
+
+    class InputType(_InputType, metaclass=_InputTypeEnumTypeWrapper): ...
+    INPUT_TYPE_UNSPECIFIED: Join.InputType.ValueType  # 0
+    NO_ROW_STRUCT: Join.InputType.ValueType  # 1
+    LEFT_ROW_STRUCT: Join.InputType.ValueType  # 2
+    RIGHT_ROW_STRUCT: Join.InputType.ValueType  # 3
+    BOTH_ROW_STRUCT: Join.InputType.ValueType  # 4
+
     LEFT_FIELD_NUMBER: builtins.int
     RIGHT_FIELD_NUMBER: builtins.int
     JOIN_CONDITION_FIELD_NUMBER: builtins.int
     JOIN_TYPE_FIELD_NUMBER: builtins.int
     USING_COLUMNS_FIELD_NUMBER: builtins.int
-    IS_LEFT_ROW_STRUCT_FIELD_NUMBER: builtins.int
-    IS_RIGHT_ROW_STRUCT_FIELD_NUMBER: builtins.int
+    INPUT_TYPE_FIELD_NUMBER: builtins.int
     @property
     def left(self) -> global___Relation:
         """(Required) Left input relation for a Join."""
@@ -995,13 +1016,9 @@ class Join(google.protobuf.message.Message):
 
         This field does not co-exist with join_condition.
         """
-    is_left_row_struct: builtins.bool
-    """Optional. set to true if the left is a struct that can be flattened to a row. Only used by
-    JoinWith where the left is a dataset.
-    """
-    is_right_row_struct: builtins.bool
-    """Optional. set to true if the right is a struct that can be flattened to a row. Only used by
-    JoinWith where the right is a dataset.
+    input_type: global___Join.InputType.ValueType
+    """Optional. Only used by joinWith.
+    Set the input type if the left and/or right is a struct that can be flattened to a row.
     """
     def __init__(
         self,
@@ -1011,20 +1028,15 @@ class Join(google.protobuf.message.Message):
         join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         join_type: global___Join.JoinType.ValueType = ...,
         using_columns: collections.abc.Iterable[builtins.str] | None = ...,
-        is_left_row_struct: builtins.bool | None = ...,
-        is_right_row_struct: builtins.bool | None = ...,
+        input_type: global___Join.InputType.ValueType | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_is_left_row_struct",
-            b"_is_left_row_struct",
-            "_is_right_row_struct",
-            b"_is_right_row_struct",
-            "is_left_row_struct",
-            b"is_left_row_struct",
-            "is_right_row_struct",
-            b"is_right_row_struct",
+            "_input_type",
+            b"_input_type",
+            "input_type",
+            b"input_type",
             "join_condition",
             b"join_condition",
             "left",
@@ -1036,14 +1048,10 @@ class Join(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_is_left_row_struct",
-            b"_is_left_row_struct",
-            "_is_right_row_struct",
-            b"_is_right_row_struct",
-            "is_left_row_struct",
-            b"is_left_row_struct",
-            "is_right_row_struct",
-            b"is_right_row_struct",
+            "_input_type",
+            b"_input_type",
+            "input_type",
+            b"input_type",
             "join_condition",
             b"join_condition",
             "join_type",
@@ -1056,15 +1064,9 @@ class Join(google.protobuf.message.Message):
             b"using_columns",
         ],
     ) -> None: ...
-    @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_is_left_row_struct", b"_is_left_row_struct"]
-    ) -> typing_extensions.Literal["is_left_row_struct"] | None: ...
-    @typing.overload
-    def WhichOneof(
-        self,
-        oneof_group: typing_extensions.Literal["_is_right_row_struct", b"_is_right_row_struct"],
-    ) -> typing_extensions.Literal["is_right_row_struct"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_input_type", b"_input_type"]
+    ) -> typing_extensions.Literal["input_type"] | None: ...
 
 global___Join = Join
 

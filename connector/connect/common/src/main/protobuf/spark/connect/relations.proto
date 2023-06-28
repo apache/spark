@@ -226,12 +226,17 @@ message Join {
     JOIN_TYPE_CROSS = 7;
   }
 
-  // Optional. set to true if the left is a struct that can be flattened to a row. Only used by
-  // JoinWith where the left is a dataset.
-  optional bool is_left_row_struct = 6;
-  // Optional. set to true if the right is a struct that can be flattened to a row. Only used by
-  // JoinWith where the right is a dataset.
-  optional bool is_right_row_struct = 7;
+  // Optional. Only used by joinWith.
+  // Set the input type if the left and/or right is a struct that can be flattened to a row.
+  optional InputType input_type = 6;
+
+  enum InputType {
+    INPUT_TYPE_UNSPECIFIED = 0;
+    NO_ROW_STRUCT = 1;
+    LEFT_ROW_STRUCT = 2;
+    RIGHT_ROW_STRUCT = 3;
+    BOTH_ROW_STRUCT = 4;
+  }
 }
 
 // Relation of type [[SetOperation]]

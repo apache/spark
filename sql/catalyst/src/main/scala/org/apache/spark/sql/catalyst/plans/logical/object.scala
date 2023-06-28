@@ -721,6 +721,7 @@ case class CoGroup(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }
 
+// TODO (SPARK-44225): Move this into analyzer
 object JoinWith {
   /**
    * find the trivially true predicates and automatically resolves them to both sides.

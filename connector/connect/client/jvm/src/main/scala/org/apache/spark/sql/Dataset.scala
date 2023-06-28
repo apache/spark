@@ -20,6 +20,7 @@ import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
@@ -860,25 +861,35 @@ class Dataset[T] private[sql] (
    */
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
-    val joinedNullables = joinTypeValue match {
+    val (leftNullable, rightNullable) = joinTypeValue match {
       case proto.Join.JoinType.JOIN_TYPE_INNER | proto.Join.JoinType.JOIN_TYPE_CROSS =>
-        Seq(false, false)
+        (false, false)
       case proto.Join.JoinType.JOIN_TYPE_FULL_OUTER =>
-        Seq(true, true)
+        (true, true)
       case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER =>
-        Seq(false, true)
+        (false, true)
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER =>
-        Seq(true, false)
+        (true, false)
       case e =>
         throw new IllegalArgumentException(s"Unsupported join type '$e'.")
     }
 
-    def isRowStruct(enc: AgnosticEncoder[_]): Boolean =
-      enc.dataType.isInstanceOf[StructType] && !enc.isInstanceOf[OptionEncoder[_]]
+    val tupleEncoder =
+      ProductEncoder[(T, U)](
+        ClassTag(Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple2")),
+        Seq(
+          EncoderField(s"_1", this.encoder, leftNullable, Metadata.empty),
+          EncoderField(s"_2", other.encoder, rightNullable, Metadata.empty)))
 
-    val tupleEncoder = ProductEncoder
-      .tuple(Seq(this.encoder, other.encoder), Some(joinedNullables))
-      .asInstanceOf[AgnosticEncoder[(T, U)]]
+    val inputType = (
+      this.encoder.isInstanceOf[RowStructEncoder],
+      other.encoder.isInstanceOf[RowStructEncoder]
+    ) match {
+      case (true, true) => proto.Join.InputType.BOTH_ROW_STRUCT
+      case (true, false) => proto.Join.InputType.LEFT_ROW_STRUCT
+      case (false, true) => proto.Join.InputType.RIGHT_ROW_STRUCT
+      case (false, false) => proto.Join.InputType.NO_ROW_STRUCT
+    }
 
     sparkSession.newDataset(tupleEncoder) { builder =>
       val joinBuilder = builder.getJoinBuilder
@@ -887,8 +898,7 @@ class Dataset[T] private[sql] (
         .setRight(other.plan.getRoot)
         .setJoinType(joinTypeValue)
         .setJoinCondition(condition.expr)
-        .setIsLeftRowStruct(isRowStruct(this.encoder))
-        .setIsRightRowStruct(isRowStruct(other.encoder))
+        .setInputType(inputType)
     }
   }
 
