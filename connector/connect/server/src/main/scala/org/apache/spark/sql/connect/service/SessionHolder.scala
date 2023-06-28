@@ -28,6 +28,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
@@ -176,7 +177,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
     if (dataFrameCache.putIfAbsent(dfId, df) != null) {
-      throw new IllegalArgumentException(s"A dataframe is already associated with id $dfId")
+      SparkException.internalError(s"A dataframe is already associated with id $dfId")
     }
   }
 
