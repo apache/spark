@@ -535,7 +535,8 @@ class UDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
-    @unittest.skip("TODO(SPARK-44233): Fix the subquery resolution.")
+    # TODO(SPARK-44233): Fix the subquery resolution.
+    @unittest.skip("Fails to resolve the subquery.")
     def test_udtf_with_table_argument_lateral_join(self):
         class TestUDTF:
             def eval(self, row: Row):
