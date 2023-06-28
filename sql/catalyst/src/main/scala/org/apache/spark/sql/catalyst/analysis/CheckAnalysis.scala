@@ -1439,12 +1439,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           if (!canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2329",
+              errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
               messageParameters = Map(
-                "table" -> table.name,
-                "fieldName" -> fieldName,
-                "oldType" -> field.dataType.simpleString,
-                "newType" -> newDataType.simpleString))
+                "table" -> toSQLId(table.name),
+                "originName" -> toSQLId(fieldName),
+                "originType" -> toSQLType(field.dataType),
+                "newName" -> toSQLId(fieldName),
+                "newType" -> toSQLType(newDataType)))
           }
         }
         if (a.nullable.isDefined) {
