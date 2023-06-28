@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.nio.file.Files
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -42,7 +41,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
@@ -68,7 +67,7 @@ import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
-import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
+import org.apache.spark.storage.BlockManagerMessages.{TriggerHeapHistogram, TriggerThreadDump}
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
 import org.apache.spark.util.logging.DriverLogger
@@ -194,6 +193,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
+  logInfo(s"OS info ${System.getProperty("os.name")}, ${System.getProperty("os.version")}, " +
+    s"${System.getProperty("os.arch")}")
+  logInfo(s"Java version ${System.getProperty("java.version")}")
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
@@ -387,13 +389,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(Level.toLevel(upperCased))
   }
 
-  /**
-   * :: Private ::
-   * Returns the directory that stores artifacts transferred through Spark Connect.
-   */
-  @Private
-  private[spark] lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
-
   try {
     _conf = config.clone()
     _conf.get(SPARK_LOG_LEVEL).foreach { level =>
@@ -479,18 +474,7 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir").orElse {
-      if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
-        // For Spark Connect, we piggyback on the existing REPL integration to load class
-        // files on the executors.
-        // This is a temporary intermediate step due to unavailable classloader isolation.
-        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
-        Files.createDirectories(classDirectory)
-        Some(classDirectory.toString)
-      } else {
-        None
-      }
-    }.foreach { path =>
+    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
       val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
       _conf.set("spark.repl.class.uri", replUri)
     }
@@ -750,6 +734,30 @@ class SparkContext(config: SparkConf) extends Logging {
     }
   }
 
+  /**
+   * Called by the web UI to obtain executor heap histogram.
+   */
+  private[spark] def getExecutorHeapHistogram(executorId: String): Option[Array[String]] = {
+    try {
+      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+        Some(Utils.getHeapHistogram())
+      } else {
+        env.blockManager.master.getExecutorEndpointRef(executorId) match {
+          case Some(endpointRef) =>
+            Some(endpointRef.askSync[Array[String]](TriggerHeapHistogram))
+          case None =>
+            logWarning(s"Executor $executorId might already have stopped and " +
+              "can not request heap histogram from it.")
+            None
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Exception getting heap histogram from executor $executorId", e)
+        None
+    }
+  }
+
   private[spark] def getLocalProperties: Properties = localProperties.get()
 
   private[spark] def setLocalProperties(props: Properties): Unit = {
@@ -827,6 +835,69 @@ class SparkContext(config: SparkConf) extends Logging {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
+  }
+
+  /**
+   * Set the behavior of job cancellation from jobs started in this thread.
+   *
+   * @param interruptOnCancel If true, then job cancellation will result in `Thread.interrupt()`
+   * being called on the job's executor threads. This is useful to help ensure that the tasks
+   * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
+   * may respond to Thread.interrupt() by marking nodes as dead.
+   *
+   * @since 3.5.0
+   */
+  def setInterruptOnCancel(interruptOnCancel: Boolean): Unit = {
+    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
+  }
+
+  /**
+   * Add a tag to be assigned to all the jobs started by this thread.
+   *
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
+   */
+  def addJobTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    val existingTags = getJobTags()
+    val newTags = (existingTags + tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+  }
+
+  /**
+   * Remove a tag previously added to be assigned to all the jobs started by this thread.
+   * Noop if such a tag was not added earlier.
+   *
+   * @param tag The tag to be removed. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
+   */
+  def removeJobTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    val existingTags = getJobTags()
+    val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
+    setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+  }
+
+  /**
+   * Get the tags that are currently set to be assigned to all the jobs started by this thread.
+   *
+   * @since 3.5.0
+   */
+  def getJobTags(): Set[String] = {
+    Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
+  }
+
+  /**
+   * Clear the current thread's job tags.
+   *
+   * @since 3.5.0
+   */
+  def clearJobTags(): Unit = {
+    setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
   }
 
   /**
@@ -2471,6 +2542,19 @@ class SparkContext(config: SparkConf) extends Logging {
     dagScheduler.cancelJobGroup(groupId)
   }
 
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
+   */
+  def cancelJobsWithTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    assertNotStopped()
+    dagScheduler.cancelJobsWithTag(tag)
+  }
+
   /** Cancel all jobs that have been scheduled or are running.  */
   def cancelAllJobs(): Unit = {
     assertNotStopped()
@@ -2840,6 +2924,7 @@ object SparkContext extends Logging {
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
   private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
+  private[spark] val SPARK_JOB_TAGS = "spark.job.tags"
   private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
@@ -2851,6 +2936,22 @@ object SparkContext extends Logging {
    */
   private[spark] val DRIVER_IDENTIFIER = "driver"
 
+  /** Separator of tags in SPARK_JOB_TAGS property */
+  private[spark] val SPARK_JOB_TAGS_SEP = ","
+
+  private[spark] def throwIfInvalidTag(tag: String) = {
+    if (tag == null) {
+      throw new IllegalArgumentException("Spark job tag cannot be null.")
+    }
+    if (tag.contains(SPARK_JOB_TAGS_SEP)) {
+      throw new IllegalArgumentException(
+        s"Spark job tag cannot contain '$SPARK_JOB_TAGS_SEP'.")
+    }
+    if (tag.isEmpty) {
+      throw new IllegalArgumentException(
+        "Spark job tag cannot be an empty string.")
+    }
+  }
 
   private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Iterable[T])
     : ArrayWritable = {

@@ -18,6 +18,7 @@
 """
 String functions on pandas-on-Spark Series
 """
+import warnings
 from typing import (
     Any,
     Callable,
@@ -1604,6 +1605,10 @@ class StringMethods:
         2    None
         dtype: object
         """
+        warnings.warn(
+            "Default value of `regex` will be changed to `False` instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         def pandas_replace(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
             return s.str.replace(pat, repl, n=n, case=case, flags=flags, regex=regex)

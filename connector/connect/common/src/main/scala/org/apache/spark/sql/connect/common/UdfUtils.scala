@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.streaming.GroupState
 
 /**
  * Util functions to help convert input functions between typed filter, map, flatMap,
@@ -93,6 +94,31 @@ private[sql] object UdfUtils extends Serializable {
       {
         f(k, itr.map(v => valueMapFunc(v)), otherItr.map(u => otherValueMapFunc(u)))
       }
+  }
+
+  def mapValuesAdaptor[K, V, S, U, IV](
+      f: (K, Iterator[V], GroupState[S]) => Iterator[U],
+      valueMapFunc: IV => V): (K, Iterator[IV], GroupState[S]) => Iterator[U] = {
+    (k: K, itr: Iterator[IV], s: GroupState[S]) =>
+      {
+        f(k, itr.map(v => valueMapFunc(v)), s)
+      }
+  }
+
+  def mapGroupsWithStateFuncToFlatMapAdaptor[K, V, S, U](
+      f: (K, Iterator[V], GroupState[S]) => U): (K, Iterator[V], GroupState[S]) => Iterator[U] = {
+    (k: K, itr: Iterator[V], s: GroupState[S]) => Iterator(f(k, itr, s))
+  }
+
+  def mapGroupsWithStateFuncToScalaFunc[K, V, S, U](
+      f: MapGroupsWithStateFunction[K, V, S, U]): (K, Iterator[V], GroupState[S]) => U = {
+    (key, data, groupState) => f.call(key, data.asJava, groupState)
+  }
+
+  def flatMapGroupsWithStateFuncToScalaFunc[K, V, S, U](
+      f: FlatMapGroupsWithStateFunction[K, V, S, U])
+      : (K, Iterator[V], GroupState[S]) => Iterator[U] = { (key, data, groupState) =>
+    f.call(key, data.asJava, groupState).asScala
   }
 
   def mapReduceFuncToScalaFunc[T](func: ReduceFunction[T]): (T, T) => T = func.call

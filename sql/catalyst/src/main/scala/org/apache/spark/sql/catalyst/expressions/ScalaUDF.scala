@@ -1168,7 +1168,7 @@ case class ScalaUDF(
          |  $funcInvocation;
          |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "$funcCls", "$inputTypesString", "$outputType", e);
+         |    "$functionName", "$inputTypesString", "$outputType", e);
          |}
        """.stripMargin
 
@@ -1188,6 +1188,8 @@ case class ScalaUDF(
 
   private[this] val resultConverter = catalystConverter
 
+  private def functionName = udfName.map { uName => s"$uName ($funcCls)" }.getOrElse(funcCls)
+
   lazy val funcCls = Utils.getSimpleName(function.getClass)
   lazy val inputTypesString = children.map(_.dataType.catalogString).mkString(", ")
   lazy val outputType = dataType.catalogString
@@ -1198,7 +1200,7 @@ case class ScalaUDF(
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-          funcCls, inputTypesString, outputType, e)
+          functionName, inputTypesString, outputType, e)
     }
 
     resultConverter(result)

@@ -122,7 +122,7 @@
     <slf4j.version>2.0.7</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.5</hadoop.version>
+    <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>3.23.2</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
@@ -137,11 +137,11 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.4.0</kafka.version>
+    <kafka.version>3.4.1</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.8.3</orc.version>
+    <orc.version>1.8.4</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
@@ -168,13 +168,13 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.12.17</scala.version>
+    <scala.version>2.12.18</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <!-- dont update scala-maven-plugin to version 4.8.1 SPARK-42809 and SPARK-43595 -->   
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
-    <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.16.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -182,11 +182,11 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.15.2</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.15.2</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.10.0</snappy.version>
+    <snappy.version>1.1.10.1</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.15</commons-codec.version>
+    <commons-codec.version>1.16.0</commons-codec.version>
     <commons-compress.version>1.23.0</commons-compress.version>
-    <commons-io.version>2.12.0</commons-io.version>
+    <commons-io.version>2.13.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -217,12 +217,12 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>12.0.0</arrow.version>
-    <ammonite.version>2.5.8</ammonite.version>
+    <arrow.version>12.0.1</arrow.version>
+    <ammonite.version>2.5.9</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.7.0</kubernetes-client.version>
+    <kubernetes-client.version>6.7.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -276,6 +276,13 @@
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
+
+    <!-- Version used in Connect -->
+    <connect.guava.version>32.0.1-jre</connect.guava.version>
+    <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
+    <io.grpc.version>1.56.0</io.grpc.version>
+    <mima.version>1.1.2</mima.version>
+    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -811,7 +818,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.44</version>
+        <version>0.9.45</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -2775,6 +2782,17 @@
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
+                  <enforceBytecodeVersion>
+                    <maxJdkVersion>${java.version}</maxJdkVersion>
+                    <ignoredScopes>test</ignoredScopes>
+                    <ignoredScopes>provided</ignoredScopes>
+                    <excludes>
+                      <!--
+                        TODO(SPARK-44032): Remove the exclusion of threeten-extra when orc-core fixes the violation
+                      -->
+                      <exclude>org.threeten:threeten-extra</exclude>
+                    </excludes>
+                  </enforceBytecodeVersion>
                 </rules>
               </configuration>
             </execution>
@@ -2790,6 +2808,13 @@
               </configuration>
             </execution>
           </executions>
+          <dependencies>
+            <dependency>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>extra-enforcer-rules</artifactId>
+              <version>1.7.0</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
@@ -2889,7 +2914,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.7.10</version>
+                <version>1.7.13</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -2914,7 +2939,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.2</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -3033,7 +3058,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>3.2.1</version>
+          <version>3.3.0</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -3160,7 +3185,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>3.6.0</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -3549,7 +3574,7 @@
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
          property correctly.
         -->
-        <scala.version>2.12.17</scala.version>
+        <scala.version>2.12.18</scala.version>
       </properties>
       <build>
         <pluginManagement>
@@ -3562,7 +3587,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.8</scala.version>
+        <scala.version>2.13.11</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3621,6 +3646,10 @@
                   -->
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBase.scala:s</arg>
                   <arg>-Wconf:cat=unused-imports&amp;src=org\/apache\/spark\/graphx\/impl\/VertexPartitionBaseOps.scala:s</arg>
+                  <!--
+                    SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
+                  -->
+                  <arg>-Wconf:msg=Implicit definition should have explicit type:s</arg>
                 </args>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>

@@ -19,11 +19,14 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, MapObjects, NewInstance}
 import org.apache.spark.sql.types._
@@ -596,4 +599,20 @@ class ScalaReflectionSuite extends SparkFunSuite {
         ),
         nullable = true))
   }
+
+  test("encoder for row") {
+    assert(encoderForWithRowEncoderSupport[Row] === UnboundRowEncoder)
+    assert(encoderForWithRowEncoderSupport[Option[Row]] === OptionEncoder(UnboundRowEncoder))
+    assert(encoderForWithRowEncoderSupport[Array[Row]] === ArrayEncoder(UnboundRowEncoder, true))
+    assert(encoderForWithRowEncoderSupport[Map[Row, Row]] ===
+      MapEncoder(
+        ClassTag(getClassFromType(typeTag[Map[Row, Row]].tpe)),
+        UnboundRowEncoder, UnboundRowEncoder, true))
+    assert(encoderForWithRowEncoderSupport[MyClass] ===
+      ProductEncoder(
+        ClassTag(getClassFromType(typeTag[MyClass].tpe)),
+        Seq(EncoderField("row", UnboundRowEncoder, true, Metadata.empty))))
+  }
+
+  case class MyClass(row: Row)
 }

@@ -70,6 +70,14 @@ class GroupedData(PandasGroupedOpsMixin):
         self._df = df
         self.session: SparkSession = df.sparkSession
 
+    def __repr__(self) -> str:
+        index = 26  # index to truncate string from the JVM side
+        jvm_string = self._jgd.toString()
+        if jvm_string is not None and len(jvm_string) > index and jvm_string[index] == "[":
+            return f"GroupedData{jvm_string[index:]}"
+        else:
+            return super().__repr__()
+
     @overload
     def agg(self, *exprs: Column) -> DataFrame:
         ...
@@ -132,6 +140,9 @@ class GroupedData(PandasGroupedOpsMixin):
         +---+-----+
 
         Group-by name, and count each group.
+
+        >>> df.groupBy(df.name)
+        GroupedData[grouping...: [name...], value: [age: bigint, name: string], type: GroupBy]
 
         >>> df.groupBy(df.name).agg({"*": "count"}).sort("name").show()
         +-----+--------+

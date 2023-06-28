@@ -47,7 +47,7 @@ object TableOutputResolver {
 
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, actualExpectedCols, query)
+        tableName, actualExpectedCols.map(_.name), query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -67,14 +67,14 @@ object TableOutputResolver {
       val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
       val queryOutputCols = if (fillDefaultValue) {
         query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         }
       } else {
         query.output
       }
       if (actualExpectedCols.size > queryOutputCols.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols, query)
+          tableName, actualExpectedCols.map(_.name), query)
       }
 
       resolveColumnsByPosition(queryOutputCols, actualExpectedCols, conf, errors += _)
@@ -185,7 +185,7 @@ object TableOutputResolver {
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
         val defaultExpr = if (fillDefaultValue) {
-          getDefaultValueExprOrNullLit(expectedCol, conf)
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         } else {
           None
         }

@@ -478,12 +478,6 @@ class Column:
 
     __bool__ = __nonzero__
 
-    @property
-    def _jc(self) -> None:
-        raise PySparkAttributeError(
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
-        )
-
 
 Column.__doc__ = PySparkColumn.__doc__
 
