@@ -157,7 +157,7 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
   "messageParameters" : {
-    "name" : "b"
+    "colName" : "`b`"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -5280,8 +5280,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("zip_with(a1, a2, (x, x) -> x)")
       },
-      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.ARGUMENT_NAMES_EXISTS_SAME_SEMANTIC",
-      parameters = Map.empty,
+      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
+      parameters = Map(
+        "args" -> "x, x",
+        "caseSensitiveConfig" -> "spark.sql.caseSensitive"),
       context = ExpectedContext(
         fragment = "(x, x) -> x",
         start = 17,

@@ -80,8 +80,10 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
       if (names.map(a => canonicalizer(a.name)).distinct.size < names.size) {
         e.failAnalysis(
-          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.ARGUMENT_NAMES_EXISTS_SAME_SEMANTIC",
-          messageParameters = Map.empty)
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
+          messageParameters = Map(
+            "args" -> names.map(a => canonicalizer(a.name)).mkString(", "),
+            "caseSensitiveConfig" -> "spark.sql.caseSensitive"))
       }
 
       val arguments = argInfo.zip(names).map {

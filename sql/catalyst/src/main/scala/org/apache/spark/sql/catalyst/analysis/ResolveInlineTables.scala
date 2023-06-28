@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -97,7 +97,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
       val tpe = TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
         table.failAnalysis(
           errorClass = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
-          messageParameters = Map("name" -> name))
+          messageParameters = Map("colName" -> toSQLId(name)))
       }
       StructField(name, tpe, nullable = column.exists(_.nullable))
     }
