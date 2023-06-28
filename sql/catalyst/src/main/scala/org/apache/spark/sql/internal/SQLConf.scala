@@ -487,6 +487,23 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val VECTORIZED_HUGE_VECTOR_RESERVE_RATIO =
+    buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio")
+      .doc("spark will reserve requiredCapacity * this ratio memory next time")
+      .version("3.5.0")
+      .doubleConf
+      .createWithDefault(1.1)
+
+  val VECTORIZED_HUGE_VECTOR_THRESHOLD =
+    buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorThreshold")
+      .doc("When the in memory column vector is larger than this, spark will reserve " +
+        s"requiredCapacity * ${VECTORIZED_HUGE_VECTOR_RESERVE_RATIO.key} memory next time and " +
+        "free this column vector before reading next batch data. -1 means disabling the " +
+        "optimization.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(-1)
+
   val IN_MEMORY_PARTITION_PRUNING =
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
@@ -4629,6 +4646,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
+
+  def vectorizedHugeVectorThreshold: Int = getConf(VECTORIZED_HUGE_VECTOR_THRESHOLD)
+
+  def vectorizedHugeVectorReserveRatio: Double = getConf(VECTORIZED_HUGE_VECTOR_RESERVE_RATIO)
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 

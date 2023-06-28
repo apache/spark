@@ -95,7 +95,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
+      int newCapacity = vectorReservePolicy.nextCapacity(requiredCapacity);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
@@ -867,11 +867,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   protected int capacity;
 
-  /**
-   * Upper limit for the maximum capacity for this column.
-   */
-  @VisibleForTesting
-  protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+  protected VectorReservePolicy vectorReservePolicy;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -922,6 +918,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector(int capacity, DataType dataType) {
     super(dataType);
     this.capacity = capacity;
+    this.vectorReservePolicy = new DefaultVectorReservePolicy(capacity);
 
     if (isArray()) {
       DataType childType;
@@ -954,5 +951,9 @@ public abstract class WritableColumnVector extends ColumnVector {
     } else {
       this.childColumns = null;
     }
+  }
+
+  public int getCapacity() {
+    return capacity;
   }
 }

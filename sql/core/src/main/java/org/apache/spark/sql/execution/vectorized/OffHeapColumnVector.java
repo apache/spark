@@ -85,6 +85,22 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void reset() {
+    super.reset();
+    if (vectorReservePolicy.shouldCleanData()) {
+      capacity = vectorReservePolicy.defaultCapacity;
+      Platform.freeMemory(nulls);
+      Platform.freeMemory(data);
+      Platform.freeMemory(lengthData);
+      Platform.freeMemory(offsetData);
+      nulls = 0;
+      data = 0;
+      lengthData = 0;
+      offsetData = 0;
+    }
+  }
+
+  @Override
   public void close() {
     super.close();
     Platform.freeMemory(nulls);

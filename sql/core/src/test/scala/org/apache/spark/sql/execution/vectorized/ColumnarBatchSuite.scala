@@ -1565,7 +1565,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("exceeding maximum capacity should throw an error") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
       val column = allocate(1, ByteType, memMode)
-      column.MAX_CAPACITY = 15
+      column.vectorReservePolicy.MAX_CAPACITY = 15
       column.appendBytes(5, 0.toByte)
       // Successfully allocate twice the requested capacity
       assert(column.capacity == 10)

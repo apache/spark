@@ -1,0 +1,71 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.vectorized;
+
+import com.google.common.annotations.VisibleForTesting;
+
+import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+
+public abstract class VectorReservePolicy {
+
+  protected int defaultCapacity;
+
+  abstract int nextCapacity(int requiredCapacity);
+
+  boolean shouldCleanData() {
+    return false;
+  }
+
+  /**
+   * Upper limit for the maximum capacity for this column.
+   */
+  @VisibleForTesting
+  protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+}
+
+class DefaultVectorReservePolicy extends VectorReservePolicy {
+
+  int hugeThreshold;
+  double hugeReserveRatio;
+
+  int currentCapacity;
+
+  public DefaultVectorReservePolicy(int defaultCapacity) {
+    this.defaultCapacity = defaultCapacity;
+    this.currentCapacity = defaultCapacity;
+    SQLConf conf = SQLConf.get();
+    hugeThreshold = conf.vectorizedHugeVectorThreshold();
+    hugeReserveRatio = conf.vectorizedHugeVectorReserveRatio();
+  }
+
+  @Override
+  public int nextCapacity(int requiredCapacity) {
+    if (hugeThreshold < 0 || requiredCapacity < hugeThreshold) {
+      currentCapacity = Math.min(MAX_CAPACITY, requiredCapacity * 2);
+    } else {
+      currentCapacity = Math.min(MAX_CAPACITY, (int) (requiredCapacity * hugeReserveRatio));
+    }
+    return currentCapacity;
+  }
+
+  @Override
+  public boolean shouldCleanData() {
+    return currentCapacity > hugeThreshold;
+  }
+}
