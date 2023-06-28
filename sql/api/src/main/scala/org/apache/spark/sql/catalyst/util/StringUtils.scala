@@ -18,14 +18,14 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.array.ByteArrayUtils
 
 /**
  * Concatenation of sequence of strings to final string with cheap append method
  * and one memory allocation for the final string.  Can also bound the final size of
  * the string.
  */
-class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH) {
   protected val strings = new ArrayBuffer[String]
   protected var length: Int = 0
 
@@ -48,7 +48,7 @@ class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGT
       // Keeps the total length of appended strings. Note that we need to cap the length at
       // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
       // length causing StringIndexOutOfBoundsException in the substring call above.
-      length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
+      length = Math.min(length.toLong + sLen, ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH).toInt
     }
   }
 
