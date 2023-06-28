@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
@@ -1419,6 +1420,145 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
         }
         assert(e3.message.contains("unsupported DELETE condition") && e3.message.contains(errMsg))
       }
+    }
+  }
+
+  test("all target filters are evaluated on data source side") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |{ "pk": 5, "salary": 500, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.DeP IN ('hr', 'software')
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
+             |""".stripMargin)
+      }
+
+      val expressions = flatMap(executedPlan)(_.expressions.flatMap(splitConjunctivePredicates))
+      val inFilterPushed = expressions.forall {
+        case In(attr: AttributeReference, _) if attr.name == "DeP" => false
+        case _ => true
+      }
+      assert(inFilterPushed, "IN filter must be evaluated on data source side")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 201, "hr"), // update
+          Row(3, 301, "hr"), // update
+          Row(4, 400, "software"), // unchanged
+          Row(5, 500, "software"), // unchanged
+          Row(6, 0, "hr"))) // insert
+    }
+  }
+
+  test("some target filters are evaluated on data source side") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |{ "pk": 5, "salary": 500, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep IN ('hr', 'software') AND t.salary != -1
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
+             |""".stripMargin)
+      }
+
+      val expressions = flatMap(executedPlan)(_.expressions.flatMap(splitConjunctivePredicates))
+
+      val inFilterPushed = expressions.forall {
+        case In(attr: AttributeReference, _) if attr.name == "dep" => false
+        case _ => true
+      }
+      assert(inFilterPushed, "IN filter must be evaluated on data source side")
+
+      val notEqualFilterPreserved = expressions.exists {
+        case Not(EqualTo(attr: AttributeReference, _)) if attr.name == "salary" => true
+        case _ => false
+      }
+      assert(notEqualFilterPreserved, "NOT filter must be evaluated on Spark side")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 201, "hr"), // update
+          Row(3, 301, "hr"), // update
+          Row(4, 400, "software"), // unchanged
+          Row(5, 500, "software"), // unchanged
+          Row(6, 0, "hr"))) // insert
+    }
+  }
+
+  test("pushable target filters are preserved with NOT MATCHED BY SOURCE clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |{ "pk": 5, "salary": 500, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND DeP IN ('hr', 'software')
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
+             |WHEN NOT MATCHED BY SOURCE THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      val expressions = flatMap(executedPlan)(_.expressions.flatMap(splitConjunctivePredicates))
+      val inFilterPreserved = expressions.exists {
+        case In(attr: AttributeReference, _) if attr.name == "DeP" => true
+        case _ => false
+      }
+      assert(inFilterPreserved, "IN filter must be preserved")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 201, "hr"), // update
+          Row(3, 301, "hr"), // update
+          Row(6, 0, "hr"))) // insert
     }
   }
 

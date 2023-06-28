@@ -74,6 +74,10 @@ if TYPE_CHECKING:
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
 
+    # Running MyPy type checks will always require pandas and
+    # other dependencies so importing here is fine.
+    from pyspark.sql.connect.client import SparkConnectClient
+
 
 __all__ = ["SparkSession"]
 
@@ -405,41 +409,6 @@ class SparkSession(SparkConversionMixin):
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
-        def create(self) -> "SparkSession":
-            """Creates a new SparkSession. Can only be used in the context of Spark Connect
-            and will throw an exception otherwise.
-
-            .. versionadded:: 3.5.0
-
-            Returns
-            -------
-            :class:`SparkSession`
-            """
-            opts = dict(self._options)
-            if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
-                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-
-                # Validate that no incompatible configuration options are selected.
-                self._validate_startup_urls()
-
-                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
-                if url.startswith("local"):
-                    raise RuntimeError(
-                        "Creating new SparkSessions with `local` "
-                        "connection string is not supported."
-                    )
-
-                # Mark this Spark Session as Spark Connect. This prevents that local PySpark is
-                # used in conjunction with Spark Connect mode.
-                os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
-                opts["spark.remote"] = url
-                return RemoteSparkSession.builder.config(map=opts).create()
-            else:
-                raise RuntimeError(
-                    "SparkSession.builder.create() can only be used with Spark Connect; "
-                    "however, spark.remote was not found."
-                )
-
         def getOrCreate(self) -> "SparkSession":
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
             new one based on the options set in this builder.
@@ -529,6 +498,42 @@ class SparkSession(SparkConversionMixin):
                         getattr(session._jvm, "SparkSession$"), "MODULE$"
                     ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
+
+        # SparkConnect-specific API
+        def create(self) -> "SparkSession":
+            """Creates a new SparkSession. Can only be used in the context of Spark Connect
+            and will throw an exception otherwise.
+
+            .. versionadded:: 3.5.0
+
+            Returns
+            -------
+            :class:`SparkSession`
+            """
+            opts = dict(self._options)
+            if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                # Validate that no incompatible configuration options are selected.
+                self._validate_startup_urls()
+
+                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                if url.startswith("local"):
+                    raise RuntimeError(
+                        "Creating new SparkSessions with `local` "
+                        "connection string is not supported."
+                    )
+
+                # Mark this Spark Session as Spark Connect. This prevents that local PySpark is
+                # used in conjunction with Spark Connect mode.
+                os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                opts["spark.remote"] = url
+                return RemoteSparkSession.builder.config(map=opts).create()
+            else:
+                raise RuntimeError(
+                    "SparkSession.builder.create() can only be used with Spark Connect; "
+                    "however, spark.remote was not found."
+                )
 
     # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
     # Python 3.8 is dropped.
@@ -1766,6 +1771,92 @@ class SparkSession(SparkConversionMixin):
         +---+
         """
         self.stop()
+
+    # SparkConnect-specific API
+    @property
+    def client(self) -> "SparkConnectClient":
+        """
+        Gives access to the Spark Connect client. In normal cases this is not necessary to be used
+        and only relevant for testing.
+
+        .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        :class:`SparkConnectClient`
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
+        """
+        raise RuntimeError(
+            "SparkSession.client is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    def addArtifacts(
+        self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
+    ) -> None:
+        """
+        Add artifact(s) to the client session. Currently only local files are supported.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        *path : tuple of str
+            Artifact's URIs to add.
+        pyfile : bool
+            Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
+            The pyfiles are directly inserted into the path when executing Python functions
+            in executors.
+        archive : bool
+            Whether to add them as archives such as .zip, .jar, .tar.gz, .tgz, or .tar files.
+            The archives are unpacked on the executor side automatically.
+        file : bool
+            Add a file to be downloaded with this Spark job on every node.
+            The ``path`` passed can only be a local file for now.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
+        """
+        raise RuntimeError(
+            "SparkSession.addArtifact(s) is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
+
+    addArtifact = addArtifacts
+
+    def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
+        """
+        Copy file from local to cloud storage file system.
+        If the file already exits in destination path, old file is overwritten.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        local_path: str
+            Path to a local file. Directories are not supported.
+            The path can be either an absolute path or a relative path.
+        dest_path: str
+            The cloud storage path to the destination the file will
+            be copied to.
+            The path must be an an absolute path.
+
+        Notes
+        -----
+        This API is a developer API.
+        Also, this is an API dedicated to Spark Connect client only. With regular
+        Spark Session, it throws an exception.
+        """
+        raise RuntimeError(
+            "SparkSession.copyFromLocalToFs is only supported with Spark Connect; "
+            "however, the current Spark session does not use Spark Connect."
+        )
 
 
 def _test() -> None:

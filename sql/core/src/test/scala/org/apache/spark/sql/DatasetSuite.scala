@@ -668,6 +668,27 @@ class DatasetSuite extends QueryTest
     )
   }
 
+  test("groupByKey, keyAs - duplicates") {
+    val ds = spark
+      .range(10)
+      .as[Long]
+      .groupByKey(id => K2(id % 2, id % 4))
+      .keyAs[K1]
+      .flatMapGroups((_, it) => Seq(it.toSeq.size))
+    checkDatasetUnorderly(ds, 3, 2, 3, 2)
+  }
+
+  test("groupByKey, keyAs, keys - duplicates") {
+    val result = spark
+      .range(10)
+      .as[Long]
+      .groupByKey(id => K2(id % 2, id % 4))
+      .keyAs[K1]
+      .keys
+      .collect()
+    assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
+  }
+
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)
@@ -2626,3 +2647,6 @@ case class SpecialCharClass(`field.1`: String, `field 2`: String)
 /** Used to test Java Enums from Scala code */
 case class SaveModeCase(mode: SaveMode)
 case class SaveModeArrayCase(modes: Array[SaveMode])
+
+case class K1(a: Long)
+case class K2(a: Long, b: Long)

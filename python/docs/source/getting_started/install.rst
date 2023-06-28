@@ -129,17 +129,17 @@ PySpark is included in the distributions available at the `Apache Spark website 
 You can download a distribution you want from the site. After that, uncompress the tar file into the directory where you want
 to install Spark, for example, as below:
 
-.. code-block:: bash
+.. parsed-literal::
 
-    tar xzvf spark-3.4.0-bin-hadoop3.tgz
+    tar xzvf spark-\ |release|\-bin-hadoop3.tgz
 
 Ensure the ``SPARK_HOME`` environment variable points to the directory where the tar file has been extracted.
 Update ``PYTHONPATH`` environment variable such that it can find the PySpark and Py4J under ``SPARK_HOME/python/lib``.
 One example of doing this is shown below:
 
-.. code-block:: bash
+.. parsed-literal::
 
-    cd spark-3.4.0-bin-hadoop3
+    cd spark-\ |release|\-bin-hadoop3
     export SPARK_HOME=`pwd`
     export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
 
@@ -157,10 +157,10 @@ Package                    Minimum supported version Note
 ========================== ========================= ======================================================================================
 `py4j`                     0.10.9.7                  Required
 `pandas`                   1.0.5                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  1.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`                  4.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    1.15                      Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
-`grpc`                     1.48.1                    Required for Spark Connect
-`grpcio-status`            1.48.1                    Required for Spark Connect
+`grpcio`                   1.56.0                    Required for Spark Connect
+`grpcio-status`            1.56.0                    Required for Spark Connect
 `googleapis-common-protos` 1.56.4                    Required for Spark Connect
 ========================== ========================= ======================================================================================
 
@@ -168,10 +168,3 @@ Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
 to |downloading|_.
 
-Note for AArch64 (ARM64) users: PyArrow is required by PySpark SQL, but PyArrow support for AArch64
-is introduced in PyArrow 4.0.0. If PySpark installation fails on AArch64 due to PyArrow
-installation errors, you can install PyArrow >= 4.0.0 as below:
-
-.. code-block:: bash
-
-    pip install "pyarrow>=4.0.0" --prefer-binary

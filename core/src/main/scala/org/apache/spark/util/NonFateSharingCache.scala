@@ -19,8 +19,7 @@ package org.apache.spark.util
 
 import java.util.concurrent.Callable
 
-import com.google.common.cache.Cache
-import com.google.common.cache.LoadingCache
+import com.google.common.cache.{Cache, CacheBuilder, CacheLoader, LoadingCache}
 
 /**
  * SPARK-43300: Guava cache fate-sharing behavior might lead to unexpected cascade failure:
@@ -50,6 +49,25 @@ private[spark] object NonFateSharingCache {
 
   def apply[K, V](loadingCache: LoadingCache[K, V]): NonFateSharingLoadingCache[K, V] =
     new NonFateSharingLoadingCache(loadingCache)
+
+  /**
+   * SPARK-44064 add this `apply` function to break non-core modules code directly using
+   * Guava Cache related types as input parameter to invoke other `NonFateSharingCache#apply`
+   * function, which can avoid non-core modules Maven test failures caused by using
+   * shaded core module.
+   * We should refactor this function to be more general when there are other requirements,
+   * or remove this function when Maven testing is no longer supported.
+   */
+  def apply[K, V](loadingFunc: K => V, maximumSize: Long = 0L): NonFateSharingLoadingCache[K, V] = {
+    require(loadingFunc != null)
+    val builder = CacheBuilder.newBuilder().asInstanceOf[CacheBuilder[K, V]]
+    if (maximumSize > 0L) {
+      builder.maximumSize(maximumSize)
+    }
+    new NonFateSharingLoadingCache(builder.build[K, V](new CacheLoader[K, V] {
+      override def load(k: K): V = loadingFunc.apply(k)
+    }))
+  }
 }
 
 private[spark] class NonFateSharingCache[K, V](protected val cache: Cache[K, V]) {
