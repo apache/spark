@@ -658,30 +658,31 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
     }.nonEmpty)
   }
 
-  test("test MSK IAM auth") {
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 3)
-    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
-    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
-    testUtils.sendMessages(topic, Array("20"), Some(2))
+  Seq("source and stream", "sink and streaming",
+    "source and batch", "sink and batch").foreach { testType =>
+    val options: Map[String, String] = Map(
+      "kafka.bootstrap.servers" -> "b-2.msktesting.com:9098",
+      "subscribe" -> "nihal-msk-iam-test",
+      "startingOffsets" -> "earliest",
+      "kafka.sasl.mechanism" -> "AWS_MSK_IAM",
+      "kafka.sasl.jaas.config" -> "software.amazon.msk.auth.iam.IAMLoginModule required;",
+      "kafka.security.protocol" -> "SASL_SSL",
+      "kafka.sasl.client.callback.handler.class" ->
+        "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+    )
 
-    val e = intercept[StreamingQueryException] {
-      val query = spark.readStream
-        .format("kafka")
-        .option("kafka.bootstrap.servers", "b-2.msktesting.com:9098")
-        .option("subscribe", "nihal-msk-iam-test")
-        .option("startingOffsets", "earliest")
-        .option("kafka.sasl.mechanism", "AWS_MSK_IAM")
-        .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
-        .option("kafka.security.protocol", "SASL_SSL")
-        .option("kafka.sasl.client.callback.handler.class", "software." +
-          "amazon.msk.auth.iam.IAMClientCallbackHandler")
-        .load()
-        .writeStream
-        .format("console")
-        .start()
-      query.processAllAvailable()
+    test(s"test MSK IAM auth on '$testType' side") {
+      val e = intercept[StreamingQueryException] {
+        val query = spark.readStream
+          .format("kafka")
+          .options(options)
+          .load()
+          .writeStream
+          .format("console")
+          .start()
+        query.processAllAvailable()
+      }
+      TestUtils.assertExceptionMsg(e, "Failed to create new KafkaAdminClient")
     }
-    TestUtils.assertExceptionMsg(e, "Failed to create new KafkaAdminClient")
   }
 }
