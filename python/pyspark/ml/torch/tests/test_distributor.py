@@ -29,6 +29,8 @@ from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
+from pyspark.ml.torch.deepspeed_disributed import DeepspeedDistributor
+
 have_torch = True
 try:
     import torch  # noqa: F401
@@ -36,7 +38,7 @@ except ImportError:
     have_torch = False
 
 from pyspark import SparkConf, SparkContext
-from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
+from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned, DeepspeedTorchDistributor
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import SPARK_HOME
@@ -542,6 +544,94 @@ class TorchWrapperUnitTestsMixin:
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
     pass
+
+class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
+    
+    def _get_env_var(self, var_name: str, default_value: Any) -> Any:
+        value = os.getenv(var_name)
+        if value:
+            return value
+        else:
+            os.environ[var_name] = default_value
+            value = default_value
+        return value
+
+    def _get_env_variables_distributed(self):
+        MASTER_ADDR = self._get_env_var("MASTER_ADDR", "127.0.0.1")
+        MASTER_PORT = self._get_env_var("MASTER_PORT", 2000)
+        RANK = self._get_env_var("RANK", 0)
+        return MASTER_ADDR, MASTER_PORT, RANK
+
+
+
+    def test_get_torchrun_args(self):
+        number_of_processes = 5
+        EXPECTED_TORCHRUN_ARGS_LOCAL= [
+                "--standalone", "--nnodes=1"
+                ]
+        EXPECTED_PROCESSES_PER_NODE_LOCAL = number_of_processes
+
+            
+        get_local_mode_torchrun_args, process_per_node= DeepspeedTorchDistributor._get_torchrun_args(True, number_of_processes)
+        assert(get_local_mode_torchrun_args == EXPECTED_TORCHRUN_ARGS_LOCAL)
+        assert(EXPECTED_PROCESSES_PER_NODE_LOCAL == process_per_node)
+        MASTER_ADDR, MASTER_PORT, RANK = self._get_env_variables_distributed()
+        EXPECTED_TORCHRUN_ARGS_DISTRIBUTED = [
+                        f"--nnodes={number_of_processes}",
+                        f" --node_rank={RANK}",
+                        f" --rdzv_endpoint={MASTER_ADDR}:{MASTER_PORT}",
+                        "--rdzv_id=0"
+                    ]
+        torchrun_args_distributed, process_per_node  = DeepspeedTorchDistributor._get_torchrun_args(False, number_of_processes)
+        assert(torchrun_args_distributed == EXPECTED_TORCHRUN_ARGS_DISTRIBUTED)
+        assert(process_per_node == 1)
+
+    
+    def test_create_torchrun_command(self):
+        DEEPSPEED_CONF = "path/to/deepspeed"
+        TRAIN_FILE_PATH = "path/to/exec"
+        NUM_PROCS = 10
+        input_params = {}
+        input_params["local_mode"] = True
+        input_params['num_processes'] = NUM_PROCS
+        input_params["deepspeed_config"] = DEEPSPEED_CONF
+
+        # get the arguments for no argument, local run
+        torchrun_local_args_expected = ["--standalone", "--nnodes=1"]
+
+        LOCAL_CMD_NO_ARGS_EXPECTED= [
+                     sys.executable,
+                    "-m",
+                    "torch.distributed.run",
+                    *torchrun_local_args_expected,
+                    f"--nproc_per_node={NUM_PROCS}",
+                    TRAIN_FILE_PATH,
+                    "--deepspeed",
+                    "-deepspeed_config",
+                    DEEPSPEED_CONF
+                    ]
+        local_cmd = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
+        assert(local_cmd == LOCAL_CMD_NO_ARGS_EXPECTED)
+        local_mode_version_args = ["--arg1", "--arg2"]
+        LOCAL_CMD_ARGS_EXPECTED= [
+                     sys.executable,
+                    "-m",
+                    "torch.distributed.run",
+                    *local_mode_version_args,
+                    f"--nproc_per_node={NUM_PROCS}",
+                    TRAIN_FILE_PATH,
+                    "--deepspeed",
+                    "-deepspeed_config",
+                    DEEPSPEED_CONF
+                    ]
+        local_cmd_with_args = DeepspeedTorchDistributor._create_torchrun_command(input_params, TRAIN_FILE_PATH)
+        assert(local_cmd_with_args == LOCAL_CMD_ARGS_EXPECTED)
+
+
+
+
+        
+
 
 
 if __name__ == "__main__":
