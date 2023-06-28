@@ -476,6 +476,19 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(testData2.agg(regr_syy($"a", $"b")), testData2.selectExpr("regr_syy(a, b)"))
   }
 
+  test("every | bool_and | some | bool_or") {
+    checkAnswer(complexData.agg(every($"b")), complexData.selectExpr("every(b)"))
+    checkAnswer(complexData.agg(bool_and($"b")), complexData.selectExpr("bool_and(b)"))
+    checkAnswer(complexData.agg(some($"b")), complexData.selectExpr("some(b)"))
+    checkAnswer(complexData.agg(bool_or($"b")), complexData.selectExpr("bool_or(b)"))
+  }
+
+  test("bit aggregate") {
+    checkAnswer(testData2.agg(bit_and($"b")), testData2.selectExpr("bit_and(b)"))
+    checkAnswer(testData2.agg(bit_or($"b")), testData2.selectExpr("bit_or(b)"))
+    checkAnswer(testData2.agg(bit_xor($"b")), testData2.selectExpr("bit_xor(b)"))
+  }
+
   test("zero moments") {
     withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
       val input = Seq((1, 2)).toDF("a", "b")
@@ -1973,6 +1986,18 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(res, Nil)
     }
     assert(error7.toString contains "UnsupportedOperationException")
+  }
+
+  test("SPARK-43876: Enable fast hashmap for distinct queries") {
+    withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true") {
+      val df = testData2.distinct()
+      checkAnswer(df, testData2)
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        df.explain("codegen")
+      }
+      assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
+    }
   }
 }
 

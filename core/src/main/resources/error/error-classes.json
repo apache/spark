@@ -157,6 +157,11 @@
     ],
     "sqlState" : "22018"
   },
+  "CANNOT_PARSE_INTERVAL" : {
+    "message" : [
+      "Unable to parse <intervalString>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
+    ]
+  },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
       "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>."
@@ -190,6 +195,11 @@
       "Renaming a <type> across schemas is not allowed."
     ],
     "sqlState" : "0AKD0"
+  },
+  "CANNOT_RESOLVE_STAR_EXPAND" : {
+    "message" : [
+      "Cannot resolve <targetString>.* given input columns <columns>. Please check that the specified table or struct exists and is accessible in the input columns."
+    ]
   },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
@@ -633,6 +643,11 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATED_METRICS_NAME" : {
+    "message" : [
+      "The metric name is not unique: <metricName>. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins)."
+    ]
+  },
   "DUPLICATE_CLAUSES" : {
     "message" : [
       "Found duplicate clauses: <clauseName>. Please, remove one of them."
@@ -688,6 +703,11 @@
       "Failed to rename <sourcePath> to <targetPath> as destination already exists."
     ],
     "sqlState" : "42K04"
+  },
+  "FAILED_SQL_EXPRESSION_EVALUATION" : {
+    "message" : [
+      "Failed to evaluate the SQL expression: <sqlExpr>. Please check your syntax and ensure all required tables and columns are available."
+    ]
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
@@ -888,10 +908,24 @@
   },
   "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
-      "Cannot write to '<tableName>', <reason>:",
-      "Table columns: <tableColumns>.",
-      "Data columns: <dataColumns>."
+      "Cannot write to <tableName>, the reason is"
     ],
+    "subClass" : {
+      "NOT_ENOUGH_DATA_COLUMNS" : {
+        "message" : [
+          "not enough data columns:",
+          "Table columns: <tableColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      },
+      "TOO_MANY_DATA_COLUMNS" : {
+        "message" : [
+          "too many data columns:",
+          "Table columns: <tableColumns>.",
+          "Data columns: <dataColumns>."
+        ]
+      }
+    },
     "sqlState" : "21S01"
   },
   "INSERT_PARTITION_COLUMN_ARITY_MISMATCH" : {
@@ -1058,6 +1092,11 @@
       "Found an invalid escape string: <invalidEscape>. The escape string must contain only one character."
     ]
   },
+  "INVALID_ESCAPE_CHAR" : {
+    "message" : [
+      "`EscapeChar` should be a string literal of length one, but got <sqlExpr>."
+    ]
+  },
   "INVALID_EXECUTOR_MEMORY" : {
     "message" : [
       "Executor memory <executorMemory> must be at least <minSystemMemory>. Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
@@ -1208,6 +1247,16 @@
         ]
       }
     }
+  },
+  "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
+    "message" : [
+      "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
+    ]
+  },
+  "INVALID_NUMERIC_LITERAL_RANGE" : {
+    "message" : [
+      "Numeric literal <rawStrippedQualifier> is outside the valid range for <typeName> with minimum value of <minValue> and maximum value of <maxValue>. Please adjust the value accordingly."
+    ]
   },
   "INVALID_OPTIONS" : {
     "message" : [
@@ -1479,9 +1528,19 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_UDF_IMPLEMENTATION" : {
+    "message" : [
+      "Function <funcName> does not implement ScalarFunction or AggregateFunction."
+    ]
+  },
   "INVALID_URL" : {
     "message" : [
       "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
+  },
+  "INVALID_VIEW_TEXT" : {
+    "message" : [
+      "The view <viewName> cannot be displayed due to invalid view text: <viewText>. This may be caused by an unauthorized modification of the view or an incorrect query syntax. Please check your query syntax and verify that the view has not been tampered with."
     ]
   },
   "INVALID_WHERE_CONDITION" : {
@@ -1716,6 +1775,11 @@
     ],
     "sqlState" : "46110"
   },
+  "NOT_SUPPORTED_COMMAND_WITHOUT_HIVE_SUPPORT" : {
+    "message" : [
+      "<cmd> is not supported, if you want to enable it, please set \"spark.sql.catalogImplementation\" to \"hive\"."
+    ]
+  },
   "NOT_SUPPORTED_IN_JDBC_CATALOG" : {
     "message" : [
       "Not supported command in JDBC catalog:"
@@ -1733,6 +1797,12 @@
       }
     },
     "sqlState" : "46110"
+  },
+  "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
+    "message" : [
+      "Can't determine the default value for <colName> since it is not nullable and it has no default value."
+    ],
+    "sqlState" : "42608"
   },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
@@ -2043,6 +2113,11 @@
     ],
     "sqlState" : "54000"
   },
+  "UDTF_ALIAS_NUMBER_MISMATCH" : {
+    "message" : [
+      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF. Expected <aliasesSize> aliases, but got <aliasesNames>. Please ensure that the number of aliases provided matches the number of columns output by the UDTF."
+    ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
@@ -2112,6 +2187,11 @@
       "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
     ],
     "sqlState" : "42704"
+  },
+  "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
+    "message" : [
+      "Could not resolve <name> to a table-valued function. Please make sure that <name> is defined as a table-valued function and that all required parameters are provided correctly. If <name> is not defined, please create the table-valued function before using it. For more information about defining table-valued functions, please refer to the Apache Spark documentation."
+    ]
   },
   "UNRESOLVED_ALL_IN_GROUP_BY" : {
     "message" : [
@@ -2206,6 +2286,11 @@
       "Unsupported data type <typeName>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATA_SOURCE_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "The direct query on files does not support the data source type: <className>. Please try a different data source type or consider using a different query method."
+    ]
   },
   "UNSUPPORTED_DEFAULT_VALUE" : {
     "message" : [
@@ -2304,9 +2389,19 @@
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
         ]
       },
+      "COMMENT_NAMESPACE" : {
+        "message" : [
+          "Attach a comment to the namespace <namespace>."
+        ]
+      },
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
+        ]
+      },
+      "DROP_NAMESPACE" : {
+        "message" : [
+          "Drop the namespace <namespace>."
         ]
       },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
@@ -2389,9 +2484,19 @@
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
         ]
       },
+      "REMOVE_NAMESPACE_COMMENT" : {
+        "message" : [
+          "Remove a comment from the namespace <namespace>."
+        ]
+      },
       "SET_NAMESPACE_PROPERTY" : {
         "message" : [
           "<property> is a reserved namespace property, <msg>."
+        ]
+      },
+      "SET_OPERATION_ON_MAP_TYPE" : {
+        "message" : [
+          "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
@@ -2464,6 +2569,55 @@
     "message" : [
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ]
+  },
+  "UNSUPPORTED_INSERT" : {
+    "message" : [
+      "Can't insert into the target."
+    ],
+    "subClass" : {
+      "NOT_ALLOWED" : {
+        "message" : [
+          "The target relation <relationId> does not allow insertion."
+        ]
+      },
+      "NOT_PARTITIONED" : {
+        "message" : [
+          "The target relation <relationId> is not partitioned."
+        ]
+      },
+      "RDD_BASED" : {
+        "message" : [
+          "An RDD-based table is not allowed."
+        ]
+      },
+      "READ_FROM" : {
+        "message" : [
+          "The target relation <relationId> is also being read from."
+        ]
+      }
+    }
+  },
+  "UNSUPPORTED_MERGE_CONDITION" : {
+    "message" : [
+      "MERGE operation contains unsupported <condName> condition."
+    ],
+    "subClass" : {
+      "AGGREGATE" : {
+        "message" : [
+          "Aggregates are not allowed: <cond>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Non-deterministic expressions are not allowed: <cond>."
+        ]
+      },
+      "SUBQUERY" : {
+        "message" : [
+          "Subqueries are not allowed: <cond>."
+        ]
+      }
+    }
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
@@ -2679,11 +2833,6 @@
       "Function trim doesn't support with type <trimOption>. Please use BOTH, LEADING or TRAILING as trim type."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0023" : {
-    "message" : [
-      "Numeric literal <rawStrippedQualifier> does not fit in range [<minValue>, <maxValue>] for type <typeName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0024" : {
     "message" : [
       "Can only have a single from-to unit in the interval literal syntax."
@@ -2732,11 +2881,6 @@
   "_LEGACY_ERROR_TEMP_0035" : {
     "message" : [
       "Operation not allowed: <message>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0036" : {
-    "message" : [
-      "Expected `NOSCAN` instead of `<ctx>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0037" : {
@@ -2960,11 +3104,6 @@
       "Number of column aliases does not match number of columns. Number of column aliases: <columnSize>; number of columns: <outputSize>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1029" : {
-    "message" : [
-      "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF expected <aliasesSize> aliases but got <aliasesNames>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1030" : {
     "message" : [
       "Window aggregate function with filter predicate is not supported yet."
@@ -3006,11 +3145,6 @@
       "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1038" : {
-    "message" : [
-      "Cannot write to table due to mismatched user specified column size(<columnSize>) and data column size(<outputSize>)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1039" : {
     "message" : [
       "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
@@ -3049,11 +3183,6 @@
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1051" : {
-    "message" : [
-      "Cannot resolve '<targetString>.*' given input columns '<columns>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1052" : {
@@ -3441,11 +3570,6 @@
       "Column <colName> not found in schema <tableSchema>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1157" : {
-    "message" : [
-      "Unsupported data source type for direct query on files: <className>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1158" : {
     "message" : [
       "Saving data into a view is not allowed."
@@ -3505,11 +3629,6 @@
       "Requested partitioning does not match the table <tableName>:",
       "Requested partitions: <normalizedPartSpec>.",
       "Table partitions: <partColNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1170" : {
-    "message" : [
-      "Hive support is required to <detail>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1171" : {
@@ -4008,11 +4127,6 @@
       "Unable to find the column `<colName>` given [<actualColumns>]."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1304" : {
-    "message" : [
-      "Unexpected type <className> of the relation <tableName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1305" : {
     "message" : [
       "Unsupported TableChange <change> in JDBC catalog."
@@ -4056,11 +4170,6 @@
   "_LEGACY_ERROR_TEMP_1316" : {
     "message" : [
       "Invalid partition transformation: <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1318" : {
-    "message" : [
-      "Unable to parse '<delayThreshold>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1319" : {
@@ -4129,11 +4238,6 @@
       "<errorMessage>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_1333" : {
-    "message" : [
-      "Invalid view text: <viewText>. The view <tableName> may have been tampered with."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1334" : {
     "message" : [
       "Cannot specify both version and timestamp when time travelling the table."
@@ -4152,16 +4256,6 @@
   "_LEGACY_ERROR_TEMP_1340" : {
     "message" : [
       "Failed to execute UPDATE command because the SET list contains a DEFAULT column reference as part of another expression; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1341" : {
-    "message" : [
-      "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1342" : {
-    "message" : [
-      "Failed to execute MERGE command because the WHERE clause contains a DEFAULT column reference; this is not allowed."
     ]
   },
   "_LEGACY_ERROR_TEMP_1343" : {
@@ -4466,11 +4560,6 @@
   "_LEGACY_ERROR_TEMP_2071" : {
     "message" : [
       "Commit denied for partition <partId> (task <taskId>, attempt <attemptId>, stage <stageId>.<stageAttempt>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2072" : {
-    "message" : [
-      "Table implementation does not support writes: <ident>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2073" : {
@@ -5409,26 +5498,6 @@
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2279" : {
-    "message" : [
-      "Multiple bucket transforms are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2280" : {
-    "message" : [
-      "Create namespace comment is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2281" : {
-    "message" : [
-      "Remove namespace comment is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2282" : {
-    "message" : [
-      "Drop namespace restrict is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2300" : {
     "message" : [
       "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
@@ -5467,11 +5536,6 @@
   "_LEGACY_ERROR_TEMP_2307" : {
     "message" : [
       "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2308" : {
-    "message" : [
-      "could not resolve `<name>` to a table-valued function."
     ]
   },
   "_LEGACY_ERROR_TEMP_2309" : {
@@ -5577,72 +5641,6 @@
   "_LEGACY_ERROR_TEMP_2330" : {
     "message" : [
       "Cannot change nullable column to non-nullable: <fieldName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2331" : {
-    "message" : [
-      "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2433" : {
-    "message" : [
-      "Only a single table generating function is allowed in a SELECT clause, found:",
-      "<sqlExprs>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2434" : {
-    "message" : [
-      "Failure when resolving conflicting references in Join:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2435" : {
-    "message" : [
-      "Failure when resolving conflicting references in Intersect:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2436" : {
-    "message" : [
-      "Failure when resolving conflicting references in Except:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2437" : {
-    "message" : [
-      "Failure when resolving conflicting references in AsOfJoin:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2438" : {
-    "message" : [
-      "Cannot have map type columns in DataFrame which calls set operations(intersect, except, etc.), but the type of column <colName> is <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2439" : {
-    "message" : [
-      "nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window, found:",
-      "<sqlExprs>",
-      "in operator <operator>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2443" : {
-    "message" : [
-      "Multiple definitions of observed metrics named '<name>': <plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2444" : {
-    "message" : [
-      "Function '<funcName>' does not implement ScalarFunction or AggregateFunction."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2445" : {
-    "message" : [
-      "grouping() can only be used with GroupingSets/Cube/Rollup."
     ]
   },
   "_LEGACY_ERROR_TEMP_2446" : {

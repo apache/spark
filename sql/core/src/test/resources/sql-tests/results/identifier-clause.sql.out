@@ -72,7 +72,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE s.tab(c1 INT) USING PARQUET
+CREATE TABLE s.tab(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -221,7 +221,7 @@ struct<id:bigint>
 
 
 -- !query
-CREATE TABLE IDENTIFIER('tab')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('tab')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -253,7 +253,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('ta' || 'b')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -269,7 +269,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet
+CREATE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -277,7 +277,7 @@ struct<>
 
 
 -- !query
-REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING parquet
+REPLACE TABLE IDENTIFIER('identifier_clauses.' || 'tab')(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -333,7 +333,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE tab(c1 INT) USING parquet
+CREATE TABLE tab(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -1209,7 +1209,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-CREATE TABLE tab(IDENTIFIER('c1') INT) USING parquet
+CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query schema
 struct<>
 -- !query output

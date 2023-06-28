@@ -597,12 +597,14 @@ def read_udfs(pickleSer, infile, eval_type):
             struct_in_pandas = (
                 "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
             )
+            ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             ser = ArrowStreamPandasUDFSerializer(
                 timezone,
                 safecheck,
                 assign_cols_by_name(runner_conf),
                 df_for_struct,
                 struct_in_pandas,
+                ndarray_as_list,
             )
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)

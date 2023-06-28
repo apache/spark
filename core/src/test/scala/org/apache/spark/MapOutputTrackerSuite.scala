@@ -1050,4 +1050,37 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       rpcEnv.shutdown()
     }
   }
+
+  test("SPARK-44109: Remove duplicate preferred locations of each RDD partition") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+      // Setup 3 map tasks
+      // on hostA with output size (2)
+      // on hostA with output size (3)
+      // on hostA with output size (4)
+      tracker.registerShuffle(10, 3, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
+        Array(2L), 5))
+      tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("exec-2", "hostA", 1000),
+        Array(3L), 6))
+      tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("exec-3", "hostA", 1000),
+        Array(4L), 7))
+
+      sc = new SparkContext("local", "MapOutputTrackerSuite", conf.clone())
+      val rdd = sc.parallelize(1 to 3, 3).map(num => (num, num).asInstanceOf[Product2[Int, Int]])
+      val mockShuffleDep = mock(classOf[ShuffleDependency[Int, Int, _]])
+      when(mockShuffleDep.shuffleId).thenReturn(10)
+      when(mockShuffleDep.partitioner).thenReturn(new HashPartitioner(1))
+      when(mockShuffleDep.rdd).thenReturn(rdd)
+
+      assert(tracker.getPreferredLocationsForShuffle(mockShuffleDep, 0) === Seq("hostA"))
+      assert(tracker.getMapLocation(mockShuffleDep, 0, 2) === Seq("hostA"))
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
 }

@@ -172,7 +172,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._timezone = timezone
         self._safecheck = safecheck
 
-    def arrow_to_pandas(self, arrow_column, struct_in_pandas="dict"):
+    def arrow_to_pandas(self, arrow_column, struct_in_pandas="dict", ndarray_as_list=False):
         # If the given column is a date type column, creates a series of datetime.date directly
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
@@ -186,6 +186,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             timezone=self._timezone,
             struct_in_pandas=struct_in_pandas,
             error_on_duplicated_field_names=True,
+            ndarray_as_list=ndarray_as_list,
         )
         return converter(s)
 
@@ -317,11 +318,13 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         assign_cols_by_name,
         df_for_struct=False,
         struct_in_pandas="dict",
+        ndarray_as_list=False,
     ):
         super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
+        self._ndarray_as_list = ndarray_as_list
 
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
@@ -331,14 +334,14 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
             series = [
                 super(ArrowStreamPandasUDFSerializer, self)
-                .arrow_to_pandas(column, self._struct_in_pandas)
+                .arrow_to_pandas(column, self._struct_in_pandas, self._ndarray_as_list)
                 .rename(field.name)
                 for column, field in zip(arrow_column.flatten(), arrow_column.type)
             ]
             s = pd.concat(series, axis=1)
         else:
             s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
-                arrow_column, self._struct_in_pandas
+                arrow_column, self._struct_in_pandas, self._ndarray_as_list
             )
         return s
 

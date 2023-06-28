@@ -302,7 +302,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "\nReplacement is unresolved: " + e.replacement)
 
           case g: Grouping =>
-            g.failAnalysis(errorClass = "_LEGACY_ERROR_TEMP_2445", messageParameters = Map.empty)
+            g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
           case g: GroupingID =>
             g.failAnalysis(
               errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
@@ -673,9 +674,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            p.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2433",
-              messageParameters = Map("sqlExprs" -> exprs.map(_.sql).mkString(",")))
+            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
+            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
@@ -685,46 +685,58 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             })
 
           case j: Join if !j.duplicateResolved =>
-            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2434",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           case i: Intersect if !i.duplicateResolved =>
-            val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
-            i.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2435",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              i.left.outputSet.intersect(i.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${i.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = i.origin.getQueryContext,
+              summary = i.origin.context.summary)
 
           case e: Except if !e.duplicateResolved =>
-            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
-            e.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2436",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              e.left.outputSet.intersect(e.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${e.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = e.origin.getQueryContext,
+              summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
-            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2437",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.
           case o if mapColumnInSetOperation(o).isDefined =>
             val mapCol = mapColumnInSetOperation(o).get
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2438",
+              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
               messageParameters = Map(
-                "colName" -> mapCol.name,
-                "dataType" -> mapCol.dataType.catalogString))
+                "colName" -> toSQLId(mapCol.name),
+                "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -734,10 +746,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
             o.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2439",
-              messageParameters = Map(
-                "sqlExprs" -> o.expressions.map(_.sql).mkString(","),
-                "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)))
+              errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+              messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
+            )
 
           case _: UnresolvedHint => throw new IllegalStateException(
             "Logical hint operator should be removed during analysis.")
@@ -868,6 +879,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   private def scrubOutIds(string: String): String =
     string.replaceAll("#\\d+", "#x")
       .replaceAll("operator id = \\d+", "operator id = #x")
+      .replaceAll("rand\\(-?\\d+\\)", "rand(number)")
 
   private def planToString(plan: LogicalPlan): String = {
     if (Utils.isTesting) scrubOutIds(plan.toString) else plan.toString
@@ -1056,10 +1068,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               // of a CTE that is used multiple times or a self join.
               if (!simplifiedMetrics.sameResult(simplifiedOther)) {
                 failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2443",
-                  messageParameters = Map(
-                    "name" -> name,
-                    "plan" -> plan.toString))
+                  errorClass = "DUPLICATED_METRICS_NAME",
+                  messageParameters = Map("metricName" -> name))
               }
             case None =>
               metricsMap.put(name, metrics)
@@ -1081,7 +1091,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * duplicates metric definition.
    */
   private def simplifyPlanForCollectedMetrics(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsDown {
+    plan.transformUpWithNewOutput {
       case p: Project if p.projectList.size == p.child.output.size =>
         val assignExprIdOnly = p.projectList.zip(p.child.output).forall {
           case (left: Alias, right: Attribute) =>
@@ -1089,9 +1099,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ => false
         }
         if (assignExprIdOnly) {
-          p.child
+          (p.child, p.output.zip(p.child.output))
         } else {
-          p
+          (p, Nil)
         }
     }
   }
