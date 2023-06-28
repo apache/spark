@@ -6725,6 +6725,7 @@ object functions {
    * This can be useful for creating copies of tables with sensitive information removed.
    *
    * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *
    * @group string_funcs
    * @since 3.5.0
    */
@@ -6732,76 +6733,83 @@ object functions {
     new Mask(input.expr)
   }
 
-  // scalastyle:off line.size.limit
   /**
    * Masks the given string value. The function replaces upper-case characters with specific
    * character, lower-case characters with 'x', and numbers with 'n'.
    * This can be useful for creating copies of tables with sensitive information removed.
    *
-   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
-   * @param upperChar character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(input: Column, upperChar: Column): Column = withExpr {
     new Mask(input.expr, upperChar.expr)
   }
 
-  // scalastyle:off line.size.limit
   /**
    * Masks the given string value. The function replaces upper-case and lower-case characters with
    * the characters specified respectively, and numbers with 'n'.
    * This can be useful for creating copies of tables with sensitive information removed.
    *
-   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
-   * @param upperChar character to replace upper-case characters with. Specify NULL to retain original character.
-   * @param lowerChar character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(input: Column, upperChar: Column, lowerChar: Column): Column = withExpr {
     new Mask(input.expr, upperChar.expr, lowerChar.expr)
   }
 
-  // scalastyle:off line.size.limit
   /**
    * Masks the given string value. The function replaces upper-case, lower-case characters and
    * numbers with the characters specified respectively.
    * This can be useful for creating copies of tables with sensitive information removed.
    *
-   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
-   * @param upperChar character to replace upper-case characters with. Specify NULL to retain original character.
-   * @param lowerChar character to replace lower-case characters with. Specify NULL to retain original character.
-   * @param digitChar character to replace digit characters with. Specify NULL to retain original character.
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column = {
     withExpr {
       new Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr)
     }
   }
 
-  // scalastyle:off line.size.limit
   /**
    * Masks the given string value. This can be useful for creating copies of tables with sensitive
    * information removed.
    *
-   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
-   * @param upperChar character to replace upper-case characters with. Specify NULL to retain original character.
-   * @param lowerChar character to replace lower-case characters with. Specify NULL to retain original character.
-   * @param digitChar character to replace digit characters with. Specify NULL to retain original character.
-   * @param otherChar character to replace all other characters with. Specify NULL to retain original character.
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
    *
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(
     input: Column,
     upperChar: Column,

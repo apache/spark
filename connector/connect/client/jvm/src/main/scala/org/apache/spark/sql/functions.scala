@@ -4498,8 +4498,6 @@ object functions {
    */
   def mask(input: Column): Column = Column.fn("mask", input)
 
-  // scalastyle:off line.size.limit
-
   /**
    * Masks the given string value. The function replaces upper-case characters with specific
    * character, lower-case characters with 'x', and numbers with 'n'. This can be useful for
@@ -4512,11 +4510,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(input: Column, upperChar: Column): Column =
     Column.fn("mask", input, upperChar)
-
-  // scalastyle:off line.size.limit
 
   /**
    * Masks the given string value. The function replaces upper-case, lower-case characters with
@@ -4532,11 +4527,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(input: Column, upperChar: Column, lowerChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar)
-
-  // scalastyle:off line.size.limit
 
   /**
    * Masks the given string value. The function replaces upper-case, lower-case characters and
@@ -4554,11 +4546,8 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar, digitChar)
-
-  // scalastyle:off line.size.limit
 
   /**
    * Masks the given string value. This can be useful for creating copies of tables with sensitive
@@ -4577,7 +4566,6 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
-  // scalastyle:on line.size.limit
   def mask(
       input: Column,
       upperChar: Column,
