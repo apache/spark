@@ -732,7 +732,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
       messageParameters = Map(
         "windowFunc" -> windowFunc,
-        "windowSpec" -> toSQLValue(windowSpec, StringType)),
+        "windowSpec" -> toSQLStmt(windowSpec)),
         origin = origin)
   }
 
