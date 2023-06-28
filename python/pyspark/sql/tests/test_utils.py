@@ -77,6 +77,25 @@ class UtilsTestsMixin:
 
         assertDFEquality(actual_df, expected_df)
 
+    def test_assert_pyspark_df_not_equal(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1001.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+
+        with self.assertRaises(AssertionError):
+            assertDFEquality(df1, df2)
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
