@@ -195,10 +195,10 @@ class PySparkErrorTestUtils:
     """
 
     def check_error(
-            self,
-            exception: PySparkException,
-            error_class: str,
-            message_parameters: Optional[Dict[str, str]] = None,
+        self,
+        exception: PySparkException,
+        error_class: str,
+        message_parameters: Optional[Dict[str, str]] = None,
     ):
         # Test if given error is an instance of PySparkException.
         self.assertIsInstance(
@@ -223,8 +223,8 @@ class PySparkErrorTestUtils:
 
 
 def assertSparkSchemaEquality(
-        s1: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
-        s2: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+    s1: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+    s2: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
 ):
     if s1 != s2:
         msg = "Schemas are different"
@@ -232,7 +232,7 @@ def assertSparkSchemaEquality(
 
 
 def assertSparkDFEquality(
-        left: PySparkDataFrame, right: PySparkDataFrame, ignore_row_order: bool = True
+    left: PySparkDataFrame, right: PySparkDataFrame, ignore_row_order: bool = True
 ):
     def assert_rows_equality(rows1, rows2):
         if rows1 != rows2:
@@ -252,12 +252,12 @@ def assertSparkDFEquality(
 
 
 def assertDFEquality(
-        left: Union[
-            PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
-        ],
-        right: Union[
-            PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
-        ],
+    left: Union[
+        PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
+    ],
+    right: Union[
+        PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
+    ],
 ):
 
     from pyspark.testing.pandasutils import assertPandasDFEquality
