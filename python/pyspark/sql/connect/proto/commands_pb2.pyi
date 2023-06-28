@@ -215,6 +215,7 @@ class SqlCommand(google.protobuf.message.Message):
 
     SQL_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
+    POS_ARGS_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -224,6 +225,13 @@ class SqlCommand(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+    @property
+    def pos_args(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Optional) A sequence of literal expressions for positional parameters in the SQL query text."""
     def __init__(
         self,
         *,
@@ -232,9 +240,16 @@ class SqlCommand(google.protobuf.message.Message):
             builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
+        pos_args: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["args", b"args", "sql", b"sql"]
+        self,
+        field_name: typing_extensions.Literal[
+            "args", b"args", "pos_args", b"pos_args", "sql", b"sql"
+        ],
     ) -> None: ...
 
 global___SqlCommand = SqlCommand

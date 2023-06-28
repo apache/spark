@@ -322,7 +322,7 @@ class PredictionModel(Model, _PredictorParams, metaclass=ABCMeta):
         """
         return self._set(predictionCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @abstractmethod
     @since("3.5.0")
     def numFeatures(self) -> int:

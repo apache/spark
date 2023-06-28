@@ -188,11 +188,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   }
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
-    throw QueryExecutionErrors.unsupportedCreateNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedCommentNamespaceError(schema)
   }
 
   override def removeSchemaCommentQuery(schema: String): String = {
-    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError()
+    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError(schema)
   }
 
   // CREATE INDEX syntax
@@ -296,7 +296,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     if (cascade) {
       s"DROP SCHEMA ${quoteIdentifier(schema)}"
     } else {
-      throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
+      throw QueryExecutionErrors.unsupportedDropNamespaceError(schema)
     }
   }
 

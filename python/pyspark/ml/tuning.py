@@ -461,7 +461,7 @@ class _ValidatorSharedReadWrite:
         evaluator = instance.getEvaluator()
         uidMap = MetaAlgorithmReadWrite.getUidMap(estiamtor)
 
-        for elem in [evaluator] + list(uidMap.values()):  # type: ignore[arg-type]
+        for elem in [evaluator] + list(uidMap.values()):
             if not isinstance(elem, MLWritable):
                 raise ValueError(
                     f"Validator write will fail because it contains {elem.uid} "

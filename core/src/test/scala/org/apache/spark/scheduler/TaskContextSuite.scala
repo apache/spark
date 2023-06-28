@@ -70,7 +70,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0, new Properties,
+      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0, JobArtifactSet(sc), new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null, 1, null, Option.empty)
@@ -92,7 +92,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0, new Properties,
+      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0, JobArtifactSet(sc), new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null, 1, null, Option.empty)
@@ -160,7 +160,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     })
 
     val e = intercept[TaskContextSuite.FakeTaskFailureException] {
-      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
+      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, JobArtifactSet(),
+        serializedTaskMetrics = Array.empty) {
         override def runTask(context: TaskContext): Int = {
           throw new TaskContextSuite.FakeTaskFailureException
         }
@@ -191,7 +192,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     })
 
     val e = intercept[TaskContextSuite.FakeTaskFailureException] {
-      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
+      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, JobArtifactSet(),
+        serializedTaskMetrics = Array.empty) {
         override def runTask(context: TaskContext): Int = {
           throw new TaskContextSuite.FakeTaskFailureException
         }
@@ -222,7 +224,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     })
 
     val e = intercept[TaskCompletionListenerException] {
-      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
+      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, JobArtifactSet(),
+        serializedTaskMetrics = Array.empty) {
         override def runTask(context: TaskContext): Int = 0
       })
     }
@@ -252,7 +255,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     })
 
     val e = intercept[TaskCompletionListenerException] {
-      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
+      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, JobArtifactSet(),
+        serializedTaskMetrics = Array.empty) {
         override def runTask(context: TaskContext): Int = 0
       })
     }
@@ -284,7 +288,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     })
 
     val e = intercept[TaskCompletionListenerException] {
-      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
+      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, JobArtifactSet(),
+        serializedTaskMetrics = Array.empty) {
         override def runTask(context: TaskContext): Int = 0
       })
     }
@@ -316,7 +321,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     })
 
     val e = intercept[TaskContextSuite.FakeTaskFailureException] {
-      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, serializedTaskMetrics = Array.empty) {
+      context.runTaskWithListeners(new Task[Int](0, 0, 0, 1, JobArtifactSet(),
+        serializedTaskMetrics = Array.empty) {
         override def runTask(context: TaskContext): Int = {
           throw new TaskContextSuite.FakeTaskFailureException
         }
@@ -424,7 +430,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.empty
-    val task = new Task[Int](0, 0, 0, 1) {
+    val task = new Task[Int](0, 0, 0, 1, JobArtifactSet(sc)) {
       context = new TaskContextImpl(0, 0, 0, 0L, 0, 1,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
@@ -447,7 +453,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.registered
-    val task = new Task[Int](0, 0, 0, 1) {
+    val task = new Task[Int](0, 0, 0, 1, JobArtifactSet(sc)) {
       context = new TaskContextImpl(0, 0, 0, 0L, 0, 1,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,

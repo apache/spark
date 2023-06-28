@@ -13,16 +13,8 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "regexp_extract_all",
+        "functionName": "random",
         "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "g"
-          }
-        }, {
-          "literal": {
-            "string": "(\\d+)([a-z]+)"
-          }
-        }, {
           "literal": {
             "integer": 1
           }

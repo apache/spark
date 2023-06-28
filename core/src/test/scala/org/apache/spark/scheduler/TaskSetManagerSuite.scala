@@ -184,7 +184,7 @@ class FakeTaskScheduler(
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, 1) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, 1, JobArtifactSet()) {
 
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024)
   val random = new Random(0)
@@ -900,7 +900,7 @@ class TaskSetManagerSuite
 
     val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
         override def index: Int = 0
-      }, 1, Seq(TaskLocation("host1", "execA")), new Properties, null)
+      }, 1, Seq(TaskLocation("host1", "execA")), JobArtifactSet(sc), new Properties, null)
     val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
       null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0))
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
@@ -1528,9 +1528,9 @@ class TaskSetManagerSuite
 
     // all tasks from the first taskset have the same jars
     val taskOption1 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption1.get.addedJars === addedJarsPreTaskSet)
+    assert(taskOption1.get.artifacts.jars === addedJarsPreTaskSet)
     val taskOption2 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption2.get.addedJars === addedJarsPreTaskSet)
+    assert(taskOption2.get.artifacts.jars === addedJarsPreTaskSet)
 
     // even with a jar added mid-TaskSet
     val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
@@ -1539,14 +1539,14 @@ class TaskSetManagerSuite
     assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)
     val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
     // which should have the old version of the jars list
-    assert(taskOption3.get.addedJars === addedJarsPreTaskSet)
+    assert(taskOption3.get.artifacts.jars === addedJarsPreTaskSet)
 
     // and then the jar does appear in the next TaskSet
     val taskSet2 = FakeTask.createTaskSet(1)
     val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, clock = new ManualClock)
 
     val taskOption4 = manager2.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
+    assert(taskOption4.get.artifacts.jars === addedJarsMidTaskSet)
   }
 
   test("SPARK-24677: Avoid NoSuchElementException from MedianHeap") {

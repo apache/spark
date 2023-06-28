@@ -944,6 +944,7 @@ private[spark] class DAGScheduler(
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
+      JobArtifactSet.getActiveOrDefault(sc),
       Utils.cloneProperties(properties)))
     waiter
   }
@@ -1023,7 +1024,7 @@ private[spark] class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
-      clonedProperties))
+      JobArtifactSet.getActiveOrDefault(sc), clonedProperties))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -1065,7 +1066,8 @@ private[spark] class DAGScheduler(
       this, jobId, 1,
       (_: Int, r: MapOutputStatistics) => callback(r))
     eventProcessLoop.post(MapStageSubmitted(
-      jobId, dependency, callSite, waiter, Utils.cloneProperties(properties)))
+      jobId, dependency, callSite, waiter, JobArtifactSet.getActiveOrDefault(sc),
+      Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -1268,6 +1270,7 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       callSite: CallSite,
       listener: JobListener,
+      artifacts: JobArtifactSet,
       properties: Properties): Unit = {
     var finalStage: ResultStage = null
     try {
@@ -1288,7 +1291,7 @@ private[spark] class DAGScheduler(
           messageScheduler.schedule(
             new Runnable {
               override def run(): Unit = eventProcessLoop.post(JobSubmitted(jobId, finalRDD, func,
-                partitions, callSite, listener, properties))
+                partitions, callSite, listener, artifacts, properties))
             },
             timeIntervalNumTasksCheck,
             TimeUnit.SECONDS
@@ -1309,7 +1312,7 @@ private[spark] class DAGScheduler(
     // Job submitted, clear internal data.
     barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
-    val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
+    val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties)
     clearCacheLocs()
     logInfo("Got job %s (%s) with %d output partitions".format(
       job.jobId, callSite.shortForm, partitions.length))
@@ -1333,6 +1336,7 @@ private[spark] class DAGScheduler(
       dependency: ShuffleDependency[_, _, _],
       callSite: CallSite,
       listener: JobListener,
+      artifacts: JobArtifactSet,
       properties: Properties): Unit = {
     // Submitting this map stage might still require the creation of some parent stages, so make
     // sure that happens.
@@ -1348,7 +1352,7 @@ private[spark] class DAGScheduler(
         return
     }
 
-    val job = new ActiveJob(jobId, finalStage, callSite, listener, properties)
+    val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties)
     clearCacheLocs()
     logInfo("Got map stage job %s (%s) with %d output partitions".format(
       jobId, callSite.shortForm, dependency.rdd.partitions.length))
@@ -1590,6 +1594,8 @@ private[spark] class DAGScheduler(
         return
     }
 
+    val artifacts = jobIdToActiveJob(jobId).artifacts
+
     val tasks: Seq[Task[_]] = try {
       val serializedTaskMetrics = closureSerializer.serialize(stage.latestInfo.taskMetrics).array()
       stage match {
@@ -1600,8 +1606,9 @@ private[spark] class DAGScheduler(
             val part = partitions(id)
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber, taskBinary,
-              part, stage.numPartitions, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
+              part, stage.numPartitions, locs, artifacts, properties, serializedTaskMetrics,
+              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
+              stage.rdd.isBarrier())
           }
 
         case stage: ResultStage =>
@@ -1610,9 +1617,9 @@ private[spark] class DAGScheduler(
             val part = partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptNumber,
-              taskBinary, part, stage.numPartitions, locs, id, properties, serializedTaskMetrics,
-              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId,
-              stage.rdd.isBarrier())
+              taskBinary, part, stage.numPartitions, locs, id, artifacts, properties,
+              serializedTaskMetrics, Option(jobId), Option(sc.applicationId),
+              sc.applicationAttemptId, stage.rdd.isBarrier())
           }
       }
     } catch {
@@ -2979,11 +2986,13 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
+    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, artifacts, properties) =>
+      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, artifacts,
+        properties)
 
-    case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
-      dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)
+    case MapStageSubmitted(jobId, dependency, callSite, listener, artifacts, properties) =>
+      dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, artifacts,
+        properties)
 
     case StageCancelled(stageId, reason) =>
       dagScheduler.handleStageCancellation(stageId, reason)

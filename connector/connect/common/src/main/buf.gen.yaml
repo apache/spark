@@ -22,14 +22,14 @@ plugins:
     out: gen/proto/csharp
   - remote: buf.build/protocolbuffers/plugins/java:v3.20.0-1
     out: gen/proto/java
-  - remote: buf.build/grpc/plugins/ruby:v1.47.0-1
+  - plugin: buf.build/grpc/ruby:v1.56.0
     out: gen/proto/ruby
   - remote: buf.build/protocolbuffers/plugins/ruby:v21.2.0-1
     out: gen/proto/ruby
    # Building the Python build and building the mypy interfaces.
   - remote: buf.build/protocolbuffers/plugins/python:v3.19.3-1
     out: gen/proto/python
-  - remote: buf.build/grpc/plugins/python:v1.47.0-1
+  - plugin: buf.build/grpc/python:v1.56.0
     out: gen/proto/python
   - name: mypy
     out: gen/proto/python

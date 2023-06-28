@@ -13,14 +13,14 @@
     },
     "expressions": [{
       "unresolvedFunction": {
-        "functionName": "percentile",
+        "functionName": "aes_encrypt",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "a"
+            "unparsedIdentifier": "g"
           }
         }, {
-          "literal": {
-            "double": 0.3
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }

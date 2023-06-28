@@ -44,6 +44,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 // scalastyle:off
 /**
@@ -61,6 +62,14 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "connect-client-jvm/testOnly org.apache.spark.sql.PlanGenerationTestSuite"
  * }}}
  *
+ * If you need to clean the orphaned golden files, you need to set the
+ * SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 environment variable before running this test, e.g.:
+ * {{{
+ *   SPARK_CLEAN_ORPHANED_GOLDEN_FILES=1 build/sbt "connect-client-jvm/testOnly org.apache.spark.sql.PlanGenerationTestSuite"
+ * }}}
+ * Note: not all orphaned golden files should be cleaned, some are reserved for testing backups
+ * compatibility.
+ *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
  * `connector/connect/server` module
  */
@@ -73,6 +82,9 @@ class PlanGenerationTestSuite
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+
+  private val cleanOrphanedGoldenFiles: Boolean =
+    System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
@@ -111,7 +123,23 @@ class PlanGenerationTestSuite
 
   override protected def afterAll(): Unit = {
     session.close()
+    if (cleanOrphanedGoldenFiles) {
+      cleanOrphanedGoldenFile()
+    }
     super.afterAll()
+  }
+
+  private def cleanOrphanedGoldenFile(): Unit = {
+    val allTestNames = testNames.map(_.replace(' ', '_'))
+    val orphans = Utils
+      .recursiveList(queryFilePath.toFile)
+      .filter(g =>
+        g.getAbsolutePath.endsWith(".proto.bin") ||
+          g.getAbsolutePath.endsWith(".json"))
+      .filter(g =>
+        !allTestNames.contains(g.getName.stripSuffix(".proto.bin")) &&
+          !allTestNames.contains(g.getName.stripSuffix(".json")))
+    orphans.foreach(Utils.deleteRecursively)
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
@@ -2668,6 +2696,85 @@ class PlanGenerationTestSuite
 
   functionTest("right") {
     fn.right(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_encrypt with mode padding iv aad") {
+    fn.aes_encrypt(
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.lit(Array(67.toByte, 68.toByte, 69.toByte)),
+      fn.col("g"))
+  }
+
+  functionTest("aes_encrypt with mode padding iv") {
+    fn.aes_encrypt(
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.col("g"),
+      fn.lit(Array(67.toByte, 68.toByte, 69.toByte)))
+  }
+
+  functionTest("aes_encrypt with mode padding") {
+    fn.aes_encrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_encrypt with mode") {
+    fn.aes_encrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_encrypt") {
+    fn.aes_encrypt(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt with mode padding aad") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt with mode padding") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt with mode") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("aes_decrypt") {
+    fn.aes_decrypt(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("sha") {
+    fn.sha(fn.col("g"))
+  }
+
+  functionTest("input_file_block_length") {
+    fn.input_file_block_length()
+  }
+
+  functionTest("input_file_block_start") {
+    fn.input_file_block_start()
+  }
+
+  functionTest("reflect") {
+    fn.reflect(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
+  functionTest("java_method") {
+    fn.java_method(lit("java.util.UUID"), lit("fromString"), fn.col("g"))
+  }
+
+  functionTest("typeof") {
+    fn.typeof(fn.col("g"))
+  }
+
+  functionTest("stack") {
+    fn.stack(lit(2), fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("random with seed") {
+    fn.random(lit(1))
   }
 
   test("groupby agg") {

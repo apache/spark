@@ -113,7 +113,7 @@ def _train_logistic_regression_model_worker_fn(
         num_samples_per_worker,
         batch_size,
         num_workers=0,
-        prefetch_factor=None,
+        prefetch_factor=None,  # type: ignore
     )
     for i in range(max_iter):
         ddp_model.train()

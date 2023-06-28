@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -781,11 +781,73 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("error test for self-join") {
     val join = Join(testRelation, testRelation, Cross, None, JoinHint.NONE)
-    val error = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(join)
-    }
-    assert(error.message.contains("Failure when resolving conflicting references in Join"))
-    assert(error.message.contains("Conflicting attributes"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(join)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Join:
+          |'Join Cross
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-intersect") {
+    val intersect = Intersect(testRelation, testRelation, true)
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(intersect)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Intersect All:
+          |'Intersect All true
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-except") {
+    val except = Except(testRelation, testRelation, true)
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(except)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in Except All:
+          |'Except All true
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("error test for self-asOfJoin") {
+    val asOfJoin =
+      AsOfJoin(testRelation, testRelation, testRelation.output(0), testRelation.output(0),
+      None, Inner, tolerance = None, allowExactMatches = true,
+      direction = AsOfJoinDirection("backward"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(asOfJoin)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        """
+          |Failure when resolving conflicting references in AsOfJoin:
+          |'AsOfJoin (a#x >= a#x), Inner
+          |:- LocalRelation <empty>, [a#x]
+          |+- LocalRelation <empty>, [a#x]
+          |
+          |Conflicting attributes: "a".""".stripMargin))
   }
 
   test("check grouping expression data types") {
@@ -1123,9 +1185,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       "Scalar subquery must return only one column, but got 2" :: Nil)
 
     // t2.* cannot be resolved and the error should be the initial analysis exception.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       Project(ScalarSubquery(t0.select(star("t2"))).as("sub") :: Nil, t1),
-      "cannot resolve 't2.*' given input columns ''" :: Nil
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
     )
   }
 

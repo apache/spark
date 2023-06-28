@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -116,8 +117,8 @@ object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport with Alias
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2331",
-              messageParameters = Map("sqlExpr" -> e.sql, "msg" -> ex.getMessage),
+              errorClass = "FAILED_SQL_EXPRESSION_EVALUATION",
+              messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
               cause = ex)
         }
       })
