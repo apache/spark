@@ -253,7 +253,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * Tries to re-cache all the cache entries that refer to the given plan.
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
-    recacheByCondition(spark, _.plan.exists(_.sameResult(plan)))
+    if (spark.sessionState.conf.getConf(SQLConf.QUERY_RESULT_CACHE_AUTO_REFRESH)) {
+      recacheByCondition(spark, _.plan.exists(_.sameResult(plan)))
+    }
   }
 
   /**
@@ -333,8 +335,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
   def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
-    val qualifiedPath = fs.makeQualified(resourcePath)
-    recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
+    if (spark.sessionState.conf.getConf(SQLConf.QUERY_RESULT_CACHE_AUTO_REFRESH)) {
+      val qualifiedPath = fs.makeQualified(resourcePath)
+      recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
+    }
   }
 
   /**

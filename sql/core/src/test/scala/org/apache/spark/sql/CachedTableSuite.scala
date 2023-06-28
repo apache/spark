@@ -1685,4 +1685,59 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+  private def isCacheMaterialized(df: DataFrame): Boolean = {
+    val cacheRelations = df.queryExecution.withCachedData.collect {
+      case i: InMemoryRelation => i
+    }
+    assert(cacheRelations.length == 1)
+    cacheRelations.head.cacheBuilder.isCachedColumnBuffersLoaded
+  }
+
+  test("SPARK-44232: auto refresh query result cache - table") {
+    withTable("t") {
+      spark.range(10).write.saveAsTable("t")
+      spark.table("t").filter($"id" > 5).cache()
+      assert(!isCacheMaterialized(spark.table("t").filter($"id" > 5)))
+      spark.table("t").filter($"id" > 5).collect()
+      assert(isCacheMaterialized(spark.table("t").filter($"id" > 5)))
+      // After writing data to the table `t`, we will automatically refresh the query cache as it
+      // references table `t`.
+      spark.range(5).write.insertInto("t")
+      assert(!isCacheMaterialized(spark.table("t").filter($"id" > 5)))
+
+      spark.table("t").filter($"id" > 5).collect()
+      assert(isCacheMaterialized(spark.table("t").filter($"id" > 5)))
+
+      withSQLConf(SQLConf.QUERY_RESULT_CACHE_AUTO_REFRESH.key -> "false") {
+        spark.range(5).write.insertInto("t")
+        // The cache is still materialized as auto refresh is disabled.
+        assert(isCacheMaterialized(spark.table("t").filter($"id" > 5)))
+      }
+    }
+  }
+
+  test("SPARK-44232: auto refresh query result cache - path") {
+    withTempPath { path =>
+      val pathStr = path.getCanonicalPath
+      spark.range(10).write.parquet(pathStr)
+      spark.read.parquet(pathStr).filter($"id" > 5).cache()
+      assert(!isCacheMaterialized(spark.read.parquet(pathStr).filter($"id" > 5)))
+      spark.read.parquet(pathStr).filter($"id" > 5).collect()
+      assert(isCacheMaterialized(spark.read.parquet(pathStr).filter($"id" > 5)))
+      // After writing data to the table `t`, we will automatically refresh the query cache as it
+      // references table `t`.
+      spark.range(5).write.mode("append").parquet(pathStr)
+      assert(!isCacheMaterialized(spark.read.parquet(pathStr).filter($"id" > 5)))
+
+      spark.read.parquet(pathStr).filter($"id" > 5).collect()
+      assert(isCacheMaterialized(spark.read.parquet(pathStr).filter($"id" > 5)))
+
+      withSQLConf(SQLConf.QUERY_RESULT_CACHE_AUTO_REFRESH.key -> "false") {
+        spark.range(5).write.mode("append").parquet(pathStr)
+        // The cache is still materialized as auto refresh is disabled.
+        assert(isCacheMaterialized(spark.read.parquet(pathStr).filter($"id" > 5)))
+      }
+    }
+  }
 }

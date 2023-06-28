@@ -4292,6 +4292,14 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
 
+  val QUERY_RESULT_CACHE_AUTO_REFRESH = buildConf("spark.sql.queryResultCache.autoRefresh.enabled")
+    .doc("When true, refresh the query result cache automatically if any of the tables " +
+      "referenced by the query gets updated. Note that, auto refresh won't be triggered if the " +
+      "table updates happen outside of this Spark application.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
