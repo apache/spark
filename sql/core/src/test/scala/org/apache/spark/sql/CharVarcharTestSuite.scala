@@ -1132,9 +1132,7 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
         sql(s"CREATE TABLE t(m MAP<STRUCT<n_c: $typ, n_i: INT>, INT>) USING $format")
-
         val inputDF = sql("SELECT map(named_struct('n_i', 1, 'n_c', '123456'), 1) AS m")
-
         val e = intercept[SparkException](inputDF.writeTo("t").append())
         checkError(
           exception = e.getCause match {
