@@ -18,6 +18,7 @@
 package org.apache.spark.sql.util
 
 import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
