@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DataType
  * a table subquery that may itself refer to one or more tables in its own
  * FROM clause.
  */
-case class FunctionTableRelationArgumentExpression(
+case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId)
@@ -41,21 +41,21 @@ case class FunctionTableRelationArgumentExpression(
 
   override def dataType: DataType = plan.schema
   override def nullable: Boolean = false
-  override def withNewPlan(plan: LogicalPlan): FunctionTableRelationArgumentExpression =
+  override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
   override def hint: Option[HintInfo] = None
-  override def withNewHint(hint: Option[HintInfo]): FunctionTableRelationArgumentExpression =
+  override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
   override def toString: String = s"table-argument#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
-    FunctionTableRelationArgumentExpression(
+    FunctionTableSubqueryArgumentExpression(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
       ExprId(0))
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): FunctionTableRelationArgumentExpression =
+      newChildren: IndexedSeq[Expression]): FunctionTableSubqueryArgumentExpression =
     copy(outerAttrs = newChildren)
 
   final override def nodePatternsInternal: Seq[TreePattern] =

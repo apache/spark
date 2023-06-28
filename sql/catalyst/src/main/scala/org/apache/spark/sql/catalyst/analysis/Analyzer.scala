@@ -2072,7 +2072,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val tableArgs = mutable.ArrayBuffer.empty[LogicalPlan]
             val tvf = resolvedFunc.transformAllExpressionsWithPruning(
               _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION), ruleId)  {
-              case t: FunctionTableRelationArgumentExpression =>
+              case t: FunctionTableSubqueryArgumentExpression =>
                 val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
                 tableArgs.append(SubqueryAlias(alias, t.evaluable))
                 UnresolvedAttribute(Seq(alias, "c"))
@@ -2436,8 +2436,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           InSubquery(values, expr.asInstanceOf[ListQuery])
         case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a @ FunctionTableRelationArgumentExpression(sub, _, exprId) if !sub.resolved =>
-          resolveSubQuery(a, outer)(FunctionTableRelationArgumentExpression(_, _, exprId))
+        case a @ FunctionTableSubqueryArgumentExpression(sub, _, exprId) if !sub.resolved =>
+          resolveSubQuery(a, outer)(FunctionTableSubqueryArgumentExpression(_, _, exprId))
       }
     }
 

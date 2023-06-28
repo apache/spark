@@ -1542,24 +1542,24 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   /**
    * Create a relation argument for a table-valued function argument.
    */
-  override def visitFunctionTableRelationArgument(
-      ctx: FunctionTableRelationArgumentContext): Expression = withOrigin(ctx) {
-    val p = if (ctx.identifierReference != null) {
-      createUnresolvedRelation(ctx.identifierReference)
-    } else {
+  override def visitFunctionTableSubqueryArgument(
+      ctx: FunctionTableSubqueryArgumentContext): Expression = withOrigin(ctx) {
+    val p = Option(ctx.identifierReference).map { r =>
+      createUnresolvedRelation(r)
+    }.getOrElse {
       plan(ctx.query)
     }
-    FunctionTableRelationArgumentExpression(p)
+    FunctionTableSubqueryArgumentExpression(p)
   }
 
   /**
    * Create a table-valued function argument.
    */
-  override def visitFunctionTableArgument(
-      ctx: FunctionTableArgumentContext): Expression = withOrigin(ctx) {
-    if (ctx.functionTableRelationArgument != null) {
-      visitFunctionTableRelationArgument(ctx.functionTableRelationArgument)
-    } else {
+  override def visitFunctionTableReferenceArgument(
+      ctx: FunctionTableReferenceArgumentContext): Expression = withOrigin(ctx) {
+    Option(ctx.functionTableSubqueryArgument).map { r =>
+      visitFunctionTableSubqueryArgument(r)
+    }.getOrElse {
       expression(ctx.expression)
     }
   }
@@ -1581,8 +1581,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
       }
 
-      val tvf = UnresolvedTableValuedFunction(
-        ident, func.functionTableArgument.asScala.map(visitFunctionTableArgument).toSeq)
+      val tvf = UnresolvedTableValuedFunction(ident,
+        func.functionTableReferenceArgument.asScala.map(visitFunctionTableReferenceArgument).toSeq)
 
       val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
 
