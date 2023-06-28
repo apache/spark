@@ -2078,6 +2078,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 UnresolvedAttribute(Seq(alias, "c"))
             }
             if (tableArgs.nonEmpty) {
+              if (!conf.tvfAllowMultipleTableArguments && tableArgs.size > 1) {
+                throw QueryCompilationErrors.tableValuedFunctionTooManyTableArgumentsError(
+                  tableArgs.size)
+              }
               val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
               Project(
                 Seq(UnresolvedStar(Some(Seq(alias)))),

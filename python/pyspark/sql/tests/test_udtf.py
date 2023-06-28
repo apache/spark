@@ -563,27 +563,21 @@ class UDTFTestsMixin:
         func = udtf(TestUDTF, returnType="a: int, b: int")
         self.spark.udtf.register("test_udtf", func)
 
-        with self.sql_conf({"spark.sql.allowMultipleTableArguments.enabled": False}):
+        query = """
+          SELECT * FROM test_udtf(
+            TABLE (SELECT id FROM range(0, 2)),
+            TABLE (SELECT id FROM range(0, 3)))
+        """
+
+        with self.sql_conf({"spark.sql.tvf.allowMultipleTableArguments.enabled": False}):
             with self.assertRaisesRegex(
                 AnalysisException, "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS"
             ):
-                self.spark.sql(
-                    """
-                    SELECT * FROM test_udtf(
-                      TABLE (SELECT id FROM range(0, 2)),
-                      TABLE (SELECT id FROM range(0, 3)))
-                    """
-                ).collect()
+                self.spark.sql(query).collect()
 
-        with self.sql_conf({"spark.sql.allowMultipleTableArguments.enabled": True}):
+        with self.sql_conf({"spark.sql.tvf.allowMultipleTableArguments.enabled": True}):
             self.assertEqual(
-                self.spark.sql(
-                    """
-                    SELECT * FROM test_udtf(
-                      TABLE (SELECT id FROM range(0, 2)),
-                      TABLE (SELECT id FROM range(0, 3)))
-                    """
-                ).collect(),
+                self.spark.sql(query).collect(),
                 [
                     Row(a=0, b=0),
                     Row(a=1, b=0),
