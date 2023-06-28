@@ -170,15 +170,5 @@ case class StructField(
    * `StructField("eventId", IntegerType, true)` will be converted to `eventId` INT.
    * @since 2.4.0
    */
-<<<<<<< HEAD
-  def toDDL: String = {
-    val nullString = if (nullable) "" else " NOT NULL"
-    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLDefault$getDDLComment"
-  }
-=======
   def toDDL: String = toDDL(isNested = false)
-
-  private[sql] def toAttribute: AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata)()
->>>>>>> 9def1c3c75 (Patch StructType.toDDL not picking up on non-nullability of nested column)
 }
