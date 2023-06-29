@@ -35,7 +35,8 @@ class DeepspeedDistributor(Distributor):
         super().__init__(num_processes, local_mode, use_gpu)
         self.deepspeed_config = deepspeed_config
         self.known_hosts_exists = os.path.exists(DeepspeedDistributor.KNOWN_HOSTS)
-        self._setup_hostfile_info()
+        self.worker_hosts = self._setup_hostfile_info()
+        self.setup_env()
    
     def _create_ssh_key(self, ssh_key_path: str):
         if not os.path.exists(ssh_key_path):
@@ -76,15 +77,15 @@ class DeepspeedDistributor(Distributor):
             print("Wow something went wrong when cleaning up after myself.")
     
     def _get_gpus_on_node(self, executor_ip: str):
-        # ask Ricky, Lu, or Maddie if this is the best way to get the GPU information of a particular worker node
+        # TODO: ask Ricky, Lu, or Maddie if this is the best way to get the GPU information of a particular worker node
         command = f"ssh {executor_ip} nvidia-smi -L | grep GPU | wc -l" # pyspark doesn't support this out of the box for some reason, so sadge
         proc_res = subprocess.run(command, capture_output=True, text=True, shell=True)
         if proc_res.returncode:
             raise RuntimeError(f'something went wrong when running the command {command}. Is nvidia-smi installed?')
         num_gpus_on_worker = proc_res.stdout
         return int(num_gpus_on_worker) 
-
-    def _assign_gpu_to_worker(self, gpu_node_map: Dict[str, int]) -> Dict[str, int]:
+    
+    def _assign_procs_to_worker(self, gpu_node_map: Dict[str, int]) -> Dict[str, int]:
        procs_left = self.num_processes 
        workers_left_to_serve = len(gpu_node_map)
        average_procs_per_node = procs_left // workers_left_to_serve
@@ -107,7 +108,7 @@ class DeepspeedDistributor(Distributor):
         public_key = self._get_ssh_key(ssh_pub_path)
         _write_to_location(DeepspeedDistributor.AUTHORIZED_LOCATION, public_key)
 
-        worker_hosts = [executor.host() for executor in self.spark.sparkContext._jsc.sc().statusTracker().getExecutorInfos()]
+        worker_hosts = [executor.host() for executor in self.spark.sparkContext._jsc.sc().statusTracker().getExecutorInfos()] # we should check if this returns the driver or not
         worker_count = len(worker_hosts) # find out if this number includes the driver or not
         rdd = spark.sparkContext.parallelize(range(worker_count), numSlices=worker_count)
         auth_key = DeepspeedDistributor.AUTHORIZED_LOCATION # have to make this a separate variable to avoid a pickling error on next line
@@ -117,17 +118,30 @@ class DeepspeedDistributor(Distributor):
         # make sure there is no terminal prompt when deepspeed launcher uses ssh to coordinate
         self._ssh_keyscan(worker_hosts)
         # what do I do if the use_gpu flag is false?
-        gpus_on_workers = {}
-        for worker_host in worker_hosts:
-            gpus_on_workers[worker_host] = self._get_gpus_on_node(worker_host)
-        assigned_slots = self._assign_gpu_to_worker(gpus_on_workers)
+        slots_on_workers = {}
+        if self.use_gpu:
+            for worker_host in worker_hosts:
+                slots_on_workers[worker_host] = self._get_gpus_on_node(worker_host)
+        else:
+            raise RuntimeError("Deepspeed doesn't work with non-GPU clusters at this time")
+
+        assigned_slots = self._assign_procs_to_worker(slots_on_workers)
         print(f"Writing to {DeepspeedDistributor.HOSTFILE}")
         for worker_host in worker_hosts:
             line = f"{worker_host} slots={assigned_slots[worker_host]}\n"
             _write_to_location(DeepspeedDistributor.HOSTFILE, line)
-        
+        return worker_hosts 
 
-    
+    def setup_env(self):
+        try:
+            subprocess.run('deepspeed --version'.split())
+            subprocess.run('ninja --version'.split())
+            with open("/root/.deepspeed_env", "w") as f:
+                # if this is open; don't add that to path if they're not running on databricks
+                # TODO: figure out what paths to add to this, because if this is OSS we don't want to constantly add a databricks filepath
+                f.write("PATH=/databricks/python3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+        except:
+            raise ImportError("Install deepspeed and ninja on the cluster using PyPi")
 
 
         
