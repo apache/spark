@@ -21,7 +21,7 @@ import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.{Clock}
 
 /**
- * Post Connect events to @link org.apache.spark.scheduler.LiveListenerBus.
+ * Post session Connect events to @link org.apache.spark.scheduler.LiveListenerBus.
  *
  * @param sessionHolder:
  *   Session for which the events are generated.
@@ -31,14 +31,46 @@ import org.apache.spark.util.{Clock}
 case class SessionEvents(sessionHolder: SessionHolder, clock: Clock) {
 
   /**
-   * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionClosed to @link
-   * org.apache.spark.scheduler.LiveListenerBus.
+   * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionStarted.
+   */
+  def postStarted(): Unit = {
+    sessionHolder.session.sparkContext.listenerBus
+      .post(
+        SparkListenerConnectSessionStarted(
+          sessionHolder.sessionId,
+          sessionHolder.userId,
+          clock.getTimeMillis()))
+  }
+
+  /**
+   * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectSessionClosed.
    */
   def postClosed(): Unit = {
     sessionHolder.session.sparkContext.listenerBus
-      .post(SparkListenerConnectSessionClosed(sessionHolder.sessionId, clock.getTimeMillis()))
+      .post(
+        SparkListenerConnectSessionClosed(
+          sessionHolder.sessionId,
+          sessionHolder.userId,
+          clock.getTimeMillis()))
   }
 }
+
+/**
+ * Event sent after a Connect session has been started.
+ *
+ * @param sessionId:
+ *   ID assigned by the client or Connect the operation was executed on.
+ * @param eventTime:
+ *   The time in ms when the event was generated.
+ * @param extraTags:
+ *   Additional metadata
+ */
+case class SparkListenerConnectSessionStarted(
+    sessionId: String,
+    userId: String,
+    eventTime: Long,
+    extraTags: Map[String, String] = Map.empty)
+    extends SparkListenerEvent
 
 /**
  * Event sent after a Connect session has been closed.
@@ -48,10 +80,11 @@ case class SessionEvents(sessionHolder: SessionHolder, clock: Clock) {
  * @param eventTime:
  *   The time in ms when the event was generated.
  * @param extraTags:
- *   Additional metadata (i.e. spark context locale properties).
+ *   Additional metadata
  */
 case class SparkListenerConnectSessionClosed(
     sessionId: String,
+    userId: String,
     eventTime: Long,
     extraTags: Map[String, String] = Map.empty)
     extends SparkListenerEvent

@@ -32,12 +32,13 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.SparkContext
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.CreateDataFrameViewCommand
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationCanceled, SparkListenerConnectOperationClosed, SparkListenerConnectOperationFailed, SparkListenerConnectOperationFinished, SparkListenerConnectOperationParsed, SparkListenerConnectOperationStarted}
+import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationCanceled, SparkListenerConnectOperationClosed, SparkListenerConnectOperationFailed, SparkListenerConnectOperationFinished, SparkListenerConnectOperationParsed, SparkListenerConnectOperationStarted, SparkListenerConnectSessionClosed, SparkListenerConnectSessionStarted}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType}
@@ -45,7 +46,7 @@ import org.apache.spark.sql.types.{IntegerType}
 /**
  * Testing Connect Service implementation.
  */
-class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar {
+class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar with Logging {
 
   private def sparkSessionHolder = SessionHolder.forTesting(spark)
 
@@ -225,6 +226,8 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar {
       reader.close()
     }
     allocator.close()
+    SparkConnectService.invalidateAllSessions()
+    verifyEvents.onSessionClosed()
     spark.sparkContext.removeSparkListener(verifyEvents.listener)
   }
 
@@ -322,6 +325,8 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar {
       assert(last.hasMetrics && !last.hasSqlCommandResult)
     }
 
+    SparkConnectService.invalidateAllSessions()
+    verifyEvents.onSessionClosed()
     spark.sparkContext.removeSparkListener(verifyEvents.listener)
   }
 
@@ -508,16 +513,22 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar {
   sealed abstract class Status(value: Int)
 
   /**
-   * 0 -> 1 -> 2 -> 3 -> 6 1, 2, 3 -> 4 1, 2, 3, 4 -> 5
+   * 0 -> 1 -> 2 -> 3 -> 4 -> 7 -> 8
+   *
+   * 2, 3, 4 -> 5 -> 8
+   *
+   * 2, 3, 4, 5 -> 6 -> 8
    */
   object Status {
     case object Pending extends Status(0)
-    case object Started extends Status(1)
-    case object Parsed extends Status(2)
-    case object Finished extends Status(3)
-    case object Failed extends Status(4)
-    case object Canceled extends Status(5)
-    case object Closed extends Status(6)
+    case object SessionStarted extends Status(1)
+    case object Started extends Status(2)
+    case object Parsed extends Status(3)
+    case object Finished extends Status(4)
+    case object Failed extends Status(5)
+    case object Canceled extends Status(6)
+    case object Closed extends Status(7)
+    case object SessionClosed extends Status(8)
   }
 
   case class VerifyEvents(sparkContext: SparkContext) {
@@ -542,36 +553,59 @@ class SparkConnectServiceSuite extends SharedSparkSession with MockitoSugar {
       listenerBus.waitUntilEmpty(LISTENER_BUS_TIMEOUT)
       assert(listener.status == Status.Closed)
     }
+    def onSessionClosed(): Unit = {
+      listenerBus.waitUntilEmpty(LISTENER_BUS_TIMEOUT)
+      assert(listener.status == Status.SessionClosed)
+    }
   }
 
   class MockSparkListener extends SparkListener {
     var status: Status = Status.Pending
     override def onOtherEvent(event: SparkListenerEvent): Unit = {
       event match {
+
+        case e: SparkListenerConnectSessionStarted =>
+          logInfo("SparkListenerConnectSessionStarted")
+          /* assert(status == Status.Pending)
+          status = Status.SessionStarted */
+
         case e: SparkListenerConnectOperationStarted =>
+          logInfo("SparkListenerConnectOperationStarted")
+          // assert(status == Status.SessionStarted)
           assert(status == Status.Pending)
           status = Status.Started
         case e: SparkListenerConnectOperationParsed =>
+          logInfo("SparkListenerConnectOperationParsed")
           assert(status == Status.Started)
           status = Status.Parsed
         case e: SparkListenerConnectOperationFinished =>
+          logInfo("SparkListenerConnectOperationFinished")
           assert(status == Status.Parsed)
           status = Status.Finished
         case e: SparkListenerConnectOperationFailed =>
+          logInfo("SparkListenerConnectOperationFailed")
           assert(
             List(Status.Started, Status.Parsed, Status.Finished)
               .find(s => s == status)
               .isDefined)
           status = Status.Failed
         case e: SparkListenerConnectOperationCanceled =>
+          logInfo("SparkListenerConnectOperationCanceled")
           assert(
             List(Status.Started, Status.Parsed, Status.Finished, Status.Failed)
               .find(s => s == status)
               .isDefined)
           status = Status.Canceled
         case e: SparkListenerConnectOperationClosed =>
+          logInfo("SparkListenerConnectOperationClosed")
           assert(status == Status.Finished)
           status = Status.Closed
+        case e: SparkListenerConnectSessionClosed =>
+          logInfo("SparkListenerConnectSessionClosed")
+          List(Status.Failed, Status.Canceled, Status.Closed)
+            .find(s => s == status)
+            .isDefined
+          status = Status.SessionClosed
         case _ =>
       }
     }

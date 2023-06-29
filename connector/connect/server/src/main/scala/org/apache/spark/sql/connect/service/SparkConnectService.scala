@@ -346,6 +346,13 @@ object SparkConnectService {
       })
   }
 
+  /**
+   * Used for testing
+   */
+  private[connect] def invalidateAllSessions() {
+    userSessionMapping.invalidateAll()
+  }
+
   private def newIsolatedSession(): SparkSession = {
     SparkSession.active.newSession()
   }

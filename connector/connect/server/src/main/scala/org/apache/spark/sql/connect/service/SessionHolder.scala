@@ -42,6 +42,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     extends Logging {
 
   val events: SessionEvents = SessionEvents(this, new SystemClock())
+  events.postStarted()
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
 
@@ -106,6 +107,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def expireSession(): Unit = {
     logDebug(s"Expiring session with userId: $userId and sessionId: $sessionId")
     artifactManager.cleanUpResources()
+    val blockManager = session.sparkContext.env.blockManager
+    blockManager.removeCache(userId, sessionId)
+    events.postClosed()
   }
 
   /**
