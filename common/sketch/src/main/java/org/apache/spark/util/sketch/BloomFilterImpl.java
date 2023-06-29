@@ -266,6 +266,12 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return filter;
   }
 
+  public static BloomFilterImpl readFrom(byte[] bytes) throws IOException {
+    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+      return readFrom(bis);
+    }
+  }
+
   private void writeObject(ObjectOutputStream out) throws IOException {
     writeTo(out);
   }
