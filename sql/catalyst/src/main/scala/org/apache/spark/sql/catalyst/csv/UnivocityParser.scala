@@ -362,7 +362,7 @@ class UnivocityParser(
     } else {
       if (badRecordException.isDefined) {
         throw BadRecordException(
-          () => currentInput, () => requiredRow.headOption, badRecordException.get)
+          () => currentInput, () => requiredRow, badRecordException.get)
       } else {
         requiredRow
       }

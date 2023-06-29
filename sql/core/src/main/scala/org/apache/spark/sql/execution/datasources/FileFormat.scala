@@ -292,9 +292,9 @@ object FileFormat {
       name: String,
       file: PartitionedFile,
       metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
-    val extractor = metadataExtractors.get(name).getOrElse {
-      pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull
-    }
+    val extractor = metadataExtractors.getOrElse(name,
+      { pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull }
+    )
     Literal(extractor.apply(file))
   }
 

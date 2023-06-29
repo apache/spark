@@ -3362,7 +3362,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: ExpressionPropertyListContext): OptionList = {
     val options = ctx.expressionProperty.asScala.map { property =>
       val key: String = visitPropertyKey(property.key)
-      val value: Expression = Option(property.value).map(expression).getOrElse(null)
+      val value: Expression = Option(property.value).map(expression).orNull
       key -> value
     }.toSeq
     OptionList(options)
