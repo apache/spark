@@ -1171,3 +1171,14 @@ This can be done several ways. One possibility is to provide additional JVM para
         --driver-java-options "-Djava.security.auth.login.config=/path/to/custom_jaas.conf" \
         --conf spark.executor.extraJavaOptions=-Djava.security.auth.login.config=/path/to/custom_jaas.conf \
         ...
+
+### IAM authentication
+
+Managed Streaming for Kafka (MSK) is a fully managed service offered by Amazon Web Services (AWS) that simplifies the deployment, management, and scaling of Apache Kafka clusters. 
+One way to connect to MSK is by using IAM authentication. To facilitate this, Spark already ships with the [aws msk library](https://github.com/aws/aws-msk-iam-auth) by default so no additional dependencies are required.
+To use IAM authentication, you can set the kafka config as in the [library documentation](https://github.com/aws/aws-msk-iam-auth). For example:
+
+    --conf spark.kafka.clusters.${cluster}.kafka.security.protocol=SASL_SSL
+    --conf spark.kafka.clusters.${cluster}.kafka.sasl.mechanism=AWS_MSK_IAM
+    --conf spark.kafka.clusters.${cluster}.kafka.sasl.jaas.config=software.amazon.msk.auth.iam.IAMLoginModule required;
+    --conf spark.kafka.clusters.${cluster}.kafka.sasl.client.callback.handler.class=software.amazon.msk.auth.iam.IAMClientCallbackHandler
