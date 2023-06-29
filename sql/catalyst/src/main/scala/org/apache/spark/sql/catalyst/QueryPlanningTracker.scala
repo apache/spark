@@ -91,8 +91,8 @@ object QueryPlanningTracker {
 }
 
 /**
- * @param readyForExecutionCallback Called when the query has been analysed and is ready for
- *                                  execution see setReadyForExecution
+ * @param readyForExecutionCallback
+ *   Called when the query has been analysed and is ready for execution see setReadyForExecution
  */
 class QueryPlanningTracker(
     readyForExecutionCallback: (QueryPlanningTracker, LogicalPlan) => Unit = (_, _) => ()) {
@@ -128,14 +128,14 @@ class QueryPlanningTracker(
   }
 
   /**
-   * Set when the query has been analysed and is ready for execution.
-   * This is after analysis for eager commands and after planning
-   * for other queries.
-   * see @link org.apache.spark.sql.execution.CommandExecutionMode
+   * Set when the query has been analysed and is ready for execution. This is after analysis for
+   * eager commands and after planning for other queries. see @link
+   * org.apache.spark.sql.execution.CommandExecutionMode. When called multiple times, ignores
+   * subsequent call.
    */
   def setReadyForExecution(analyzedPlan: LogicalPlan): Unit = {
     if (readyForExecution) {
-      throw new IllegalStateException("Cannot setReadyForExecution more than once")
+      return
     }
     readyForExecution = true
     readyForExecutionCallback(this, analyzedPlan)

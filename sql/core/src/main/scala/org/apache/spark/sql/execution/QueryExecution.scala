@@ -71,15 +71,9 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = {
-    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
-      // We can't clone `logical` here, which will reset the `_analyzed` flag.
-      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
-    }
-    if (isEager(plan)) {
-      tracker.setReadyForExecution(plan)
-    }
-    plan
+  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
+    // We can't clone `logical` here, which will reset the `_analyzed` flag.
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
   lazy val commandExecuted: LogicalPlan = mode match {
@@ -99,6 +93,11 @@ class QueryExecution(
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
     case c: Command =>
+      // Since Command execution will eagerly take place here,
+      // and in most cases be the bulk of time and effort,
+      // with the rest of processing of the root plan being just outputting command results,
+      // for eagerly executed commands we mark this place as beginning of execution.
+      tracker.setReadyForExecution(analyzed)
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
       val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
         qe.executedPlan.executeCollect()
@@ -156,7 +155,7 @@ class QueryExecution(
     }
   }
 
-  private def assertOptimized(): Unit = optimizedPlan
+  def assertOptimized(): Unit = optimizedPlan
 
   lazy val sparkPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
@@ -169,6 +168,8 @@ class QueryExecution(
     }
   }
 
+  def assertSparkPlanPrepared(): Unit = sparkPlan
+
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = {
@@ -180,9 +181,9 @@ class QueryExecution(
       // optimizing and planning.
       QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
     }
-    if (!isEager(analyzed)) {
-      tracker.setReadyForExecution(analyzed)
-    }
+    // Note: For eagerly executed command it might have already been called in
+    // `eagerlyExecutedCommand` and is a noop here.
+    tracker.setReadyForExecution(analyzed)
     plan
   }
 
@@ -348,13 +349,6 @@ class QueryExecution(
    */
   private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
-  }
-
-  private def isEager(plan: LogicalPlan): Boolean = {
-    logical.find {
-      case _: Command => true
-      case _ => false
-    }.isDefined && mode != CommandExecutionMode.SKIP
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

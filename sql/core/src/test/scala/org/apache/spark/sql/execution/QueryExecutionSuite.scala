@@ -245,23 +245,25 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("SPARK-35378: Eagerly execute non-root Command") {
-    val mockCallback = MockCallbackEagerCommand()
-    def qe(logicalPlan: LogicalPlan): QueryExecution = new QueryExecution(
-      spark,
-      logicalPlan,
-      new QueryPlanningTracker(mockCallback.callback))
+    val mockCallback1 = MockCallbackEagerCommand()
+    val mockCallback2 = MockCallbackEagerCommand()
+    def qe(logicalPlan: LogicalPlan, callback: AnalyzedCallback): QueryExecution =
+      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(callback.callback))
 
     val showTables = ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
-    val showTablesQe = qe(showTables)
+    val showTablesQe = qe(showTables, mockCallback1)
+    assert(mockCallback1.tracker == null)
     assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
+    assert(mockCallback1.tracker != null)
     assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
     val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
-    assert(mockCallback.tracker != null)
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
-    val projectQe = qe(project)
+    val projectQe = qe(project, mockCallback2)
+    assert(mockCallback2.tracker == null)
     assert(projectQe.commandExecuted.isInstanceOf[Project])
+    assert(mockCallback2.tracker != null)
     assert(projectQe.commandExecuted.children.length == 1)
     assert(projectQe.commandExecuted.children(0).isInstanceOf[SubqueryAlias])
     assert(projectQe.commandExecuted.children(0).children.length == 1)
@@ -269,7 +271,6 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
-    assert(mockCallback.tracker != null)
   }
 
   test("SPARK-44145: non eagerly executed command setReadyForExecution") {
@@ -281,7 +282,13 @@ class QueryExecutionSuite extends SharedSparkSession {
       showTables,
       new QueryPlanningTracker(mockCallback.callback),
       CommandExecutionMode.SKIP)
-    showTablesQe.assertExecutedPlanPrepared()
+    showTablesQe.assertAnalyzed
+    assert(mockCallback.tracker == null)
+    showTablesQe.assertOptimized
+    assert(mockCallback.tracker == null)
+    showTablesQe.assertSparkPlanPrepared
+    assert(mockCallback.tracker == null)
+    showTablesQe.assertExecutedPlanPrepared
     assert(mockCallback.tracker != null)
   }
 
@@ -289,7 +296,13 @@ class QueryExecutionSuite extends SharedSparkSession {
     val mockCallback = MockCallback()
     val plan: LogicalPlan = org.apache.spark.sql.catalyst.plans.logical.Range(0, 1, 1, 1)
     val df = Dataset.ofRows(spark, plan, new QueryPlanningTracker(mockCallback.callback))
-    df.queryExecution.assertExecutedPlanPrepared()
+    df.queryExecution.assertAnalyzed
+    assert(mockCallback.tracker == null)
+    df.queryExecution.assertOptimized
+    assert(mockCallback.tracker == null)
+    df.queryExecution.assertSparkPlanPrepared
+    assert(mockCallback.tracker == null)
+    df.queryExecution.assertExecutedPlanPrepared
     assert(mockCallback.tracker != null)
   }
 
@@ -319,14 +332,19 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
-  case class MockCallbackEagerCommand(var tracker: QueryPlanningTracker = null) {
+  trait AnalyzedCallback {
+    def callback(tracker: QueryPlanningTracker, plan: LogicalPlan): Unit
+  }
+
+  case class MockCallbackEagerCommand(var tracker: QueryPlanningTracker = null)
+      extends AnalyzedCallback {
     def callback(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
       tracker = trackerFromCallback
       assert(tracker.phases.keySet.contains(QueryPlanningTracker.ANALYSIS))
       assert(!tracker.phases.keySet.contains(QueryPlanningTracker.OPTIMIZATION))
     }
   }
-  case class MockCallback(var tracker: QueryPlanningTracker = null) {
+  case class MockCallback(var tracker: QueryPlanningTracker = null) extends AnalyzedCallback {
     def callback(trackerFromCallback: QueryPlanningTracker, plan: LogicalPlan): Unit = {
       tracker = trackerFromCallback
       assert(tracker.phases.keySet.contains(QueryPlanningTracker.PLANNING))
