@@ -1,9 +1,4 @@
 {
-  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
-    "message" : [
-      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
-    ]
-  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -1662,6 +1657,11 @@
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
+    ]
+  },
+  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
+    "message" : [
+      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ]
   },
   "NESTED_AGGREGATE_FUNCTION" : {
