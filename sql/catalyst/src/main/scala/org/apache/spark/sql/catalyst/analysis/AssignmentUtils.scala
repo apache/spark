@@ -104,7 +104,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         case assignment if assignment.key.semanticEquals(attr) => assignment
       }
       val resolvedValue = if (matchingAssignments.isEmpty) {
-        val defaultExpr = getDefaultValueExprOrNullLit(attr, conf)
+        val defaultExpr = getDefaultValueExprOrNullLit(
+          attr, conf.useNullsForMissingDefaultColumnValues)
         if (defaultExpr.isEmpty) {
           errors += s"No assignment for '${attr.name}'"
         }

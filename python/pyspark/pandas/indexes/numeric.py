@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from typing import Any, Optional, Union, cast
 
 import pandas as pd
@@ -93,6 +94,10 @@ class Int64Index(IntegerIndex):
         copy: bool = False,
         name: Optional[Name] = None,
     ) -> "Int64Index":
+        warnings.warn(
+            "Int64Index is deprecated in 3.4.0, and will be removed in 4.0.0. Use Index instead.",
+            FutureWarning,
+        )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 
@@ -157,6 +162,10 @@ class Float64Index(NumericIndex):
         copy: bool = False,
         name: Optional[Name] = None,
     ) -> "Float64Index":
+        warnings.warn(
+            "Float64Index is deprecated in 3.4.0, and will be removed in 4.0.0. Use Index instead.",
+            FutureWarning,
+        )
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
 

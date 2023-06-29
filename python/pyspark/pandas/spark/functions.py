@@ -17,15 +17,11 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Union, no_type_check
+from typing import Union
 
 from pyspark import SparkContext
 import pyspark.sql.functions as F
-from pyspark.sql.column import (
-    Column,
-    _to_java_column,
-    _create_column_from_literal,
-)
+from pyspark.sql.column import Column
 
 # For supporting Spark Connect
 from pyspark.sql.utils import is_remote
@@ -47,23 +43,65 @@ def product(col: Column, dropna: bool) -> Column:
 
 
 def stddev(col: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_stddev",
+            col,  # type: ignore[arg-type]
+            lit(ddof),
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
 
 def var(col: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_var",
+            col,  # type: ignore[arg-type]
+            lit(ddof),
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
 
 
 def skew(col: Column) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_skew",
+            col,  # type: ignore[arg-type]
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
 
 
 def kurt(col: Column) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "pandas_kurt",
+            col,  # type: ignore[arg-type]
+        )
+
+    else:
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
 
 
 def mode(col: Column, dropna: bool) -> Column:
@@ -105,25 +143,45 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     return F.call_udf("repeat", col, _n)
 
 
-def date_part(field: Union[str, Column], source: Column) -> Column:
-    """
-    Extracts a part of the date/timestamp or interval source.
-    """
-    sc = SparkContext._active_spark_context
-    field = (
-        _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
-    )
-    return _call_udf(sc, "date_part", field, _to_java_column(source))
+def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "ewm",
+            col,  # type: ignore[arg-type]
+            lit(alpha),
+            lit(ignore_na),
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
 
 
-@no_type_check
-def _call_udf(sc, name, *cols):
-    return Column(sc._jvm.functions.callUDF(name, _make_arguments(sc, *cols)))
+def last_non_null(col: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "last_non_null",
+            col,  # type: ignore[arg-type]
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.lastNonNull(col._jc))
 
 
-@no_type_check
-def _make_arguments(sc, *cols):
-    java_arr = sc._gateway.new_array(sc._jvm.Column, len(cols))
-    for i, col in enumerate(cols):
-        java_arr[i] = col
-    return java_arr
+def null_index(col: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(  # type: ignore[return-value]
+            "null_index",
+            col,  # type: ignore[arg-type]
+        )
+
+    else:
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))

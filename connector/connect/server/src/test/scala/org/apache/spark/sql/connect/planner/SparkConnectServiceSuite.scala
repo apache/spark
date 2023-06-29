@@ -24,18 +24,22 @@ import io.grpc.stub.StreamObserver
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Testing Connect Service implementation.
  */
 class SparkConnectServiceSuite extends SharedSparkSession {
+
+  private def sparkSessionHolder = SessionHolder.forTesting(spark)
 
   test("Test schema in analyze response") {
     withTable("test") {
@@ -64,7 +68,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .newBuilder()
         .setSchema(proto.AnalyzePlanRequest.Schema.newBuilder().setPlan(plan).build())
         .build()
-      val response1 = handler.process(request1, spark)
+      val response1 = handler.process(request1, sparkSessionHolder)
       assert(response1.hasSchema)
       assert(response1.getSchema.getSchema.hasStruct)
       val schema = response1.getSchema.getSchema.getStruct
@@ -85,7 +89,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
             .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE)
             .build())
         .build()
-      val response2 = handler.process(request2, spark)
+      val response2 = handler.process(request2, sparkSessionHolder)
       assert(response2.hasExplain)
       assert(response2.getExplain.getExplainString.size > 0)
 
@@ -93,7 +97,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .newBuilder()
         .setIsLocal(proto.AnalyzePlanRequest.IsLocal.newBuilder().setPlan(plan).build())
         .build()
-      val response3 = handler.process(request3, spark)
+      val response3 = handler.process(request3, sparkSessionHolder)
       assert(response3.hasIsLocal)
       assert(!response3.getIsLocal.getIsLocal)
 
@@ -101,7 +105,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .newBuilder()
         .setIsStreaming(proto.AnalyzePlanRequest.IsStreaming.newBuilder().setPlan(plan).build())
         .build()
-      val response4 = handler.process(request4, spark)
+      val response4 = handler.process(request4, sparkSessionHolder)
       assert(response4.hasIsStreaming)
       assert(!response4.getIsStreaming.getIsStreaming)
 
@@ -109,7 +113,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .newBuilder()
         .setTreeString(proto.AnalyzePlanRequest.TreeString.newBuilder().setPlan(plan).build())
         .build()
-      val response5 = handler.process(request5, spark)
+      val response5 = handler.process(request5, sparkSessionHolder)
       assert(response5.hasTreeString)
       val treeString = response5.getTreeString.getTreeString
       assert(treeString.contains("root"))
@@ -120,13 +124,15 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .newBuilder()
         .setInputFiles(proto.AnalyzePlanRequest.InputFiles.newBuilder().setPlan(plan).build())
         .build()
-      val response6 = handler.process(request6, spark)
+      val response6 = handler.process(request6, sparkSessionHolder)
       assert(response6.hasInputFiles)
       assert(response6.getInputFiles.getFilesCount === 0)
     }
   }
 
   test("SPARK-41224: collect data using arrow") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val instance = new SparkConnectService(false)
     val connect = new MockRemoteSession()
     val context = proto.UserContext
@@ -291,7 +297,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
             .build())
         .build()
 
-      val response = handler.process(request, spark)
+      val response = handler.process(request, sparkSessionHolder)
 
       assert(response.getExplain.getExplainString.contains("Parsed Logical Plan"))
       assert(response.getExplain.getExplainString.contains("Analyzed Logical Plan"))
@@ -301,6 +307,8 @@ class SparkConnectServiceSuite extends SharedSparkSession {
   }
 
   test("Test observe response") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("test") {
       spark.sql("""
                   | CREATE TABLE test (col1 INT, col2 STRING)

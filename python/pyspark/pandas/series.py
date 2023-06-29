@@ -53,7 +53,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
-from pyspark import SparkContext
 from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -70,7 +69,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import is_remote
+from pyspark.sql.utils import get_column_class, get_window_class
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
@@ -1682,6 +1681,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         multicolumn_format: Optional[str] = None,
         multirow: Optional[bool] = None,
     ) -> Optional[str]:
+        warnings.warn(
+            "Argument `col_space` will be removed in 4.0.0.",
+            FutureWarning,
+        )
 
         args = locals()
         psseries = self
@@ -2253,10 +2256,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-        last_non_null = PySparkColumn(sql_utils.lastNonNull(scol._jc))
-        null_index = PySparkColumn(sql_utils.nullIndex(scol._jc))
+        last_non_null = SF.last_non_null(scol)
+        null_index = SF.null_index(scol)
 
+        Window = get_window_class()
         window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
@@ -3638,7 +3641,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         warnings.warn(
             "The Series.append method is deprecated "
-            "and will be removed in a future version. "
+            "and will be removed in 4.0.0. "
             "Use pyspark.pandas.concat instead.",
             FutureWarning,
         )
@@ -4193,6 +4196,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.rank(numeric_only=True)
         Series([], Name: A, dtype: float64)
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `None` in 4.0.0.",
+            FutureWarning,
+        )
         is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
         if numeric_only and not is_numeric:
             return ps.Series([], dtype="float64", name=self.name)
@@ -4213,12 +4221,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
+        Column = get_column_class()
         if ascending:
             asc_func = Column.asc
         else:
@@ -4227,8 +4230,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if method == "first":
             window = (
                 Window.orderBy(
-                    asc_func(self.spark.column),  # type: ignore[arg-type]
-                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),  # type: ignore[arg-type]
+                    asc_func(self.spark.column),
+                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
@@ -4236,7 +4239,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.row_number().over(window)
         elif method == "dense":
             window = (
-                Window.orderBy(asc_func(self.spark.column))  # type: ignore[arg-type]
+                Window.orderBy(asc_func(self.spark.column))
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -4249,7 +4252,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             elif method == "max":
                 stat_func = F.max
             window1 = (
-                Window.orderBy(asc_func(self.spark.column))  # type: ignore[arg-type]
+                Window.orderBy(asc_func(self.spark.column))
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
@@ -5956,7 +5959,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1.0
         """
         warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
+            "The 'mad' method is deprecated and will be removed in 4.0.0. "
             "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
             FutureWarning,
         )
@@ -6128,7 +6131,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             iteritems is deprecated and will be removed in a future version.
             Use .items instead.
         """
-        warnings.warn("Deprecated in 3.4, Use Series.items instead.", FutureWarning)
+        warnings.warn(
+            "Deprecated in 3.4, and will be removed in 4.0.0. Use Series.items instead.",
+            FutureWarning,
+        )
         return self.items()
 
     def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Series":

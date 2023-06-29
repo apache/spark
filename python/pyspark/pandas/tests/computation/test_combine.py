@@ -148,21 +148,21 @@ class FrameCombineMixin:
             },
             columns=["rkey", "value", "y"],
         )
-        right_ps = pd.Series(list("defghi"), name="x", index=[5, 6, 7, 8, 9, 10])
+        right_pser = pd.Series(list("defghi"), name="x", index=[5, 6, 7, 8, 9, 10])
 
         left_psdf = ps.from_pandas(left_pdf)
         right_psdf = ps.from_pandas(right_pdf)
-        right_psser = ps.from_pandas(right_ps)
+        right_psser = ps.from_pandas(right_pser)
 
         def check(op, right_psdf=right_psdf, right_pdf=right_pdf):
-            k_res = op(left_psdf, right_psdf)
-            k_res = k_res._to_pandas()
-            k_res = k_res.sort_values(by=list(k_res.columns))
-            k_res = k_res.reset_index(drop=True)
+            ps_res = op(left_psdf, right_psdf)
+            ps_res = ps_res._to_pandas()
+            ps_res = ps_res.sort_values(by=list(ps_res.columns))
+            ps_res = ps_res.reset_index(drop=True)
             p_res = op(left_pdf, right_pdf)
             p_res = p_res.sort_values(by=list(p_res.columns))
             p_res = p_res.reset_index(drop=True)
-            self.assert_eq(k_res, p_res)
+            self.assert_eq(ps_res, p_res)
 
         check(lambda left, right: left.merge(right))
         check(lambda left, right: left.merge(right, on="value"))
@@ -218,23 +218,25 @@ class FrameCombineMixin:
         )
 
         # Test Series on the right
-        check(lambda left, right: left.merge(right), right_psser, right_ps)
+        check(lambda left, right: left.merge(right), right_psser, right_pser)
         check(
-            lambda left, right: left.merge(right, left_on="x", right_on="x"), right_psser, right_ps
+            lambda left, right: left.merge(right, left_on="x", right_on="x"),
+            right_psser,
+            right_pser,
         )
         check(
             lambda left, right: left.set_index("x").merge(right, left_index=True, right_on="x"),
             right_psser,
-            right_ps,
+            right_pser,
         )
 
         # Test join types with Series
         for how in ["inner", "left", "right", "outer"]:
-            check(lambda left, right: left.merge(right, how=how), right_psser, right_ps)
+            check(lambda left, right: left.merge(right, how=how), right_psser, right_pser)
             check(
                 lambda left, right: left.merge(right, left_on="x", right_on="x", how=how),
                 right_psser,
-                right_ps,
+                right_pser,
             )
 
         # suffix with Series
@@ -247,7 +249,7 @@ class FrameCombineMixin:
                 right_index=True,
             ),
             right_psser,
-            right_ps,
+            right_pser,
         )
 
         # multi-index columns

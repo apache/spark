@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
@@ -94,6 +95,7 @@ trait AlsoTestWithChangelogCheckpointingEnabled
   }
 }
 
+@SlowSQLTest
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
 
   sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)

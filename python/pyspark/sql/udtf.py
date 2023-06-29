@@ -193,6 +193,7 @@ class UDTFRegistration:
         ... class PlusOne:
         ...     def eval(self, x: int):
         ...         yield x, x + 1
+        ...
         >>> _ = spark.udtf.register(name="plus_one", f=PlusOne)
         >>> spark.sql("SELECT * FROM plus_one(1)").collect()
         [Row(c1=1, c2=2)]

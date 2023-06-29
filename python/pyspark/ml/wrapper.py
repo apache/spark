@@ -268,7 +268,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         return self._java_obj
 
     @staticmethod
-    def _from_java(java_stage: "JavaObject") -> "JP":
+    def _from_java(java_stage: "JavaObject") -> "JP":  # type: ignore
         """
         Given a Java object, create and return a Python wrapper of it.
         Used for ML persistence.
@@ -449,7 +449,7 @@ class JavaPredictionModel(PredictionModel[T], JavaModel, _PredictorParams):
     (Private) Java Model for prediction tasks (regression and classification).
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def numFeatures(self) -> int:
         """
