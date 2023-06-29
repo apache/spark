@@ -4,6 +4,11 @@
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
     ]
   },
+  "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot use all columns for partition columns."
+    ]
+  },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -704,11 +709,6 @@
     ],
     "sqlState" : "42K04"
   },
-  "FAILED_SQL_EXPRESSION_EVALUATION" : {
-    "message" : [
-      "Failed to evaluate the SQL expression: <sqlExpr>. Please check your syntax and ensure all required tables and columns are available."
-    ]
-  },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
@@ -1185,6 +1185,11 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_HIVE_COLUMN_NAME" : {
+    "message" : [
+      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+    ]
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
@@ -1197,6 +1202,28 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_INLINE_TABLE" : {
+    "message" : [
+      "Invalid inline table."
+    ],
+    "subClass" : {
+      "CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE" : {
+        "message" : [
+          "Cannot evaluate the expression <expr> in inline table definition."
+        ]
+      },
+      "FAILED_SQL_EXPRESSION_EVALUATION" : {
+        "message" : [
+          "Failed to evaluate the SQL expression <sqlExpr>. Please check your syntax and ensure all required tables and columns are available."
+        ]
+      },
+      "INCOMPATIBLE_TYPES_IN_INLINE_TABLE" : {
+        "message" : [
+          "Found incompatible types in the column <colName> for inline table."
+        ]
+      }
+    }
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -1208,6 +1235,23 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ],
     "sqlState" : "22032"
+  },
+  "INVALID_LAMBDA_FUNCTION_CALL" : {
+    "message" : [
+      "Invalid lambda function call."
+    ],
+    "subClass" : {
+      "DUPLICATE_ARG_NAMES" : {
+        "message" : [
+          "The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to \"true\"."
+        ]
+      },
+      "NUM_ARGS_MISMATCH" : {
+        "message" : [
+          "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
+        ]
+      }
+    }
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
@@ -1654,6 +1698,11 @@
     ],
     "sqlState" : "42803"
   },
+  "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
+    "message" : [
+      "The expression <expr> does not support more than one source."
+    ]
+  },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
@@ -2042,6 +2091,16 @@
       "sortBy must be used together with bucketBy."
     ]
   },
+  "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime."
+    ]
+  },
+  "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
+    "message" : [
+      "It is not allowed to specify partition columns when the table schema is not defined. When the table schema is not provided, schema and partition columns will be inferred."
+    ]
+  },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
@@ -2263,6 +2322,23 @@
     "message" : [
       "Attempted to unset non-existent properties [<properties>] in table <table>."
     ]
+  },
+  "UNSUPPORTED_ADD_FILE" : {
+    "message" : [
+      "Don't support add file."
+    ],
+    "subClass" : {
+      "DIRECTORY" : {
+        "message" : [
+          "The file <path> is a directory, consider to set \"spark.sql.legacy.addSingleFileInAddFile\" to \"false\"."
+        ]
+      },
+      "LOCAL_DIRECTORY" : {
+        "message" : [
+          "The local directory <path> is not supported in a non-local master mode."
+        ]
+      }
+    }
   },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
@@ -3547,11 +3623,6 @@
   "_LEGACY_ERROR_TEMP_1153" : {
     "message" : [
       "Cannot use <field> for partition column."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1154" : {
-    "message" : [
-      "Cannot use all columns for partition columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1155" : {
@@ -5492,31 +5563,6 @@
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2300" : {
-    "message" : [
-      "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2301" : {
-    "message" : [
-      "Lambda function arguments should not have names that are semantically the same."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2302" : {
-    "message" : [
-      "'<name>' does not support more than one sources."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2303" : {
-    "message" : [
-      "incompatible types found in column <name> for inline table."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2304" : {
-    "message" : [
-      "cannot evaluate expression <sqlExpr> in inline table definition."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2305" : {
     "message" : [
       "expected <numCols> columns but found <rowSize> columns in row <ri>."
@@ -5635,40 +5681,6 @@
   "_LEGACY_ERROR_TEMP_2330" : {
     "message" : [
       "Cannot change nullable column to non-nullable: <fieldName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2433" : {
-    "message" : [
-      "Only a single table generating function is allowed in a SELECT clause, found:",
-      "<sqlExprs>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2434" : {
-    "message" : [
-      "Failure when resolving conflicting references in Join:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2435" : {
-    "message" : [
-      "Failure when resolving conflicting references in Intersect:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2436" : {
-    "message" : [
-      "Failure when resolving conflicting references in Except:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2437" : {
-    "message" : [
-      "Failure when resolving conflicting references in AsOfJoin:",
-      "<plan>",
-      "Conflicting attributes: <conflictingAttributes>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2446" : {

@@ -429,7 +429,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
         checkError(
           exception = intercept[AnalysisException](sql(sqlCreateTable)),
-          errorClass = null,
+          errorClass = "SPECIFY_PARTITION_IS_NOT_ALLOWED",
           parameters = Map.empty
         )
       } else {
@@ -1316,19 +1316,21 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE jsonTable
-             |USING org.apache.spark.sql.json
-             |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
-             |)
-             |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
-           """.stripMargin)
-        }
-        assert(e.message == "Cannot specify bucketing information if the table schema is not " +
-          "specified when creating and will be inferred at runtime")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""
+                 |CREATE TABLE jsonTable
+                 |USING org.apache.spark.sql.json
+                 |OPTIONS (
+                 |  path '${tempDir.getCanonicalPath}'
+                 |)
+                 |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
+               """.stripMargin)
+          },
+          errorClass = "SPECIFY_BUCKETING_IS_NOT_ALLOWED",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -2247,8 +2249,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           exception = intercept[SparkException] {
             sql(s"ADD FILE $testDir")
           },
-          errorClass = null,
-          parameters = Map.empty
+          errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
+          parameters = Map("path" -> s"file:${testDir.getCanonicalPath}/")
         )
       }
     }

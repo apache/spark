@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.column import Column
+    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy = False
@@ -188,7 +189,7 @@ def try_remote_window(f: FuncT) -> FuncT:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
 
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window
+            from pyspark.sql.connect.window import Window  # type: ignore[misc]
 
             return getattr(Window, f.__name__)(*args, **kwargs)
         else:
@@ -282,3 +283,14 @@ def get_dataframe_class() -> Type["DataFrame"]:
         return ConnectDataFrame  # type: ignore[return-value]
     else:
         return PySparkDataFrame
+
+
+def get_window_class() -> Type["Window"]:
+    from pyspark.sql.window import Window as PySparkWindow
+
+    if is_remote():
+        from pyspark.sql.connect.window import Window as ConnectWindow
+
+        return ConnectWindow  # type: ignore[return-value]
+    else:
+        return PySparkWindow

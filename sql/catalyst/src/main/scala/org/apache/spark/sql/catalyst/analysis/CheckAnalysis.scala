@@ -674,9 +674,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            p.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2433",
-              messageParameters = Map("sqlExprs" -> exprs.map(_.sql).mkString(",")))
+            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
+            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(
@@ -686,36 +685,48 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             })
 
           case j: Join if !j.duplicateResolved =>
-            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2434",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           case i: Intersect if !i.duplicateResolved =>
-            val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
-            i.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2435",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              i.left.outputSet.intersect(i.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${i.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = i.origin.getQueryContext,
+              summary = i.origin.context.summary)
 
           case e: Except if !e.duplicateResolved =>
-            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
-            e.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2436",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              e.left.outputSet.intersect(e.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${e.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = e.origin.getQueryContext,
+              summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
-            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
-            j.failAnalysis(
-              errorClass = "_LEGACY_ERROR_TEMP_2437",
-              messageParameters = Map(
-                "plan" -> plan.toString,
-                "conflictingAttributes" -> conflictingAttributes.mkString(",")))
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
 
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.

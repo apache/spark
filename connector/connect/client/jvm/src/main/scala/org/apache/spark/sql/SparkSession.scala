@@ -429,7 +429,7 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  object implicits extends SQLImplicits(this)
+  object implicits extends SQLImplicits(this) with Serializable
   // scalastyle:on
 
   def newSession(): SparkSession = {

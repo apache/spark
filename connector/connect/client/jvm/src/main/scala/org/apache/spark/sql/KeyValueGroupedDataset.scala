@@ -38,7 +38,7 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  *
  * @since 3.5.0
  */
-abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
+class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -462,7 +462,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
       UdfUtils.coGroupFunctionToScalaFunc(f))(encoder)
   }
 
-  protected def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
+  protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
       outputMode: Option[OutputMode],
       timeoutConf: GroupStateTimeout,
       initialState: Option[KeyValueGroupedDataset[K, S]],
@@ -923,7 +923,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     agg(aggregator)
   }
 
-  override protected def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
+  override protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](
       outputMode: Option[OutputMode],
       timeoutConf: GroupStateTimeout,
       initialState: Option[KeyValueGroupedDataset[K, S]],
