@@ -129,16 +129,15 @@ class QueryPlanningTracker(
 
   /**
    * Set when the query has been analysed and is ready for execution. This is after analysis for
-   * eager commands and after planning for other queries. see @link
-   * org.apache.spark.sql.execution.CommandExecutionMode. When called multiple times, ignores
-   * subsequent call.
+   * eager commands and after planning for other queries.
+   * see @link org.apache.spark.sql.execution.CommandExecutionMode
+   * When called multiple times, ignores subsequent call.
    */
   def setReadyForExecution(analyzedPlan: LogicalPlan): Unit = {
-    if (readyForExecution) {
-      return
+    if (!readyForExecution) {
+      readyForExecution = true
+      readyForExecutionCallback(this, analyzedPlan)
     }
-    readyForExecution = true
-    readyForExecutionCallback(this, analyzedPlan)
   }
 
   /**
