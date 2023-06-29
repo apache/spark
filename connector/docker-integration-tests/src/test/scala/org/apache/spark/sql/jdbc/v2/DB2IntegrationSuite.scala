@@ -102,7 +102,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
         "newType" -> "\"VARCHAR(10)\"",
         "newName" -> "`ID`",
         "originName" -> "`ID`",
-        "table" -> s"`$catalogName`.`alt_table`")
+        "table" -> s"`$catalogName`.`alt_table`"),
+      context = ExpectedContext(fragment = "", start = 0, stop = 1)
     )
   }
 

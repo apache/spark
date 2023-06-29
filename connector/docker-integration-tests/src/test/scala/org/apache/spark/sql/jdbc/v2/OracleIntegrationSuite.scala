@@ -121,7 +121,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "newType" -> "\"INT\"",
         "newName" -> "`ID`",
         "originName" -> "`ID`",
-        "table" -> s"`$catalogName`.`alt_table`")
+        "table" -> s"`$catalogName`.`alt_table`"),
+      context = ExpectedContext(fragment = "", start = 0, stop = 1)
     )
   }
 
