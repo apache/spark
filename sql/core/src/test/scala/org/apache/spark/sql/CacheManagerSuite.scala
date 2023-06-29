@@ -31,13 +31,9 @@ class CacheManagerSuite extends SparkFunSuite with SharedSparkSession {
       ("s3://bucket/a/b/c", "s3://bucket/a/b/c") -> true,
       ("s3://bucket/a/b/c", "s3://bucket/a/b") -> false,
       ("s3://bucket/a/z/c", "s3://bucket/a/b/c") -> false,
-      ("s3://bucket/a/b/c", "abfs://bucket/a/b/c") -> false
-    )
+      ("s3://bucket/a/b/c", "abfs://bucket/a/b/c") -> false)
     testCases.foreach { test =>
-      val result = cacheManager.isSubDir(
-        new Path(test._1._1),
-        new Path(test._1._2)
-      )
+      val result = cacheManager.isSubDir(new Path(test._1._1), new Path(test._1._2))
       assert(result == test._2)
     }
   }

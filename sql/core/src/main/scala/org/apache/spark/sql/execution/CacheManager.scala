@@ -375,12 +375,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /**
    * Checks if the given child path is a sub-directory of the given parent path.
-   * @param qualifiedPathChild: Fully qualified child path
-   * @param qualifiedPathParent: Fully qualified parent path.
-   * @return True if the child path is a sub-directory of the given parent path. Otherwise, false.
+   * @param qualifiedPathChild:
+   *   Fully qualified child path
+   * @param qualifiedPathParent:
+   *   Fully qualified parent path.
+   * @return
+   *   True if the child path is a sub-directory of the given parent path. Otherwise, false.
    */
   def isSubDir(qualifiedPathParent: Path, qualifiedPathChild: Path): Boolean = {
-    Iterator.iterate(qualifiedPathChild)(_.getParent)
+    Iterator
+      .iterate(qualifiedPathChild)(_.getParent)
       .takeWhile(_ != null)
       .exists(_.equals(qualifiedPathParent))
   }
