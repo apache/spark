@@ -92,11 +92,18 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     expectedSchema = new StructType().add("ID", DoubleType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
-    val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
-    }.getMessage
-    assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: double cannot be cast to varchar"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
+      },
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+      parameters = Map(
+        "originType" -> "\"DOUBLE\"",
+        "newType" -> "\"VARCHAR(10)\"",
+        "newName" -> "`ID`",
+        "originName" -> "`ID`",
+        "table" -> s"`$catalogName`.`alt_table`")
+    )
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {

@@ -27,6 +27,9 @@ class DataSourceV2SQLSessionCatalogSuite
 
   override protected val catalogAndNamespace = ""
 
+  override protected def table(name: String): String =
+    toSQLId("`spark_catalog`.`default`." + name)
+
   override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val tmpView = "tmp_view"
     withTempView(tmpView) {

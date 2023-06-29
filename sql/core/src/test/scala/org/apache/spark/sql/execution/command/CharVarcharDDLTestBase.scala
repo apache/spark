@@ -142,7 +142,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
             "table" -> table),
           queryContext = table match {
             case "`spark_catalog`.`default`.`t`" => Array.empty
-            case _ => Array(ExpectedContext(fragment = sql1, start = 0, stop = 41))
+            case _ => Array(ExpectedContext(fragment = sql1, start = 0, stop = 44))
           }
       )
     }
