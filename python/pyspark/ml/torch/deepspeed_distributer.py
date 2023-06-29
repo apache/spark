@@ -1,8 +1,12 @@
 import json
 from contextlib import contextmanager
 import collections
+import copy
+from copy import deepcopy
 import os
+from queue import Queue
 import random
+from re import A
 import shutil
 import subprocess
 from typing import (
@@ -26,7 +30,7 @@ class DeepspeedDistributor(Distributor):
     KNOWN_HOSTS = "/root/.ssh/known_hosts"
     KNOWN_HOSTS_TEMP = "/root/.ssh/known_hosts_temp"
     AUTHORIZED_LOCATION = "/root/.ssh/authorized_keys"
-
+    HOSTFILE = "/root/hostfile"
     def __init__(self, num_processes: int = 1, local_mode: bool = True, use_gpu : bool = True, deepspeed_config = None):
         super().__init__(num_processes, local_mode, use_gpu)
         self.deepspeed_config = deepspeed_config
@@ -70,7 +74,31 @@ class DeepspeedDistributor(Distributor):
             os.rename(DeepspeedDistributor.KNOWN_HOSTS_TEMP, DeepspeedDistributor.KNOWN_HOSTS)
         except OSError:
             print("Wow something went wrong when cleaning up after myself.")
+    
+    def _get_gpus_on_node(self, executor_ip: str):
+        # ask Ricky, Lu, or Maddie if this is the best way to get the GPU information of a particular worker node
+        command = f"ssh {executor_ip} nvidia-smi -L | grep GPU | wc -l" # pyspark doesn't support this out of the box for some reason, so sadge
+        proc_res = subprocess.run(command, capture_output=True, text=True, shell=True)
+        if proc_res.returncode:
+            raise RuntimeError(f'something went wrong when running the command {command}. Is nvidia-smi installed?')
+        num_gpus_on_worker = proc_res.stdout
+        return int(num_gpus_on_worker) 
 
+    def _assign_gpu_to_worker(self, gpu_node_map: Dict[str, int]) -> Dict[str, int]:
+       procs_left = self.num_processes 
+       workers_left_to_serve = len(gpu_node_map)
+       average_procs_per_node = procs_left // workers_left_to_serve
+       gpu_mapped_to_node = {}
+       # sorting allows us to just do a single pass, as filling the smallest capacity nodes first will allow for a single pass
+       sorted_buckets = sorted(gpu_node_map.items(), key=lambda x: x[1])
+       for worker, capacity in sorted_buckets:
+        average_procs_per_node = procs_left // workers_left_to_serve
+        gpu_mapped_to_node[worker] = min(average_procs_per_node, capacity)
+        procs_left -= gpu_mapped_to_node[worker]
+        workers_left_to_serve -= 1 
+       if procs_left != 0:
+           print(f"There are not enough GPUS to fully assign processes to nodes; there are {procs_left} processes left over")
+       return gpu_mapped_to_node
         
     def _setup_hostfile_info(self):
         ssh_path = "/root/.ssh/id_rsa"
@@ -80,7 +108,7 @@ class DeepspeedDistributor(Distributor):
         _write_to_location(DeepspeedDistributor.AUTHORIZED_LOCATION, public_key)
 
         worker_hosts = [executor.host() for executor in self.spark.sparkContext._jsc.sc().statusTracker().getExecutorInfos()]
-        worker_count = len(worker_hosts) - 1
+        worker_count = len(worker_hosts) # find out if this number includes the driver or not
         rdd = spark.sparkContext.parallelize(range(worker_count), numSlices=worker_count)
         auth_key = DeepspeedDistributor.AUTHORIZED_LOCATION # have to make this a separate variable to avoid a pickling error on next line
 
@@ -88,7 +116,15 @@ class DeepspeedDistributor(Distributor):
         _ = rdd.mapPartitions(lambda _: [_write_to_location(auth_key, public_key)]).collect()
         # make sure there is no terminal prompt when deepspeed launcher uses ssh to coordinate
         self._ssh_keyscan(worker_hosts)
-        #TODO get the GPU information to the driver somehow
+        # what do I do if the use_gpu flag is false?
+        gpus_on_workers = {}
+        for worker_host in worker_hosts:
+            gpus_on_workers[worker_host] = self._get_gpus_on_node(worker_host)
+        assigned_slots = self._assign_gpu_to_worker(gpus_on_workers)
+        print(f"Writing to {DeepspeedDistributor.HOSTFILE}")
+        for worker_host in worker_hosts:
+            line = f"{worker_host} slots={assigned_slots[worker_host]}\n"
+            _write_to_location(DeepspeedDistributor.HOSTFILE, line)
         
 
     
