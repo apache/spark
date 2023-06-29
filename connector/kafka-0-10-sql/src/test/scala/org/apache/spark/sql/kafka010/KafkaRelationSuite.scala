@@ -666,10 +666,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
   Seq("source and stream", "sink and streaming",
     "source and batch", "sink and batch").foreach { testType =>
     val options: Map[String, String] = Map(
-      "kafka.bootstrap.servers" ->
-        ("b-2-public.nihalmskiamtesting.5len6e.c6.kafka.us-west-2.amazonaws.com:9198," +
-        "b-3-public.nihalmskiamtesting.5len6e.c6.kafka.us-west-2.amazonaws.com:9198," +
-          "b-1-public.nihalmskiamtesting.5len6e.c6.kafka.us-west-2.amazonaws.com:9198"),
+      "kafka.bootstrap.servers" -> "localhost:8080",
       "subscribe" -> "msk-123",
       "startingOffsets" -> "earliest",
       "kafka.sasl.mechanism" -> "AWS_MSK_IAM",
