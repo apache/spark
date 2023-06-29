@@ -1572,6 +1572,13 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val LOCAL_SHUFFLE_LOCALITY_ENABLE =
+    ConfigBuilder("spark.shuffle.localShuffleLocality.enabled")
+      .doc("Whether to compute locality preferences for local shuffle readers")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST =
     ConfigBuilder("spark.shuffle.mapOutput.minSizeForBroadcast")
       .doc("The size at which we use Broadcast to send the map output statuses to the executors.")

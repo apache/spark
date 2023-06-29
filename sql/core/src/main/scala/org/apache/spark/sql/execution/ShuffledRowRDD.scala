@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Arrays
 
 import org.apache.spark._
+import org.apache.spark.internal.config.LOCAL_SHUFFLE_LOCALITY_ENABLE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
@@ -175,12 +176,15 @@ class ShuffledRowRDD(
         }
 
       case PartialReducerPartitionSpec(_, startMapIndex, endMapIndex, _) =>
+        if (!tracker.shuffleLocalityEnabled) return Nil
         tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
 
       case PartialMapperPartitionSpec(mapIndex, _, _) =>
+        if (!conf.get(LOCAL_SHUFFLE_LOCALITY_ENABLE)) return Nil
         tracker.getMapLocation(dependency, mapIndex, mapIndex + 1)
 
       case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
+        if (!conf.get(LOCAL_SHUFFLE_LOCALITY_ENABLE)) return Nil
         tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
     }
   }
