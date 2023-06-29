@@ -9,6 +9,7 @@ import random
 from re import A
 import shutil
 import subprocess
+import tempfile
 from typing import (
         Union,
         Callable,
@@ -17,7 +18,7 @@ from typing import (
         Optional,
         Any,
         )
-from pyspark.ml.torch.distributor import Distributor
+from pyspark.ml.torch.distributor import Distributor, TorchDistributor
 from pyspark.sql.functions import exists
 
 
@@ -34,7 +35,9 @@ class DeepspeedDistributor(Distributor):
     def __init__(self, num_processes: int = 1, local_mode: bool = True, use_gpu : bool = True, deepspeed_config = None):
         super().__init__(num_processes, local_mode, use_gpu)
         self.deepspeed_config = deepspeed_config
+        self.temp_deepspeed_fname = None
         self.known_hosts_exists = os.path.exists(DeepspeedDistributor.KNOWN_HOSTS)
+        self.input_params = self._create_input_params()
         self.worker_hosts = self._setup_hostfile_info()
         self.setup_env()
    
@@ -143,5 +146,49 @@ class DeepspeedDistributor(Distributor):
         except:
             raise ImportError("Install deepspeed and ninja on the cluster using PyPi")
 
+    def _create_deepspeed_command(self, input_params: Dict[str, Any], path_to_train_file: str, *args: Any):
+            local_mode = input_params["local_mode"]
+            num_processes = input_params["num_processes"]
+            deepspeed_config = input_params["deepspeed_config"]
+            if isinstance(deepspeed_config, dict):
+                with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as f:
+                    json.dump(deepspeed_config, f)
+                    deepspeed_config_path = f.name
+                    self.temp_deepspeed_fname = f.name
+            else:
+                deepspeed_config_path = deepspeed_config
+            if local_mode:
+                deepspeed_args = ["--num_gpus", str(num_processes)] # no need for num nodes, the host file, or any port stuff (no communiation)
+            else:
+                deepspeed_args = ["--num_gpus", str(input_params['num_processes']), "--num_nodes", str(len(self.worker_hosts)), "--hostfile", str(DeepspeedDistributor.HOSTFILE), "--master_addr", str(self.worker_hosts[0]), "--master_port=9902"]
+            return [
+                "deepspeed",
+                *deepspeed_args,
+                path_to_train_file,
+                *args,
+                "--deepspeed",
+                "--deepspeed_config",
+                deepspeed_config_path
+            ]
 
-        
+    def _run_training_on_pytorch_file(self, input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs: Any) -> None:
+        if kwargs:
+            raise ValueError("Running pytorch file does not support key-word type arguments.")
+        training_command = self._create_deepspeed_command(
+            input_params, train_path, *args
+        )
+        TorchDistributor._execute_command(training_command) # should we include some form of logging here
+    
+    def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
+        if isinstance(train_object, str):
+            self._run_training_on_pytorch_file(self.input_params, train_object, *args, **kwargs)  # type: ignore
+        else:
+            raise RuntimeError("Using functions isn't implemented yet. Next iteration.")
+        return "Finished"
+
+    def _clean_up(self):
+        self._cleanup_ssh_keyscan()
+        if self.temp_deepspeed_fname:
+            os.remove(self.temp_deepspeed_fname)
+        os.remove(DeepspeedDistributor.HOSTFILE)
+
