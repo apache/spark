@@ -1,0 +1,12 @@
+@@ -1659,6 +1659,11 @@
+       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
+     ]
+   },
++  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
++    "message" : [
++      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
++    ]
++  },
+   "NESTED_AGGREGATE_FUNCTION" : {
+     "message" : [
+       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."

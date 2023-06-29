@@ -789,7 +789,7 @@ inlineTable
     ;
 
 functionTable
-    : funcName=functionName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tableAlias
+    : funcName=functionName LEFT_PAREN (functionArgument (COMMA functionArgument)*)? RIGHT_PAREN tableAlias
     ;
 
 tableAlias
@@ -862,6 +862,15 @@ expression
     : booleanExpression
     ;
 
+namedArgumentExpression
+    : key=identifier FAT_ARROW value=expression
+    ;
+
+functionArgument
+    : expression
+    | namedArgumentExpression
+    ;
+
 expressionSeq
     : expression (COMMA expression)*
     ;
@@ -921,7 +930,8 @@ primaryExpression
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN                                          #identifierClause
-    | functionName LEFT_PAREN (setQuantifier? argument+=expression (COMMA argument+=expression)*)? RIGHT_PAREN
+    | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
+       (COMMA argument+=functionArgument)*)? RIGHT_PAREN
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier ARROW expression                                                              #lambda
