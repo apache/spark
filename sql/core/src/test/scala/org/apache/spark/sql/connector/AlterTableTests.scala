@@ -737,7 +737,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         queryContext = Array(ExpectedContext(
           fragment = sql1,
           start = 0,
-          stop = sql1.length - 1)),
+          stop = sql1.length - 1))
       )
     }
   }
