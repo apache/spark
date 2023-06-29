@@ -663,7 +663,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
     }.nonEmpty)
   }
 
-  Seq("source and stream", "sink and streaming",
+  Seq("source and stream", "sink and stream",
     "source and batch", "sink and batch").foreach { testType =>
     val options: Map[String, String] = Map(
       "kafka.bootstrap.servers" -> "localhost:8080",
