@@ -509,7 +509,7 @@ object MetadataAttributeWithLogicalName {
 
 object MetadataStructFieldWithLogicalName {
   def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
-    .unapply(field.toAttribute)
+    .unapply(DataTypeUtils.toAttribute(field))
     .map { case (_, name) => field -> name }
 }
 

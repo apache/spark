@@ -43,7 +43,7 @@ _CAPTURE_SCOPES = 3
 def sql(
     query: str,
     index_col: Optional[Union[str, List[str]]] = None,
-    args: Optional[Dict[str, Any]] = None,
+    args: Optional[Union[Dict[str, Any], List]] = None,
     **kwargs: Any,
 ) -> DataFrame:
     """
@@ -102,17 +102,20 @@ def sql(
             e      f       3  6
 
             Also note that the index name(s) should be matched to the existing name.
-    args : dict
-        A dictionary of parameter names to Python objects that can be converted to
-        SQL literal expressions. See
+    args : dict or list
+        A dictionary of parameter names to Python objects or a list of Python objects
+        that can be converted to SQL literal expressions. See
         <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
         Supported Data Types</a> for supported value types in Python.
         For example, dictionary keys: "rank", "name", "birthdate";
         dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
-        Dict value can be also a `Column` of literal expression, in that case it is taken as is.
+        A value can be also a `Column` of literal expression, in that case it is taken as is.
 
 
         .. versionadded:: 3.4.0
+
+        .. versionchanged:: 3.5.0
+            Added positional parameters.
 
     kwargs
         other variables that the user want to set that can be referenced in the query
@@ -171,6 +174,13 @@ def sql(
     And substitude named parameters with the `:` prefix by SQL literals.
 
     >>> ps.sql("SELECT * FROM range(10) WHERE id > :bound1", args={"bound1":7})
+       id
+    0   8
+    1   9
+
+    Or positional parameters marked by `?` in the SQL query by SQL literals.
+
+    >>> ps.sql("SELECT * FROM range(10) WHERE id > ?", args=[7])
        id
     0   8
     1   9

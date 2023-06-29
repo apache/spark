@@ -30,7 +30,6 @@ import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -45,12 +44,14 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
 
-  def handle(v: ExecutePlanRequest): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
-    val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-    val session = sessionHolder.session
-
-    session.withActive {
+  def handle(v: ExecutePlanRequest): Unit = {
+    val sessionHolder =
+      SparkConnectService
+        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
+    // available during processing.
+    sessionHolder.withSession { session =>
+      // Add debug information to the query execution so that the jobs are traceable.
       val debugString =
         try {
           Utils.redact(
@@ -63,10 +64,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         }
 
       val executeHolder = sessionHolder.createExecutePlanHolder(v)
-      session.sparkContext.setJobGroup(
-        executeHolder.jobGroupId,
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
-        interruptOnCancel = true)
+      session.sparkContext.addJobTag(executeHolder.jobTag)
+      session.sparkContext.setInterruptOnCancel(true)
 
       try {
         // Add debug information to the query execution so that the jobs are traceable.
@@ -89,6 +88,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
             throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
         }
       } finally {
+        session.sparkContext.removeJobTag(executeHolder.jobTag)
         sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }

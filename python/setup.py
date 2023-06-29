@@ -131,8 +131,8 @@ if in_spark:
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "1.0.5"
-_minimum_pyarrow_version = "1.0.0"
-_minimum_grpc_version = "1.48.1"
+_minimum_pyarrow_version = "4.0.0"
+_minimum_grpc_version = "1.56.0"
 _minimum_googleapis_common_protos_version = "1.56.4"
 
 
