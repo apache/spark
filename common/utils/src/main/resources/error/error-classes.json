@@ -4,6 +4,11 @@
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
     ]
   },
+  "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot use all columns for partition columns."
+    ]
+  },
   "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -1180,6 +1185,11 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_HIVE_COLUMN_NAME" : {
+    "message" : [
+      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+    ]
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
@@ -2081,6 +2091,16 @@
       "sortBy must be used together with bucketBy."
     ]
   },
+  "SPECIFY_BUCKETING_IS_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot specify bucketing information if the table schema is not specified when creating and will be inferred at runtime."
+    ]
+  },
+  "SPECIFY_PARTITION_IS_NOT_ALLOWED" : {
+    "message" : [
+      "It is not allowed to specify partition columns when the table schema is not defined. When the table schema is not provided, schema and partition columns will be inferred."
+    ]
+  },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
@@ -2302,6 +2322,23 @@
     "message" : [
       "Attempted to unset non-existent properties [<properties>] in table <table>."
     ]
+  },
+  "UNSUPPORTED_ADD_FILE" : {
+    "message" : [
+      "Don't support add file."
+    ],
+    "subClass" : {
+      "DIRECTORY" : {
+        "message" : [
+          "The file <path> is a directory, consider to set \"spark.sql.legacy.addSingleFileInAddFile\" to \"false\"."
+        ]
+      },
+      "LOCAL_DIRECTORY" : {
+        "message" : [
+          "The local directory <path> is not supported in a non-local master mode."
+        ]
+      }
+    }
   },
   "UNSUPPORTED_ARROWTYPE" : {
     "message" : [
@@ -3586,11 +3623,6 @@
   "_LEGACY_ERROR_TEMP_1153" : {
     "message" : [
       "Cannot use <field> for partition column."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1154" : {
-    "message" : [
-      "Cannot use all columns for partition columns."
     ]
   },
   "_LEGACY_ERROR_TEMP_1155" : {

@@ -467,6 +467,20 @@ private[spark] object SparkCoreErrors {
         "receivedBytes" -> receivedBytes.toString).asJava)
   }
 
+  def addLocalDirectoryError(path: Path): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_ADD_FILE.LOCAL_DIRECTORY",
+       messageParameters = Map("path" -> path.toString),
+      cause = null)
+  }
+
+  def addDirectoryError(path: Path): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_ADD_FILE.DIRECTORY",
+      messageParameters = Map("path" -> path.toString),
+      cause = null)
+  }
+
   private def quoteByDefault(elem: String): String = {
     "\"" + elem + "\""
   }
