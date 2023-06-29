@@ -19,17 +19,14 @@ import pandas as pd
 from typing import Any, Union
 
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol
+from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasProbabilityCol
 from pyspark.ml.connect.base import Evaluator
 from pyspark.ml.connect.io_utils import ParamsReadWrite
 from pyspark.ml.connect.util import aggregate_dataframe
 from pyspark.sql import DataFrame
 
-import torch
-import torcheval.metrics as torchmetrics
 
-
-class _TorchMetricEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
+class _TorchMetricEvaluator(Evaluator):
 
     def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
         super().__init__()
@@ -42,38 +39,40 @@ class _TorchMetricEvaluator(Evaluator, HasLabelCol, HasPredictionCol):
         typeConverter=TypeConverters.toString,
     )
 
-    def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
-        prediction_col = self.getPredictionCol()
-        label_col = self.getLabelCol()
+    def _get_torch_metric(self):
+        raise NotImplementedError()
 
+    def _get_input_cols(self):
+        raise NotImplementedError()
+
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+        raise NotImplementedError()
+
+    def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
+        import torch
         torch_metric = self._get_torch_metric()
 
         def local_agg_fn(pandas_df: "pd.DataFrame") -> "pd.DataFrame":
-            with torch.inference_mode():
-                preds_tensor = torch.tensor(pandas_df[prediction_col].values)
-                labels_tensor = torch.tensor(pandas_df[label_col].values)
-                torch_metric.update(preds_tensor, labels_tensor)
-                return torch_metric
+            torch_metric.update(*self._get_metric_update_inputs(pandas_df))
+            return torch_metric
 
         def merge_agg_state(state1: Any, state2: Any) -> Any:
-            with torch.inference_mode():
-                state1.merge_state([state2])
-                return state1
+            state1.merge_state([state2])
+            return state1
 
         def agg_state_to_result(state: Any) -> Any:
-            with torch.inference_mode():
-                return state.compute().item()
+            return state.compute().item()
 
         return aggregate_dataframe(
             dataset,
-            [prediction_col, label_col],
+            self._get_input_cols(),
             local_agg_fn,
             merge_agg_state,
             agg_state_to_result,
         )
 
 
-class RegressionEvaluator(_TorchMetricEvaluator, ParamsReadWrite):
+class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
     """
     Evaluator for Regression, which expects input columns prediction and label.
     Supported metrics are 'mse' and 'r2'.
@@ -82,6 +81,8 @@ class RegressionEvaluator(_TorchMetricEvaluator, ParamsReadWrite):
     """
 
     def _get_torch_metric(self) -> Any:
+        import torcheval.metrics as torchmetrics
+
         metric_name = self.getOrDefault(self.metricName)
 
         if metric_name == "mse":
@@ -91,22 +92,73 @@ class RegressionEvaluator(_TorchMetricEvaluator, ParamsReadWrite):
 
         raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 
+    def _get_input_cols(self):
+        return [self.getPredictionCol(), self.getLabelCol()]
 
-class BinaryClassificationEvaluator(_TorchMetricEvaluator, ParamsReadWrite):
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+        import torch
+        preds_tensor = torch.tensor(dataset[self.getPredictionCol()].values)
+        labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
+        return preds_tensor, labels_tensor
+
+
+class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProbabilityCol, ParamsReadWrite):
     """
     Evaluator for binary classification, which expects input columns prediction and label.
-    Supported metrics are 'mse' and 'r2'.
+    Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
 
     .. versionadded:: 3.5.0
     """
 
     def _get_torch_metric(self) -> Any:
+        import torcheval.metrics as torchmetrics
+
         metric_name = self.getOrDefault(self.metricName)
 
-        if metric_name == "mse":
-            return torchmetrics.MeanSquaredError()
-        if metric_name == "r2":
-            return torchmetrics.R2Score()
+        if metric_name == "areaUnderROC":
+            return torchmetrics.BinaryAUROC()
+        if metric_name == "areaUnderPR":
+            return torchmetrics.BinaryAUPRC()
 
-        raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
+        raise ValueError(f"Unsupported binary classification evaluator metric name: {metric_name}")
 
+    def _get_input_cols(self):
+        return [self.getProbabilityCol(), self.getLabelCol()]
+
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+        import torch
+        preds_tensor = torch.tensor(dataset[self.getProbabilityCol()].values)
+        if preds_tensor.dim() == 2:
+            preds_tensor = preds_tensor[:, 1]
+        labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
+        return preds_tensor, labels_tensor
+
+
+class MulticlassClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
+    """
+    Evaluator for multiclass classification, which expects input columns prediction and label.
+    Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
+
+    .. versionadded:: 3.5.0
+    """
+
+    def _get_torch_metric(self) -> Any:
+        import torcheval.metrics as torchmetrics
+
+        metric_name = self.getOrDefault(self.metricName)
+
+        if metric_name == "f1":
+            return torchmetrics.MulticlassF1Score()
+        if metric_name == "accuracy":
+            return torchmetrics.MulticlassAccuracy()
+
+        raise ValueError(f"Unsupported multiclass classification evaluator metric name: {metric_name}")
+
+    def _get_input_cols(self):
+        return [self.getPredictionCol(), self.getLabelCol()]
+
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+        import torch
+        preds_tensor = torch.tensor(dataset[self.getPredictionCol()].values)
+        labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
+        return preds_tensor, labels_tensor
