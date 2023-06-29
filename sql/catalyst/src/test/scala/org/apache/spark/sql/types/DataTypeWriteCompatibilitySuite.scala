@@ -160,7 +160,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", stringPoint2, point2, true,
+        DataTypeUtils.canWrite("", stringPoint2, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -179,7 +179,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", arrayOfString, arrayOfInt, true,
+        DataTypeUtils.canWrite("", arrayOfString, arrayOfInt, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -198,7 +198,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", mapKeyString, mapKeyInt, true,
+        DataTypeUtils.canWrite("", mapKeyString, mapKeyInt, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -214,7 +214,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", LongType, TimestampType, true,
+        DataTypeUtils.canWrite("", LongType, TimestampType, true,
           analysis.caseSensitiveResolution, "longToTimestamp", storeAssignmentPolicy,
           errMsg => errs += errMsg)
       ),
@@ -227,7 +227,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     )
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", TimestampType, LongType, true,
+        DataTypeUtils.canWrite("", TimestampType, LongType, true,
           analysis.caseSensitiveResolution, "timestampToLong", storeAssignmentPolicy,
           errMsg => errs += errMsg)
       ),
@@ -303,7 +303,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           val errs = new mutable.ArrayBuffer[String]()
           checkError(
             exception = intercept[AnalysisException] (
-              DataType.canWrite("", w, r, true, analysis.caseSensitiveResolution, "t",
+              DataTypeUtils.canWrite("", w, r, true, analysis.caseSensitiveResolution, "t",
                 storeAssignmentPolicy, errMsg => errs += errMsg)
             ),
             errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -325,7 +325,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", missingRequiredField, point2, true,
+        DataTypeUtils.canWrite("", missingRequiredField, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
@@ -338,7 +338,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", missingRequiredField, point2, true,
+        DataTypeUtils.canWrite("", missingRequiredField, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
@@ -366,7 +366,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", missingMiddleField, expectedStruct, true,
+        DataTypeUtils.canWrite("", missingMiddleField, expectedStruct, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
@@ -403,7 +403,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", requiredFieldIsOptional, point2, true,
+        DataTypeUtils.canWrite("", requiredFieldIsOptional, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
@@ -415,7 +415,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", point3, point2, true,
+        DataTypeUtils.canWrite("", point3, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
@@ -456,7 +456,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", arrayOfOptional, arrayOfRequired, true,
+        DataTypeUtils.canWrite("", arrayOfOptional, arrayOfRequired, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
@@ -486,7 +486,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", mapOfOptional, mapOfRequired, true,
+        DataTypeUtils.canWrite("", mapOfOptional, mapOfRequired, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
@@ -538,7 +538,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", writeType, readType, true,
+        DataTypeUtils.canWrite("", writeType, readType, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -560,8 +560,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       desc: String,
       byName: Boolean = true): Unit = {
     assert(
-      DataTypeUtils.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
-        storeAssignmentPolicy,
+      DataTypeUtils.canWrite("", writeType, readType, byName, analysis.caseSensitiveResolution,
+        name, storeAssignmentPolicy,
         errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
 
@@ -586,8 +586,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       (checkErrors: Seq[String] => Unit): Unit = {
     val errs = new mutable.ArrayBuffer[String]()
     assert(
-      DataTypeUtils.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
-        storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
+      DataTypeUtils.canWrite("", writeType, readType, byName, analysis.caseSensitiveResolution,
+        name, storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
     checkErrors(errs.toSeq)
   }
