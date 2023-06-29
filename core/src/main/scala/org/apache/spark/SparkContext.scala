@@ -19,7 +19,6 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.nio.file.Files
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -42,7 +41,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.errors.SparkCoreErrors
@@ -391,13 +390,6 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(Level.toLevel(upperCased))
   }
 
-  /**
-   * :: Private ::
-   * Returns the directory that stores artifacts transferred through Spark Connect.
-   */
-  @Private
-  private[spark] lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
-
   try {
     _conf = config.clone()
     _conf.get(SPARK_LOG_LEVEL).foreach { level =>
@@ -483,18 +475,7 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir").orElse {
-      if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
-        // For Spark Connect, we piggyback on the existing REPL integration to load class
-        // files on the executors.
-        // This is a temporary intermediate step due to unavailable classloader isolation.
-        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
-        Files.createDirectories(classDirectory)
-        Some(classDirectory.toString)
-      } else {
-        None
-      }
-    }.foreach { path =>
+    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
       val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
       _conf.set("spark.repl.class.uri", replUri)
     }
@@ -864,6 +845,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * being called on the job's executor threads. This is useful to help ensure that the tasks
    * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
    * may respond to Thread.interrupt() by marking nodes as dead.
+   *
+   * @since 3.5.0
    */
   def setInterruptOnCancel(interruptOnCancel: Boolean): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
@@ -873,6 +856,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Add a tag to be assigned to all the jobs started by this thread.
    *
    * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
    */
   def addJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
@@ -886,6 +871,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Noop if such a tag was not added earlier.
    *
    * @param tag The tag to be removed. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
    */
   def removeJobTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
@@ -894,14 +881,22 @@ class SparkContext(config: SparkConf) extends Logging {
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
   }
 
-  /** Get the tags that are currently set to be assigned to all the jobs started by this thread. */
+  /**
+   * Get the tags that are currently set to be assigned to all the jobs started by this thread.
+   *
+   * @since 3.5.0
+   */
   def getJobTags(): Set[String] = {
     Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
   }
 
-  /** Clear the current thread's job tags. */
+  /**
+   * Clear the current thread's job tags.
+   *
+   * @since 3.5.0
+   */
   def clearJobTags(): Unit = {
     setLocalProperty(SparkContext.SPARK_JOB_TAGS, null)
   }
@@ -2550,6 +2545,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
    */
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)

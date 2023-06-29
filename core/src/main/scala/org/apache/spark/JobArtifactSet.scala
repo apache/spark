@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.Serializable
+import java.util.Objects
 
 /**
  * Artifact set for a job.
@@ -41,7 +42,7 @@ class JobArtifactSet(
   def withActive[T](f: => T): T = JobArtifactSet.withActive(this)(f)
 
   override def hashCode(): Int = {
-    Seq(uuid, replClassDirUri, jars.toSeq, files.toSeq, archives.toSeq).hashCode()
+    Objects.hash(uuid, replClassDirUri, jars.toSeq, files.toSeq, archives.toSeq)
   }
 
   override def equals(obj: Any): Boolean = {
@@ -76,17 +77,17 @@ object JobArtifactSet {
       archives = sc.addedArchives.toMap)
   }
 
+  private lazy val emptyJobArtifactSet = new JobArtifactSet(
+    None,
+    None,
+    Map.empty,
+    Map.empty,
+    Map.empty)
+
   /**
    * Empty artifact set for use in tests.
    */
-  private[spark] def apply(): JobArtifactSet = {
-    new JobArtifactSet(
-      None,
-      None,
-      Map.empty,
-      Map.empty,
-      Map.empty)
-  }
+  private[spark] def apply(): JobArtifactSet = emptyJobArtifactSet
 
   /**
    * Used for testing. Returns artifacts from [[SparkContext]] if one exists or otherwise, an
