@@ -71,9 +71,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
     checkError(
       exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
+        sql(sql1)
       },
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
@@ -82,7 +83,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
         "newName" -> "`ID`",
         "originName" -> "`ID`",
         "table" -> s"`$catalogName`.`alt_table`"),
-      context = ExpectedContext(fragment = "", start = 0, stop = 1)
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 60)
     )
   }
 

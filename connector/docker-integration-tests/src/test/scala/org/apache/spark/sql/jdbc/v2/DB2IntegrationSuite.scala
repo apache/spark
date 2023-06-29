@@ -92,9 +92,10 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
     expectedSchema = new StructType().add("ID", DoubleType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)"
     checkError(
       exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
+        sql(sql1)
       },
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
@@ -103,7 +104,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
         "newName" -> "`ID`",
         "originName" -> "`ID`",
         "table" -> s"`$catalogName`.`alt_table`"),
-      context = ExpectedContext(fragment = "", start = 0, stop = 1)
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 57)
     )
   }
 

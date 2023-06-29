@@ -111,9 +111,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
+    val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
     checkError(
       exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
+        sql(sql1)
       },
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       parameters = Map(
@@ -122,7 +123,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
         "newName" -> "`ID`",
         "originName" -> "`ID`",
         "table" -> s"`$catalogName`.`alt_table`"),
-      context = ExpectedContext(fragment = "", start = 0, stop = 1)
+      context = ExpectedContext(fragment = sql1, start = 0, stop = 56)
     )
   }
 
