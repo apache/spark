@@ -2169,9 +2169,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2225",
-      messageParameters = Map.empty)
+    SqlApiQueryExecutionErrros.unsupportedOperationExceptionError()
   }
 
   def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
