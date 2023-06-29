@@ -218,12 +218,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   private def getLoadedMapForStore(version: Long): HDFSBackedStateStoreMap = synchronized {
-    require(version >= 0, "Version cannot be less than 0")
-    val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
-    if (version > 0) {
-      newMap.putAll(loadMap(version))
+    try {
+      require(version >= 0, "Version cannot be less than 0")
+      val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
+      if (version > 0) {
+        newMap.putAll(loadMap(version))
+      }
+      newMap
     }
-    newMap
+    catch {
+      case e: Throwable =>
+        throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 
   override def init(

@@ -29,8 +29,8 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.apache.spark._
 
+import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.AnalysisException
@@ -2848,16 +2848,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "enumString" -> enumString))
   }
 
-  def invalidUnsafeRowException(err: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_UNSAFE_ROW_EXCEPTION",
-      messageParameters = Map(
-        "err" -> err
-      ),
-      cause = null
-    )
-  }
-
   def unreleasedThreadError(loggingId: String, newAcquiredThreadInfo: String,
                             AcquiredThreadInfo: String, timeWaitedMs: Long,
                             stackTraceOutput: String): Throwable = {
@@ -2866,12 +2856,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "loggingId" -> loggingId,
         "newAcquiredThreadInfo" -> newAcquiredThreadInfo,
-        "AcquiredThreadInfo" -> AcquiredThreadInfo,
+        "acquiredThreadInfo" -> AcquiredThreadInfo,
         "timeWaitedMs" -> timeWaitedMs.toString,
         "stackTraceOutput" -> stackTraceOutput
       ),
-      cause = null
-    )
+      cause = null)
   }
 
   def cannotReadCheckpoint(versionLine: String): Throwable = {
@@ -2880,8 +2869,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map(
         "versionLine" -> versionLine
       ),
-      cause = null
-    )
+      cause = null)
   }
 
   def unexpectedFileSize(dfsFile: Path, localFile: File, expectedSize: Long,
@@ -2894,8 +2882,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "expectedSize" -> expectedSize.toString,
         "localFileSize" -> localFileSize.toString
       ),
-      cause = null
-    )
+      cause = null)
+  }
+
+  def cannotLoadStore(e: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+      messageParameters = Map.empty,
+      cause = e)
+  }
 
   def mergeCardinalityViolationError(): SparkRuntimeException = {
     new SparkRuntimeException(

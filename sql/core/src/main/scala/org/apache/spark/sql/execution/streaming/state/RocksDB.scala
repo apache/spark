@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
@@ -30,8 +30,8 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.TickerType._
-import org.apache.spark.TaskContext
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -142,6 +142,10 @@ class RocksDB(
    * and possibly restart the native RocksDB instance.
    */
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
+    if (version < 0) {
+      throw new FileNotFoundException("version negative")
+    }
+
     assert(version >= 0)
     acquire()
     logInfo(s"Loading $version")

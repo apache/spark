@@ -212,22 +212,37 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Corrupt snapshot file and verify that it throws error
       assert(getData(provider, snapshotVersion) === Set(("a", 0) -> snapshotVersion))
       corruptFile(provider, snapshotVersion, isSnapshot = true)
-      intercept[Exception] {
+      var e = intercept[SparkException] {
         getData(provider, snapshotVersion)
       }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        parameters = Map.empty
+      )
 
       // Corrupt delta file and verify that it throws error
       assert(getData(provider, snapshotVersion - 1) === Set(("a", 0) -> (snapshotVersion - 1)))
       corruptFile(provider, snapshotVersion - 1, isSnapshot = false)
-      intercept[Exception] {
+      e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        parameters = Map.empty
+      )
 
       // Delete delta file and verify that it throws error
       deleteFilesEarlierThanVersion(provider, snapshotVersion)
-      intercept[Exception] {
+      intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        parameters = Map.empty
+      )
     }
   }
 
@@ -876,12 +891,22 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(getLatestData(provider) === Set(("b", 0) -> 2))
 
       // Trying to get newer versions should fail
-      intercept[Exception] {
+      var e = intercept[SparkException] {
         provider.getStore(2)
       }
-      intercept[Exception] {
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        parameters = Map.empty
+      )
+      e = intercept[SparkException] {
         getData(provider, 2)
       }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+        parameters = Map.empty
+      )
 
       // New updates to the reloaded store with new version, and does not change old version
       tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
@@ -1019,9 +1044,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   testWithAllCodec("getStore with invalid versions") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       def checkInvalidVersion(version: Int): Unit = {
-        intercept[Exception] {
+        val e = intercept[SparkException] {
           provider.getStore(version)
         }
+        checkError(
+          e,
+          errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+          parameters = Map.empty
+        )
       }
 
       checkInvalidVersion(-1)
@@ -1178,10 +1208,15 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           }
           assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
 
-          intercept[IllegalStateException] {
+          val e = intercept[SparkException] {
             StateStore.get(
               storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
           }
+          checkError(
+            e,
+            errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+            parameters = Map.empty
+          )
 
           // Increase version of the store and try to get again
           val store0 = StateStore.get(

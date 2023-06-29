@@ -2782,18 +2782,19 @@
     },
     "sqlState" : "42605"
   },
+  "CANNOT_LOAD_STATE_STORE_WRAPPER" : {
+    "message" : [
+      "This is my error message."
+    ],
+    "sqlState" : "40000"
+  },
   "CANNOT_LOAD_STATE_STORE" : {
     "message" : [
       "An error occurred during loading state."
     ],
     "subClass" : {
-      "INVALID_UNSAFE_ROW_EXCEPTION" : {
-        "message" : [
-          "The streaming query failed by state format invalidation.",
-          "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed among restart.",
-          "For the first case, you can try to restart the application without checkpoint or use the legacy Spark version to process the streaming state.",
-          "<err>"
-        ]
+      "WRAPPER" : {
+        "message" : [""]
       },
       "CANNOT_READ_DELTA_FILE" : {
         "message" : [
@@ -2812,10 +2813,14 @@
         ]
       },
       "CANNOT_READ_CHECKPOINT" : {
-        "message" : "Cannot read RocksDB checkpoint metadata of version <versionLine>."
+        "message" : [
+          "Cannot read RocksDB checkpoint metadata of version <versionLine>."
+        ]
       },
       "UNEXPECTED_FILE_SIZE" : {
-        "message" : "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        "message" : [
+          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        ]
       }
     },
     "sqlState" : "40000"

@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
@@ -123,8 +124,28 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("RocksDB: load version that doesn't exist") {
+    val provider = new RocksDBStateStoreProvider()
+
+    var ex = intercept[SparkException] {
+      provider.getStore(-1)
+    }
+    checkError(
+      ex,
+      errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+      parameters = Map.empty
+    )
+
+    ex = intercept[SparkException] {
+      provider.getReadStore(-1)
+    }
+    checkError(
+      ex,
+      errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
+      parameters = Map.empty
+    )
+
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     withDB(remoteDir) { db =>
       intercept[IllegalStateException] {
         db.load(1)
@@ -704,7 +725,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(0)  // Current thread should be able to load again
 
         // Another thread should not be able to load while current thread is using it
-        val ex = intercept[IllegalStateException] {
+        val ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
         }
         // Assert that the error message contains the stack trace
@@ -720,9 +741,12 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         // Another thread should not be able to load while current thread is using it
         db.load(2)
-        intercept[IllegalStateException] {
+        intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
         }
+        // Assert that the error message contains the stack trace
+        assert(ex.getMessage.contains("Thread holding the lock has trace:"))
+        assert(ex.getMessage.contains("runInNewThread"))
 
         // Rollback should release the instance allowing other threads to load new version
         db.rollback()

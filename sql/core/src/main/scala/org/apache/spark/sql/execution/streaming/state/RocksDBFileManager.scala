@@ -39,8 +39,8 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.util.Utils
 
