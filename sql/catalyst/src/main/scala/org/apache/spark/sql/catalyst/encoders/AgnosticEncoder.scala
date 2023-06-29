@@ -36,6 +36,8 @@ import org.apache.spark.util.Utils
  * called lenient serialization. An example of this is lenient date serialization, in this case both
  * [[java.sql.Date]] and [[java.time.LocalDate]] are allowed. Deserialization is never lenient; it
  * will always produce instance of the external type.
+ *
+ * An encoder is flattenable if it contains fields that can be fattened to a row.
  */
 trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
@@ -43,6 +45,7 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def dataType: DataType
   override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
   def lenientSerialization: Boolean = false
+  def isFlattenable: Boolean = false
 }
 
 object AgnosticEncoders {
@@ -89,9 +92,6 @@ object AgnosticEncoders {
       valueContainsNull)
   }
 
-  // The encoder's top level data type is a struct type and can be flattened to a row.
-  trait RowStructEncoder
-
   case class EncoderField(
       name: String,
       enc: AgnosticEncoder[_],
@@ -102,15 +102,19 @@ object AgnosticEncoders {
     def structField: StructField = StructField(name, enc.dataType, nullable, metadata)
   }
 
+  // Contains a sequence of fields. The fields can be flattened to columns in a row.
+  trait FieldsEncoder[K] extends AgnosticEncoder[K] {
+    val fields: Seq[EncoderField]
+    override def isPrimitive: Boolean = false
+    override def schema: StructType = StructType(fields.map(_.structField))
+    override def dataType: DataType = schema
+    override val isFlattenable: Boolean = true
+  }
+
   // This supports both Product and DefinedByConstructorParams
   case class ProductEncoder[K](
       override val clsTag: ClassTag[K],
-      fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] with RowStructEncoder {
-    override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
-    override def dataType: DataType = schema
-  }
+      override val fields: Seq[EncoderField]) extends FieldsEncoder[K]
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
@@ -128,28 +132,21 @@ object AgnosticEncoders {
     }
   }
 
-  abstract class BaseRowEncoder extends AgnosticEncoder[Row] with RowStructEncoder {
-    override def isPrimitive: Boolean = false
-    override def dataType: DataType = schema
+  abstract class BaseRowEncoder extends FieldsEncoder[Row] {
     override def clsTag: ClassTag[Row] = classTag[Row]
   }
 
-  case class RowEncoder(fields: Seq[EncoderField]) extends BaseRowEncoder {
-    override val schema: StructType = StructType(fields.map(_.structField))
-  }
+  case class RowEncoder(override val fields: Seq[EncoderField]) extends BaseRowEncoder
 
   object UnboundRowEncoder extends BaseRowEncoder {
     override val schema: StructType = new StructType()
-  }
+    override val fields: Seq[EncoderField] = Seq.empty
+}
 
   case class JavaBeanEncoder[K](
       override val clsTag: ClassTag[K],
-      fields: Seq[EncoderField])
-    extends AgnosticEncoder[K] with RowStructEncoder {
-    override def isPrimitive: Boolean = false
-    override val schema: StructType = StructType(fields.map(_.structField))
-    override def dataType: DataType = schema
-  }
+      override val fields: Seq[EncoderField])
+    extends FieldsEncoder[K]
 
   // This will only work for encoding from/to Sparks' InternalRow format.
   // It is here for compatibility.

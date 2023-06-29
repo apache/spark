@@ -752,8 +752,8 @@ object JoinWith {
       plan: Join,
       isAutoSelfJoinAliasEnable: Boolean,
       resolver: Resolver,
-      isLeftStructForTopLevel: Boolean,
-      isRightStructForTopLevel: Boolean): LogicalPlan = {
+      isLeftFlattenableToRow: Boolean,
+      isRightFlattenableToRow: Boolean): LogicalPlan = {
     var joined = plan
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
       throw QueryCompilationErrors.invalidJoinTypeInJoinWithError(joined.joinType)
@@ -764,7 +764,7 @@ object JoinWith {
     }
 
     val leftResultExpr = {
-      if (!isLeftStructForTopLevel) {
+      if (!isLeftFlattenableToRow) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
@@ -773,7 +773,7 @@ object JoinWith {
     }
 
     val rightResultExpr = {
-      if (!isRightStructForTopLevel) {
+      if (!isRightFlattenableToRow) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
@@ -798,14 +798,14 @@ object JoinWith {
       // after we combine the outputs of each join side.
       val conditionExpr = joined.condition.get transformUp {
         case a: Attribute if joined.left.outputSet.contains(a) =>
-          if (!isLeftStructForTopLevel) {
+          if (!isLeftFlattenableToRow) {
             left.output.head
           } else {
             val index = joined.left.output.indexWhere(_.exprId == a.exprId)
             GetStructField(left.output.head, index)
           }
         case a: Attribute if joined.right.outputSet.contains(a) =>
-          if (!isRightStructForTopLevel) {
+          if (!isRightFlattenableToRow) {
             right.output.head
           } else {
             val index = joined.right.output.indexWhere(_.exprId == a.exprId)

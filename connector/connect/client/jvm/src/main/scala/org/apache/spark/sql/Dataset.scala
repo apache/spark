@@ -881,16 +881,6 @@ class Dataset[T] private[sql] (
           EncoderField(s"_1", this.encoder, leftNullable, Metadata.empty),
           EncoderField(s"_2", other.encoder, rightNullable, Metadata.empty)))
 
-    val inputType = (
-      this.encoder.isInstanceOf[RowStructEncoder],
-      other.encoder.isInstanceOf[RowStructEncoder]
-    ) match {
-      case (true, true) => proto.Join.InputType.BOTH_ROW_STRUCT
-      case (true, false) => proto.Join.InputType.LEFT_ROW_STRUCT
-      case (false, true) => proto.Join.InputType.RIGHT_ROW_STRUCT
-      case (false, false) => proto.Join.InputType.NO_ROW_STRUCT
-    }
-
     sparkSession.newDataset(tupleEncoder) { builder =>
       val joinBuilder = builder.getJoinBuilder
       joinBuilder
@@ -898,7 +888,9 @@ class Dataset[T] private[sql] (
         .setRight(other.plan.getRoot)
         .setJoinType(joinTypeValue)
         .setJoinCondition(condition.expr)
-        .setInputType(inputType)
+        .setJoinDataType(joinBuilder.getJoinDataTypeBuilder
+          .setIsLeftFlattenableToRow(this.encoder.isFlattenable)
+          .setIsRightFlattenableToRow(other.encoder.isFlattenable))
     }
   }
 

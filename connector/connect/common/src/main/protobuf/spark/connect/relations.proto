@@ -226,16 +226,14 @@ message Join {
     JOIN_TYPE_CROSS = 7;
   }
 
-  // Optional. Only used by joinWith.
-  // Set the input type if the left and/or right is a struct that can be flattened to a row.
-  optional InputType input_type = 6;
+  // (Optional) Only used by joinWith. Set the left and right join data types.
+  optional JoinDataType join_data_type = 6;
 
-  enum InputType {
-    INPUT_TYPE_UNSPECIFIED = 0;
-    NO_ROW_STRUCT = 1;
-    LEFT_ROW_STRUCT = 2;
-    RIGHT_ROW_STRUCT = 3;
-    BOTH_ROW_STRUCT = 4;
+  message JoinDataType {
+    // If the left data type is a struct that can be flatten to a row.
+    bool is_left_flattenable_to_row = 1;
+    // If the right data type is a struct that can be flatten to a row.
+    bool is_right_flattenable_to_row = 2;
   }
 }
 
