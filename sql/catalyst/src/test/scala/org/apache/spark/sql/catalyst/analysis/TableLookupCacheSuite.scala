@@ -74,7 +74,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
   test("table lookups to external catalog are cached") {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
-      val catalog = spy(inMemoryCatalog)
+      val catalog = spy[InMemoryCatalog](inMemoryCatalog)
       val analyzer = getAnalyzer(catalog, tempDir)
       reset(catalog)
       analyzer.execute(table("t1").join(table("t1")).join(table("t1")))
@@ -85,7 +85,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
   test("table lookups via nested views are cached") {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
-      val catalog = spy(inMemoryCatalog)
+      val catalog = spy[InMemoryCatalog](inMemoryCatalog)
       val analyzer = getAnalyzer(catalog, tempDir)
       val viewDef = CatalogTable(
         TableIdentifier("view", Some("default")),

@@ -86,7 +86,7 @@ abstract class QueryStageExec extends LeafExecNode {
   protected var _resultOption = new AtomicReference[Option[Any]](None)
 
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
-  def isMaterialized: Boolean = resultOption.get().isDefined
+  final def isMaterialized: Boolean = resultOption.get().isDefined
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -275,20 +275,22 @@ case class TableCacheQueryStageExec(
   }
 
   @transient
-  private lazy val future: FutureAction[Unit] = {
-    val rdd = inMemoryTableScan.baseCacheRDD()
-    sparkContext.submitJob(
-      rdd,
-      (_: Iterator[CachedBatch]) => (),
-      (0 until rdd.getNumPartitions).toSeq,
-      (_: Int, _: Unit) => (),
-      ()
-    )
+  private lazy val future: Future[Unit] = {
+    if (inMemoryTableScan.isMaterialized) {
+      Future.successful(())
+    } else {
+      val rdd = inMemoryTableScan.baseCacheRDD()
+      sparkContext.submitJob(
+        rdd,
+        (_: Iterator[CachedBatch]) => (),
+        (0 until rdd.getNumPartitions).toSeq,
+        (_: Int, _: Unit) => (),
+        ()
+      )
+    }
   }
 
   override protected def doMaterialize(): Future[Any] = future
-
-  override def isMaterialized: Boolean = super.isMaterialized || inMemoryTableScan.isMaterialized
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
 }

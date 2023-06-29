@@ -22,7 +22,7 @@ import unittest
 from typing import cast
 
 from pyspark.sql import Row
-from pyspark.sql.functions import lit
+from pyspark.sql.functions import col, encode, lit
 from pyspark.errors import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -67,6 +67,23 @@ class MapInPandasTestsMixin:
         actual = df.mapInPandas(func, df.schema).collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
+
+    def test_large_variable_types(self):
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": True}):
+
+            def func(iterator):
+                for pdf in iterator:
+                    assert isinstance(pdf, pd.DataFrame)
+                    yield pdf
+
+            df = (
+                self.spark.range(10, numPartitions=3)
+                .select(col("id").cast("string").alias("str"))
+                .withColumn("bin", encode(col("str"), "utf8"))
+            )
+            actual = df.mapInPandas(func, "str string, bin binary").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
 
     def test_different_output_length(self):
         def func(iterator):

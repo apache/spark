@@ -24,7 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
+class SparkFrameMethodsTestsMixin:
     def test_frame_apply_negative(self):
         with self.assertRaisesRegex(
             ValueError, "The output of the function.* pyspark.sql.DataFrame.*int"
@@ -141,6 +141,12 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         psdf = ps.DataFrame({"a": ["a", "b", "c"]})
         new_psdf = psdf.spark.local_checkpoint()
         self.assert_eq(psdf, new_psdf)
+
+
+class SparkFrameMethodsTests(
+    SparkFrameMethodsTestsMixin, PandasOnSparkTestCase, SQLTestUtils, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

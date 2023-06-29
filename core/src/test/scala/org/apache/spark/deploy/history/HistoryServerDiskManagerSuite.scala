@@ -62,7 +62,8 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
 
   private def mockManager(): HistoryServerDiskManager = {
     val conf = new SparkConf().set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
-    val manager = spy(new HistoryServerDiskManager(conf, testDir, store, new ManualClock()))
+    val manager = spy[HistoryServerDiskManager](
+      new HistoryServerDiskManager(conf, testDir, store, new ManualClock()))
     doAnswer(AdditionalAnswers.returnsFirstArg[Long]()).when(manager)
       .approximateSize(anyLong(), anyBoolean())
     manager

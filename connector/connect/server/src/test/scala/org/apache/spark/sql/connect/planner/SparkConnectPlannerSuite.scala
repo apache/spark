@@ -21,19 +21,20 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.connect.proto.Expression.{Alias, DistributedSequenceID, ExpressionString, UnresolvedStar}
+import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.trees.TreePattern.DISTRIBUTED_SEQUENCE_ID
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -52,11 +53,12 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(rel: proto.Relation): logical.LogicalPlan = {
-    new SparkConnectPlanner(spark).transformRelation(rel)
+    new SparkConnectPlanner(SessionHolder.forTesting(spark)).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", new MockObserver())
+    new SparkConnectPlanner(SessionHolder.forTesting(spark))
+      .process(cmd, "clientId", "sessionId", new MockObserver())
   }
 
   def readRel: proto.Relation =
@@ -90,7 +92,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         StructType.fromAttributes(attrs.map(_.toAttribute)),
         Long.MaxValue,
         Long.MaxValue,
-        null)
+        null,
+        true)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
@@ -382,6 +385,36 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
   }
 
+  test("Test invalid deduplicateWithinWatermark") {
+    val deduplicateWithinWatermark = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setAllColumnsAsKeys(true)
+      .addColumnNames("test")
+      .setWithinWatermark(true)
+
+    val e = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation.newBuilder
+          .setDeduplicate(deduplicateWithinWatermark)
+          .build())
+    }
+    assert(
+      e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
+
+    val deduplicateWithinWatermark2 = proto.Deduplicate
+      .newBuilder()
+      .setInput(readRel)
+      .setWithinWatermark(true)
+    val e2 = intercept[InvalidPlanInput] {
+      transform(
+        proto.Relation.newBuilder
+          .setDeduplicate(deduplicateWithinWatermark2)
+          .build())
+    }
+    assert(e2.getMessage.contains("either deduplicate on all columns or a subset of columns"))
+  }
+
   test("Test invalid intersect, except") {
     // Except with union_by_name=true
     val except = proto.SetOperation
@@ -407,6 +440,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform LocalRelation") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = (0 until 10).map { i =>
       InternalRow(i, UTF8String.fromString(s"str-$i"), InternalRow(i))
     }
@@ -435,7 +470,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(
@@ -508,6 +543,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform UnresolvedStar and ExpressionString") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sql =
       "SELECT * FROM VALUES (1,'spark',1), (2,'hadoop',2), (3,'kafka',3) AS tab(id, name, value)"
     val input = proto.Relation
@@ -544,6 +581,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("transform UnresolvedStar with target field") {
+    // TODO(SPARK-44121) Renable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = (0 until 10).map { i =>
       InternalRow(InternalRow(InternalRow(i, i + 1)))
     }
@@ -844,24 +883,5 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
 
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
-  }
-
-  test("Test DistributedSequenceID") {
-    val readWithTable = proto.Read
-      .newBuilder()
-      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
-      .build()
-    val project =
-      proto.Project
-        .newBuilder()
-        .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
-        .addExpressions(
-          proto.Expression
-            .newBuilder()
-            .setDistributedSequenceId(DistributedSequenceID.newBuilder().build())
-            .build())
-        .build()
-    val res = transform(proto.Relation.newBuilder.setProject(project).build())
-    assert(res.containsPattern(DISTRIBUTED_SEQUENCE_ID))
   }
 }

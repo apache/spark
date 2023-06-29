@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+from distutils.version import LooseVersion
 import numpy as np
 import pandas as pd
 
@@ -29,7 +31,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
+class StatsTestsMixin:
     def _test_stat_functions(self, pdf_or_pser, psdf_or_psser):
         functions = ["max", "min", "mean", "sum", "count"]
         for funcname in functions:
@@ -74,6 +76,11 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         self._test_stat_functions(pdf.A, psdf.A)
         self._test_stat_functions(pdf, psdf)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43499): Enable SeriesTests.test_stat_functions_with_no_numeric_columns "
+        "for pandas 2.0.0.",
+    )
     def test_stat_functions_with_no_numeric_columns(self):
         pdf = pd.DataFrame(
             {
@@ -154,6 +161,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             psdf.D.abs()
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43498): Enable SeriesTests.test_axis_on_dataframe for pandas 2.0.0.",
+    )
     def test_axis_on_dataframe(self):
         # The number of each count is intentionally big
         # because when data is small, it executes a shortcut.
@@ -396,6 +407,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                     almost=True,
                 )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43497): Enable SeriesTests.test_cov_corr_meta for pandas 2.0.0.",
+    )
     def test_cov_corr_meta(self):
         # Disable arrow execution since corr() is using UDT internally which is not supported.
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
@@ -547,6 +562,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.s.sum()
+
+
+class StatsTests(StatsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@
 #
 
 import datetime
+import unittest
 
 from distutils.version import LooseVersion
 
@@ -25,7 +26,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
+class DatetimeIndexTestsMixin:
     @property
     def fixed_freqs(self):
         return [
@@ -72,6 +73,10 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
         ):
             ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43608): Enable DatetimeIndexTests.test_properties for pandas 2.0.0.",
+    )
     def test_properties(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(psidx.year, pidx.year)
@@ -140,6 +145,11 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
                 psidx.strftime(date_format="%B %d, %Y"), pidx.strftime(date_format="%B %d, %Y")
             )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43644): Enable DatetimeIndexTests.test_indexer_between_time "
+        "for pandas 2.0.0.",
+    )
     def test_indexer_between_time(self):
         for psidx, pidx in self.idx_pairs:
             self.assert_eq(
@@ -247,6 +257,10 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
 
         mapper_pser = pd.Series([1, 2, 3], index=pidx)
         self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
+
+
+class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

@@ -17,14 +17,14 @@
 
 package org.apache.spark.status.protobuf
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
 import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-class ApplicationEnvironmentInfoWrapperSerializer
+private[protobuf] class ApplicationEnvironmentInfoWrapperSerializer
   extends ProtobufSerDe[ApplicationEnvironmentInfoWrapper] {
 
   override def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {

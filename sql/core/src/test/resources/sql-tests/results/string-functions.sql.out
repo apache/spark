@@ -218,7 +218,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "errorClass" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003"
 }
 

@@ -19,13 +19,13 @@ package org.apache.spark.status.protobuf.sql
 
 import java.util.Date
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}
 import org.apache.spark.status.protobuf.Utils._
 
-class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
+private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
 
   override def serialize(ui: SQLExecutionUIData): Array[Byte] = {
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()

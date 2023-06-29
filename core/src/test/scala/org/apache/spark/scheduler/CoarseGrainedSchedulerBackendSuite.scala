@@ -21,8 +21,10 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.reflect.ClassTag
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
@@ -37,10 +39,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, ExecutorInfo}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils}
 
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
@@ -256,9 +257,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, mutable.Map.empty[String, Long],
-      mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), taskCpus, taskResources, bytebuffer)))
+      "t1", 0, 1, JobArtifactSet(), new Properties(), taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -364,9 +363,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, mutable.Map.empty[String, Long],
-      mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), taskCpus, taskResources, bytebuffer)))
+      "t1", 0, 1, JobArtifactSet(), new Properties(), taskCpus, taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -458,9 +455,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     // Task cpus can be different from default resource profile when TaskResourceProfile is used.
     val taskCpus = 2
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, mutable.Map.empty[String, Long],
-      mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
-      new Properties(), taskCpus, Map.empty, bytebuffer)))
+      "t1", 0, 1, JobArtifactSet(), new Properties(), taskCpus, Map.empty, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
@@ -490,6 +485,32 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
           "Exec allocation and request times don't make sense")
       }
     }
+  }
+
+  test("SPARK-41766: New registered executor should receive decommission request" +
+    " sent before registration") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+      .set(SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS.key, "1")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val mockEndpointRef = new MockExecutorRpcEndpointRef(conf)
+    val mockAddress = mock[RpcAddress]
+    val executorId = "1"
+    val executorDecommissionInfo = ExecutorDecommissionInfo(
+      s"Executor $executorId is decommissioned")
+
+    backend.decommissionExecutor(executorId, executorDecommissionInfo, false)
+    assert(!mockEndpointRef.decommissionReceived)
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(mockEndpointRef.decommissionReceived)
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
@@ -545,4 +566,22 @@ class TestCoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, override v
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   def getTaskSchedulerImpl(): TaskSchedulerImpl = scheduler
+}
+
+private[spark] class MockExecutorRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
+  // scalastyle:off executioncontextglobal
+  import scala.concurrent.ExecutionContext.Implicits.global
+  // scalastyle:on executioncontextglobal
+
+  var decommissionReceived = false
+
+  override def address: RpcAddress = null
+  override def name: String = "executor"
+  override def send(message: Any): Unit =
+    message match {
+      case DecommissionExecutor => decommissionReceived = true
+    }
+  override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
+    Future{true.asInstanceOf[T]}
+  }
 }

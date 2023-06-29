@@ -20,12 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
@@ -100,8 +99,11 @@ object DataSourceV2Implicits {
   implicit class MetadataColumnsHelper(metadata: Array[MetadataColumn]) {
     def asStruct: StructType = {
       val fields = metadata.map { metaCol =>
-        val fieldMeta = new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, true).build()
-        val field = StructField(metaCol.name, metaCol.dataType, metaCol.isNullable, fieldMeta)
+        val field = StructField(
+          name = metaCol.name,
+          dataType = metaCol.dataType,
+          nullable = metaCol.isNullable,
+          metadata = MetadataAttribute.metadata(metaCol.name))
         Option(metaCol.comment).map(field.withComment).getOrElse(field)
       }
       StructType(fields)

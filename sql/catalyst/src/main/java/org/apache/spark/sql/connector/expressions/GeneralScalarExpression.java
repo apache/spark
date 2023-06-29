@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions;
 
 import java.util.Arrays;
-import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
@@ -441,12 +440,17 @@ public class GeneralScalarExpression extends ExpressionWithToString {
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
+
     GeneralScalarExpression that = (GeneralScalarExpression) o;
-    return Objects.equals(name, that.name) && Arrays.equals(children, that.children);
+
+    if (!name.equals(that.name)) return false;
+    return Arrays.equals(children, that.children);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, children);
+    int result = name.hashCode();
+    result = 31 * result + Arrays.hashCode(children);
+    return result;
   }
 }

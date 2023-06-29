@@ -24,13 +24,11 @@ import scala.collection.JavaConverters._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -173,6 +171,64 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     assert(testProgress2.toString === testProgress2.prettyJson)
   }
 
+  test("StreamingQueryProgress - jsonString and fromJson") {
+    Seq(testProgress1, testProgress2).foreach { input =>
+      val jsonString = StreamingQueryProgress.jsonString(input)
+      val result = StreamingQueryProgress.fromJson(jsonString)
+      assert(input.id == result.id)
+      assert(input.runId == result.runId)
+      assert(input.name == result.name)
+      assert(input.timestamp == result.timestamp)
+      assert(input.batchId == result.batchId)
+      assert(input.batchDuration == result.batchDuration)
+      assert(input.durationMs == result.durationMs)
+      assert(input.eventTime == result.eventTime)
+
+      input.stateOperators.zip(result.stateOperators).foreach { case (o1, o2) =>
+        assert(o1.operatorName == o2.operatorName)
+        assert(o1.numRowsTotal == o2.numRowsTotal)
+        assert(o1.numRowsUpdated == o2.numRowsUpdated)
+        assert(o1.allUpdatesTimeMs == o2.allUpdatesTimeMs)
+        assert(o1.numRowsRemoved == o2.numRowsRemoved)
+        assert(o1.allRemovalsTimeMs == o2.allRemovalsTimeMs)
+        assert(o1.commitTimeMs == o2.commitTimeMs)
+        assert(o1.memoryUsedBytes == o2.memoryUsedBytes)
+        assert(o1.numRowsDroppedByWatermark == o2.numRowsDroppedByWatermark)
+        assert(o1.numShufflePartitions == o2.numShufflePartitions)
+        assert(o1.numStateStoreInstances == o2.numStateStoreInstances)
+        assert(o1.customMetrics == o2.customMetrics)
+      }
+
+      input.sources.zip(result.sources).foreach { case (s1, s2) =>
+        assert(s1.description == s2.description)
+        assert(s1.startOffset == s2.startOffset)
+        assert(s1.endOffset == s2.endOffset)
+        assert(s1.latestOffset == s2.latestOffset)
+        assert(s1.numInputRows == s2.numInputRows)
+        if (s1.inputRowsPerSecond.isNaN) {
+          assert(s2.inputRowsPerSecond.isNaN)
+        } else {
+          assert(s1.inputRowsPerSecond == s2.inputRowsPerSecond)
+        }
+        assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
+        assert(s1.metrics == s2.metrics)
+      }
+
+      Seq(input.sink).zip(Seq(result.sink)).foreach { case (s1, s2) =>
+        assert(s1.description == s2.description)
+        assert(s1.numOutputRows == s2.numOutputRows)
+        assert(s1.metrics == s2.metrics)
+      }
+
+      val resultObservedMetrics = result.observedMetrics
+      assert(input.observedMetrics.size() == resultObservedMetrics.size())
+      assert(input.observedMetrics.keySet() == resultObservedMetrics.keySet())
+      input.observedMetrics.entrySet().forEach { e =>
+        assert(e.getValue == resultObservedMetrics.get(e.getKey))
+      }
+    }
+  }
+
   test("StreamingQueryStatus - prettyJson") {
     val json = testStatus.prettyJson
     assertJson(
@@ -230,42 +286,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     }
   }
 
-  test("SPARK-19378: Continue reporting stateOp metrics even if there is no active trigger") {
-    import testImplicits._
-
-    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10") {
-      val inputData = MemoryStream[Int]
-
-      val query = inputData.toDS().toDF("value")
-        .select($"value")
-        .groupBy($"value")
-        .agg(count("*"))
-        .writeStream
-        .queryName("metric_continuity")
-        .format("memory")
-        .outputMode("complete")
-        .start()
-      try {
-        inputData.addData(1, 2)
-        query.processAllAvailable()
-
-        val progress = query.lastProgress
-        assert(progress.stateOperators.length > 0)
-        // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
-        eventually(timeout(1.minute)) {
-          val nextProgress = query.lastProgress
-          assert(nextProgress.timestamp !== progress.timestamp)
-          assert(nextProgress.numInputRows === 0)
-          assert(nextProgress.stateOperators.head.numRowsTotal === 2)
-          assert(nextProgress.stateOperators.head.numRowsUpdated === 0)
-          assert(nextProgress.sink.numOutputRows === 0)
-        }
-      } finally {
-        query.stop()
-      }
-    }
-  }
-
   test("SPARK-29973: Make `processedRowsPerSecond` calculated more accurately and meaningfully") {
     import testImplicits._
 
@@ -278,8 +298,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       AdvanceManualClock(1000),
       waitUntilBatchProcessed,
       AssertOnQuery(query => {
-        assert(query.lastProgress.numInputRows == 0)
-        assert(query.lastProgress.processedRowsPerSecond == 0.0d)
+        assert(query.lastProgress == null)
         true
       }),
       AddData(inputData, 1, 2),

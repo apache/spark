@@ -21,7 +21,7 @@ import org.apache.spark.status.ExecutorStageSummaryWrapper
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-class ExecutorStageSummaryWrapperSerializer
+private[protobuf] class ExecutorStageSummaryWrapperSerializer
   extends ProtobufSerDe[ExecutorStageSummaryWrapper] {
 
   override def serialize(input: ExecutorStageSummaryWrapper): Array[Byte] = {

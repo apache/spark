@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from typing import Any, Callable, Dict, Optional, cast
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, Optional, cast
 
 import py4j
 from py4j.protocol import Py4JJavaError
@@ -25,10 +25,16 @@ from pyspark import SparkContext
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
     IllegalArgumentException as BaseIllegalArgumentException,
+    ArithmeticException as BaseArithmeticException,
+    UnsupportedOperationException as BaseUnsupportedOperationException,
+    ArrayIndexOutOfBoundsException as BaseArrayIndexOutOfBoundsException,
+    DateTimeException as BaseDateTimeException,
+    NumberFormatException as BaseNumberFormatException,
     ParseException as BaseParseException,
     PySparkException,
     PythonException as BasePythonException,
     QueryExecutionException as BaseQueryExecutionException,
+    SparkRuntimeException as BaseSparkRuntimeException,
     SparkUpgradeException as BaseSparkUpgradeException,
     StreamingQueryException as BaseStreamingQueryException,
     UnknownException as BaseUnknownException,
@@ -129,8 +135,21 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return StreamingQueryException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.sql.execution.QueryExecutionException"):
         return QueryExecutionException(origin=e)
+    # Order matters. NumberFormatException inherits IllegalArgumentException.
+    elif is_instance_of(gw, e, "java.lang.NumberFormatException"):
+        return NumberFormatException(origin=e)
     elif is_instance_of(gw, e, "java.lang.IllegalArgumentException"):
         return IllegalArgumentException(origin=e)
+    elif is_instance_of(gw, e, "java.lang.ArithmeticException"):
+        return ArithmeticException(origin=e)
+    elif is_instance_of(gw, e, "java.lang.UnsupportedOperationException"):
+        return UnsupportedOperationException(origin=e)
+    elif is_instance_of(gw, e, "java.lang.ArrayIndexOutOfBoundsException"):
+        return ArrayIndexOutOfBoundsException(origin=e)
+    elif is_instance_of(gw, e, "java.time.DateTimeException"):
+        return DateTimeException(origin=e)
+    elif is_instance_of(gw, e, "org.apache.spark.SparkRuntimeException"):
+        return SparkRuntimeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
         return SparkUpgradeException(origin=e)
 
@@ -170,6 +189,22 @@ def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
     return deco
 
 
+@contextmanager
+def unwrap_spark_exception() -> Iterator[Any]:
+    assert SparkContext._gateway is not None
+
+    gw = SparkContext._gateway
+    try:
+        yield
+    except Py4JJavaError as e:
+        je: Py4JJavaError = e.java_exception
+        if je is not None and is_instance_of(gw, je, "org.apache.spark.SparkException"):
+            converted = convert_exception(je.getCause())
+            if not isinstance(converted, UnknownException):
+                raise converted from None
+        raise
+
+
 def install_exception_handler() -> None:
     """
     Hook an exception handler into Py4j, which could capture some SQL exceptions in Java.
@@ -194,7 +229,7 @@ class AnalysisException(CapturedException, BaseAnalysisException):
     """
 
 
-class ParseException(CapturedException, BaseParseException):
+class ParseException(AnalysisException, BaseParseException):
     """
     Failed to parse a SQL command.
     """
@@ -224,13 +259,49 @@ class PythonException(CapturedException, BasePythonException):
     """
 
 
-class UnknownException(CapturedException, BaseUnknownException):
+class ArithmeticException(CapturedException, BaseArithmeticException):
     """
-    None of the above exceptions.
+    Arithmetic exception.
+    """
+
+
+class UnsupportedOperationException(CapturedException, BaseUnsupportedOperationException):
+    """
+    Unsupported operation exception.
+    """
+
+
+class ArrayIndexOutOfBoundsException(CapturedException, BaseArrayIndexOutOfBoundsException):
+    """
+    Array index out of bounds exception.
+    """
+
+
+class DateTimeException(CapturedException, BaseDateTimeException):
+    """
+    Datetime exception.
+    """
+
+
+class NumberFormatException(IllegalArgumentException, BaseNumberFormatException):
+    """
+    Number format exception.
+    """
+
+
+class SparkRuntimeException(CapturedException, BaseSparkRuntimeException):
+    """
+    Runtime exception.
     """
 
 
 class SparkUpgradeException(CapturedException, BaseSparkUpgradeException):
     """
     Exception thrown because of Spark upgrade.
+    """
+
+
+class UnknownException(CapturedException, BaseUnknownException):
+    """
+    None of the above exceptions.
     """

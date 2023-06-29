@@ -550,7 +550,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --verbose, -v               Print additional debug output.
         |  --version,                  Print the version of current Spark.
         |
-        | Experimental options:
+        | Spark Connect only:
         |   --remote CONNECT_URL       URL to connect to the server for Spark Connect, e.g.,
         |                              sc://host:port. --master and --deploy-mode cannot be set
         |                              together with this option. This option is experimental, and
