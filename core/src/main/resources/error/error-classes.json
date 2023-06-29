@@ -4,7 +4,7 @@
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
     ]
   },
-  "ALL_FOR_PARTITION_COLUMNS_IS_NOT_ALLOWED" : {
+  "ALL_PARTITION_COLUMNS_NOT_ALLOWED" : {
     "message" : [
       "Cannot use all columns for partition columns."
     ]
@@ -2291,12 +2291,12 @@
     "subClass" : {
       "DIRECTORY" : {
         "message" : [
-          "The file <path> is a directory, you must set \"spark.sql.legacy.addSingleFileInAddFile\" to \"false\"."
+          "The file <path> is a directory, consider to set \"spark.sql.legacy.addSingleFileInAddFile\" to \"false\"."
         ]
       },
       "LOCAL_DIRECTORY" : {
         "message" : [
-          "The file <path> is a local directory, but not running \"local mode\"."
+          "The local directory <path> is not supported in a non-local master mode."
         ]
       }
     }
