@@ -83,7 +83,7 @@ object TableOutputResolver {
     }
 
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
+      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
     }
 
     if (resolved == query.output) {
@@ -123,7 +123,7 @@ object TableOutputResolver {
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case _ =>
-        checkUpdate(value, col, conf, addError, colPath)
+        checkUpdate(tableName, value, col, conf, addError, colPath)
     }
   }
 
