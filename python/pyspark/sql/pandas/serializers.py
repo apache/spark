@@ -230,13 +230,11 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             mask = series.isnull()
         try:
             if arrow_cast:
-                return pa.Array.from_pandas(series, mask=mask).cast(
+                return pa.Array.from_pandas(series, mask=mask, type=arrow_type).cast(
                     target_type=arrow_type, safe=self._safecheck
                 )
             else:
-                return pa.Array.from_pandas(
-                    series, mask=mask, type=arrow_type, safe=self._safecheck
-                )
+                return pa.Array.from_pandas(series, mask=mask, safe=self._safecheck)
         except TypeError as e:
             error_msg = (
                 "Exception thrown when converting pandas.Series (%s) "
