@@ -94,6 +94,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       doubleData = null;
       arrayLengths = null;
       arrayOffsets = null;
+      reserveInternal(capacity);
     }
   }
 

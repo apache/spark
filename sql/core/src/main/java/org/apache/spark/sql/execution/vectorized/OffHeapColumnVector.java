@@ -97,6 +97,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
       data = 0;
       lengthData = 0;
       offsetData = 0;
+      reserveInternal(capacity);
     }
   }
 
