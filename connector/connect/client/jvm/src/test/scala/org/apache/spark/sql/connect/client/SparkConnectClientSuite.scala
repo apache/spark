@@ -21,11 +21,12 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.{Server, StatusRuntimeException}
+import io.grpc.Server
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
@@ -104,7 +105,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
 
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       client.analyze(request)
     }
   }

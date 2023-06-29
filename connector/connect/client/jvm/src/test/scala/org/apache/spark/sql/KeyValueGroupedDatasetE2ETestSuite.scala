@@ -19,8 +19,7 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.util.Arrays
 
-import io.grpc.StatusRuntimeException
-
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.functions._
@@ -153,7 +152,7 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
     assert(values == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
 
     // Star is not allowed as group sort column
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       grouped
         .flatMapSortedGroups(col("*")) { (g, iter) =>
           Iterator(String.valueOf(g), iter.mkString(","))
