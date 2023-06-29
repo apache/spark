@@ -1449,16 +1449,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
    * see SPARK-4080 for more context.
    */
   def tryOrIOException[T](block: => T): T = {
-    try {
-      block
-    } catch {
-      case e: IOException =>
-        logError("Exception encountered", e)
-        throw e
-      case NonFatal(e) =>
-        logError("Exception encountered", e)
-        throw new IOException(e)
-    }
+    SparkErrorUtils.tryOrIOException(block)
   }
 
   /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
