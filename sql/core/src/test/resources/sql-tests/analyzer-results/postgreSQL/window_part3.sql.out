@@ -65,7 +65,7 @@ insert into datetimes values
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FAILED_SQL_EXPRESSION_EVALUATION",
+  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
   "messageParameters" : {
     "sqlExpr" : "\"CAST(11:00 BST AS TIMESTAMP)\""
   },

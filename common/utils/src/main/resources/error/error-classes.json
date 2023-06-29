@@ -704,11 +704,6 @@
     ],
     "sqlState" : "42K04"
   },
-  "FAILED_SQL_EXPRESSION_EVALUATION" : {
-    "message" : [
-      "Failed to evaluate the SQL expression: <sqlExpr>. Please check your syntax and ensure all required tables and columns are available."
-    ]
-  },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
@@ -1197,6 +1192,28 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_INLINE_TABLE" : {
+    "message" : [
+      "Invalid inline table."
+    ],
+    "subClass" : {
+      "CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE" : {
+        "message" : [
+          "Cannot evaluate the expression <expr> in inline table definition."
+        ]
+      },
+      "FAILED_SQL_EXPRESSION_EVALUATION" : {
+        "message" : [
+          "Failed to evaluate the SQL expression <sqlExpr>. Please check your syntax and ensure all required tables and columns are available."
+        ]
+      },
+      "INCOMPATIBLE_TYPES_IN_INLINE_TABLE" : {
+        "message" : [
+          "Found incompatible types in the column <colName> for inline table."
+        ]
+      }
+    }
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -1208,6 +1225,23 @@
       "Input schema <jsonSchema> can only contain STRING as a key type for a MAP."
     ],
     "sqlState" : "22032"
+  },
+  "INVALID_LAMBDA_FUNCTION_CALL" : {
+    "message" : [
+      "Invalid lambda function call."
+    ],
+    "subClass" : {
+      "DUPLICATE_ARG_NAMES" : {
+        "message" : [
+          "The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to \"true\"."
+        ]
+      },
+      "NUM_ARGS_MISMATCH" : {
+        "message" : [
+          "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
+        ]
+      }
+    }
   },
   "INVALID_LATERAL_JOIN_TYPE" : {
     "message" : [
@@ -1653,6 +1687,11 @@
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
+  },
+  "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
+    "message" : [
+      "The expression <expr> does not support more than one source."
+    ]
   },
   "MULTI_UDF_INTERFACE_ERROR" : {
     "message" : [
@@ -5490,31 +5529,6 @@
   "_LEGACY_ERROR_TEMP_2278" : {
     "message" : [
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2300" : {
-    "message" : [
-      "The number of lambda function arguments '<namesSize>' does not match the number of arguments expected by the higher order function '<argInfoSize>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2301" : {
-    "message" : [
-      "Lambda function arguments should not have names that are semantically the same."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2302" : {
-    "message" : [
-      "'<name>' does not support more than one sources."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2303" : {
-    "message" : [
-      "incompatible types found in column <name> for inline table."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2304" : {
-    "message" : [
-      "cannot evaluate expression <sqlExpr> in inline table definition."
     ]
   },
   "_LEGACY_ERROR_TEMP_2305" : {
