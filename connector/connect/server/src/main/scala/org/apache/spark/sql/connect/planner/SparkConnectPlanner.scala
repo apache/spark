@@ -26,8 +26,6 @@ import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.json4s._
-import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
@@ -90,15 +88,6 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
-
-  // SparkConnectPlanner is used per request.
-  private lazy val pythonIncludes = {
-    implicit val formats = DefaultFormats
-    parse(session.conf.get("spark.connect.pythonUDF.includes", "[]"))
-      .extract[Array[String]]
-      .toList
-      .asJava
-  }
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
@@ -1519,7 +1508,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       command = fun.getCommand.toByteArray,
       // Empty environment variables
       envVars = Maps.newHashMap(),
-      pythonIncludes = pythonIncludes,
+      pythonIncludes = sessionHolder.artifactManager.getSparkConnectPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
