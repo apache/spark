@@ -47,7 +47,7 @@ class SparkThrowableSuite extends SparkFunSuite {
    }}}
    */
   private val errorJsonFilePath = getWorkspaceFilePath(
-    "core", "src", "main", "resources", "error", "error-classes.json")
+    "common", "utils", "src", "main", "resources", "error", "error-classes.json")
 
   private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
 
