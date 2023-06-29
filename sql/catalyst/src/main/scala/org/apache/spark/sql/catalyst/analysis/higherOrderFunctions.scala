@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLConf, toSQLId}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -82,8 +84,8 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
         e.failAnalysis(
           errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
           messageParameters = Map(
-            "args" -> names.map(a => canonicalizer(a.name)).mkString(", "),
-            "caseSensitiveConfig" -> "spark.sql.caseSensitive"))
+            "args" -> names.map(a => canonicalizer(a.name)).map(toSQLId(_)).mkString(", "),
+            "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
       }
 
       val arguments = argInfo.zip(names).map {

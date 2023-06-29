@@ -5282,8 +5282,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
       parameters = Map(
-        "args" -> "x, x",
-        "caseSensitiveConfig" -> "spark.sql.caseSensitive"),
+        "args" -> "`x`, `x`",
+        "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""),
       context = ExpectedContext(
         fragment = "(x, x) -> x",
         start = 17,
