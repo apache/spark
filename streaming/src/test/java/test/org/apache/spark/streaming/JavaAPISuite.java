@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.JavaCheckpointTestUtils;
 import org.apache.spark.streaming.JavaTestUtils;
@@ -1476,7 +1475,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(1,4),
         Arrays.asList(8,7));
 
-    File tempDir = JavaUtils.createTempDir();
+    File tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
     ssc.checkpoint(tempDir.getAbsolutePath());
 
@@ -1507,7 +1506,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         .setAppName("test")
         .set("newContext", "true");
 
-    File emptyDir = JavaUtils.createTempDir();
+    File emptyDir = Utils.createTempDir();
     emptyDir.deleteOnExit();
     StreamingContextSuite contextSuite = new StreamingContextSuite();
     String corruptedCheckpointDir = contextSuite.createCorruptedCheckpoint();

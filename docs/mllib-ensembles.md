@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -110,6 +110,12 @@ The test error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForest.html) and [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForestModel.html) for more details on the API.
+
+{% include_example python/mllib/random_forest_classification_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`RandomForest` Scala docs](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) and [`RandomForestModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
@@ -120,12 +126,6 @@ Refer to the [`RandomForest` Scala docs](api/scala/org/apache/spark/mllib/tree/R
 Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/RandomForest.html) and [`RandomForestModel` Java docs](api/java/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaRandomForestClassificationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForest.html) and [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForestModel.html) for more details on the API.
-
-{% include_example python/mllib/random_forest_classification_example.py %}
 </div>
 
 </div>
@@ -141,6 +141,12 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForest.html) and [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForestModel.html) for more details on the API.
+
+{% include_example python/mllib/random_forest_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`RandomForest` Scala docs](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) and [`RandomForestModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
@@ -151,12 +157,6 @@ Refer to the [`RandomForest` Scala docs](api/scala/org/apache/spark/mllib/tree/R
 Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/RandomForest.html) and [`RandomForestModel` Java docs](api/java/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaRandomForestRegressionExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForest.html) and [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForestModel.html) for more details on the API.
-
-{% include_example python/mllib/random_forest_regression_example.py %}
 </div>
 
 </div>
@@ -191,7 +191,7 @@ Note that each loss is applicable to one of classification or regression, not bo
 
 Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = features of instance $i$.  $F(x_i)$ = model's predicted label for instance $i$.
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>Loss</th><th>Task</th><th>Formula</th><th>Description</th></tr>
   </thead>
@@ -251,6 +251,12 @@ The test error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`GradientBoostedTrees` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTreesModel.html) for more details on the API.
+
+{% include_example python/mllib/gradient_boosting_classification_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`GradientBoostedTrees` Scala docs](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
@@ -261,12 +267,6 @@ Refer to the [`GradientBoostedTrees` Scala docs](api/scala/org/apache/spark/mlli
 Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Java docs](api/java/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaGradientBoostingClassificationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`GradientBoostedTrees` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTreesModel.html) for more details on the API.
-
-{% include_example python/mllib/gradient_boosting_classification_example.py %}
 </div>
 
 </div>
@@ -282,6 +282,12 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`GradientBoostedTrees` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTreesModel.html) for more details on the API.
+
+{% include_example python/mllib/gradient_boosting_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`GradientBoostedTrees` Scala docs](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
@@ -292,12 +298,6 @@ Refer to the [`GradientBoostedTrees` Scala docs](api/scala/org/apache/spark/mlli
 Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Java docs](api/java/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaGradientBoostingRegressionExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`GradientBoostedTrees` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTreesModel.html) for more details on the API.
-
-{% include_example python/mllib/gradient_boosting_regression_example.py %}
 </div>
 
 </div>

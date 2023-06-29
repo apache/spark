@@ -118,7 +118,7 @@ private case object OracleDialect extends JdbcDialect {
     case DoubleType => Some(JdbcType("NUMBER(19, 4)", java.sql.Types.DOUBLE))
     case ByteType => Some(JdbcType("NUMBER(3)", java.sql.Types.SMALLINT))
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
-    case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
+    case StringType => Some(JdbcType("CLOB", java.sql.Types.CLOB))
     case _ => None
   }
 
@@ -181,22 +181,47 @@ private case object OracleDialect extends JdbcDialect {
     if (limit > 0) s"WHERE rownum <= $limit" else ""
   }
 
+  override def getOffsetClause(offset: Integer): String = {
+    // Oracle doesn't support OFFSET clause.
+    // We can use rownum > n to skip some rows in the result set.
+    // Note: rn is an alias of rownum.
+    if (offset > 0) s"WHERE rn > $offset" else ""
+  }
+
   class OracleSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
     extends JdbcSQLQueryBuilder(dialect, options) {
 
-    // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
     override def build(): String = {
       val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause"
-      if (limit > 0) {
-        val limitClause = dialect.getLimitClause(limit)
-        options.prepareQuery + s"SELECT tab.* FROM ($selectStmt) tab $limitClause"
+      val finalSelectStmt = if (limit > 0) {
+        if (offset > 0) {
+          // Because the rownum is calculated when the value is returned,
+          // if we not give an alias for rownum and using it directly, e.g.
+          // SELECT $columnList FROM ($selectStmt) tab WHERE rownum > $offset AND
+          // rownum <= ${limit + offset}. The result is incorrect.
+          s"SELECT $columnList FROM (SELECT tab.*, rownum rn FROM ($selectStmt) tab)" +
+            s" WHERE rn > $offset AND rn <= ${limit + offset}"
+        } else {
+          val limitClause = dialect.getLimitClause(limit)
+          s"SELECT tab.* FROM ($selectStmt) tab $limitClause"
+        }
+      } else if (offset > 0) {
+        val offsetClause = dialect.getOffsetClause(offset)
+        // Using rownum directly will lead to incorrect result too.
+        s"SELECT $columnList FROM (SELECT tab.*, rownum rn FROM ($selectStmt) tab) $offsetClause"
       } else {
-        options.prepareQuery + selectStmt
+        selectStmt
       }
+
+      options.prepareQuery + finalSelectStmt
     }
   }
 
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new OracleSQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

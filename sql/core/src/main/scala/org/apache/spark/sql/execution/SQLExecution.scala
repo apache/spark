@@ -106,7 +106,7 @@ object SQLExecution {
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
-            rootExecutionId = rootExecutionId,
+            rootExecutionId = Some(rootExecutionId),
             description = desc,
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.explainString(planDescriptionMode),

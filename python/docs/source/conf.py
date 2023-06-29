@@ -89,6 +89,8 @@ rst_epilog = """
 .. _binder_df: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart_df.ipynb
 .. |binder_ps| replace:: Live Notebook: pandas API on Spark
 .. _binder_ps: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart_ps.ipynb
+.. |binder_connect| replace:: Live Notebook: Spark Connect
+.. _binder_connect: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart_connect.ipynb
 .. |examples| replace:: Examples
 .. _examples: https://github.com/apache/spark/tree/{0}/examples/src/main/python
 .. |downloading| replace:: Downloading

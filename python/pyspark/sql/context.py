@@ -41,6 +41,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
+from pyspark.sql.udtf import UDTFRegistration
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -191,9 +192,11 @@ class SQLContext:
 
         .. versionadded:: 1.3.0
         """
-        self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
+        self.sparkSession.conf.set(key, value)
 
-    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
+    def getConf(
+        self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue
+    ) -> Optional[str]:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
@@ -225,6 +228,18 @@ class SQLContext:
         :class:`UDFRegistration`
         """
         return self.sparkSession.udf
+
+    @property
+    def udtf(self) -> UDTFRegistration:
+        """Returns a :class:`UDTFRegistration` for UDTF registration.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`UDTFRegistration`
+        """
+        return self.sparkSession.udtf
 
     def range(
         self,

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDAF}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
@@ -41,8 +40,8 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   private def aggregates(e: Expression): Seq[Expression] = {
     Seq(
       count(e),
-      PythonUDF("pyUDF", null, IntegerType, Seq(e),
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF, udfDeterministic = true)
+      PythonUDAF("pyUDAF", null, IntegerType, Seq(e), udfDeterministic = true)
+        .toAggregateExpression()
     )
   }
 

@@ -398,3 +398,10 @@ HAVING t0a <
   FROM   t2
   WHERE  t2b <= t0b)
 );
+
+-- SPARK-43760: the result of the subquery can be NULL.
+select *
+from range(1, 3) t1
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) is not null;

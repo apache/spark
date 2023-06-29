@@ -21,7 +21,7 @@ import java.io.ByteArrayOutputStream
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.EncoderFactory
 
@@ -220,24 +220,34 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       functions.from_avro($"avro", avroTypeStruct)), df)
   }
 
-  test("to_avro with unsupported nullable Avro schema") {
+  test("to_avro optional union Avro schema") {
     val df = spark.range(10).select(struct($"id", $"id".cast("string").as("str")).as("struct"))
-    for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
+    for (supportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
       val avroTypeStruct = s"""
         |{
         |  "type": "record",
         |  "name": "struct",
         |  "fields": [
-        |    {"name": "id", "type": $unsupportedAvroType},
+        |    {"name": "id", "type": $supportedAvroType},
         |    {"name": "str", "type": ["null", "string"]}
         |  ]
         |}
       """.stripMargin
-      val message = intercept[SparkException] {
-        df.select(functions.to_avro($"struct", avroTypeStruct).as("avro")).show()
-      }.getCause.getMessage
-      assert(message.contains("Only UNION of a null type and a non-null type is supported"))
+      val avroStructDF = df.select(functions.to_avro($"struct", avroTypeStruct).as("avro"))
+      checkAnswer(avroStructDF.select(
+        functions.from_avro($"avro", avroTypeStruct)), df)
     }
+  }
+
+  test("to_avro complex union Avro schema") {
+    val df = Seq((Some(1), None), (None, Some("a"))).toDF()
+      .select(struct(struct($"_1".as("member0"), $"_2".as("member1")).as("u")).as("struct"))
+    val avroTypeStruct = SchemaBuilder.record("struct").fields()
+      .name("u").`type`().unionOf().intType().and().stringType().endUnion().noDefault()
+      .endRecord().toString
+    val avroStructDF = df.select(functions.to_avro($"struct", avroTypeStruct).as("avro"))
+    checkAnswer(avroStructDF.select(
+      functions.from_avro($"avro", avroTypeStruct)), df)
   }
 
   test("SPARK-39775: Disable validate default values when parsing Avro schemas") {
@@ -250,13 +260,18 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin
-    val avroSchema = AvroOptions(Map("avroSchema" -> avroTypeStruct)).schema.get
-    val sparkSchema = SchemaConverters.toSqlType(avroSchema).dataType.asInstanceOf[StructType]
+    val options = Map("avroSchema" -> avroTypeStruct)
+    val avroOptions = AvroOptions(options)
+    val avroSchema = avroOptions.schema.get
+    val sparkSchema = SchemaConverters
+      .toSqlType(avroSchema, options)
+      .dataType
+      .asInstanceOf[StructType]
 
     val df = spark.range(5).select($"id")
     val structDf = df.select(struct($"id").as("struct"))
-    val avroStructDF = structDf.select(functions.to_avro('struct, avroTypeStruct).as("avro"))
-    checkAnswer(avroStructDF.select(functions.from_avro('avro, avroTypeStruct)), structDf)
+    val avroStructDF = structDf.select(functions.to_avro($"struct", avroTypeStruct).as("avro"))
+    checkAnswer(avroStructDF.select(functions.from_avro($"avro", avroTypeStruct)), structDf)
 
     withTempPath { dir =>
       df.write.format("avro").save(dir.getCanonicalPath)

@@ -148,6 +148,20 @@ class ColumnVectorSuite extends SparkFunSuite {
     }
   }
 
+  testVectors("timestamp_ntz", 10, TimestampNTZType) { testVector =>
+    (0 until 10).foreach { i =>
+      testVector.appendLong(i)
+    }
+
+    val array = new ColumnarArray(testVector, 0, 10)
+    val arrayCopy = array.copy()
+
+    (0 until 10).foreach { i =>
+      assert(array.get(i, TimestampNTZType) === i)
+      assert(arrayCopy.get(i, TimestampNTZType) === i)
+    }
+  }
+
   testVectors("float", 10, FloatType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendFloat(i.toFloat)
@@ -502,25 +516,26 @@ class ColumnVectorSuite extends SparkFunSuite {
   }
 
   test("CachedBatch long Apis") {
-    val dataType = LongType
-    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
-    val row = new SpecificInternalRow(Array(dataType))
+    Seq(LongType, TimestampType, TimestampNTZType).foreach { dataType =>
+      val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+      val row = new SpecificInternalRow(Array(dataType))
 
-    row.setNullAt(0)
-    columnBuilder.appendFrom(row, 0)
-    for (i <- 1 until 16) {
-      row.setLong(0, i.toLong)
+      row.setNullAt(0)
       columnBuilder.appendFrom(row, 0)
-    }
-
-    withVectors(16, dataType) { testVector =>
-      val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
-      ColumnAccessor.decompress(columnAccessor, testVector, 16)
-
-      assert(testVector.isNullAt(0))
       for (i <- 1 until 16) {
-        assert(testVector.isNullAt(i) == false)
-        assert(testVector.getLong(i) == i.toLong)
+        row.setLong(0, i.toLong)
+        columnBuilder.appendFrom(row, 0)
+      }
+
+      withVectors(16, dataType) { testVector =>
+        val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+        ColumnAccessor.decompress(columnAccessor, testVector, 16)
+
+        assert(testVector.isNullAt(0))
+        for (i <- 1 until 16) {
+          assert(testVector.isNullAt(i) == false)
+          assert(testVector.getLong(i) == i.toLong)
+        }
       }
     }
   }

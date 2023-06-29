@@ -158,24 +158,35 @@ private[spark] class SparkSubmit extends Logging {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
-        val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
-          UserGroupInformation.getCurrentUser())
-        try {
-          proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
-            override def run(): Unit = {
-              runMain(args, uninitLog)
-            }
-          })
-        } catch {
-          case e: Exception =>
-            // Hadoop's AuthorizationException suppresses the exception's stack trace, which
-            // makes the message printed to the output by the JVM not very helpful. Instead,
-            // detect exceptions with empty stack traces here, and treat them differently.
-            if (e.getStackTrace().length == 0) {
-              error(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-            } else {
-              throw e
-            }
+        // Here we are checking for client mode because when job is sumbitted in cluster
+        // deploy mode with k8s resource manager, the spark submit in the driver container
+        // is done in client mode.
+        val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
+          "client".equals(args.deployMode) &&
+          args.toSparkConf().getBoolean("spark.kubernetes.submitInDriver", false)
+        if (isKubernetesClusterModeDriver) {
+          logInfo("Running driver with proxy user. Cluster manager: Kubernetes")
+          SparkHadoopUtil.get.runAsSparkUser(() => runMain(args, uninitLog))
+        } else {
+          val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
+            UserGroupInformation.getCurrentUser())
+          try {
+            proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
+              override def run(): Unit = {
+                runMain(args, uninitLog)
+              }
+            })
+          } catch {
+            case e: Exception =>
+              // Hadoop's AuthorizationException suppresses the exception's stack trace, which
+              // makes the message printed to the output by the JVM not very helpful. Instead,
+              // detect exceptions with empty stack traces here, and treat them differently.
+              if (e.getStackTrace().length == 0) {
+                error(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+              } else {
+                throw e
+              }
+          }
         }
       } else {
         runMain(args, uninitLog)
@@ -403,6 +414,9 @@ private[spark] class SparkSubmit extends Logging {
         // directory too.
         // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
         // working directory
+        // SPARK-43540: add current working directory into driver classpath
+        val workingDirectory = "."
+        childClasspath += workingDirectory
         def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
         String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
@@ -412,13 +426,12 @@ private[spark] class SparkSubmit extends Logging {
             targetDir, sparkConf, hadoopConf)
           Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(resolvedUris).map {
             case (localResources, resolvedUri) =>
-              val source = new File(localResources.getPath)
+              val source = new File(localResources.getPath).getCanonicalFile
               val dest = new File(
-                ".",
+                workingDirectory,
                 if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
-              logInfo(
-                s"Files  $resolvedUri " +
-                  s"from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
+                .getCanonicalFile
+              logInfo(s"Files $resolvedUri from $source to $dest")
               Utils.deleteRecursively(dest)
               if (isArchive) {
                 Utils.unpack(source, dest)
@@ -893,7 +906,12 @@ private[spark] class SparkSubmit extends Logging {
       childArgs ++= Seq("--verbose")
     }
 
-    sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
+    val setSubmitTimeInClusterModeDriver =
+      sparkConf.getBoolean("spark.kubernetes.setSubmitTimeInDriver", true)
+    if (!sparkConf.contains("spark.app.submitTime")
+      || isKubernetesClusterModeDriver && setSubmitTimeInClusterModeDriver) {
+      sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
+    }
 
     if (childClasspath.nonEmpty && isCustomClasspathInClusterModeDisallowed) {
       childClasspath.clear()

@@ -260,7 +260,7 @@ private[ui] class ExecutionPagedTable(
   private val parameterPath =
     s"$basePath/$subPath/?${getParameterOtherTable(request, executionTag)}"
 
-  private val showSubExecutions = subExecutions.nonEmpty
+  private val showSubExecutions = subExecutions.exists(_._2.nonEmpty)
 
   override def tableId: String = s"$executionTag-table"
 

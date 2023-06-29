@@ -431,7 +431,6 @@ javolution:javolution
 com.esotericsoftware:kryo-shaded
 com.esotericsoftware:minlog
 com.esotericsoftware:reflectasm
-com.google.protobuf:protobuf-java
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
 jline:jline
@@ -443,6 +442,7 @@ pl.edu.icm:JLargeArrays
 BSD 3-Clause
 ------------
 
+com.google.protobuf:protobuf-java
 dk.brics.automaton:automaton
 org.antlr:antlr-runtime
 org.antlr:ST4

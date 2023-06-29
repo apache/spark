@@ -41,3 +41,8 @@ case class BadRecordException(
     @transient record: () => UTF8String,
     @transient partialResult: () => Option[InternalRow],
     cause: Throwable) extends Exception(cause)
+
+/**
+ * Exception thrown when the underlying parser parses a JSON array as a struct.
+ */
+case class JsonArraysAsStructsException() extends RuntimeException()

@@ -119,7 +119,7 @@ install_mvn() {
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
-  if [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
+  if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
     local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
     local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
     local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}

@@ -17,6 +17,7 @@
 
 import unittest
 import sys
+from distutils.version import LooseVersion
 
 import pandas as pd
 
@@ -25,7 +26,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesConversionTestsMixin:
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -48,6 +49,10 @@ class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.to_clipboard(sep=",", index=False), pser.to_clipboard(sep=",", index=False)
         )
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43458): Enable SeriesConversionTests.test_to_latex for pandas 2.0.0.",
+    )
     def test_to_latex(self):
         pser = self.pser
         psser = self.psser
@@ -62,6 +67,10 @@ class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.to_latex(index_names=False), pser.to_latex(index_names=False))
         self.assert_eq(psser.to_latex(bold_rows=True), pser.to_latex(bold_rows=True))
         self.assert_eq(psser.to_latex(decimal=","), pser.to_latex(decimal=","))
+
+
+class SeriesConversionTests(SeriesConversionTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

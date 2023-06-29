@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
@@ -53,6 +54,7 @@ class RelationalGroupedDataset protected[sql](
     private[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
+  import RelationalGroupedDataset._
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
@@ -83,13 +85,6 @@ class RelationalGroupedDataset protected[sql](
         Dataset.ofRows(
           df.sparkSession, Pivot(Some(aliasedGrps), pivotCol, values, aggExprs, df.logicalPlan))
     }
-  }
-
-  private[this] def alias(expr: Expression): NamedExpression = expr match {
-    case expr: NamedExpression => expr
-    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, Some(Column.generateAlias))
-    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
@@ -142,25 +137,15 @@ class RelationalGroupedDataset protected[sql](
     val keyEncoder = encoderFor[K]
     val valueEncoder = encoderFor[T]
 
-    // Resolves grouping expressions.
-    val dummyPlan = Project(groupingExprs.map(alias), LocalRelation(df.logicalPlan.output))
-    val analyzedPlan = df.sparkSession.sessionState.analyzer.execute(dummyPlan)
-      .asInstanceOf[Project]
-    df.sparkSession.sessionState.analyzer.checkAnalysis(analyzedPlan)
-    val aliasedGroupings = analyzedPlan.projectList
-
-    // Adds the grouping expressions that are not in base DataFrame into outputs.
-    val addedCols = aliasedGroupings.filter(g => !df.logicalPlan.outputSet.contains(g.toAttribute))
-    val qe = Dataset.ofRows(
-      df.sparkSession,
-      Project(df.logicalPlan.output ++ addedCols, df.logicalPlan)).queryExecution
+    val (qe, groupingAttributes) =
+      handleGroupingExpression(df.logicalPlan, df.sparkSession, groupingExprs)
 
     new KeyValueGroupedDataset(
       keyEncoder,
       valueEncoder,
       qe,
       df.logicalPlan.output,
-      aliasedGroupings.map(_.toAttribute))
+      groupingAttributes)
   }
 
   /**
@@ -430,6 +415,9 @@ class RelationalGroupedDataset protected[sql](
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column): RelationalGroupedDataset = {
+    if (df.isStreaming) {
+      throw new AnalysisException("pivot is not supported on a streaming DataFrames/Datasets")
+    }
     // This is to prevent unintended OOM errors when the number of distinct values is large
     val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
@@ -694,6 +682,33 @@ private[sql] object RelationalGroupedDataset {
       groupingExprs: Seq[Expression],
       groupType: GroupType): RelationalGroupedDataset = {
     new RelationalGroupedDataset(df, groupingExprs, groupType: GroupType)
+  }
+
+  private[sql] def handleGroupingExpression(
+      logicalPlan: LogicalPlan,
+      sparkSession: SparkSession,
+      groupingExprs: Seq[Expression]): (QueryExecution, Seq[Attribute]) = {
+    // Resolves grouping expressions.
+    val dummyPlan = Project(groupingExprs.map(alias), LocalRelation(logicalPlan.output))
+    val analyzedPlan = sparkSession.sessionState.analyzer.execute(dummyPlan)
+      .asInstanceOf[Project]
+    sparkSession.sessionState.analyzer.checkAnalysis(analyzedPlan)
+    val aliasedGroupings = analyzedPlan.projectList
+
+    // Adds the grouping expressions that are not in base DataFrame into outputs.
+    val addedCols = aliasedGroupings.filter(g => !logicalPlan.outputSet.contains(g.toAttribute))
+    val newPlan = Project(logicalPlan.output ++ addedCols, logicalPlan)
+    val qe = sparkSession.sessionState.executePlan(newPlan)
+
+    (qe, aliasedGroupings.map(_.toAttribute))
+  }
+
+  private def alias(expr: Expression): NamedExpression = expr match {
+    case expr: NamedExpression => expr
+    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+      UnresolvedAlias(a, Some(Column.generateAlias))
+    case u: UnresolvedFunction => UnresolvedAlias(expr, None)
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   /**

@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.parser
 import java.lang.{Long => JLong}
 import java.nio.CharBuffer
 import java.util
-
-import scala.collection.mutable.StringBuilder
+import java.util.Locale
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.TerminalNode
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -258,5 +257,33 @@ object ParserUtils {
         plan
       }
     }
+  }
+
+  /**
+   * Normalizes the expression parser tree to a SQL string which will be used to generate
+   * the expression alias. In particular, it concatenates terminal nodes of the tree and
+   * upper casts keywords and numeric literals.
+   */
+  def toExprAlias(ctx: ParseTree): String = {
+    val sb = new StringBuilder()
+    def concatTerms(ctx: ParseTree): Unit = {
+      for (i <- 0 until ctx.getChildCount) {
+        ctx.getChild(i) match {
+          case term: TerminalNodeImpl =>
+            val termText = term.getText
+            val tt = term.getSymbol.getType
+            val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+              (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
+              termText.toUpperCase(Locale.ROOT)
+            } else {
+              termText
+            }
+            sb.append(current)
+          case child => concatTerms(child)
+        }
+      }
+    }
+    concatTerms(ctx)
+    sb.toString()
   }
 }

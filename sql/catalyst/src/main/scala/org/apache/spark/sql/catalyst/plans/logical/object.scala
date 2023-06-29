@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
@@ -64,13 +65,8 @@ trait ObjectProducer extends LogicalPlan {
  * A trait for logical operators that consumes domain objects as input.
  * The output of its child must be a single-field row containing the input object.
  */
-trait ObjectConsumer extends UnaryNode {
+trait ObjectConsumer extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
   assert(child.output.length == 1)
-
-  // This operator always need all columns of its child, even it doesn't reference to.
-  @transient
-  override lazy val references: AttributeSet = child.outputSet
-
   def inputObjAttr: Attribute = child.output.head
 }
 
@@ -341,6 +337,22 @@ object AppendColumns {
       encoderFor[U].namedExpressions,
       child)
   }
+
+  private[sql] def apply(
+      func: AnyRef,
+      inEncoder: ExpressionEncoder[_],
+      outEncoder: ExpressionEncoder[_],
+      child: LogicalPlan,
+      inputAttributes: Seq[Attribute] = Nil): AppendColumns = {
+    new AppendColumns(
+      func.asInstanceOf[Any => Any],
+      inEncoder.clsTag.runtimeClass,
+      inEncoder.schema,
+      UnresolvedDeserializer(inEncoder.deserializer, inputAttributes),
+      outEncoder.namedExpressions,
+      child
+    )
+  }
 }
 
 /**
@@ -401,6 +413,13 @@ object MapGroups {
       CatalystSerde.generateObjAttr[U],
       child)
     CatalystSerde.serialize[U](mapped)
+  }
+
+  private[sql] def sortOrder(sortExprs: Seq[Expression]): Seq[SortOrder] = {
+    sortExprs.map {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    }
   }
 }
 

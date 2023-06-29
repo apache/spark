@@ -36,11 +36,14 @@ class AlterTableSetSerdeSuite extends command.AlterTableSetSerdeSuiteBase with C
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) " +
         s"USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
-      }
-      assert(e.message.contains(
-        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
+        },
+        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        sqlState = "46110",
+        parameters = Map("cmd" -> "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      )
     }
   }
 }

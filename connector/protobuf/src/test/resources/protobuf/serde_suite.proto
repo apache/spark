@@ -59,17 +59,6 @@ message TypeMiss {
   int64 bar = 1;
 }
 
-/* Field boo missing from SQL root, but available in Protobuf root*/
-message FieldMissingInSQLRoot {
-  Foo foo = 1;
-  int32 boo = 2;
-}
-
-/* Field baz missing from SQL nested and available in Protobuf nested*/
-message FieldMissingInSQLNested {
-  Baz foo = 1;
-}
-
 message Baz {
   int32 bar = 1;
   int32 baz = 2;

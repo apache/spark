@@ -141,7 +141,7 @@ private[spark] object UIUtils extends Logging {
    *
    * @param batchTime the batch time to be formatted
    * @param batchInterval the batch interval
-   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value will be
    *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
    * @param timezone only for test
    */

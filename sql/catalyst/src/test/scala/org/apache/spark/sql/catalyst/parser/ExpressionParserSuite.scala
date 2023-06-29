@@ -193,14 +193,13 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contain only one character."
     assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
     assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
 
     checkError(
       exception = parseException("a like 'pattern%' escape '##'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'##'"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape '##'",
         start = 2,
@@ -208,8 +207,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "like 'pattern%' escape ''",
         start = 2,
@@ -220,8 +219,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape '\"/'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'\"/'"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape '\"/'",
         start = 2,
@@ -229,8 +228,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("a not like 'pattern%' escape ''"),
-      errorClass = "_LEGACY_ERROR_TEMP_0017",
-      parameters = Map.empty,
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
       context = ExpectedContext(
         fragment = "not like 'pattern%' escape ''",
         start = 2,
@@ -725,13 +724,13 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(".e3"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
+      parameters = Map("error" -> "'.'", "hint" -> ""))
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
     checkError(
       exception = parseException("1000Y"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "1000",
         "minValue" -> Byte.MinValue.toString,
@@ -746,7 +745,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10S", Literal(10.toShort))
     checkError(
       exception = parseException("40000S"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "40000",
         "minValue" -> Short.MinValue.toString,
@@ -761,7 +760,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10L", Literal(10L))
     checkError(
       exception = parseException("78732472347982492793712334L"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "78732472347982492793712334",
         "minValue" -> Long.MinValue.toString,
@@ -776,7 +775,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("10.0D", Literal(10.0D))
     checkError(
       exception = parseException("-1.8E308D"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "-1.8E308",
         "minValue" -> BigDecimal(Double.MinValue).toString,
@@ -788,7 +787,7 @@ class ExpressionParserSuite extends AnalysisTest {
         stop = 8))
     checkError(
       exception = parseException("1.8E308D"),
-      errorClass = "_LEGACY_ERROR_TEMP_0023",
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
       parameters = Map(
         "rawStrippedQualifier" -> "1.8E308",
         "minValue" -> BigDecimal(Double.MinValue).toString,
@@ -969,16 +968,6 @@ class ExpressionParserSuite extends AnalysisTest {
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
       }
     }
-
-    // Empty interval statement
-    checkError(
-      exception = parseException("interval"),
-      errorClass = "_LEGACY_ERROR_TEMP_0025",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "interval",
-        start = 0,
-        stop = 7))
 
     // Single Intervals.
     val forms = Seq("", "s")

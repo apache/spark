@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.Column
@@ -122,13 +123,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE char_types (" +
-      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar)"
+      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar(1))"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_types VALUES " +
       "('abcd', 'efgh', 'ijkl', 'mnop', 'q')").executeUpdate()
 
+    // SPARK-42916: character/char/bpchar w/o length specifier defaults to int max value, this will
+    // cause OOM as it will be padded with ' ' to 2147483647.
     conn.prepareStatement("CREATE TABLE char_array_types (" +
-      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar[])"
+      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar(1)[])"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_array_types VALUES " +
       """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}')"""
@@ -138,6 +141,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "c0 money)").executeUpdate()
     conn.prepareStatement("INSERT INTO money_types VALUES " +
       "('$1,000.00')").executeUpdate()
+
+    conn.prepareStatement(s"CREATE TABLE timestamp_ntz(v timestamp)").executeUpdate()
+    conn.prepareStatement(s"""INSERT INTO timestamp_ntz VALUES
+      |('2013-04-05 12:01:02'),
+      |('2013-04-05 18:01:02.123'),
+      |('2013-04-05 18:01:02.123456')""".stripMargin).executeUpdate()
+
+    conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
+    conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
+      "type not_null_text)").executeUpdate()
+    conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
+      "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
+
   }
 
   test("Type mapping for various types") {
@@ -378,5 +394,42 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row.length === 1)
     assert(row(0).length === 1)
     assert(row(0).getString(0) === "$1,000.00")
+  }
+
+  test("SPARK-43040: timestamp_ntz read test") {
+    val prop = new Properties
+    prop.setProperty("preferTimestampNTZ", "true")
+    val df = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz", prop)
+    val row = df.collect()
+    assert(row.length === 3)
+    assert(row(0).length === 1)
+    assert(row(0) === Row(LocalDateTime.of(2013, 4, 5, 12, 1, 2)))
+    assert(row(1) === Row(LocalDateTime.of(2013, 4, 5, 18, 1, 2, 123000000)))
+    assert(row(2) === Row(LocalDateTime.of(2013, 4, 5, 18, 1, 2, 123456000)))
+  }
+
+  test("SPARK-43040: timestamp_ntz roundtrip test") {
+    val prop = new Properties
+    prop.setProperty("preferTimestampNTZ", "true")
+
+    val sparkQuery = """
+      |select
+      |  timestamp_ntz'2020-12-10 11:22:33' as col0
+      """.stripMargin
+
+    val df_expected = sqlContext.sql(sparkQuery)
+    df_expected.write.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
+
+    val df_actual = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
+    assert(df_actual.collect()(0) == df_expected.collect()(0))
+  }
+
+  test("SPARK-43267: user-defined column in array test") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "custom_type", new Properties)
+    val row = df.collect()
+    assert(row.length === 1)
+    assert(row(0).length === 2)
+    assert(row(0).getSeq[String](0) == Seq("1", "fds", "fdsa"))
+    assert(row(0).getString(1) == "fdasfasdf")
   }
 }

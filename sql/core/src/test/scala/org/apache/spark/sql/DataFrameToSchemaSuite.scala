@@ -180,6 +180,17 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(Row(1)))
   }
 
+  test("struct value: compatible field nullability") {
+    val innerFields = new StructType().add("i", LongType, nullable = false)
+    val schema = new StructType().add("a", LongType).add("b", innerFields)
+    val data = sql("VALUES (1, STRUCT(1 as i)), (NULL, NULL) as t(a, b)")
+    assert(data.schema.fields(1).nullable)
+    assert(!data.schema.fields(1).dataType.asInstanceOf[StructType].fields(0).nullable)
+    val df = data.to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Seq(Row(1, Row(1)), Row(null, null)))
+  }
+
   test("negative: incompatible field nullability") {
     val innerFields = new StructType().add("i", IntegerType, nullable = false)
     val schema = new StructType().add("struct", innerFields)
@@ -254,6 +265,17 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(Seq(Row(1L))))
   }
 
+  test("array element: compatible field nullability") {
+    val innerFields = ArrayType(LongType, containsNull = false)
+    val schema = new StructType().add("a", LongType).add("b", innerFields)
+    val data = sql("VALUES (1, ARRAY(1, 2)), (NULL, NULL) as t(a, b)")
+    assert(data.schema.fields(1).nullable)
+    assert(!data.schema.fields(1).dataType.asInstanceOf[ArrayType].containsNull)
+    val df = data.to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Seq(Row(1, Seq(1, 2)), Row(null, null)))
+  }
+
   test("array element: incompatible array nullability") {
     val arr = ArrayType(IntegerType, containsNull = false)
     val schema = new StructType().add("arr", arr)
@@ -319,6 +341,17 @@ class DataFrameToSchemaSuite extends QueryTest with SharedSparkSession {
       .to(schema)
     assert(df.schema == schema)
     checkAnswer(df, Row(Map("a" -> Row("b", "a"))))
+  }
+
+  test("map value: compatible field nullability") {
+    val innerFields = MapType(StringType, LongType, valueContainsNull = false)
+    val schema = new StructType().add("a", LongType).add("b", innerFields)
+    val data = sql("VALUES (1, MAP('a', 1, 'b', 2)), (NULL, NULL) as t(a, b)")
+    assert(data.schema.fields(1).nullable)
+    assert(!data.schema.fields(1).dataType.asInstanceOf[MapType].valueContainsNull)
+    val df = data.to(schema)
+    assert(df.schema == schema)
+    checkAnswer(df, Seq(Row(1, Map("a" -> 1, "b" -> 2)), Row(null, null)))
   }
 
   test("map value: incompatible map nullability") {

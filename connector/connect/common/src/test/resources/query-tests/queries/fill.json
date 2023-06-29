@@ -1,0 +1,19 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "fillNa": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "cols": ["id"],
+    "values": [{
+      "long": "8"
+    }]
+  }
+}

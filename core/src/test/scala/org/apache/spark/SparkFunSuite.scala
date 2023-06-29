@@ -31,8 +31,11 @@ import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome, Tag}
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.scalatest.time._ // scalastyle:ignore
 
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
@@ -68,6 +71,7 @@ abstract class SparkFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
+  with TimeLimits
   with Logging {
 // scalastyle:on
 
@@ -135,6 +139,22 @@ abstract class SparkFunSuite
     }
     val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
     java.nio.file.Paths.get(sparkHome, first +: more: _*)
+  }
+
+  // subclasses can override this to exclude certain tests by name
+  // useful when inheriting a test suite but do not want to run all tests in it
+  protected def excluded: Seq[String] = Seq.empty
+
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+    (implicit pos: Position): Unit = {
+    if (excluded.contains(testName)) {
+      ignore(s"$testName (excluded)")(testBody)
+    } else {
+      val timeout = sys.props.getOrElse("spark.test.timeout", "20").toLong
+      super.test(testName, testTags: _*)(
+        failAfter(Span(timeout, Minutes))(testBody)
+      )
+    }
   }
 
   /**
@@ -277,6 +297,7 @@ abstract class SparkFunSuite
           logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
           logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
+        LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
       }
     }
   }

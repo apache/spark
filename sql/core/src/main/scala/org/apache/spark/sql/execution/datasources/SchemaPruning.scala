@@ -172,7 +172,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
       prunedMetadataSchema: StructType) = {
     val finalSchema = prunedBaseRelation.schema.merge(prunedMetadataSchema)
     val prunedOutput = getPrunedOutput(outputRelation.output, finalSchema)
-    outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
+    val prunedRelation = outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
+    prunedRelation.copyTagsFrom(outputRelation)
+    prunedRelation
   }
 
   // Prune the given output to make it consistent with `requiredSchema`.

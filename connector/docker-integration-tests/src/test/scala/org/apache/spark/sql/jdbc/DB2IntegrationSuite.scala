@@ -217,4 +217,25 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(actual.length === 2)
     assert(actual.toSet === expectedResult)
   }
+
+  test("SPARK-42534: DB2 Limit pushdown test") {
+    val actual = sqlContext.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "tbl")
+      .load()
+      .limit(2)
+      .select("x", "y")
+      .orderBy("x")
+      .collect()
+
+    val expected = sqlContext.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT x, y FROM tbl ORDER BY x FETCH FIRST 2 ROWS ONLY")
+      .load()
+      .collect()
+
+    assert(actual === expected)
+  }
 }

@@ -646,6 +646,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  4.0  1.500000  1.000000
         """
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         return self._reduce_for_stat_function(
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
@@ -885,6 +890,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
         if numeric_only is not None and not isinstance(numeric_only, bool):
             raise TypeError("numeric_only must be None or bool")
         if not isinstance(min_count, int):
@@ -988,6 +998,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         .. versionadded:: 3.4.0
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
@@ -1010,6 +1022,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(group_df - group_df.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         internal, agg_columns, sdf = self._prepare_reduce(
             groupkey_names=groupkey_names,
@@ -1270,6 +1287,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
+
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="prod")
 
@@ -1877,7 +1900,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> g.apply(plus_min).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(plus_min).sort_index()  # doctest: +SKIP
             A  B   C
         0  aa  2   8
         1  aa  3  10
@@ -1899,7 +1922,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[int, [float, float]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
             c0   c1
         0  1.0  1.0
         1  1.0  1.0
@@ -1907,7 +1930,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def pandas_div(x) -> ps.DataFrame[("index", int), [("f1", float), ("f2", float)]]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
-        >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(pandas_div).sort_index()  # doctest: +SKIP
                 f1   f2
         index
         0      1.0  1.0
@@ -1916,7 +1939,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         In case of Series, it works as below.
 
-        >>> def plus_max(x) -> ps.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
         >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
         0    6
@@ -1926,7 +1949,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         >>> def plus_min(x):
         ...     return x + x.min()
-        >>> df.B.groupby(df.A).apply(plus_min).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_min).sort_index()  # doctest: +SKIP
         0    2
         1    3
         2    6
@@ -1934,7 +1957,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can also return a scalar value as an aggregated value of the group:
 
-        >>> def plus_length(x) -> np.int:
+        >>> def plus_length(x) -> int:
         ...     return len(x)
         >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
         0    1
@@ -1943,7 +1966,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         The extra arguments to the function can be passed as below.
 
-        >>> def calculation(x, y, z) -> np.int:
+        >>> def calculation(x, y, z) -> int:
         ...     return len(x) + y * z
         >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
         0    51
@@ -2275,7 +2298,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # the index in some cases.
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in
-            # https://github.com/pyspark.pandas/issues/628.
+            # https://github.com/databricks/koalas/issues/628.
             pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(
                 pdf, retain_index=retain_index, prefer_timestamp_ntz=prefer_timestamp_ntz
             )
@@ -2644,7 +2667,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="bfill", limit=limit)
 
-    backfill = bfill
+    def backfill(self, limit: Optional[int] = None) -> FrameLike:
+        """
+        Alias for bfill.
+
+        .. deprecated:: 3.4.0
+        """
+        warnings.warn(
+            "The GroupBy.backfill method is deprecated "
+            "and will be removed in a future version. "
+            "Use GroupBy.bfill instead.",
+            FutureWarning,
+        )
+        return self.bfill(limit=limit)
 
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
@@ -2695,7 +2730,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="ffill", limit=limit)
 
-    pad = ffill
+    def pad(self, limit: Optional[int] = None) -> FrameLike:
+        """
+        Alias for ffill.
+
+        .. deprecated:: 3.4.0
+        """
+        warnings.warn(
+            "The GroupBy.pad method is deprecated "
+            "and will be removed in a future version. "
+            "Use GroupBy.ffill instead.",
+            FutureWarning,
+        )
+        return self.ffill(limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """
@@ -3046,7 +3093,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  a string 2  a string 6
         2  a string 3  a string 5
 
-        >>> def plus_max(x) -> ps.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
         >>> g.transform(plus_max)  # doctest: +NORMALIZE_WHITESPACE
            B   C
@@ -3080,7 +3127,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can also specify extra arguments to pass to the function.
 
-        >>> def calculation(x, y, z) -> ps.Series[np.int]:
+        >>> def calculation(x, y, z) -> ps.Series[int]:
         ...     return x + x.min() + y + z
         >>> g.transform(calculation, 5, z=20)  # doctest: +NORMALIZE_WHITESPACE
             B   C
@@ -3499,6 +3546,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
+        warnings.warn(
+            "Default value of `numeric_only` will be changed to `False` "
+            "instead of `True` in 4.0.0.",
+            FutureWarning,
+        )
+
         def stat_function(col: Column) -> Column:
             return F.percentile_approx(col, 0.5, accuracy)
 
@@ -3519,15 +3572,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if isinstance(self, SeriesGroupBy):
                 raise TypeError("Only numeric aggregation column is accepted.")
 
-            if not numeric_only:
-                if has_non_numeric:
-                    warnings.warn(
-                        "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
-                        "In a future version, a TypeError will be raised. "
-                        "Before calling .%s, select only columns which should be "
-                        "valid for the function." % (function_name, function_name),
-                        FutureWarning,
-                    )
+            if not numeric_only and has_non_numeric:
+                warnings.warn(
+                    "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
+                    "In a future version, a TypeError will be raised. "
+                    "Before calling .%s, select only columns which should be "
+                    "valid for the function." % (function_name, function_name),
+                    FutureWarning,
+                )
 
     def _reduce_for_stat_function(
         self,
@@ -4226,6 +4278,10 @@ class SeriesGroupBy(GroupBy[Series]):
            NaN    1
         Name: B, dtype: int64
         """
+        warnings.warn(
+            "The resulting Series will have a fixed name of 'count' from 4.0.0.",
+            FutureWarning,
+        )
         groupkeys = self._groupkeys + self._agg_columns
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(groupkeys))]
         groupkey_cols = [s.spark.column.alias(name) for s, name in zip(groupkeys, groupkey_names)]

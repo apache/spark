@@ -356,7 +356,7 @@ class SQLAppStatusListener(
     kvstore.write(graphToStore)
 
     val exec = getOrCreateExecution(executionId)
-    exec.rootExecutionId = rootExecutionId
+    exec.rootExecutionId = rootExecutionId.getOrElse(executionId)
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription

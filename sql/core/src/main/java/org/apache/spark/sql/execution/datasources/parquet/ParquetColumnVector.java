@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
@@ -64,7 +65,7 @@ final class ParquetColumnVector {
       boolean isTopLevel,
       Object defaultValue) {
     DataType sparkType = column.sparkType();
-    if (!sparkType.sameType(vector.dataType())) {
+    if (!DataTypeUtils.sameType(sparkType, vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + sparkType +
         " doesn't match the type: " + vector.dataType() + " in column vector");
     }

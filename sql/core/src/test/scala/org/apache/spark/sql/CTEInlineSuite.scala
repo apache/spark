@@ -44,7 +44,7 @@ abstract class CTEInlineSuiteBase
       checkAnswer(df, Nil)
 
       val r = df.queryExecution.optimizedPlan.find {
-        case RepartitionByExpression(p, _, None) => p.isEmpty
+        case RepartitionByExpression(p, _, None, _) => p.isEmpty
         case _ => false
       }
       assert(

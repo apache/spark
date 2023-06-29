@@ -240,7 +240,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       partitions: Array[Transform],
       catalog: InMemoryTableCatalog = catalog): Unit = {
     catalog.createTable(Identifier.of(Array("ns"), table),
-      schema, partitions, emptyProps, Distributions.unspecified(), Array.empty, None,
+      schema, partitions, emptyProps, Distributions.unspecified(), Array.empty, None, None,
       numRowsPerSplit = 1)
   }
 

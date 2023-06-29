@@ -56,7 +56,7 @@ private[spark] trait TaskScheduler {
 
   // Kill all the tasks in a stage and fail the stage and all the jobs that depend on the stage.
   // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
-  def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
+  def cancelTasks(stageId: Int, interruptThread: Boolean, reason: String): Unit
 
   /**
    * Kills a task attempt.

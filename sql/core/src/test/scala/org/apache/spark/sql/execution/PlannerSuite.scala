@@ -730,10 +730,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
              SortExec(_, _,
-               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _, _), _),
              SortExec(_, _,
                ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _),
-               _, _), _), _) =>
+               _, _, _), _), _) =>
         assert(leftKeys === smjExec.leftKeys)
         assert(rightKeys === smjExec.rightKeys)
         assert(leftKeys === leftPartitioningExpressions)
@@ -1129,9 +1129,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         assert(sortNodes.size == 3)
         val outputOrdering = planned.outputOrdering
         assert(outputOrdering.size == 1)
-        // Sort order should have 3 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
-        assert(outputOrdering.head.children.size == 3)
-        assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 2)
+        // Sort order should have 2 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
+        // and t2.id is not a valid ordering (the final plan doesn't output t2.id)
+        assert(outputOrdering.head.children.size == 2)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 1)
         assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 1)
       }
     }

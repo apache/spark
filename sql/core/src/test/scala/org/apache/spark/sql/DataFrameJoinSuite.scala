@@ -195,22 +195,28 @@ class DataFrameJoinSuite extends QueryTest
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
-    // equijoin - should be converted into broadcast join
-    val plan1 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
-    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // equijoin - should not be converted into broadcast join without hint
+      val plan1 = df1.join(df2, "key").queryExecution.sparkPlan
+      assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
-    // no join key -- should not be a broadcast join
-    val plan2 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
-    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
+      // equijoin - should be converted into broadcast join with hint
+      val plan2 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
+      assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
-    // planner should not crash without a join
-    broadcast(df1).queryExecution.sparkPlan
+      // no join key -- should not be a broadcast join
+      val plan3 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
+      assert(plan3.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
-    // SPARK-12275: no physical plan for BroadcastHint in some condition
-    withTempPath { path =>
-      df1.write.parquet(path.getCanonicalPath)
-      val pf1 = spark.read.parquet(path.getCanonicalPath)
-      assert(df1.crossJoin(broadcast(pf1)).count() === 4)
+      // planner should not crash without a join
+      broadcast(df1).queryExecution.sparkPlan
+
+      // SPARK-12275: no physical plan for BroadcastHint in some condition
+      withTempPath { path =>
+        df1.write.parquet(path.getCanonicalPath)
+        val pf1 = spark.read.parquet(path.getCanonicalPath)
+        assert(df1.crossJoin(broadcast(pf1)).count() === 4)
+      }
     }
   }
 

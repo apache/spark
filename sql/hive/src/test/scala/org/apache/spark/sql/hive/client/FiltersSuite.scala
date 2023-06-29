@@ -66,17 +66,17 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
 
   filterTest("date filter",
     (a("datecol", DateType) === Literal(Date.valueOf("2019-01-01"))) :: Nil,
-    "datecol = 2019-01-01")
+    "datecol = \"2019-01-01\"")
 
   filterTest("date filter with IN predicate",
     (a("datecol", DateType) in
       (Literal(Date.valueOf("2019-01-01")), Literal(Date.valueOf("2019-01-07")))) :: Nil,
-    "(datecol = 2019-01-01 or datecol = 2019-01-07)")
+    "(datecol = \"2019-01-01\" or datecol = \"2019-01-07\")")
 
   filterTest("date and string filter",
     (Literal(Date.valueOf("2019-01-01")) === a("datecol", DateType)) ::
       (Literal("a") === a("strcol", IntegerType)) :: Nil,
-    "2019-01-01 = datecol and \"a\" = strcol")
+    "\"2019-01-01\" = datecol and \"a\" = strcol")
 
   filterTest("date filter with null",
     (a("datecol", DateType) ===  Literal(null)) :: Nil,
@@ -105,7 +105,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
 
   filterTest("NOT: date filter",
     (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
-    "datecol != 2019-01-01")
+    "datecol != \"2019-01-01\"")
 
   filterTest("not-in, string filter",
     (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
@@ -118,7 +118,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
   filterTest("not-in, date filter",
     (Not(In(a("datecol", DateType),
       Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")))))) :: Nil,
-    """(datecol != 2021-01-01 and datecol != 2021-01-02)""")
+    """(datecol != "2021-01-01" and datecol != "2021-01-02")""")
 
   filterTest("not-in, date filter with null",
     (Not(In(a("datecol", DateType),
@@ -139,7 +139,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     (Not(InSet(a("datecol", DateType),
       Set(Literal(Date.valueOf("2020-01-01")).eval(),
         Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
-    """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
+    """(datecol != "2020-01-01" and datecol != "2020-01-02")""")
 
   filterTest("not-inset, date filter with null",
     (Not(InSet(a("datecol", DateType),
@@ -215,7 +215,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
       checkConverted(
         InSet(a("datecol", DateType),
           Range(1, 20).map(d => Literal(d, DateType).eval(EmptyRow)).toSet),
-        "(datecol >= 1970-01-02 and datecol <= 1970-01-20)")
+        "(datecol >= \"1970-01-02\" and datecol <= \"1970-01-20\")")
     }
   }
 
@@ -246,7 +246,7 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
       val dateFilter = InSet(a("p", DateType), Set(null,
         Literal(Date.valueOf("2020-01-01")).eval(), Literal(Date.valueOf("2021-01-01")).eval()))
       val dateConverted = shim.convertFilters(testTable, Seq(dateFilter))
-      assert(dateConverted == "(p = 2020-01-01 or p = 2021-01-01)")
+      assert(dateConverted == "(p = \"2020-01-01\" or p = \"2021-01-01\")")
     }
   }
 

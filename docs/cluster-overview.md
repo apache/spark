@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -66,7 +66,7 @@ The system currently supports several cluster managers:
   easy to set up a cluster.
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications. (Deprecated)
-* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2 and 3.
+* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 3.
 * [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
   and management of containerized applications.
 
@@ -91,7 +91,7 @@ The [job scheduling overview](job-scheduling.html) describes this in more detail
 
 The following table summarizes terms you'll see used to refer to cluster concepts:
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
   </thead>

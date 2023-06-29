@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
@@ -79,8 +80,8 @@ case class InsertAdaptiveSparkPlan(
     case _ => plan
   }
 
-  // AQE is only useful when the query has exchanges or sub-queries. This method returns true if
-  // one of the following conditions is satisfied:
+  // AQE is only useful when the query has exchanges, sub-queries or table caches. This method
+  // returns true if one of the following conditions is satisfied:
   //   - The config ADAPTIVE_EXECUTION_FORCE_APPLY is true.
   //   - The input query is from a sub-query. When this happens, it means we've already decided to
   //     apply AQE for the main query and we must continue to do it.
@@ -88,12 +89,22 @@ case class InsertAdaptiveSparkPlan(
   //   - The query may need to add exchanges. It's an overkill to run `EnsureRequirements` here, so
   //     we just check `SparkPlan.requiredChildDistribution` and see if it's possible that the
   //     the query needs to add exchanges later.
+  //   - The query contains nested `AdaptiveSparkPlanExec`.
+  //   - The query contains `InMemoryTableScanExec`.
   //   - The query contains sub-query.
   private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
       plan.exists {
         case _: Exchange => true
         case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true
+        // AQE framework has a different way to update the query plan in the UI: it updates the plan
+        // at the end of execution, while non-AQE updates the plan before execution. If the cached
+        // plan is already AQEed, the current plan must be AQEed as well so that the UI can get plan
+        // update correctly.
+        case i: InMemoryTableScanExec
+            if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
+        case _: InMemoryTableScanExec
+            if conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING) => true
         case p => p.expressions.exists(_.exists {
           case _: SubqueryExpression => true
           case _ => false
@@ -114,38 +125,23 @@ case class InsertAdaptiveSparkPlan(
   /**
    * Returns an expression-id-to-execution-plan map for all the sub-queries.
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
-   * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
+   * rule.
+   * The returned subquery map holds executed plan, then the [[PlanAdaptiveSubqueries]] can take
+   * them and create a new subquery.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
-    val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SparkPlan] = {
+    val subqueryMap = mutable.HashMap.empty[Long, SparkPlan]
     if (!plan.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       return subqueryMap.toMap
     }
     plan.foreach(_.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach(_.foreach {
-      case expressions.ScalarSubquery(p, _, exprId, _, _)
-          if !subqueryMap.contains(exprId.id) =>
-        val executedPlan = compileSubquery(p)
-        verifyAdaptivePlan(executedPlan, p)
-        val subquery = SubqueryExec.createForScalarSubquery(
-          s"subquery#${exprId.id}", executedPlan)
-        subqueryMap.put(exprId.id, subquery)
-      case expressions.InSubquery(_, ListQuery(query, _, exprId, _, _, _))
-          if !subqueryMap.contains(exprId.id) =>
-        val executedPlan = compileSubquery(query)
-        verifyAdaptivePlan(executedPlan, query)
-        val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
-        subqueryMap.put(exprId.id, subquery)
-      case expressions.DynamicPruningSubquery(value, buildPlan,
-          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _)
-          if !subqueryMap.contains(exprId.id) =>
-        val executedPlan = compileSubquery(buildPlan)
-        verifyAdaptivePlan(executedPlan, buildPlan)
-
-        val name = s"dynamicpruning#${exprId.id}"
-        val subquery = SubqueryAdaptiveBroadcastExec(
-          name, broadcastKeyIndex, onlyInBroadcast,
-          buildPlan, buildKeys, executedPlan)
-        subqueryMap.put(exprId.id, subquery)
+      case e @ (_: expressions.ScalarSubquery | _: ListQuery | _: DynamicPruningSubquery) =>
+        val subquery = e.asInstanceOf[SubqueryExpression]
+        if (!subqueryMap.contains(subquery.exprId.id)) {
+          val executedPlan = compileSubquery(subquery.plan)
+          verifyAdaptivePlan(executedPlan, subquery.plan)
+          subqueryMap.put(subquery.exprId.id, executedPlan)
+        }
       case _ =>
     }))
 

@@ -18,6 +18,7 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
+import warnings
 from typing import Any, Optional, Union, no_type_check
 
 import numpy as np
@@ -115,11 +116,19 @@ class DatetimeMethods:
     def nanosecond(self) -> "ps.Series":
         raise NotImplementedError()
 
+    # TODO(SPARK-42617): Support isocalendar.week and replace it.
+    # See also https://github.com/pandas-dev/pandas/pull/33595.
     @property
     def week(self) -> "ps.Series":
         """
         The week ordinal of the year.
+
+        .. deprecated:: 3.4.0
         """
+        warnings.warn(
+            "weekofyear and week have been deprecated.",
+            FutureWarning,
+        )
         return self._data.spark.transform(lambda c: F.weekofyear(c).cast(LongType()))
 
     @property

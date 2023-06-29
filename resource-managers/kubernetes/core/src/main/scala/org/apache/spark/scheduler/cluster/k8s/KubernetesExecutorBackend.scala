@@ -82,7 +82,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         clientMode = true)
 
       var driver: RpcEndpointRef = null
-      val nTries = 3
+      val nTries = sys.env.getOrElse("EXECUTOR_DRIVER_PROPS_FETCHER_MAX_ATTEMPTS", "3").toInt
       for (i <- 0 until nTries if driver == null) {
         try {
           driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)

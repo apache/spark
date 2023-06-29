@@ -41,16 +41,20 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   protected val func: Expression
   protected val pythonEvalType: Int
 
+  protected val isBarrier: Boolean
+
   private val pythonFunction = func.asInstanceOf[PythonUDF].func
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
   private val batchSize = conf.arrowMaxRecordsPerBatch
 
+  private val largeVarTypes = conf.arrowUseLargeVarTypes
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { inputIter =>
+    def mapper(inputIter: Iterator[InternalRow]): Iterator[InternalRow] = {
       // Single function with one struct.
       val argOffsets = Array(Array(0))
       val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
@@ -75,6 +79,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
         argOffsets,
         StructType(Array(StructField("struct", outputTypes))),
         sessionLocalTimeZone,
+        largeVarTypes,
         pythonRunnerConf,
         pythonMetrics).compute(batchIter, context.partitionId(), context)
 
@@ -89,6 +94,12 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
         flattenedBatch.setNumRows(batch.numRows())
         flattenedBatch.rowIterator.asScala
       }.map(unsafeProj)
+    }
+
+    if (isBarrier) {
+      child.execute().barrier().mapPartitions(mapper)
+    } else {
+      child.execute().mapPartitionsInternal(mapper)
     }
   }
 }

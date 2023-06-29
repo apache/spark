@@ -321,16 +321,6 @@ private[spark] class AppStatusListener(
     liveUpdate(exec, now)
   }
 
-  private def setStageBlackListStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
-    executorIds.foreach { executorId =>
-      val executorStageSummary = stage.executorSummary(executorId)
-      executorStageSummary.isExcluded = true
-      maybeUpdate(executorStageSummary, now)
-    }
-    stage.excludedExecutors ++= executorIds
-    maybeUpdate(stage, now)
-  }
-
   private def setStageExcludedStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
     executorIds.foreach { executorId =>
       val executorStageSummary = stage.executorSummary(executorId)
@@ -448,6 +438,12 @@ private[spark] class AppStatusListener(
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)) }
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
+    val jobTags = Option(event.properties)
+      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_TAGS)) }
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
+      .toSeq
+      .sorted
     val sqlExecutionId = Option(event.properties)
       .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))
 
@@ -458,6 +454,7 @@ private[spark] class AppStatusListener(
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
+      jobTags,
       numTasks,
       sqlExecutionId)
     liveJobs.put(event.jobId, job)

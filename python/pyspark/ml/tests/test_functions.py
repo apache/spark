@@ -72,6 +72,11 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         with self.assertRaisesRegex(Exception, "Multiple input columns found, but model expected"):
             preds = self.df.withColumn("preds", identity("a", "b")).toPandas()
 
+        # batch_size 1
+        identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=1)
+        preds = self.df.withColumn("preds", identity("a")).toPandas()
+        self.assertTrue(preds["a"].equals(preds["preds"]))
+
     def test_identity_multi(self):
         # single input model
         def make_predict_fn():

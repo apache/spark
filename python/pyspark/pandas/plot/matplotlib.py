@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import warnings
 from distutils.version import LooseVersion
 
 import matplotlib as mat
@@ -837,6 +838,9 @@ def plot_frame(
         labels with "(right)" in the legend
     sort_columns: bool, default is False
         When True, will sort values on plots.
+
+        .. deprecated:: 3.4.0
+
     **kwds : keywords
         Options to pass to matplotlib plotting method
 
@@ -852,6 +856,10 @@ def plot_frame(
       for bar plot layout by `position` keyword.
       From 0 (left/bottom-end) to 1 (right/top-end). Default is 0.5 (center)
     """
+    warnings.warn(
+        "Argument `sort_columns` will be removed in 4.0.0.",
+        FutureWarning,
+    )
 
     return _plot(
         data,

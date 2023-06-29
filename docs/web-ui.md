@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -62,7 +62,7 @@ When you click on a specific job, you can see the detailed information of this j
 
 ### Jobs detail
 
-This page displays the details of a specific job identified by its job ID. 
+This page displays the details of a specific job identified by its job ID.
 * Job Status: (running, succeeded, failed)
 * Number of stages per status (active, pending, completed, skipped, failed)
 * Associated SQL Query: Link to the sql tab for this job
@@ -74,7 +74,7 @@ This page displays the details of a specific job identified by its job ID.
 
 * DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
 * An example of DAG visualization for `sc.parallelize(1 to 100).toDF.count()`
- 
+
 <p style="text-align: center;">
   <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
 </p>
@@ -185,7 +185,7 @@ scala> rdd.persist(MEMORY_ONLY_SER)
 res0: rdd.type = rdd MapPartitionsRDD[1] at range at <console>:27
 
 scala> rdd.count
-res1: Long = 100                                                                
+res1: Long = 100
 
 scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
 df: org.apache.spark.sql.DataFrame = [count: int, name: string]
@@ -318,7 +318,7 @@ scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
 df: org.apache.spark.sql.DataFrame = [count: int, name: string]
 
 scala> df.count
-res0: Long = 3                                                                  
+res0: Long = 3
 
 scala> df.createGlobalTempView("df")
 
@@ -380,8 +380,8 @@ operator shows the number of bytes written by a shuffle.
 
 Here is the list of SQL metrics:
 
-<table class="table">
-<tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr>
+<table class="table table-striped">
+<thead><tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr></thead>
 <tr><td> <code>number of output rows</code> </td><td> the number of output rows of the operator </td><td> Aggregate operators, Join operators, Sample, Range, Scan operators, Filter, etc.</td></tr>
 <tr><td> <code>data size</code> </td><td> the size of broadcast/shuffled/collected data of the operator </td><td> BroadcastExchange, ShuffleExchange, Subquery </td></tr>
 <tr><td> <code>time to collect</code> </td><td> the time spent on collecting data </td><td> BroadcastExchange, Subquery </td></tr>
@@ -411,7 +411,7 @@ Here is the list of SQL metrics:
 </table>
 
 ## Structured Streaming Tab
-When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be 
+When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be
 available on the Web UI. The overview page displays some brief statistics for running and completed
 queries. Also, you can check the latest exception of a failed query. For detailed statistics, please
 click a "run id" in the tables.
@@ -421,13 +421,13 @@ click a "run id" in the tables.
   <img src="img/webui-structured-streaming-detail2.png">
 </p>
 
-The statistics page displays some useful metrics for insight into the status of your streaming 
+The statistics page displays some useful metrics for insight into the status of your streaming
 queries. Currently, it contains the following metrics.
 
 * **Input Rate.** The aggregate (across all sources) rate of data arriving.
 * **Process Rate.** The aggregate (across all sources) rate at which Spark is processing data.
 * **Input Rows.** The aggregate (across all sources) number of records processed in a trigger.
-* **Batch Duration.** The process duration of each batch. 
+* **Batch Duration.** The process duration of each batch.
 * **Operation Duration.** The amount of time taken to perform various operations in milliseconds.
 The tracked operations are listed as follows.
     * addBatch: Time taken to read the micro-batch's input data from the sources, process it, and write the batch's output to the sink. This should take the bulk of the micro-batch's time.
@@ -440,7 +440,7 @@ The tracked operations are listed as follows.
 * **Aggregated Number Of Updated State Rows.** The aggregated number of updated state rows.
 * **Aggregated State Memory Used In Bytes.** The aggregated state memory used in bytes.
 * **Aggregated Number Of State Rows Dropped By Watermark.** The aggregated number of state rows dropped by watermark.
-    
+
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.
 

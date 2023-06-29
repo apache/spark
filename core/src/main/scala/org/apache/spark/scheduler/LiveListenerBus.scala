@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.{List => JList}
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -54,12 +54,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
-
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
-
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
 
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 

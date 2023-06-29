@@ -62,13 +62,21 @@ class GroupedData(PandasGroupedOpsMixin):
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, jgd: JavaObject, df: DataFrame):
         self._jgd = jgd
         self._df = df
         self.session: SparkSession = df.sparkSession
+
+    def __repr__(self) -> str:
+        index = 26  # index to truncate string from the JVM side
+        jvm_string = self._jgd.toString()
+        if jvm_string is not None and len(jvm_string) > index and jvm_string[index] == "[":
+            return f"GroupedData{jvm_string[index:]}"
+        else:
+            return super().__repr__()
 
     @overload
     def agg(self, *exprs: Column) -> DataFrame:
@@ -102,7 +110,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -132,6 +140,9 @@ class GroupedData(PandasGroupedOpsMixin):
         +---+-----+
 
         Group-by name, and count each group.
+
+        >>> df.groupBy(df.name)
+        GroupedData[grouping...: [name...], value: [age: bigint, name: string], type: GroupBy]
 
         >>> df.groupBy(df.name).agg({"*": "count"}).sort("name").show()
         +-----+--------+
@@ -182,7 +193,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -218,7 +229,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -235,7 +246,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -284,7 +295,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -328,7 +339,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -377,7 +388,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -429,6 +440,9 @@ class GroupedData(PandasGroupedOpsMixin):
         because Spark needs to first compute the list of distinct values internally.
 
         .. versionadded:: 1.6.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------

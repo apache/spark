@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapCol
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
@@ -211,6 +211,7 @@ case class CachedRDDBuilder(
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
+  private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
@@ -247,16 +248,17 @@ case class CachedRDDBuilder(
   }
 
   private def isCachedRDDLoaded: Boolean = {
-      _cachedColumnBuffersAreLoaded || {
-        val bmMaster = SparkEnv.get.blockManager.master
-        val rddLoaded = _cachedColumnBuffers.partitions.forall { partition =>
-          bmMaster.getBlockStatus(RDDBlockId(_cachedColumnBuffers.id, partition.index), false)
-            .exists { case(_, blockStatus) => blockStatus.isCached }
-        }
-        if (rddLoaded) {
-          _cachedColumnBuffersAreLoaded = rddLoaded
-        }
-        rddLoaded
+    _cachedColumnBuffersAreLoaded || {
+      // We must make sure the statistics of `sizeInBytes` and `rowCount` are accurate if
+      // `isCachedRDDLoaded` return true. Otherwise, AQE would do a wrong optimization,
+      // e.g., convert a non-empty plan to empty local relation if `rowCount` is 0.
+      // Because the statistics is based on accumulator, here we use an extra accumulator to
+      // track if all partitions are materialized.
+      val rddLoaded = _cachedColumnBuffers.partitions.length == materializedPartitions.value
+      if (rddLoaded) {
+        _cachedColumnBuffersAreLoaded = rddLoaded
+      }
+      rddLoaded
     }
   }
 
@@ -275,10 +277,19 @@ case class CachedRDDBuilder(
         storageLevel,
         cachedPlan.conf)
     }
-    val cached = cb.map { batch =>
-      sizeInBytesStats.add(batch.sizeInBytes)
-      rowCountStats.add(batch.numRows)
-      batch
+    val cached = cb.mapPartitionsInternal { it =>
+      TaskContext.get().addTaskCompletionListener[Unit](_ => {
+        materializedPartitions.add(1L)
+      })
+      new Iterator[CachedBatch] {
+        override def hasNext: Boolean = it.hasNext
+        override def next(): CachedBatch = {
+          val batch = it.next()
+          sizeInBytesStats.add(batch.sizeInBytes)
+          rowCountStats.add(batch.numRows)
+          batch
+        }
+      }
     }.persist(storageLevel)
     cached.setName(cachedName)
     cached
@@ -378,7 +389,17 @@ case class InMemoryRelation(
 
   @volatile var statsOfPlanToCache: Statistics = null
 
-  override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
+
+  override lazy val innerChildren: Seq[SparkPlan] = {
+    // The cachedPlan needs to be cloned here because it does not get cloned when SparkPlan.clone is
+    // called. This is a problem because when the explain output is generated for
+    // a plan it traverses the innerChildren and modifies their TreeNode.tags. If the plan is not
+    // cloned, there is a thread safety issue in the case that two plans with a shared cache
+    // operator have explain called at the same time. The cachedPlan cannot be cloned because
+    // it contains stateful information so we only clone it for the purpose of generating the
+    // explain output.
+    Seq(cachedPlan.clone())
+  }
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),

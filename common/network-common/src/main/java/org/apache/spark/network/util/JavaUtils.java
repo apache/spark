@@ -369,26 +369,6 @@ public class JavaUtils {
   }
 
   /**
-   * Create a temporary directory inside `java.io.tmpdir` with default namePrefix "spark".
-   * The directory will be automatically deleted when the VM shuts down.
-   */
-  public static File createTempDir() throws IOException {
-    return createTempDir(System.getProperty("java.io.tmpdir"), "spark");
-  }
-
-  /**
-   * Create a temporary directory inside the given parent directory. The directory will be
-   * automatically deleted when the VM shuts down.
-   */
-  public static File createTempDir(String root, String namePrefix) throws IOException {
-    if (root == null) root = System.getProperty("java.io.tmpdir");
-    if (namePrefix == null) namePrefix = "spark";
-    File dir = createDirectory(root, namePrefix);
-    dir.deleteOnExit();
-    return dir;
-  }
-
-  /**
    * Create a directory inside the given parent directory with default namePrefix "spark".
    * The directory is guaranteed to be newly created, and is not marked for automatic deletion.
    */

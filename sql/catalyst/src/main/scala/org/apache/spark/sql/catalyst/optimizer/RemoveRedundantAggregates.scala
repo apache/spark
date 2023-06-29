@@ -58,7 +58,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       .aggregateExpressions
       .forall(expr => !expr.exists {
         case ae: AggregateExpression => isDuplicateSensitive(ae)
-        case e => AggregateExpression.isAggregate(e)
+        case _ => false
       })
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(

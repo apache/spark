@@ -32,7 +32,9 @@ dagre-d3.min.js
 graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
+vis-timeline-graph2d.min.js.map
 vis-timeline-graph2d.min.css
+vis-timeline-graph2d.min.css.map
 dataTables.bootstrap4.1.13.2.min.css
 dataTables.bootstrap4.1.13.2.min.js
 dataTables.rowsGroup.js
@@ -73,6 +75,7 @@ db.lck
 build/*
 dist/*
 .*out
+.*out.java21
 .*ipr
 .*iws
 logs
@@ -141,3 +144,5 @@ any.proto
 empty.proto
 .*\.explain
 .*\.proto.bin
+LimitedInputStream.java
+TimSort.java

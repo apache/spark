@@ -139,7 +139,7 @@ private[storage] object BlockInfo {
  *
  * This class is thread-safe.
  */
-private[storage] class BlockInfoManager extends Logging {
+private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false) extends Logging {
 
   private type TaskAttemptId = Long
 
@@ -149,6 +149,12 @@ private[storage] class BlockInfoManager extends Logging {
    * by [[removeBlock()]].
    */
   private[this] val blockInfoWrappers = new ConcurrentHashMap[BlockId, BlockInfoWrapper]
+
+  /**
+   * Record invisible rdd blocks stored in the block manager, entries will be removed when blocks
+   * are marked as visible or blocks are removed by [[removeBlock()]].
+   */
+  private[this] val invisibleRDDBlocks = new mutable.HashSet[RDDBlockId]
 
   /**
    * Stripe used to control multi-threaded access to block information.
@@ -179,6 +185,32 @@ private[storage] class BlockInfoManager extends Logging {
   registerTask(BlockInfo.NON_TASK_WRITER)
 
   // ----------------------------------------------------------------------------------------------
+
+  // Exposed for test only.
+  private[storage] def containsInvisibleRDDBlock(blockId: RDDBlockId): Boolean = {
+    invisibleRDDBlocks.synchronized {
+      invisibleRDDBlocks.contains(blockId)
+    }
+  }
+
+  private[spark] def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    if (trackingCacheVisibility) {
+      invisibleRDDBlocks.synchronized {
+        blockInfoWrappers.containsKey(blockId) && !invisibleRDDBlocks.contains(blockId)
+      }
+    } else {
+      // Always be visible if the feature flag is disabled.
+      true
+    }
+  }
+
+  private[spark] def tryMarkBlockAsVisible(blockId: RDDBlockId): Unit = {
+    if (trackingCacheVisibility) {
+      invisibleRDDBlocks.synchronized {
+        invisibleRDDBlocks.remove(blockId)
+      }
+    }
+  }
 
   /**
    * Called at the start of a task in order to register that task with this [[BlockInfoManager]].
@@ -399,7 +431,19 @@ private[storage] class BlockInfoManager extends Logging {
     try {
       val wrapper = new BlockInfoWrapper(newBlockInfo, lock)
       while (true) {
-        val previous = blockInfoWrappers.putIfAbsent(blockId, wrapper)
+        val previous = if (trackingCacheVisibility) {
+          invisibleRDDBlocks.synchronized {
+            val res = blockInfoWrappers.putIfAbsent(blockId, wrapper)
+            if (res == null) {
+              // Added to invisible blocks if it doesn't exist before.
+              blockId.asRDDId.foreach(invisibleRDDBlocks.add)
+            }
+            res
+          }
+        } else {
+          blockInfoWrappers.putIfAbsent(blockId, wrapper)
+        }
+
         if (previous == null) {
           // New block lock it for writing.
           val result = lockForWriting(blockId, blocking = false)
@@ -502,7 +546,10 @@ private[storage] class BlockInfoManager extends Logging {
         throw new IllegalStateException(
           s"Task $taskAttemptId called remove() on block $blockId without a write lock")
       } else {
-        blockInfoWrappers.remove(blockId)
+        invisibleRDDBlocks.synchronized {
+          blockInfoWrappers.remove(blockId)
+          blockId.asRDDId.foreach(invisibleRDDBlocks.remove)
+        }
         info.readerCount = 0
         info.writerTask = BlockInfo.NO_WRITER
         writeLocksByTask.get(taskAttemptId).remove(blockId)
@@ -525,6 +572,9 @@ private[storage] class BlockInfoManager extends Logging {
     blockInfoWrappers.clear()
     readLocksByTask.clear()
     writeLocksByTask.clear()
+    invisibleRDDBlocks.synchronized {
+      invisibleRDDBlocks.clear()
+    }
   }
 
 }

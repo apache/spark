@@ -541,8 +541,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         isMapGroupsWithState = true, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
     outputMode = Append)
 
-  // stream-stream relation, time interval join can't be followed by any stateful operators
-  assertFailOnGlobalWatermarkLimit(
+  // stream-stream relation, time interval join can be followed by any stateful operators
+  assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream time-interval join followed by agg",
     Aggregate(Nil, aggExprs("c"),
       streamRelation.join(streamRelation, joinType = Inner,
@@ -550,7 +550,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           attributeWithWatermark > attributeWithWatermark + 10))),
     outputMode = Append)
 
-  // stream-stream relation, only equality join can be followed by any stateful operators
+  // stream-stream relation, equality join can be followed by any stateful operators
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream equality join followed by agg",
     Aggregate(Nil, aggExprs("c"),
@@ -601,10 +601,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       outputMode = outputMode)
   }
 
-  // Deduplication, if on event time column, is a stateful operator
-  // and cannot be placed after join
-  assertFailOnGlobalWatermarkLimit(
-    "multiple stateful ops - stream-stream time interval join followed by" +
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - stream-stream time interval join followed by " +
       "dedup (with event-time)",
     Deduplicate(Seq(attributeWithWatermark),
       streamRelation.join(streamRelation, joinType = Inner,
@@ -612,11 +610,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           attributeWithWatermark > attributeWithWatermark + 10))),
     outputMode = Append)
 
-  // Deduplication, if not on event time column,
-  // although it is still a stateful operator,
-  // it can be placed after join
   assertPassOnGlobalWatermarkLimit(
-    "multiple stateful ops - stream-stream time interval join followed by" +
+    "multiple stateful ops - stream-stream time interval join followed by " +
       "dedup (without event-time)",
     Deduplicate(Seq(att),
       streamRelation.join(streamRelation, joinType = Inner,
@@ -624,15 +619,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           attributeWithWatermark > attributeWithWatermark + 10))),
     outputMode = Append)
 
-  // for a stream-stream join followed by a stateful operator,
-  // if the join is keyed on time-interval inequality conditions (inequality on watermarked cols),
-  // should fail.
-  // if the join is keyed on time-interval equality conditions -> should pass
   Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach {
     joinType =>
-      assertFailOnGlobalWatermarkLimit(
+      assertPassOnGlobalWatermarkLimit(
         s"streaming aggregation after " +
-          s"stream-stream $joinType join keyed on time inequality in Append mode are not supported",
+          s"stream-stream $joinType join keyed on time interval in Append mode are not supported",
         streamRelation.join(streamRelation, joinType = joinType,
           condition = Some(attributeWithWatermark === attribute &&
             attributeWithWatermark < attributeWithWatermark + 10))

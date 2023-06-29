@@ -30,7 +30,7 @@ and building from the source.
 Python Versions Supported
 -------------------------
 
-Python 3.7 and above.
+Python 3.8 and above.
 
 
 Using PyPI
@@ -57,7 +57,7 @@ For PySpark with/without a specific Hadoop version, you can install it by using 
 
 .. code-block:: bash
 
-    PYSPARK_HADOOP_VERSION=2 pip install pyspark
+    PYSPARK_HADOOP_VERSION=3 pip install pyspark
 
 The default distribution uses Hadoop 3.3 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
 downloads a different version and uses it in PySpark. Downloading it can take a while depending on
@@ -65,18 +65,17 @@ the network and the mirror chosen. ``PYSPARK_RELEASE_MIRROR`` can be set to manu
 
 .. code-block:: bash
 
-    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org PYSPARK_HADOOP_VERSION=2 pip install
+    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org PYSPARK_HADOOP_VERSION=3 pip install
 
 It is recommended to use ``-v`` option in ``pip`` to track the installation and download status.
 
 .. code-block:: bash
 
-    PYSPARK_HADOOP_VERSION=2 pip install pyspark -v
+    PYSPARK_HADOOP_VERSION=3 pip install pyspark -v
 
 Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 
 - ``without``: Spark pre-built with user-provided Apache Hadoop
-- ``2``: Spark pre-built for Apache Hadoop 2.7
 - ``3``: Spark pre-built for Apache Hadoop 3.3 and later (default)
 
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
@@ -130,17 +129,17 @@ PySpark is included in the distributions available at the `Apache Spark website 
 You can download a distribution you want from the site. After that, uncompress the tar file into the directory where you want
 to install Spark, for example, as below:
 
-.. code-block:: bash
+.. parsed-literal::
 
-    tar xzvf spark-3.3.0-bin-hadoop3.tgz
+    tar xzvf spark-\ |release|\-bin-hadoop3.tgz
 
 Ensure the ``SPARK_HOME`` environment variable points to the directory where the tar file has been extracted.
 Update ``PYTHONPATH`` environment variable such that it can find the PySpark and Py4J under ``SPARK_HOME/python/lib``.
 One example of doing this is shown below:
 
-.. code-block:: bash
+.. parsed-literal::
 
-    cd spark-3.3.0-bin-hadoop3
+    cd spark-\ |release|\-bin-hadoop3
     export SPARK_HOME=`pwd`
     export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
 
@@ -158,10 +157,10 @@ Package                    Minimum supported version Note
 ========================== ========================= ======================================================================================
 `py4j`                     0.10.9.7                  Required
 `pandas`                   1.0.5                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  1.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`                  4.0.0                     Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    1.15                      Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
-`grpc`                     1.48.1                    Required for Spark Connect
-`grpcio-status`            1.48.1                    Required for Spark Connect
+`grpcio`                   1.56.0                    Required for Spark Connect
+`grpcio-status`            1.56.0                    Required for Spark Connect
 `googleapis-common-protos` 1.56.4                    Required for Spark Connect
 ========================== ========================= ======================================================================================
 
@@ -169,10 +168,3 @@ Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
 to |downloading|_.
 
-Note for AArch64 (ARM64) users: PyArrow is required by PySpark SQL, but PyArrow support for AArch64
-is introduced in PyArrow 4.0.0. If PySpark installation fails on AArch64 due to PyArrow
-installation errors, you can install PyArrow >= 4.0.0 as below:
-
-.. code-block:: bash
-
-    pip install "pyarrow>=4.0.0" --prefer-binary

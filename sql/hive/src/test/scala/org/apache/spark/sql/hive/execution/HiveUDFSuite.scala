@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.UDF
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
@@ -737,9 +738,43 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           e,
           "FAILED_EXECUTE_UDF",
           parameters = Map(
-            "functionName" -> s"${classOf[GenericUDFAssertTrue].getName}",
+            "functionName" ->
+              "`org`.`apache`.`hadoop`.`hive`.`ql`.`udf`.`generic`.`GenericUDFAssertTrue`",
             "signature" -> "boolean",
             "result" -> "void"))
+      }
+    }
+  }
+
+  test("SPARK-42052: HiveSimpleUDF Codegen Support") {
+    withUserDefinedFunction("CodeGenHiveSimpleUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveSimpleUDF AS '${classOf[UDFStringString].getName}'")
+      withTable("HiveSimpleUDFTable") {
+        sql(s"create table HiveSimpleUDFTable as select 'Spark SQL' as v")
+        val df = sql("SELECT CodeGenHiveSimpleUDF('Hello', v) from HiveSimpleUDFTable")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec])
+        checkAnswer(df, Seq(Row("Hello Spark SQL")))
+      }
+    }
+  }
+
+  test("SPARK-42052: HiveSimpleUDF Codegen Support w/ execution failure") {
+    withUserDefinedFunction("CodeGenHiveSimpleUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveSimpleUDF AS '${classOf[SimpleUDFAssertTrue].getName}'")
+      withTable("HiveSimpleUDFTable") {
+        sql(s"create table HiveSimpleUDFTable as select false as v")
+        val df = sql("SELECT CodeGenHiveSimpleUDF(v) from HiveSimpleUDFTable")
+        checkError(
+          exception = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException],
+          errorClass = "FAILED_EXECUTE_UDF",
+          parameters = Map(
+            "functionName" ->
+              "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",
+            "signature" -> "boolean",
+            "result" -> "boolean"
+          )
+        )
       }
     }
   }
@@ -842,5 +877,14 @@ class ListFiles extends UDF {
   def evaluate(path: String): JList[String] = {
     val fileArray = new File(path).list()
     if (fileArray != null) Arrays.asList(fileArray: _*) else new ArrayList[String]()
+  }
+}
+
+class SimpleUDFAssertTrue extends UDF {
+  def evaluate(condition: Boolean): Boolean = {
+    if (!condition) {
+      throw new HiveException("ASSERT_TRUE(): assertion failed.");
+    }
+    condition
   }
 }

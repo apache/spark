@@ -46,15 +46,21 @@ object UnsafeRowUtils {
    *     check if the unused bits in the field are all zeros. The UnsafeRowWriter's write() methods
    *     make this guarantee.
    * - Check the total length of the row.
+   * @param row The input UnsafeRow to be validated
+   * @param expectedSchema The expected schema that should match with the UnsafeRow
+   * @return None if all the checks pass. An error message if the row is not matched with the schema
    */
-  def validateStructuralIntegrity(row: UnsafeRow, expectedSchema: StructType): Boolean = {
+  private def validateStructuralIntegrityWithReasonImpl(
+      row: UnsafeRow, expectedSchema: StructType): Option[String] = {
     if (expectedSchema.fields.length != row.numFields) {
-      return false
+      return Some(s"Field length mismatch: " +
+        s"expected: ${expectedSchema.fields.length}, actual: ${row.numFields}")
     }
     val bitSetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields)
     val rowSizeInBytes = row.getSizeInBytes
     if (expectedSchema.fields.length > 0 && bitSetWidthInBytes >= rowSizeInBytes) {
-      return false
+      return Some(s"rowSizeInBytes should not exceed bitSetWidthInBytes, " +
+        s"bitSetWidthInBytes: $bitSetWidthInBytes, rowSizeInBytes: $rowSizeInBytes")
     }
     var varLenFieldsSizeInBytes = 0
     expectedSchema.fields.zipWithIndex.foreach {
@@ -62,21 +68,31 @@ object UnsafeRowUtils {
         val (offset, size) = getOffsetAndSize(row, index)
         if (size < 0 ||
             offset < bitSetWidthInBytes + 8 * row.numFields || offset + size > rowSizeInBytes) {
-          return false
+          return Some(s"Variable-length field validation error: field: $field, index: $index")
         }
         varLenFieldsSizeInBytes += size
       case (field, index) if UnsafeRow.isFixedLength(field.dataType) && !row.isNullAt(index) =>
         field.dataType match {
           case BooleanType =>
-            if ((row.getLong(index) >> 1) != 0L) return false
+            if ((row.getLong(index) >> 1) != 0L) {
+              return Some(s"Fixed-length field validation error: field: $field, index: $index")
+            }
           case ByteType =>
-            if ((row.getLong(index) >> 8) != 0L) return false
+            if ((row.getLong(index) >> 8) != 0L) {
+              return Some(s"Fixed-length field validation error: field: $field, index: $index")
+            }
           case ShortType =>
-            if ((row.getLong(index) >> 16) != 0L) return false
+            if ((row.getLong(index) >> 16) != 0L) {
+              return Some(s"Fixed-length field validation error: field: $field, index: $index")
+            }
           case IntegerType =>
-            if ((row.getLong(index) >> 32) != 0L) return false
+            if ((row.getLong(index) >> 32) != 0L) {
+              return Some(s"Fixed-length field validation error: field: $field, index: $index")
+            }
           case FloatType =>
-            if ((row.getLong(index) >> 32) != 0L) return false
+            if ((row.getLong(index) >> 32) != 0L) {
+              return Some(s"Fixed-length field validation error: field: $field, index: $index")
+            }
           case _ =>
         }
       case (field, index) if row.isNullAt(index) =>
@@ -94,17 +110,37 @@ object UnsafeRowUtils {
             val (offset, size) = getOffsetAndSize(row, index)
             if (size != 0 || offset != 0 &&
                 (offset < bitSetWidthInBytes + 8 * row.numFields || offset > rowSizeInBytes)) {
-              return false
+              return Some(s"Variable-length decimal field special case validation error: " +
+                s"field: $field, index: $index")
             }
           case _ =>
-            if (row.getLong(index) != 0L) return false
+            if (row.getLong(index) != 0L) {
+              return Some(s"Variable-length offset-size validation error: " +
+                s"field: $field, index: $index")
+            }
         }
       case _ =>
     }
     if (bitSetWidthInBytes + 8 * row.numFields + varLenFieldsSizeInBytes > rowSizeInBytes) {
-      return false
+      return Some(s"Row total length invalid: " +
+        s"calculated: ${bitSetWidthInBytes + 8 * row.numFields + varLenFieldsSizeInBytes} " +
+        s"rowSizeInBytes: $rowSizeInBytes")
     }
-    true
+    None
+  }
+
+  /**
+   * Wrapper of validateStructuralIntegrityWithReasonImpl, add more information for debugging
+   * @param row The input UnsafeRow to be validated
+   * @param expectedSchema The expected schema that should match with the UnsafeRow
+   * @return None if all the checks pass. An error message if the row is not matched with the schema
+   */
+  def validateStructuralIntegrityWithReason(
+      row: UnsafeRow, expectedSchema: StructType): Option[String] = {
+    validateStructuralIntegrityWithReasonImpl(row, expectedSchema).map {
+      errorMessage => s"Error message is: $errorMessage, " +
+          s"UnsafeRow status: ${getStructuralIntegrityStatus(row, expectedSchema)}"
+    }
   }
 
   def getOffsetAndSize(row: UnsafeRow, index: Int): (Int, Int) = {
@@ -138,5 +174,27 @@ object UnsafeRowUtils {
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS => true
     case CalendarIntervalType => true
     case _ => false
+  }
+
+  def getStructuralIntegrityStatus(row: UnsafeRow, expectedSchema: StructType): String = {
+    val minLength = Math.min(row.numFields(), expectedSchema.fields.length)
+    val fieldStatusArr = expectedSchema.fields.take(minLength).zipWithIndex.map {
+      case (field, index) =>
+        val offsetAndSizeStr = if (!UnsafeRow.isFixedLength(field.dataType)) {
+          val (offset, size) = getOffsetAndSize(row, index)
+          s"offset: $offset, size: $size"
+        } else {
+          "" // offset and size doesn't make sense for fixed length field
+        }
+        s"[UnsafeRowFieldStatus] index: $index, " +
+          s"expectedFieldType: ${field.dataType}, isNull: ${row.isNullAt(index)}, " +
+          s"isFixedLength: ${UnsafeRow.isFixedLength(field.dataType)}. $offsetAndSizeStr"
+    }
+
+    s"[UnsafeRowStatus] expectedSchema: $expectedSchema, " +
+      s"expectedSchemaNumFields: ${expectedSchema.fields.length}, numFields: ${row.numFields}, " +
+      s"bitSetWidthInBytes: ${UnsafeRow.calculateBitSetWidthInBytes(row.numFields)}, " +
+      s"rowSizeInBytes: ${row.getSizeInBytes}\nfieldStatus:\n" +
+      fieldStatusArr.mkString("\n")
   }
 }

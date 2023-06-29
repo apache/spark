@@ -19,14 +19,15 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.status.ApplicationInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.Utils._
 
 
-class ApplicationInfoWrapperSerializer extends ProtobufSerDe[ApplicationInfoWrapper] {
+private[protobuf] class ApplicationInfoWrapperSerializer
+  extends ProtobufSerDe[ApplicationInfoWrapper] {
 
   override def serialize(j: ApplicationInfoWrapper): Array[Byte] = {
     val jobData = serializeApplicationInfo(j.info)

@@ -69,11 +69,10 @@ from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
 from pyspark._globals import _NoValue  # noqa: F401
 
-T = TypeVar("T")
-F = TypeVar("F", bound=Callable)
+_F = TypeVar("_F", bound=Callable)
 
 
-def since(version: Union[str, float]) -> Callable[[F], F]:
+def since(version: Union[str, float]) -> Callable[[_F], _F]:
     """
     A decorator that annotates a function to append the version of Spark the function was added.
     """
@@ -81,7 +80,7 @@ def since(version: Union[str, float]) -> Callable[[F], F]:
 
     indent_p = re.compile(r"\n( +)")
 
-    def deco(f: F) -> F:
+    def deco(f: _F) -> _F:
         assert f.__doc__ is not None
 
         indents = indent_p.findall(f.__doc__)
@@ -93,11 +92,11 @@ def since(version: Union[str, float]) -> Callable[[F], F]:
 
 
 def copy_func(
-    f: F,
+    f: _F,
     name: Optional[str] = None,
     sinceversion: Optional[Union[str, float]] = None,
     doc: Optional[str] = None,
-) -> F:
+) -> _F:
     """
     Returns a function with same code, globals, defaults, closure, and
     name (or provide a new name).
@@ -119,10 +118,10 @@ def copy_func(
         fn.__doc__ = doc
     if sinceversion is not None:
         fn = since(sinceversion)(fn)
-    return cast(F, fn)
+    return cast(_F, fn)
 
 
-def keyword_only(func: F) -> F:
+def keyword_only(func: _F) -> _F:
     """
     A decorator that forces keyword arguments in the wrapped method
     and saves actual input keyword arguments in `_input_kwargs`.
@@ -139,7 +138,7 @@ def keyword_only(func: F) -> F:
         self._input_kwargs = kwargs
         return func(self, **kwargs)
 
-    return cast(F, wrapper)
+    return cast(_F, wrapper)
 
 
 # To avoid circular dependencies

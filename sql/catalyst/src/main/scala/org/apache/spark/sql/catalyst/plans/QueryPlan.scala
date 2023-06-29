@@ -239,6 +239,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * A variant of [[transformAllExpressions]] which considers plan nodes inside subqueries as well.
+   */
+  def transformAllExpressionsWithSubqueries(
+    rule: PartialFunction[Expression, Expression]): this.type = {
+    transformWithSubqueries {
+      case q => q.transformExpressions(rule).asInstanceOf[PlanType]
+    }.asInstanceOf[this.type]
+  }
+
+  /**
    * Returns the result of running [[transformExpressionsWithPruning]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
    */
@@ -297,21 +307,28 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           newChild
         }
 
-        val attrMappingForCurrentPlan = attrMapping.filter {
-          // The `attrMappingForCurrentPlan` is used to replace the attributes of the
-          // current `plan`, so the `oldAttr` must be part of `plan.references`.
-          case (oldAttr, _) => plan.references.contains(oldAttr)
-        }
+        plan match {
+          case _: ReferenceAllColumns[_] =>
+            // It's dangerous to call `references` on an unresolved `ReferenceAllColumns`, and
+            // it's unnecessary to rewrite its attributes that all of references come from children
 
-        if (attrMappingForCurrentPlan.nonEmpty) {
-          assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
-            .exists(_._2.map(_._2.exprId).distinct.length > 1),
-            "Found duplicate rewrite attributes")
+          case _ =>
+            val attrMappingForCurrentPlan = attrMapping.filter {
+              // The `attrMappingForCurrentPlan` is used to replace the attributes of the
+              // current `plan`, so the `oldAttr` must be part of `plan.references`.
+              case (oldAttr, _) => plan.references.contains(oldAttr)
+            }
 
-          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
-          // Using attrMapping from the children plans to rewrite their parent node.
-          // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-          newPlan = newPlan.rewriteAttrs(attributeRewrites)
+            if (attrMappingForCurrentPlan.nonEmpty) {
+              assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
+                .exists(_._2.map(_._2.exprId).distinct.length > 1),
+                s"Found duplicate rewrite attributes.\n$plan")
+
+              val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
+              // Using attrMapping from the children plans to rewrite their parent node.
+              // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
+              newPlan = newPlan.rewriteAttrs(attributeRewrites)
+            }
         }
 
         val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {

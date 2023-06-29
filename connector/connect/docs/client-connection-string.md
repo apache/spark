@@ -58,7 +58,8 @@ sc://hostname:port/;param1=value;param2=value
     <td>token</td>
     <td>String</td>
     <td>When this param is set in the URL, it will enable standard
-    bearer token authentication using GRPC. By default this value is not set.</td>
+    bearer token authentication using GRPC. By default this value is not set.
+    Setting this value enables SSL.</td>
     <td><pre>token=ABCDEFGH</pre></td>
   </tr>
   <tr>
@@ -80,6 +81,15 @@ sc://hostname:port/;param1=value;param2=value
     <td>
     <pre>user_id=Martin</pre>
     </td>
+  </tr>
+  <tr>
+    <td>user_agent</td>
+    <td>String</td>
+    <td>The user agent acting on behalf of the user, typically applications
+    that use Spark Connect to implement its functionality and execute Spark
+    requests on behalf of the user.<br/>
+    <i>Default: </i><pre>_SPARK_CONNECT_PYTHON</pre> in the Python client</td>
+    <td><pre>user_agent=my_data_query_app</pre></td>
   </tr>
 </table>
 

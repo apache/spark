@@ -160,3 +160,14 @@ select array_append(CAST(null AS ARRAY<String>), CAST(null as String));
 select array_append(array(), 1);
 select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
 select array_append(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- function array_prepend
+select array_prepend(array(1, 2, 3), 4);
+select array_prepend(array('a', 'b', 'c'), 'd');
+select array_prepend(array(1, 2, 3, NULL), NULL);
+select array_prepend(array('a', 'b', 'c', NULL), NULL);
+select array_prepend(CAST(null AS ARRAY<String>), 'a');
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_prepend(array(), 1);
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));

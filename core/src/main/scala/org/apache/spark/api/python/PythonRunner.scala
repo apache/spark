@@ -44,6 +44,7 @@ private[spark] object PythonEvalType {
   val NON_UDF = 0
 
   val SQL_BATCHED_UDF = 100
+  val SQL_ARROW_BATCHED_UDF = 101
 
   val SQL_SCALAR_PANDAS_UDF = 200
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
@@ -55,9 +56,12 @@ private[spark] object PythonEvalType {
   val SQL_MAP_ARROW_ITER_UDF = 207
   val SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE = 208
 
+  val SQL_TABLE_UDF = 300
+
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
     case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
+    case SQL_ARROW_BATCHED_UDF => "SQL_ARROW_BATCHED_UDF"
     case SQL_SCALAR_PANDAS_UDF => "SQL_SCALAR_PANDAS_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
@@ -67,6 +71,7 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_PANDAS_UDF => "SQL_COGROUPED_MAP_PANDAS_UDF"
     case SQL_MAP_ARROW_ITER_UDF => "SQL_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE => "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE"
+    case SQL_TABLE_UDF => "SQL_TABLE_UDF"
   }
 }
 
@@ -135,6 +140,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val execCoresProp = Option(context.getLocalProperty(EXECUTOR_CORES_LOCAL_PROPERTY))
     val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
+    // If OMP_NUM_THREADS is not explicitly set, override it with the number of task cpus.
+    // See SPARK-42613 for details.
+    if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
+      envVars.put("OMP_NUM_THREADS", conf.get("spark.task.cpus", "1"))
+    }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
@@ -697,7 +707,12 @@ private[spark] object PythonRunner {
   // already running worker monitor threads for worker and task attempts ID pairs
   val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
 
+  private var printPythonInfo: AtomicBoolean = new AtomicBoolean(true)
+
   def apply(func: PythonFunction): PythonRunner = {
+    if (printPythonInfo.compareAndSet(true, false)) {
+      PythonUtils.logPythonInfo(func.pythonExec)
+    }
     new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))
   }
 }

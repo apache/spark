@@ -25,7 +25,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.connect.common.UdfPacket
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, UdfPacket}
 import org.apache.spark.util.Utils
 
 /**
@@ -101,11 +101,16 @@ case class ScalarUserDefinedFunction(
     override val deterministic: Boolean)
     extends UserDefinedFunction {
 
-  private[this] lazy val udf = {
+  // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
+  private[this] val udf = {
     val udfPacketBytes = Utils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     val scalaUdfBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(udfPacketBytes))
+      // Send the real inputs and return types to obtain the types without deser the udf bytes.
+      .addAllInputTypes(
+        inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType).asJava)
+      .setOutputType(DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType))
       .setNullable(nullable)
 
     scalaUdfBuilder.build()
@@ -137,8 +142,21 @@ object ScalarUserDefinedFunction {
 
     ScalarUserDefinedFunction(
       function = function,
-      inputEncoders = parameterTypes.map(tag => ScalaReflection.encoderFor(tag)),
-      outputEncoder = ScalaReflection.encoderFor(returnType),
+      // Input can be a row because the input data schema can be found from the plan.
+      inputEncoders =
+        parameterTypes.map(tag => ScalaReflection.encoderForWithRowEncoderSupport(tag)),
+      // Output cannot be a row as there is no good way to get the return data type.
+      outputEncoder = ScalaReflection.encoderFor(returnType))
+  }
+
+  private[sql] def apply(
+      function: AnyRef,
+      inputEncoders: Seq[AgnosticEncoder[_]],
+      outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      function = function,
+      inputEncoders = inputEncoders,
+      outputEncoder = outputEncoder,
       name = None,
       nullable = true,
       deterministic = true)

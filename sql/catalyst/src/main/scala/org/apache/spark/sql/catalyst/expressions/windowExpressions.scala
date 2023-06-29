@@ -376,8 +376,10 @@ object WindowFunctionType {
 
   def functionType(windowExpression: NamedExpression): WindowFunctionType = {
     val t = windowExpression.collectFirst {
+      case udf: PythonFuncExpression if PythonUDF.isWindowPandasUDF(udf) => Python
+      // We should match `AggregateFunction` after the python function, as `PythonUDAF` extends
+      // `AggregateFunction` but the function type should be Python.
       case _: WindowFunction | _: AggregateFunction => SQL
-      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
     }
 
     // Normally a window expression would either have a SQL window function, a SQL
@@ -600,7 +602,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
-    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
+    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError(prettyName)
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
@@ -1162,19 +1164,19 @@ case class LastNonNull(input: Expression)
 
   override def dataType: DataType = input.dataType
 
-  private val last = AttributeReference("last", dataType, nullable = true)()
+  private lazy val last = AttributeReference("last", dataType, nullable = true)()
 
   override def aggBufferAttributes: Seq[AttributeReference] = last :: Nil
 
-  override val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
+  override lazy val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = {
     Seq(
       /* last = */ If(IsNull(input), last, input)
     )
   }
 
-  override val evaluateExpression: Expression = last
+  override lazy val evaluateExpression: Expression = last
 
   override def prettyName: String = "last_non_null"
 

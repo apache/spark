@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, RepartitionOperation, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, REPARTITION_OPERATION, TreePattern}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 
 /**
  * The LogicalPlan wrapper for a [[QueryStageExec]], or a snippet of physical plan containing
@@ -53,8 +54,14 @@ case class LogicalQueryStage(
   override def computeStats(): Statistics = {
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.
     val physicalStats = physicalPlan.collectFirst {
-      case s: QueryStageExec => s
-    }.flatMap(_.computeStats())
+      case a: BaseAggregateExec if a.groupingExpressions.isEmpty =>
+        a.collectFirst {
+          case s: QueryStageExec => s.computeStats()
+        }.flatten.map { stat =>
+          if (stat.rowCount.contains(0)) stat.copy(rowCount = Some(1)) else stat
+        }
+      case s: QueryStageExec => s.computeStats()
+    }.flatten
     if (physicalStats.isDefined) {
       logDebug(s"Physical stats available as ${physicalStats.get} for plan: $physicalPlan")
     } else {

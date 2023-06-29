@@ -128,6 +128,7 @@ trait WindowExecBase extends UnaryExecNode {
             TimestampAddYMInterval(expr, boundOffset, Some(timeZone))
           case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) =>
             TimeAdd(expr, boundOffset, Some(timeZone))
+          case (d: DecimalType, _: DecimalType) => DecimalAddNoOverflowCheck(expr, boundOffset, d)
           case (a, b) if a == b => Add(expr, boundOffset)
         }
         val bound = MutableProjection.create(boundExpr :: Nil, child.output)
@@ -189,7 +190,6 @@ trait WindowExecBase extends UnaryExecNode {
                 case _ => collect("AGGREGATE", frame, e, f)
               }
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: PythonUDF => collect("AGGREGATE", frame, e, f)
             case f => throw new IllegalStateException(s"Unsupported window function: $f")
           }
         case _ =>
@@ -209,7 +209,7 @@ trait WindowExecBase extends UnaryExecNode {
         // in a single Window physical node. Therefore, we can assume no SQL aggregation
         // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
         // aggregation function in a single physical node.
-        def processor = if (functions.exists(_.isInstanceOf[PythonUDF])) {
+        def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
           AggregateProcessor(

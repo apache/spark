@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Catalog methods for working with Tables.
@@ -77,6 +79,11 @@ public interface TableCatalog extends CatalogPlugin {
    * A prefix used to pass OPTIONS in table properties
    */
   String OPTION_PREFIX = "option.";
+
+  /**
+   * @return the set of capabilities for this TableCatalog
+   */
+  default Set<TableCatalogCapability> capabilities() { return Collections.emptySet(); }
 
   /**
    * List the tables in a namespace from the catalog.
@@ -190,6 +197,14 @@ public interface TableCatalog extends CatalogPlugin {
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
+  }
+
+  /**
+   * If true, mark all the fields of the query schema as nullable when executing
+   * CREATE/REPLACE TABLE ... AS SELECT ... and creating the table.
+   */
+  default boolean useNullableQuerySchema() {
+    return true;
   }
 
   /**

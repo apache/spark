@@ -44,6 +44,8 @@ case class JDBCScanBuilder(
     with SupportsPushDownTopN
     with Logging {
 
+  private val dialect = JdbcDialects.get(jdbcOptions.url)
+
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
   private var pushedPredicate = Array.empty[Predicate]
@@ -60,7 +62,6 @@ case class JDBCScanBuilder(
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val dialect = JdbcDialects.get(jdbcOptions.url)
       val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
       this.pushedPredicate = pushed
       unSupported
@@ -88,7 +89,6 @@ case class JDBCScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
-    val dialect = JdbcDialects.get(jdbcOptions.url)
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
@@ -126,8 +126,7 @@ case class JDBCScanBuilder(
       upperBound: Double,
       withReplacement: Boolean,
       seed: Long): Boolean = {
-    if (jdbcOptions.pushDownTableSample &&
-      JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
+    if (jdbcOptions.pushDownTableSample && dialect.supportsTableSample) {
       this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
       return true
     }
@@ -135,7 +134,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit) {
+    if (jdbcOptions.pushDownLimit && dialect.supportsLimit) {
       pushedLimit = limit
       return true
     }
@@ -143,7 +142,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushOffset(offset: Int): Boolean = {
-    if (jdbcOptions.pushDownOffset && !isPartiallyPushed) {
+    if (jdbcOptions.pushDownOffset && !isPartiallyPushed && dialect.supportsOffset) {
       // Spark pushes down LIMIT first, then OFFSET. In SQL statements, OFFSET is applied before
       // LIMIT. Here we need to adjust the LIMIT value to match SQL statements.
       if (pushedLimit > 0) {
@@ -157,7 +156,6 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
-      val dialect = JdbcDialects.get(jdbcOptions.url)
       val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit

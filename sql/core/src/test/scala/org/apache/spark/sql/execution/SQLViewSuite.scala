@@ -87,9 +87,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             },
             errorClass = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
-              "obj" -> "view",
+              "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
-              "tempObj" -> "view",
+              "tempObj" -> "VIEW",
               "tempObjName" -> "`temp_jtv1`"))
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
@@ -99,9 +99,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             },
             errorClass = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
-              "obj" -> "view",
+              "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
-              "tempObj" -> "view",
+              "tempObj" -> "VIEW",
               "tempObjName" -> "`global_temp`.`global_temp_jtv1`"))
         }
       }
@@ -203,10 +203,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
 
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $viewName SELECT 1")
-      }.getMessage
-      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $viewName SELECT 1")
+        },
+        errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+        parameters = Map.empty
+      )
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
@@ -944,7 +947,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`C1`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v1",
@@ -975,7 +978,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               sqlState = None,
               parameters = Map(
                 "objectName" -> "`a`",
-                "proposal" -> "`spark_catalog`.`default`.`t`.`c1`"),
+                "proposal" -> "`c1`"),
               context = ExpectedContext(
                 objectType = "VIEW",
                 objectName = "spark_catalog.default.v4",

@@ -17,71 +17,68 @@
 
 package org.apache.spark.util.collection
 
-import java.util.NoSuchElementException
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 
 class PercentileHeapSuite extends SparkFunSuite {
 
-  test("If no numbers in PercentileHeap, NoSuchElementException is thrown.") {
-    val medianHeap = new PercentileHeap()
+  test("When PercentileHeap is empty, NoSuchElementException is thrown.") {
+    val medianHeap = new PercentileHeap(0.5)
     intercept[NoSuchElementException] {
       medianHeap.percentile
     }
   }
 
-  test("Median should be correct when size of PercentileHeap is even") {
-    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-    val medianHeap = new PercentileHeap()
-    array.foreach(medianHeap.insert(_))
-    assert(medianHeap.size() === 10)
-    assert(medianHeap.smallerSize() === 5)
-    assert(medianHeap.percentile === 4.5)
+  private def percentile(nums: Seq[Int], percentage: Double): Double = {
+    val p = (nums.length * percentage).toInt
+    nums.sorted.toIndexedSeq(p)
   }
 
-  test("Median should be correct when size of PercentileHeap is odd") {
-    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8)
-    val medianHeap = new PercentileHeap()
-    array.foreach(medianHeap.insert(_))
-    assert(medianHeap.size() === 9)
-    assert(medianHeap.smallerSize() === 4)
-    assert(medianHeap.percentile === 4)
+  private def testPercentileFor(nums: Seq[Int], percentage: Double) = {
+    val h = new PercentileHeap(percentage)
+    Random.shuffle(nums).foreach(h.insert(_))
+    assert(h.size == nums.length)
+    assert(h.percentile == percentile(nums, percentage))
   }
 
-  test("Median should be correct though there are duplicated numbers inside.") {
-    val array = Array(0, 0, 1, 1, 2, 3, 4)
-    val medianHeap = new PercentileHeap()
-    array.foreach(medianHeap.insert(_))
-    assert(medianHeap.size === 7)
-    assert(medianHeap.smallerSize() === 3)
-    assert(medianHeap.percentile === 1)
+  private val tests = Seq(
+    0 until 1,
+    0 until 2,
+    0 until 11,
+    0 until 42,
+    0 until 100
+  )
+
+  for (t <- tests) {
+    for (p <- Seq(1, 50, 99)) {
+      test(s"$p% of ${t.mkString(",")}") {
+        testPercentileFor(t, p / 100d)
+      }
+    }
   }
 
-  test("Median should be correct when input data is skewed.") {
-    val medianHeap = new PercentileHeap()
-    (0 until 10).foreach(_ => medianHeap.insert(5))
-    assert(medianHeap.percentile === 5)
-    (0 until 100).foreach(_ => medianHeap.insert(10))
-    assert(medianHeap.percentile === 10)
-    (0 until 1000).foreach(_ => medianHeap.insert(0))
-    assert(medianHeap.percentile === 0)
-  }
+  ignore("benchmark") {
+    val input: Seq[Int] = 0 until 1000
+    val numRuns = 1000
 
-  test("Percentile should be correct when size of PercentileHeap is even") {
-    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-    val percentileMap = new PercentileHeap(0.7)
-    array.foreach(percentileMap.insert(_))
-    assert(percentileMap.size() === 10)
-    assert(percentileMap.smallerSize() == 7)
-    assert(percentileMap.percentile === 6.5)
-  }
+    def kernel(): Long = {
+      val shuffled = Random.shuffle(input).toArray
+      val start = System.nanoTime()
+      val h = new PercentileHeap(0.95)
+      shuffled.foreach { x =>
+        h.insert(x)
+        for (_ <- 0 until h.size) h.percentile
+      }
+      System.nanoTime() - start
+    }
+    for (_ <- 0 until numRuns) kernel()  // warmup
 
-  test("Percentile should be correct when size of PercentileHeap is odd") {
-    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8)
-    val percentileMap = new PercentileHeap(0.7)
-    array.foreach(percentileMap.insert(_))
-    assert(percentileMap.size() === 9)
-    assert(percentileMap.smallerSize() == 6)
-    assert(percentileMap.percentile === 6)
+    var elapsed: Long = 0
+    for (_ <- 0 until numRuns) elapsed += kernel()
+    val perOp = elapsed / (numRuns * input.length)
+    // scalastyle:off println
+    println(s"$perOp ns per op on heaps of size ${input.length}")
+    // scalastyle:on println
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -88,9 +89,9 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
               exception = e,
               errorClass = "INVALID_TEMP_OBJ_REFERENCE",
               parameters = Map(
-                "obj" -> "view",
+                "obj" -> "VIEW",
                 "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
-                "tempObj" -> "function",
+                "tempObj" -> "FUNCTION",
                 "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
@@ -143,7 +144,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // Check the output rows.
         checkAnswer(df, Row(1, 2))
         // Check the output schema.
-        assert(df.schema.sameType(view.schema))
+        assert(DataTypeUtils.sameType(df.schema, view.schema))
       }
     }
   }

@@ -20,11 +20,11 @@ package org.apache.hive.service.auth;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 
@@ -57,6 +57,7 @@ public final class HttpAuthUtils {
   private static final String COOKIE_KEY_VALUE_SEPARATOR = "=";
   private static final Set<String> COOKIE_ATTRIBUTES =
     new HashSet<String>(Arrays.asList(COOKIE_CLIENT_USER_NAME, COOKIE_CLIENT_RAND_NUMBER));
+  private static final SecureRandom random = new SecureRandom();
 
   /**
    * @return Stringified Base64 encoded kerberosAuthHeader on success
@@ -95,7 +96,7 @@ public final class HttpAuthUtils {
     sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName)
       .append(COOKIE_ATTR_SEPARATOR);
     sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR)
-      .append((new Random(System.currentTimeMillis())).nextLong());
+      .append(random.nextLong());
     return sb.toString();
   }
 

@@ -32,7 +32,7 @@ import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.AvroUtils.{toFieldStr, AvroMatchedField}
+import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -218,6 +218,17 @@ private[sql] class AvroSerializer(
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
+      case (st: StructType, UNION) =>
+        val unionConvertor = newComplexUnionConverter(st, avroType, catalystPath, avroPath)
+        val numFields = st.length
+        (getter, ordinal) => unionConvertor(getter.getStruct(ordinal, numFields))
+
+      case (DoubleType, UNION) if nonNullUnionTypes(avroType) == Set(FLOAT, DOUBLE) =>
+        (getter, ordinal) => getter.getDouble(ordinal)
+
+      case (LongType, UNION) if nonNullUnionTypes(avroType) == Set(INT, LONG) =>
+        (getter, ordinal) => getter.getLong(ordinal)
+
       case (MapType(kt, vt, valueContainsNull), MAP) if kt == StringType =>
         val valueConverter = newConverter(
           vt, resolveNullableType(avroType.getValueType, valueContainsNull),
@@ -288,13 +299,58 @@ private[sql] class AvroSerializer(
   }
 
   /**
+   * Complex unions map to struct types where field names are member0, member1, etc.
+   * This is consistent with the behavior in [[SchemaConverters]] and when converting between Avro
+   * and Parquet.
+   */
+  private def newComplexUnionConverter(
+      catalystStruct: StructType,
+      unionType: Schema,
+      catalystPath: Seq[String],
+      avroPath: Seq[String]): InternalRow => Any = {
+    val nonNullTypes = nonNullUnionBranches(unionType)
+    val expectedFieldNames = nonNullTypes.indices.map(i => s"member$i")
+    val catalystFieldNames = catalystStruct.fieldNames.toSeq
+    if (positionalFieldMatch) {
+      if (expectedFieldNames.length != catalystFieldNames.length) {
+        throw new IncompatibleSchemaException(s"Generic Avro union at ${toFieldStr(avroPath)} " +
+          s"does not match the SQL schema at ${toFieldStr(catalystPath)}.  It expected the " +
+          s"${expectedFieldNames.length} members but got ${catalystFieldNames.length}")
+      }
+    } else {
+      if (catalystFieldNames != expectedFieldNames) {
+        throw new IncompatibleSchemaException(s"Generic Avro union at ${toFieldStr(avroPath)} " +
+          s"does not match the SQL schema at ${toFieldStr(catalystPath)}.  It expected the " +
+          s"following members ${expectedFieldNames.mkString("(", ", ", ")")} but got " +
+          s"${catalystFieldNames.mkString("(", ", ", ")")}")
+      }
+    }
+
+    val unionBranchConverters = nonNullTypes.zip(catalystStruct).map { case (unionBranch, cf) =>
+      newConverter(cf.dataType, unionBranch, catalystPath :+ cf.name, avroPath :+ cf.name)
+    }.toArray
+
+    val numBranches = catalystStruct.length
+    row: InternalRow => {
+      var idx = 0
+      var retVal: Any = null
+      while (idx < numBranches && retVal == null) {
+        if (!row.isNullAt(idx)) {
+          retVal = unionBranchConverters(idx).apply(row, idx)
+        }
+        idx += 1
+      }
+      retVal
+    }
+  }
+
+  /**
    * Resolve a possibly nullable Avro Type.
    *
-   * An Avro type is nullable when it is a [[UNION]] of two types: one null type and another
-   * non-null type. This method will check the nullability of the input Avro type and return the
-   * non-null type within when it is nullable. Otherwise it will return the input Avro type
-   * unchanged. It will throw an [[UnsupportedAvroTypeException]] when the input Avro type is an
-   * unsupported nullable type.
+   * An Avro type is nullable when it is a [[UNION]] which contains a null type.  This method will
+   * check the nullability of the input Avro type.
+   * Returns the non-null type within the union when it contains only 1 non-null type.
+   * Otherwise it will return the input Avro type unchanged.
    *
    * It will also log a warning message if the nullability for Avro and catalyst types are
    * different.
@@ -306,20 +362,18 @@ private[sql] class AvroSerializer(
   }
 
   /**
-   * Check the nullability of the input Avro type and resolve it when it is nullable. The first
-   * return value is a [[Boolean]] indicating if the input Avro type is nullable. The second
-   * return value is the possibly resolved type.
+   * Check the nullability of the input Avro type and resolve it when it is a single nullable type.
+   * The first return value is a [[Boolean]] indicating if the input Avro type is nullable.
+   * The second return value is the possibly resolved type otherwise the input Avro type unchanged.
    */
   private def resolveAvroType(avroType: Schema): (Boolean, Schema) = {
     if (avroType.getType == Type.UNION) {
-      val fields = avroType.getTypes.asScala
-      val actualType = fields.filter(_.getType != Type.NULL)
-      if (fields.length != 2 || actualType.length != 1) {
-        throw new UnsupportedAvroTypeException(
-          s"Unsupported Avro UNION type $avroType: Only UNION of a null type and a non-null " +
-            "type is supported")
+      val containsNull = avroType.getTypes.asScala.exists(_.getType == Schema.Type.NULL)
+      nonNullUnionBranches(avroType) match {
+        case Seq() => (true, Schema.create(Type.NULL))
+        case Seq(singleType) => (containsNull, singleType)
+        case _ => (containsNull, avroType)
       }
-      (true, actualType.head)
     } else {
       (false, avroType)
     }
@@ -336,5 +390,9 @@ private[sql] class AvroSerializer(
       logWarning("Writing Avro files with non-nullable Avro schema and nullable catalyst " +
         "schema will throw runtime exception if there is a record with null value.")
     }
+  }
+
+  private def nonNullUnionTypes(avroType: Schema): Set[Type] = {
+    nonNullUnionBranches(avroType).map(_.getType).toSet
   }
 }

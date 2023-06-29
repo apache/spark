@@ -25,6 +25,14 @@ license: |
 ## Starting Point: SparkSession
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
+
+{% include_example init_session python/sql/basic.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/scala/org/apache/spark/sql/SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
@@ -39,13 +47,6 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/java
 {% include_example init_session java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-
-The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
-
-{% include_example init_session python/sql/basic.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/R/reference/sparkR.session.html) class. To initialize a basic `SparkSession`, just call `sparkR.session()`:
@@ -54,6 +55,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/R/re
 
 Note that when invoked for the first time, `sparkR.session()` initializes a global `SparkSession` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SparkSession` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SparkSession` instance around.
 </div>
+
 </div>
 
 `SparkSession` in Spark 2.0 provides builtin support for Hive features including the ability to
@@ -63,6 +65,16 @@ To use these features, you do not need to have an existing Hive setup.
 ## Creating DataFrames
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
+from a Hive table, or from [Spark data sources](sql-data-sources.html).
+
+As an example, the following creates a DataFrame based on the content of a JSON file:
+
+{% include_example create_df python/sql/basic.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
 from a Hive table, or from [Spark data sources](sql-data-sources.html).
@@ -81,15 +93,6 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 {% include_example create_df java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
-from a Hive table, or from [Spark data sources](sql-data-sources.html).
-
-As an example, the following creates a DataFrame based on the content of a JSON file:
-
-{% include_example create_df python/sql/basic.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from a local R data.frame,
 from a Hive table, or from [Spark data sources](sql-data-sources.html).
@@ -99,6 +102,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 {% include_example create_df r/RSparkSQLExample.R %}
 
 </div>
+
 </div>
 
 
@@ -111,6 +115,21 @@ As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala
 Here we include some basic examples of structured data processing using Datasets:
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+In Python, it's possible to access a DataFrame's columns either by attribute
+(`df.age`) or by indexing (`df['age']`). While the former is convenient for
+interactive data exploration, users are highly encouraged to use the
+latter form, which is future proof and won't break with column names that
+are also attributes on the DataFrame class.
+
+{% include_example untyped_ops python/sql/basic.py %}
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/reference/pyspark.sql.html#dataframe-apis).
+
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/reference/pyspark.sql.html#functions).
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example untyped_ops scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
@@ -128,20 +147,6 @@ For a complete list of the types of operations that can be performed on a Datase
 In addition to simple column references and expressions, Datasets also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/java/org/apache/spark/sql/functions.html).
 </div>
 
-<div data-lang="python"  markdown="1">
-In Python, it's possible to access a DataFrame's columns either by attribute
-(`df.age`) or by indexing (`df['age']`). While the former is convenient for
-interactive data exploration, users are highly encouraged to use the
-latter form, which is future proof and won't break with column names that
-are also attributes on the DataFrame class.
-
-{% include_example untyped_ops python/sql/basic.py %}
-For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/reference/pyspark.sql.html#dataframe-apis).
-
-In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/reference/pyspark.sql.html#functions).
-
-</div>
-
 <div data-lang="r"  markdown="1">
 
 {% include_example untyped_ops r/RSparkSQLExample.R %}
@@ -157,6 +162,13 @@ In addition to simple column references and expressions, DataFrames also have a 
 ## Running SQL Queries Programmatically
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
+
+{% include_example run_sql python/sql/basic.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
@@ -167,12 +179,6 @@ The `sql` function on a `SparkSession` enables applications to run SQL queries p
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `Dataset<Row>`.
 
 {% include_example run_sql java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
-
-{% include_example run_sql python/sql/basic.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -193,6 +199,11 @@ view is tied to a system preserved database `global_temp`, and we must use the q
 refer it, e.g. `SELECT * FROM global_temp.view1`.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example global_temp_view python/sql/basic.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example global_temp_view scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
@@ -201,21 +212,14 @@ refer it, e.g. `SELECT * FROM global_temp.view1`.
 {% include_example global_temp_view java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example global_temp_view python/sql/basic.py %}
-</div>
-
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
-
 CREATE GLOBAL TEMPORARY VIEW temp_view AS SELECT a + 1, b * 2 FROM tbl
 
 SELECT * FROM global_temp.temp_view
-
 {% endhighlight %}
-
 </div>
+
 </div>
 
 
@@ -229,6 +233,7 @@ that allows Spark to perform many operations like filtering, sorting and hashing
 the bytes back into an object.
 
 <div class="codetabs">
+
 <div data-lang="scala"  markdown="1">
 {% include_example create_ds scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
@@ -251,6 +256,15 @@ you to construct Datasets when the columns and their types are not known until r
 
 ### Inferring the Schema Using Reflection
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the datatypes. Rows are constructed by passing a list of
+key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
+and the types are inferred by sampling the whole dataset, similar to the inference that is performed on JSON files.
+
+{% include_example schema_inferring python/sql/basic.py %}
+</div>
 
 <div data-lang="scala"  markdown="1">
 
@@ -276,20 +290,28 @@ Serializable and has getters and setters for all of its fields.
 {% include_example schema_inferring java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-
-Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the datatypes. Rows are constructed by passing a list of
-key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
-and the types are inferred by sampling the whole dataset, similar to the inference that is performed on JSON files.
-
-{% include_example schema_inferring python/sql/basic.py %}
-</div>
-
 </div>
 
 ### Programmatically Specifying the Schema
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+When a dictionary of kwargs cannot be defined ahead of time (for example,
+the structure of records is encoded in a string, or a text dataset will be parsed and
+fields will be projected differently for different users),
+a `DataFrame` can be created programmatically with three steps.
+
+1. Create an RDD of tuples or lists from the original RDD;
+2. Create the schema represented by a `StructType` matching the structure of
+tuples or lists in the RDD created in the step 1.
+3. Apply the schema to the RDD via `createDataFrame` method provided by `SparkSession`.
+
+For example:
+
+{% include_example programmatic_schema python/sql/basic.py %}
+</div>
 
 <div data-lang="scala"  markdown="1">
 
@@ -325,23 +347,6 @@ by `SparkSession`.
 For example:
 
 {% include_example programmatic_schema java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-
-When a dictionary of kwargs cannot be defined ahead of time (for example,
-the structure of records is encoded in a string, or a text dataset will be parsed and
-fields will be projected differently for different users),
-a `DataFrame` can be created programmatically with three steps.
-
-1. Create an RDD of tuples or lists from the original RDD;
-2. Create the schema represented by a `StructType` matching the structure of
-tuples or lists in the RDD created in the step 1.
-3. Apply the schema to the RDD via `createDataFrame` method provided by `SparkSession`.
-
-For example:
-
-{% include_example programmatic_schema python/sql/basic.py %}
 </div>
 
 </div>
