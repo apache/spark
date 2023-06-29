@@ -86,4 +86,10 @@ private[sql] object SqlApiQueryExecutionErrors {
         "userClass" -> userClass),
       cause = null)
   }
+
+  def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "_LEGACY_ERROR_TEMP_2120",
+      messageParameters = Map("clazz" -> clazz.toString()))
+  }
 }
