@@ -2885,7 +2885,7 @@ class HiveDDLSuite
               .format("hive")
               .saveAsTable("t")
           },
-          errorClass = "INVALID_COLUMN_NAME",
+          errorClass = "INVALID_HIVE_COLUMN_NAME",
           parameters = Map(
             "invalidChars" -> "',', ':', ';'",
             "tableName" -> "`spark_catalog`.`default`.`t`",
@@ -3362,7 +3362,7 @@ class HiveDDLSuite
       exception = intercept[AnalysisException] {
         sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c1) STORED AS PARQUET")
       },
-      errorClass = "ALL_FOR_PARTITION_COLUMNS_IS_NOT_ALLOWED",
+      errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
       parameters = Map.empty
     )
   }

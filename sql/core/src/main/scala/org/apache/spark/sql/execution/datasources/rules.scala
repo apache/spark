@@ -319,7 +319,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       throw new AnalysisException(
-        errorClass = "ALL_FOR_PARTITION_COLUMNS_IS_NOT_ALLOWED",
+        errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
         messageParameters = Map.empty)
     }
 

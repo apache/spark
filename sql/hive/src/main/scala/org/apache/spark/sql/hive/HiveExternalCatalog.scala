@@ -158,7 +158,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case _ if invalidChars.exists(f.name.contains) =>
             val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
             throw new AnalysisException(
-              errorClass = "INVALID_COLUMN_NAME",
+              errorClass = "INVALID_HIVE_COLUMN_NAME",
               messageParameters = Map(
                 "invalidChars" -> invalidCharsString,
                 "tableName" -> toSQLId(tableName.nameParts),

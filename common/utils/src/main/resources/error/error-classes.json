@@ -1040,11 +1040,6 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
-  "INVALID_COLUMN_NAME" : {
-    "message" : [
-      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ]
-  },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
       "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
@@ -1194,6 +1189,11 @@
       "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_HIVE_COLUMN_NAME" : {
+    "message" : [
+      "Cannot create the table <tableName> having the nested column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+    ]
   },
   "INVALID_IDENTIFIER" : {
     "message" : [

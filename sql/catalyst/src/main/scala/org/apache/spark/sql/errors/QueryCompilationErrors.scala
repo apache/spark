@@ -1600,7 +1600,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
     new AnalysisException(
-      errorClass = "ALL_FOR_PARTITION_COLUMNS_IS_NOT_ALLOWED",
+      errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
       messageParameters = Map.empty)
   }
 
