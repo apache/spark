@@ -1686,7 +1686,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("using_inferred_key") {
+  test("SPARK-44251: Full outer USING join with null key value") {
     withTempView("v1", "v2") {
       sql("create or replace temp view v1 as values (1, 2), (null, 7) as (c1, c2)")
       sql("create or replace temp view v2 as values (2, 3) as (c1, c2)")
