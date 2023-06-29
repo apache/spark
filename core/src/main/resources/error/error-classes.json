@@ -128,6 +128,43 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_LOAD_STATE_STORE" : {
+    "message" : [
+      "An error occurred during loading state."
+    ],
+    "subClass" : {
+      "CANNOT_READ_CHECKPOINT" : {
+        "message" : [
+          "Cannot read RocksDB checkpoint metadata of version <versionLine>"
+        ]
+      },
+      "CANNOT_READ_DELTA_FILE" : {
+        "message" : [
+          "Error reading delta file <fileToRead> of <clazz>: <message>"
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: <message>"
+        ]
+      },
+      "UNEXPECTED_FILE_SIZE" : {
+        "message" : [
+          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
+        ]
+      },
+      "UNRELEASED_THREAD_ERROR": {
+        "message" : [
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "Thread holding the lock has trace: <stackTraceOutput>"
+        ]
+      },
+      "WRAPPER" : {
+        "message" : [""]
+      }
+    },
+    "sqlState" : "40000"
+  },
   "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
     "message" : [
       "Failed to merge incompatible data types <left> and <right>. Please check the data types of the columns being merged and ensure that they are compatible. If necessary, consider casting the columns to compatible data types before attempting the merge."
@@ -2781,49 +2818,6 @@
       }
     },
     "sqlState" : "42605"
-  },
-  "CANNOT_LOAD_STATE_STORE_WRAPPER" : {
-    "message" : [
-      "This is my error message."
-    ],
-    "sqlState" : "40000"
-  },
-  "CANNOT_LOAD_STATE_STORE" : {
-    "message" : [
-      "An error occurred during loading state."
-    ],
-    "subClass" : {
-      "WRAPPER" : {
-        "message" : [""]
-      },
-      "CANNOT_READ_DELTA_FILE" : {
-        "message" : [
-          "Error reading delta file <fileToRead> of <clazz>: <message>."
-        ]
-      },
-      "CANNOT_READ_SNAPSHOT_FILE" : {
-        "message" : [
-          "Error reading snapshot file <fileToRead> of <clazz>: <message>."
-        ]
-      },
-      "UNRELEASED_THREAD_ERROR": {
-        "message" : [
-          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
-          "Thread holding the lock has trace: <stackTraceOutput>"
-        ]
-      },
-      "CANNOT_READ_CHECKPOINT" : {
-        "message" : [
-          "Cannot read RocksDB checkpoint metadata of version <versionLine>."
-        ]
-      },
-      "UNEXPECTED_FILE_SIZE" : {
-        "message" : [
-          "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."
-        ]
-      }
-    },
-    "sqlState" : "40000"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [

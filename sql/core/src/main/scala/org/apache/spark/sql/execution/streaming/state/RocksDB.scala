@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{File, FileNotFoundException}
+import java.io.{File}
 import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
@@ -142,10 +142,6 @@ class RocksDB(
    * and possibly restart the native RocksDB instance.
    */
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
-    if (version < 0) {
-      throw new FileNotFoundException("version negative")
-    }
-
     assert(version >= 0)
     acquire()
     logInfo(s"Loading $version")

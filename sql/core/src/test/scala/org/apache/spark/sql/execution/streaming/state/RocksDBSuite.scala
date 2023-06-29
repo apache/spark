@@ -125,7 +125,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   test("RocksDB: load version that doesn't exist") {
     val provider = new RocksDBStateStoreProvider()
-
     var ex = intercept[SparkException] {
       provider.getStore(-1)
     }
@@ -134,7 +133,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
       parameters = Map.empty
     )
-
     ex = intercept[SparkException] {
       provider.getReadStore(-1)
     }
@@ -145,7 +143,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     )
 
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete() // to make sure that the directory gets created
+    new File(remoteDir).delete()  // to make sure that the directory gets created
     withDB(remoteDir) { db =>
       intercept[IllegalStateException] {
         db.load(1)
@@ -725,7 +723,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(0)  // Current thread should be able to load again
 
         // Another thread should not be able to load while current thread is using it
-        val ex = intercept[SparkException] {
+        var ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
         }
         // Assert that the error message contains the stack trace
@@ -741,7 +739,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         // Another thread should not be able to load while current thread is using it
         db.load(2)
-        intercept[SparkException] {
+        ex = intercept[SparkException] {
           ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
         }
         // Assert that the error message contains the stack trace
@@ -776,6 +774,23 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("checkpoint metadata serde roundtrip") {
+    // expect read metadata error when metadata uses unsupported version
+    withTempDir { dir =>
+      val file2 = new File(dir, "json")
+      val json2 = """{"sstFiles":[],"numKeys":0}"""
+      FileUtils.write(file2, s"v2\n$json2")
+      val e = intercept[SparkException] {
+        RocksDBCheckpointMetadata.readFromFile(file2)
+      }
+      checkError(
+        e,
+        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
+        parameters = scala.collection.immutable.Map(
+          "versionLine" -> "v2"
+        )
+      )
+    }
+
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
       withTempDir { dir =>

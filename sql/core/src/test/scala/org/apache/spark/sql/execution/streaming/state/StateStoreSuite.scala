@@ -235,14 +235,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // Delete delta file and verify that it throws error
       deleteFilesEarlierThanVersion(provider, snapshotVersion)
-      intercept[SparkException] {
+      e = intercept[SparkException] {
         getData(provider, snapshotVersion - 1)
       }
-      checkError(
-        e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
-        parameters = Map.empty
-      )
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getMessage.contains("Error reading delta file") &&
+        e.getCause.getMessage.contains("does not exist"))
     }
   }
 
@@ -894,19 +892,16 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       var e = intercept[SparkException] {
         provider.getStore(2)
       }
-      checkError(
-        e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
-        parameters = Map.empty
-      )
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getMessage.contains("Error reading delta file") &&
+        e.getCause.getMessage.contains("does not exist"))
+
       e = intercept[SparkException] {
         getData(provider, 2)
       }
-      checkError(
-        e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
-        parameters = Map.empty
-      )
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getMessage.contains("Error reading delta file") &&
+        e.getCause.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version
       tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
@@ -1212,11 +1207,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             StateStore.get(
               storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
           }
-          checkError(
-            e,
-            errorClass = "CANNOT_LOAD_STATE_STORE.WRAPPER",
-            parameters = Map.empty
-          )
+          assert(e.getCause.isInstanceOf[SparkException])
+          assert(e.getCause.getMessage.contains("Error reading delta file") &&
+            e.getCause.getMessage.contains("does not exist"))
 
           // Increase version of the store and try to get again
           val store0 = StateStore.get(

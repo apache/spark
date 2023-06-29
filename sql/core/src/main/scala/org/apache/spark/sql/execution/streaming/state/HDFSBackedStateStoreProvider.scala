@@ -227,8 +227,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
-      case e: Throwable =>
-        throw QueryExecutionErrors.cannotLoadStore(e)
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
 
