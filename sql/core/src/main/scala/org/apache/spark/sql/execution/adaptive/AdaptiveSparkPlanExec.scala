@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
-import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
+import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
@@ -117,7 +117,10 @@ case class AdaptiveSparkPlanExec(
     // around this case.
     val ensureRequirements =
       EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+    // CoalesceBucketsInJoin can help eliminate shuffles and must be run before
+    // EnsureRequirements
     Seq(
+      CoalesceBucketsInJoin,
       RemoveRedundantProjects,
       ensureRequirements,
       AdjustShuffleExchangePosition,
@@ -584,8 +587,15 @@ case class AdaptiveSparkPlanExec(
           BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
         }
       case i: InMemoryTableScanExec =>
-        // No need to optimize `InMemoryTableScanExec` as it's a leaf node.
-        TableCacheQueryStageExec(currentStageId, i)
+        // Apply `queryStageOptimizerRules` so that we can reuse subquery.
+        // No need to apply `postStageCreationRules` for `InMemoryTableScanExec`
+        // as it's a leaf node.
+        val newPlan = optimizeQueryStage(i, isFinalStage = false)
+        if (!newPlan.isInstanceOf[InMemoryTableScanExec]) {
+          throw SparkException.internalError(
+            "Custom AQE rules cannot transform table scan node to something else.")
+        }
+        TableCacheQueryStageExec(currentStageId, newPlan)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)

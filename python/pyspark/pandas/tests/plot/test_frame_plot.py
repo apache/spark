@@ -25,7 +25,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class DataFramePlotTest(PandasOnSparkTestCase):
+class DataFramePlotTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -151,6 +151,10 @@ class DataFramePlotTest(PandasOnSparkTestCase):
 
         check_box_multi_columns(psdf)
         check_box_multi_columns(-psdf)
+
+
+class DataFramePlotTests(DataFramePlotTestsMixin, PandasOnSparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

@@ -27,6 +27,26 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     props
   }
 
+  test("delete with nondeterministic conditions") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    checkError(
+      exception = intercept[AnalysisException](
+        sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")),
+      errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      parameters = Map(
+        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\""),
+      context = ExpectedContext(
+        fragment = "DELETE FROM cat.ns1.test_table WHERE id <= 1 AND rand() > 0.5",
+        start = 0,
+        stop = 60)
+    )
+  }
+
   test("nullable row ID attrs") {
     createAndInitTable("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 300, "dep": 'hr' }

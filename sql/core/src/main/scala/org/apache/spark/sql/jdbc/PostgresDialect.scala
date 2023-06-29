@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, SQLException, Types}
+import java.sql.{Connection, SQLException, Timestamp, Types}
+import java.time.LocalDateTime
 import java.util
 import java.util.Locale
 
@@ -60,6 +61,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
+    } else if ("text".equalsIgnoreCase(typeName)) {
+      Some(StringType) // sqlType is  Types.VARCHAR
     } else if (sqlType == Types.ARRAY) {
       val scale = md.build.getLong("scale").toInt
       // postgres array type names start with underscore
@@ -78,7 +81,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
     case "float8" => Some(DoubleType)
-    case "text" | "varchar" | "char" | "bpchar" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
+    case "varchar" => Some(VarcharType(precision))
+    case "char" | "bpchar" => Some(CharType(precision))
+    case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
          "line" | "lseg" | "box" | "path" | "polygon" | "circle" | "pg_lsn" | "varbit" |
          "interval" | "pg_snapshot" =>
@@ -89,17 +94,27 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
-      Some(DecimalType. SYSTEM_DEFAULT)
+      Some(DecimalType.SYSTEM_DEFAULT)
     case "money" =>
       // money[] type seems to be broken and difficult to handle.
       // So this method returns None for now.
       // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/1405
       None
-    case _ => None
+    case _ =>
+      // SPARK-43267: handle unknown types in array as string, because there are user-defined types
+      Some(StringType)
+  }
+
+  override def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    t.toLocalDateTime
+  }
+
+  override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    Timestamp.valueOf(ldt)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case StringType => Some(JdbcType("TEXT", Types.CHAR))
+    case StringType => Some(JdbcType("TEXT", Types.VARCHAR))
     case BinaryType => Some(JdbcType("BYTEA", Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))

@@ -23,6 +23,7 @@ import java.util.concurrent.{CompletableFuture, ConcurrentLinkedDeque, ThreadPoo
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Implementation of CommitLog to perform asynchronous writes to storage
@@ -54,9 +55,7 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
       if (ret) {
         batchId
       } else {
-        throw new IllegalStateException(
-          s"Concurrent update to the log. Multiple streaming jobs detected for $batchId"
-        )
+        throw QueryExecutionErrors.concurrentStreamLogUpdate(batchId)
       }
     })
 

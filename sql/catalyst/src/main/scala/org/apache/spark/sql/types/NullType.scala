@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNullType}
 
 /**
  * The data type representing `NULL` values. Please use the singleton `DataTypes.NullType`.
@@ -31,8 +30,6 @@ class NullType private() extends DataType {
   // this type. Otherwise, the companion object would be of type "NullType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   override def defaultSize: Int = 1
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalNullType
 
   private[spark] override def asNullable: NullType = this
 

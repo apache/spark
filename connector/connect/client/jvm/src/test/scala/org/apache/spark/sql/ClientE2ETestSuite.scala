@@ -18,25 +18,31 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.util.Properties
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import io.grpc.StatusRuntimeException
-import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
+import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateMethodTester {
 
   // Spark Result
   test("spark result schema") {
@@ -80,17 +86,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(result(0) == 0)
     assert(result(1) == 1)
     assert(result(2) == 2)
-  }
-
-  ignore("SPARK-42665: Ignore simple udf test until the udf is fully implemented.") {
-    def dummyUdf(x: Int): Int = x + 5
-    val myUdf = udf(dummyUdf _)
-    val df = spark.range(5).select(myUdf(Column("id")))
-    val result = df.collect()
-    assert(result.length == 5)
-    result.zipWithIndex.foreach { case (v, idx) =>
-      assert(v.getInt(0) == idx + 5)
-    }
   }
 
   test("read and write") {
@@ -198,12 +193,41 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
+  test("different spark session join/union") {
+    val df = spark.range(10).limit(3)
+
+    val spark2 = SparkSession
+      .builder()
+      .client(
+        SparkConnectClient
+          .builder()
+          .port(port)
+          .build())
+      .create()
+
+    val df2 = spark2.range(10).limit(3)
+
+    assertThrows[SparkException] {
+      df.union(df2).collect()
+    }
+
+    assertThrows[SparkException] {
+      df.unionByName(df2).collect()
+    }
+
+    assertThrows[SparkException] {
+      df.join(df2).collect()
+    }
+
+  }
+
   test("write without table or path") {
     // Should receive no error to write noop
     spark.range(10).write.format("noop").mode("append").save()
   }
 
   test("write jdbc") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
       val url = "jdbc:derby:memory:1234"
       val table = "t1"
@@ -862,6 +886,90 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
     }.getMessage
     assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("Dataset result destructive iterator") {
+    // Helper methods for accessing private field `idxToBatches` from SparkResult
+    val _idxToBatches =
+      PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
+
+    def getColumnarBatches(result: SparkResult[_]): Seq[ColumnarBatch] = {
+      val idxToBatches = result invokePrivate _idxToBatches()
+
+      // Sort by key to get stable results.
+      idxToBatches.toSeq.sortBy(_._1).map(_._2)
+    }
+
+    val df = spark
+      .range(0, 10, 1, 10)
+      .filter("id > 5 and id < 9")
+
+    df.withResult { result =>
+      try {
+        // build and verify the destructive iterator
+        val iterator = result.destructiveIterator
+        // batches is empty before traversing the result iterator
+        assert(getColumnarBatches(result).isEmpty)
+        var previousBatch: ColumnarBatch = null
+        val buffer = mutable.Buffer.empty[Long]
+        while (iterator.hasNext) {
+          // always having 1 batch, since a columnar batch will be removed and closed after
+          // its data got consumed.
+          val batches = getColumnarBatches(result)
+          assert(batches.size === 1)
+          assert(batches.head != previousBatch)
+          previousBatch = batches.head
+
+          buffer.append(iterator.next())
+        }
+        // Batches should be closed and removed after traversing all the records.
+        assert(getColumnarBatches(result).isEmpty)
+
+        val expectedResult = Seq(6L, 7L, 8L)
+        assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+      } finally {
+        result.close()
+      }
+    }
+  }
+
+  test("SparkSession.createDataFrame - large data set") {
+    val threshold = 1024 * 1024
+    withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
+      val count = 2
+      val suffix = "abcdef"
+      val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
+      val data = Seq.tabulate(count)(i => (i, str))
+      for (_ <- 0 until 2) {
+        val df = spark.createDataFrame(data)
+        assert(df.count() === count)
+        assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+      }
+    }
+  }
+
+  test("sql() with positional parameters") {
+    val result0 = spark.sql("select 1", Array.empty).collect()
+    assert(result0.length == 1 && result0(0).getInt(0) === 1)
+
+    val result1 = spark.sql("select ?", Array(1)).collect()
+    assert(result1.length == 1 && result1(0).getInt(0) === 1)
+
+    val result2 = spark.sql("select ?, ?", Array(1, "abc")).collect()
+    assert(result2.length == 1)
+    assert(result2(0).getInt(0) === 1)
+    assert(result2(0).getString(1) === "abc")
+  }
+
+  test("sql() with named parameters") {
+    val result0 = spark.sql("select 1", Map.empty[String, Any]).collect()
+    assert(result0.length == 1 && result0(0).getInt(0) === 1)
+
+    val result1 = spark.sql("select :abc", Map("abc" -> 1)).collect()
+    assert(result1.length == 1 && result1(0).getInt(0) === 1)
+
+    val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
+    assert(result2.length == 1 && result2(0).getString(0) === "abc")
   }
 }
 

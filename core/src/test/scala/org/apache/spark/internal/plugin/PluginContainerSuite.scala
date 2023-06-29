@@ -307,14 +307,14 @@ class TestSparkPlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = {
     val p = new TestDriverPlugin()
     require(TestSparkPlugin.driverPlugin == null, "Driver plugin already initialized.")
-    TestSparkPlugin.driverPlugin = spy(p)
+    TestSparkPlugin.driverPlugin = spy[TestDriverPlugin](p)
     TestSparkPlugin.driverPlugin
   }
 
   override def executorPlugin(): ExecutorPlugin = {
     val p = new TestExecutorPlugin()
     require(TestSparkPlugin.executorPlugin == null, "Executor plugin already initialized.")
-    TestSparkPlugin.executorPlugin = spy(p)
+    TestSparkPlugin.executorPlugin = spy[TestExecutorPlugin](p)
     TestSparkPlugin.executorPlugin
   }
 

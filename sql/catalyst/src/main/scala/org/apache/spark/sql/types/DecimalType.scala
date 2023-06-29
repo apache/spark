@@ -20,11 +20,8 @@ package org.apache.spark.sql.types
 import java.util.Locale
 
 import scala.annotation.tailrec
-import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalDecimalType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -58,15 +55,6 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   // default constructor for Java
   def this(precision: Int) = this(precision, 0)
   def this() = this(10)
-
-  private[sql] type InternalType = Decimal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val numeric = Decimal.DecimalIsFractional
-  private[sql] val fractional = Decimal.DecimalIsFractional
-  private[sql] val ordering = Decimal.DecimalIsFractional
-  private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
-
-  override private[sql] def exactNumeric = DecimalExactNumeric
 
   override def typeName: String = s"decimal($precision,$scale)"
 
@@ -111,9 +99,6 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    */
   override def defaultSize: Int = if (precision <= Decimal.MAX_LONG_DIGITS) 8 else 16
 
-  private[sql] override def physicalDataType: PhysicalDataType =
-    PhysicalDecimalType(precision, scale)
-
   override def simpleString: String = s"decimal($precision,$scale)"
 
   private[spark] override def asNullable: DecimalType = this
@@ -153,13 +138,6 @@ object DecimalType extends AbstractDataType {
     case LongType => LongDecimal
     case FloatType => FloatDecimal
     case DoubleType => DoubleDecimal
-  }
-
-  private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
-    case v: Short => fromDecimal(Decimal(BigDecimal(v)))
-    case v: Int => fromDecimal(Decimal(BigDecimal(v)))
-    case v: Long => fromDecimal(Decimal(BigDecimal(v)))
-    case _ => forType(literal.dataType)
   }
 
   private[sql] def fromDecimal(d: Decimal): DecimalType = DecimalType(d.precision, d.scale)
@@ -222,13 +200,6 @@ object DecimalType extends AbstractDataType {
     def unapply(t: DecimalType): Option[(Int, Int)] = Some((t.precision, t.scale))
   }
 
-  private[sql] object Expression {
-    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
-      case t: DecimalType => Some((t.precision, t.scale))
-      case _ => None
-    }
-  }
-
   /**
    * Returns if dt is a DecimalType that fits inside an int
    */
@@ -263,6 +234,4 @@ object DecimalType extends AbstractDataType {
   }
 
   def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
-
-  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
 }

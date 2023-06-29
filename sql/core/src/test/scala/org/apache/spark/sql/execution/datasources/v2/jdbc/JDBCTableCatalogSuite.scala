@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -136,9 +137,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType, true, defaultMetadata)
+      .add("NAME", VarcharType(32), true, defaultMetadata)
       .add("ID", IntegerType, true, defaultMetadata)
-    assert(t.schema === expectedSchema)
+    assert(t.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     Seq(
       "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
       "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
@@ -476,5 +477,19 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       errorClass = "_LEGACY_ERROR_TEMP_2082",
       parameters = Map("catalogString" -> "array<int>")
     )
+  }
+
+  test("SPARK-42916: Keep Char/Varchar meta information on the read-side") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID CHAR(10), deptno VARCHAR(20))")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE VARCHAR(30)")
+      val t = spark.table(tableName)
+      val expected = new StructType()
+        .add("ID", CharType(10), true, defaultMetadata)
+        .add("deptno", VarcharType(30), true, defaultMetadata)
+      val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expected)
+      assert(t.schema === replaced)
+    }
   }
 }

@@ -16,6 +16,8 @@
 #
 
 import datetime
+import unittest
+from distutils.version import LooseVersion
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -24,7 +26,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class DateOpsTest(OpsTestBase):
+class DateOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(
@@ -61,6 +63,10 @@ class DateOpsTest(OpsTestBase):
         for psser in self.pssers:
             self.assertRaises(TypeError, lambda: self.psser + psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43571): Enable DateOpsTests.test_sub for pandas 2.0.0.",
+    )
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
@@ -122,6 +128,10 @@ class DateOpsTest(OpsTestBase):
         self.assertRaises(TypeError, lambda: 1 + self.psser)
         self.assertRaises(TypeError, lambda: self.some_date + self.psser)
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43570): Enable DateOpsTests.test_rsub for pandas 2.0.0.",
+    )
     def test_rsub(self):
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: 1 - self.psser)
@@ -228,6 +238,10 @@ class DateOpsTest(OpsTestBase):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+
+
+class DateOpsTests(DateOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

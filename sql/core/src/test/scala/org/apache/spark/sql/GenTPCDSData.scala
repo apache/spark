@@ -412,6 +412,10 @@ class GenTPCDSDataConfig(args: Array[String]) {
  * {{{
  *   build/sbt "sql/Test/runMain <this class> --dsdgenDir <path> --location <path> --scaleFactor 1"
  * }}}
+ *
+ * Note: if users specify a small scale factor, GenTPCDSData works good. Otherwise, may encounter
+ * OOM and cause failure. Users can retry by setting a larger value for the environment variable
+ * HEAP_SIZE(the default size is 4g), e.g. export HEAP_SIZE=10g.
  */
 object GenTPCDSData {
 

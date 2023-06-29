@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -42,7 +42,7 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
       plan: SparkPlan,
       numCoalescedBuckets: Int): SparkPlan = {
     plan transformUp {
-      case f: FileSourceScanExec =>
+      case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty =>
         f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
     }
   }
@@ -115,7 +115,11 @@ object ExtractJoinWithBuckets {
   private def hasScanOperation(plan: SparkPlan): Boolean = plan match {
     case f: FilterExec => hasScanOperation(f.child)
     case p: ProjectExec => hasScanOperation(p.child)
-    case _: FileSourceScanExec => true
+    case j: BroadcastHashJoinExec =>
+      if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
+    case j: BroadcastNestedLoopJoinExec =>
+      if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
+    case f: FileSourceScanExec => f.relation.bucketSpec.nonEmpty
     case _ => false
   }
 
@@ -142,9 +146,7 @@ object ExtractJoinWithBuckets {
   }
 
   private def isApplicable(j: ShuffledJoin): Boolean = {
-    (j.isInstanceOf[SortMergeJoinExec] ||
-      j.isInstanceOf[ShuffledHashJoinExec]) &&
-      hasScanOperation(j.left) &&
+    hasScanOperation(j.left) &&
       hasScanOperation(j.right) &&
       satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
       satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)

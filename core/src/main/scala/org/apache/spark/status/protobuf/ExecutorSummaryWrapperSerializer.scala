@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper

@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 some_global_variable = 0
 
 
-class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
+class UtilsTestsMixin:
 
     # a dummy to_html version with an extra parameter that pandas does not support
     # used in test_validate_arguments_and_invoke_function
@@ -114,6 +114,10 @@ class TestClassForLazyProp:
     def lazy_prop(self):
         self.some_variable += 1
         return self.some_variable
+
+
+class UtilsTests(UtilsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

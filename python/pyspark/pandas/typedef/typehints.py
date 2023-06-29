@@ -206,7 +206,7 @@ def as_spark_type(
     elif tpe in (str, np.unicode_, "str", "U"):
         return types.StringType()
     # TimestampType or TimestampNTZType if timezone is not specified.
-    elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M"):
+    elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M", pd.Timestamp):
         return types.TimestampNTZType() if prefer_timestamp_ntz else types.TimestampType()
 
     # DayTimeIntervalType
@@ -214,7 +214,7 @@ def as_spark_type(
         return types.DayTimeIntervalType()
 
     # categorical types
-    elif isinstance(tpe, CategoricalDtype) or (isinstance(tpe, str) and type == "category"):
+    elif isinstance(tpe, CategoricalDtype) or (isinstance(tpe, str) and tpe == "category"):
         return types.LongType()
 
     # extension types

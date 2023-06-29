@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
@@ -87,6 +88,7 @@ class Catalog:
         """Create a new Catalog that wraps the underlying JVM object."""
         self._sparkSession = sparkSession
         self._jsparkSession = sparkSession._jsparkSession
+        self._sc = sparkSession._sc
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
     def currentCatalog(self) -> str:
@@ -117,21 +119,45 @@ class Catalog:
         """
         return self._jcatalog.setCurrentCatalog(catalogName)
 
-    def listCatalogs(self) -> List[CatalogMetadata]:
+    def listCatalogs(self, pattern: Optional[str] = None) -> List[CatalogMetadata]:
         """Returns a list of catalogs in this session.
 
         .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        pattern : str
+            The pattern that the catalog name needs to match.
+
+            .. versionchanged: 3.5.0
+                Added ``pattern`` argument.
 
         Returns
         -------
         list
             A list of :class:`CatalogMetadata`.
+
+        Examples
+        --------
+        >>> spark.catalog.listCatalogs()
+        [CatalogMetadata(name='spark_catalog', description=None)]
+
+        >>> spark.catalog.listCatalogs("spark*")
+        [CatalogMetadata(name='spark_catalog', description=None)]
+
+        >>> spark.catalog.listCatalogs("hive*")
+        []
         """
-        iter = self._jcatalog.listCatalogs().toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listCatalogs().toLocalIterator()
+        else:
+            iter = self._jcatalog.listCatalogs(pattern).toLocalIterator()
         catalogs = []
         while iter.hasNext():
             jcatalog = iter.next()
-            catalogs.append(CatalogMetadata(name=jcatalog.name, description=jcatalog.description))
+            catalogs.append(
+                CatalogMetadata(name=jcatalog.name(), description=jcatalog.description())
+            )
         return catalogs
 
     def currentDatabase(self) -> str:
@@ -164,11 +190,19 @@ class Catalog:
         """
         return self._jcatalog.setCurrentDatabase(dbName)
 
-    def listDatabases(self) -> List[Database]:
+    def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
         """
         Returns a list of databases available across all sessions.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        pattern : str
+            The pattern that the database name needs to match.
+
+            .. versionchanged: 3.5.0
+                Adds ``pattern`` argument.
 
         Returns
         -------
@@ -179,8 +213,17 @@ class Catalog:
         --------
         >>> spark.catalog.listDatabases()
         [Database(name='default', catalog='spark_catalog', description='default database', ...
+
+        >>> spark.catalog.listDatabases("def*")
+        [Database(name='default', catalog='spark_catalog', description='default database', ...
+
+        >>> spark.catalog.listDatabases("def2*")
+        []
         """
-        iter = self._jcatalog.listDatabases().toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listDatabases().toLocalIterator()
+        else:
+            iter = self._jcatalog.listDatabases(pattern).toLocalIterator()
         databases = []
         while iter.hasNext():
             jdb = iter.next()
@@ -264,7 +307,9 @@ class Catalog:
         """
         return self._jcatalog.databaseExists(dbName)
 
-    def listTables(self, dbName: Optional[str] = None) -> List[Table]:
+    def listTables(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Table]:
         """Returns a list of tables/views in the specified database.
 
         .. versionadded:: 2.0.0
@@ -276,6 +321,12 @@ class Catalog:
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
+
+        pattern : str
+            The pattern that the database name needs to match.
+
+            .. versionchanged: 3.5.0
+                Adds ``pattern`` argument.
 
         Returns
         -------
@@ -293,13 +344,23 @@ class Catalog:
         >>> spark.catalog.listTables()
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
 
+        >>> spark.catalog.listTables(pattern="test*")
+        [Table(name='test_view', catalog=None, namespace=[], description=None, ...
+
+        >>> spark.catalog.listTables(pattern="table*")
+        []
+
         >>> _ = spark.catalog.dropTempView("test_view")
         >>> spark.catalog.listTables()
         []
         """
         if dbName is None:
             dbName = self.currentDatabase()
-        iter = self._jcatalog.listTables(dbName).toLocalIterator()
+
+        if pattern is None:
+            iter = self._jcatalog.listTables(dbName).toLocalIterator()
+        else:
+            iter = self._jcatalog.listTables(dbName, pattern).toLocalIterator()
         tables = []
         while iter.hasNext():
             jtable = iter.next()
@@ -378,7 +439,9 @@ class Catalog:
             isTemporary=jtable.isTemporary(),
         )
 
-    def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
+    def listFunctions(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Function]:
         """
         Returns a list of functions registered in the specified database.
 
@@ -389,6 +452,11 @@ class Catalog:
         dbName : str
             name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
+        pattern : str
+            The pattern that the function name needs to match.
+
+            .. versionchanged: 3.5.0
+                Adds ``pattern`` argument.
 
         Returns
         -------
@@ -404,10 +472,20 @@ class Catalog:
         --------
         >>> spark.catalog.listFunctions()
         [Function(name=...
+
+        >>> spark.catalog.listFunctions(pattern="to_*")
+        [Function(name=...
+
+        >>> spark.catalog.listFunctions(pattern="*not_existing_func*")
+        []
         """
         if dbName is None:
             dbName = self.currentDatabase()
         iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
+        else:
+            iter = self._jcatalog.listFunctions(dbName, pattern).toLocalIterator()
         functions = []
         while iter.hasNext():
             jfunction = iter.next()
@@ -917,8 +995,9 @@ class Catalog:
         """
         return self._jcatalog.isCached(tableName)
 
-    def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory.
+    def cacheTable(self, tableName: str, storageLevel: Optional[StorageLevel] = None) -> None:
+        """Caches the specified table in-memory or with given storage level.
+        Default MEMORY_AND_DISK.
 
         .. versionadded:: 2.0.0
 
@@ -930,11 +1009,21 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
+        storageLevel : :class:`StorageLevel`
+            storage level to set for persistence.
+
+            .. versionchanged:: 3.5.0
+                Allow to specify storage level.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         >>> _ = spark.sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.cacheTable("tbl1")
+
+        or
+
+        >>> spark.catalog.cacheTable("tbl1", StorageLevel.OFF_HEAP)
 
         Throw an analysis exception when the table does not exist.
 
@@ -949,7 +1038,11 @@ class Catalog:
         >>> spark.catalog.uncacheTable("tbl1")
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
-        self._jcatalog.cacheTable(tableName)
+        if storageLevel:
+            javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
+            self._jcatalog.cacheTable(tableName, javaStorageLevel)
+        else:
+            self._jcatalog.cacheTable(tableName)
 
     def uncacheTable(self, tableName: str) -> None:
         """Removes the specified table from the in-memory cache.

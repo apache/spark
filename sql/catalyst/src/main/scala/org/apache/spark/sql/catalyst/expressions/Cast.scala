@@ -29,16 +29,15 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
 object Cast extends QueryErrorsBase {
@@ -271,6 +270,8 @@ object Cast extends QueryErrorsBase {
     case (TimestampType | DateType, StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
+    case (TimestampType, TimestampNTZType) => true
+    case (TimestampNTZType, TimestampType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
@@ -495,6 +496,7 @@ case class Cast(
     evalMode: EvalMode.Value = EvalMode.fromSQLConf(SQLConf.get))
   extends UnaryExpression
   with TimeZoneAwareExpression
+  with ToStringBase
   with NullIntolerant
   with SupportQueryContext
   with QueryErrorsBase {
@@ -590,132 +592,21 @@ case class Cast(
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
-  private lazy val dateFormatter = DateFormatter()
-  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private lazy val timestampNTZFormatter =
-    TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
-
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
-  // The brackets that are used in casting structs and maps to strings
-  private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
+
+  protected val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
+
+  override protected def nullString: String = if (legacyCastToStr) "" else "null"
+
+  // In ANSI mode, Spark always use plain string representation on casting Decimal values
+  // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
+  // notation if an exponent is needed.
+  override protected def useDecimalPlainString: Boolean = ansiEnabled
+
+  override protected def useHexFormatForBinary: Boolean = false
 
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
-
-  // UDFToString
-  private[this] def castToString(from: DataType): Any => Any = from match {
-    case CalendarIntervalType =>
-      buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
-    case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampFormatter.format(t)))
-    case TimestampNTZType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampNTZFormatter.format(t)))
-    case ArrayType(et, _) =>
-      buildCast[ArrayData](_, array => {
-        val builder = new UTF8StringBuilder
-        builder.append("[")
-        if (array.numElements > 0) {
-          val toUTF8String = castToString(et)
-          if (array.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
-          } else {
-            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < array.numElements) {
-            builder.append(",")
-            if (array.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
-            } else {
-              builder.append(" ")
-              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append("]")
-        builder.build()
-      })
-    case MapType(kt, vt, _) =>
-      buildCast[MapData](_, map => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (map.numElements > 0) {
-          val keyArray = map.keyArray()
-          val valueArray = map.valueArray()
-          val keyToUTF8String = castToString(kt)
-          val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
-          builder.append(" ->")
-          if (valueArray.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append(" null")
-          } else {
-            builder.append(" ")
-            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < map.numElements) {
-            builder.append(", ")
-            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
-            builder.append(" ->")
-            if (valueArray.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
-            } else {
-              builder.append(" ")
-              builder.append(valueToUTF8String(valueArray.get(i, vt))
-                .asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case StructType(fields) =>
-      buildCast[InternalRow](_, row => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (row.numFields > 0) {
-          val st = fields.map(_.dataType)
-          val toUTF8StringFuncs = st.map(castToString)
-          if (row.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
-          } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < row.numFields) {
-            builder.append(",")
-            if (row.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
-            } else {
-              builder.append(" ")
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
-    case udt: UserDefinedType[_] =>
-      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
-    case YearMonthIntervalType(startField, endField) =>
-      buildCast[Int](_, i => UTF8String.fromString(
-        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
-    case DayTimeIntervalType(startField, endField) =>
-      buildCast[Long](_, i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
-    // In ANSI mode, Spark always use plain string representation on casting Decimal values
-    // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
-    // notation if an exponent is needed.
-    case _: DecimalType if ansiEnabled =>
-      buildCast[Decimal](_, d => UTF8String.fromString(d.toPlainString))
-    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
-  }
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
@@ -871,10 +762,10 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
       buildCast[Decimal](_, d =>
@@ -891,10 +782,10 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
       buildCast[Decimal](_, d =>
@@ -915,9 +806,11 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType if ansiEnabled =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      b => exactNumeric.toLong(b)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toLong(b)
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToLong(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -947,9 +840,11 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      b => exactNumeric.toInt(b)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toInt(b)
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToInt(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -983,9 +878,10 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toShort)
     case x: NumericType if ansiEnabled =>
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
         val intValue = try {
-          x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+          exactNumeric.toInt(b)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
@@ -996,7 +892,8 @@ case class Cast(
           throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
         }
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toInt(b).toShort
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToShort(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -1030,9 +927,10 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toByte)
     case x: NumericType if ansiEnabled =>
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
         val intValue = try {
-          x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+          exactNumeric.toInt(b)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
@@ -1043,7 +941,8 @@ case class Cast(
           throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
         }
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toInt(b).toByte
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToByte(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -1111,10 +1010,11 @@ case class Cast(
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
-      b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+      b => changePrecision(Decimal(PhysicalIntegralType.integral(t).toLong(b)), target)
     case x: FractionalType =>
+      val fractional = PhysicalFractionalType.fractional(x)
       b => try {
-        changePrecision(Decimal(x.fractional.asInstanceOf[Fractional[Any]].toDouble(b)), target)
+        changePrecision(Decimal(fractional.toDouble(b)), target)
       } catch {
         case _: NumberFormatException => null
       }
@@ -1155,7 +1055,8 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toDouble(b)
   }
 
   // FloatConverter
@@ -1181,7 +1082,8 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t).toFloat)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toFloat(b)
   }
 
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
@@ -1330,7 +1232,7 @@ case class Cast(
 
     case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
-    case StringType => castToStringCode(from, ctx)
+    case StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
@@ -1380,241 +1282,6 @@ case class Cast(
         $castCodeWithTryCatchIfNeeded
       }
     """
-  }
-
-  private def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
-    if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
-  }
-
-  private def writeArrayToStringBuilder(
-      et: DataType,
-      array: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-    val elementToStringCode = castToStringCode(et, ctx)
-    val funcName = ctx.freshName("elementToString")
-    val element = JavaCode.variable("element", et)
-    val elementStr = JavaCode.variable("elementStr", StringType)
-    val elementToStringFunc = inline"${ctx.addNewFunction(funcName,
-      s"""
-         |private UTF8String $funcName(${CodeGenerator.javaType(et)} $element) {
-         |  UTF8String $elementStr = null;
-         |  ${elementToStringCode(element, elementStr, null /* resultIsNull won't be used */)}
-         |  return elementStr;
-         |}
-       """.stripMargin)}"
-
-    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    code"""
-       |$buffer.append("[");
-       |if ($array.numElements() > 0) {
-       |  if ($array.isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
-       |  } else {
-       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
-       |  }
-       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
-       |    $buffer.append(",");
-       |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
-       |    } else {
-       |      $buffer.append(" ");
-       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
-       |    }
-       |  }
-       |}
-       |$buffer.append("]");
-     """.stripMargin
-  }
-
-  private def writeMapToStringBuilder(
-      kt: DataType,
-      vt: DataType,
-      map: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-
-    def dataToStringFunc(func: String, dataType: DataType) = {
-      val funcName = ctx.freshName(func)
-      val dataToStringCode = castToStringCode(dataType, ctx)
-      val data = JavaCode.variable("data", dataType)
-      val dataStr = JavaCode.variable("dataStr", StringType)
-      val functionCall = ctx.addNewFunction(funcName,
-        s"""
-           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
-           |  UTF8String $dataStr = null;
-           |  ${dataToStringCode(data, dataStr, null /* resultIsNull won't be used */)}
-           |  return dataStr;
-           |}
-         """.stripMargin)
-      inline"$functionCall"
-    }
-
-    val keyToStringFunc = dataToStringFunc("keyToString", kt)
-    val valueToStringFunc = dataToStringFunc("valueToString", vt)
-    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
-    val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
-    val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
-    val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
-      JavaCode.literal("0", IntegerType))
-    val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
-    val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
-    code"""
-       |$buffer.append("$leftBracket");
-       |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append(" ->");
-       |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
-       |  } else {
-       |    $buffer.append(" ");
-       |    $buffer.append($valueToStringFunc($getMapFirstValue));
-       |  }
-       |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
-       |    $buffer.append(", ");
-       |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append(" ->");
-       |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
-       |    } else {
-       |      $buffer.append(" ");
-       |      $buffer.append($valueToStringFunc($getMapValueArray));
-       |    }
-       |  }
-       |}
-       |$buffer.append("$rightBracket");
-     """.stripMargin
-  }
-
-  private def writeStructToStringBuilder(
-      st: Seq[DataType],
-      row: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft, ctx)
-      val field = ctx.freshVariable("field", ft)
-      val fieldStr = ctx.freshVariable("fieldStr", StringType)
-      val javaType = JavaCode.javaType(ft)
-      code"""
-         |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
-         |if ($row.isNullAt($i)) {
-         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
-         |} else {
-         |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
-         |
-         |  // Append $i field into the string buffer
-         |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
-         |  UTF8String $fieldStr = null;
-         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
-         |  $buffer.append($fieldStr);
-         |}
-       """.stripMargin
-    }
-
-    val writeStructCode = ctx.splitExpressions(
-      expressions = structToStringCode.map(_.code),
-      funcName = "fieldToString",
-      arguments = ("InternalRow", row.code) ::
-        (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
-
-    code"""
-       |$buffer.append("$leftBracket");
-       |$writeStructCode
-       |$buffer.append("$rightBracket");
-     """.stripMargin
-  }
-
-  @scala.annotation.tailrec
-  private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
-    from match {
-      case BinaryType =>
-        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
-      case DateType =>
-        val df = JavaCode.global(
-          ctx.addReferenceObj("dateFormatter", dateFormatter),
-          dateFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
-      case TimestampType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
-          timestampFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case TimestampNTZType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
-          timestampNTZFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case CalendarIntervalType =>
-        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
-      case ArrayType(et, _) =>
-        (c, evPrim, evNull) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
-          code"""
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeArrayElemCode;
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case MapType(kt, vt, _) =>
-        (c, evPrim, evNull) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
-          code"""
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeMapElemCode;
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case StructType(fields) =>
-        (c, evPrim, evNull) => {
-          val row = ctx.freshVariable("row", classOf[InternalRow])
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
-          code"""
-             |InternalRow $row = $c;
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeStructCode
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
-      case udt: UserDefinedType[_] =>
-        val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
-        (c, evPrim, evNull) => {
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
-        }
-      case i: YearMonthIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case i: DayTimeIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      // In ANSI mode, Spark always use plain string representation on casting Decimal values
-      // as strings. Otherwise, the casting is using `BigDecimal.toString` which may use scientific
-      // notation if an exponent is needed.
-      case _: DecimalType if ansiEnabled =>
-        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
-      case _ =>
-        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
-    }
   }
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {

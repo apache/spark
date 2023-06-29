@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -37,7 +38,9 @@ object TableOutputResolver {
       expected: Seq[Attribute],
       query: LogicalPlan,
       byName: Boolean,
-      conf: SQLConf): LogicalPlan = {
+      conf: SQLConf,
+      // TODO: Only DS v1 writing will set it to true. We should enable in for DS v2 as well.
+      supportColDefaultValue: Boolean = false): LogicalPlan = {
 
     val actualExpectedCols = expected.map { attr =>
       attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
@@ -45,19 +48,42 @@ object TableOutputResolver {
 
     if (actualExpectedCols.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
-        tableName, actualExpectedCols, query)
+        tableName, actualExpectedCols.map(_.name), query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
-      reorderColumnsByName(tableName, query.output, actualExpectedCols, conf, errors += _)
+      // If a top-level column does not have a corresponding value in the input query, fill with
+      // the column's default value. We need to pass `fillDefaultValue` as true here, if the
+      // `supportColDefaultValue` parameter is also true.
+      reorderColumnsByName(
+        tableName,
+        query.output,
+        actualExpectedCols,
+        conf,
+        errors += _,
+        fillDefaultValue = supportColDefaultValue)
     } else {
-      if (actualExpectedCols.size > query.output.size) {
+      // If the target table needs more columns than the input query, fill them with
+      // the columns' default values, if the `supportColDefaultValue` parameter is true.
+      val fillDefaultValue = supportColDefaultValue && actualExpectedCols.size > query.output.size
+      val queryOutputCols = if (fillDefaultValue) {
+        query.output ++ actualExpectedCols.drop(query.output.size).flatMap { expectedCol =>
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
+        }
+      } else {
+        query.output
+      }
+      if (actualExpectedCols.size > queryOutputCols.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, actualExpectedCols, query)
+          tableName, actualExpectedCols.map(_.name), query)
       }
 
-      resolveColumnsByPosition(tableName, query.output, actualExpectedCols, conf, errors += _)
+      resolveColumnsByPosition(tableName, queryOutputCols, actualExpectedCols, conf, errors += _)
+    }
+
+    if (errors.nonEmpty) {
+      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
     }
 
     if (resolved == query.output) {
@@ -67,21 +93,111 @@ object TableOutputResolver {
     }
   }
 
+  def resolveUpdate(
+      value: Expression,
+      col: Attribute,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Expression = {
+
+    (value.dataType, col.dataType) match {
+      // no need to reorder inner fields or cast if types are already compatible
+      case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
+        val canWriteExpr = canWrite(valueType, colType, byName = true, conf, addError, colPath)
+        if (canWriteExpr) checkNullability(value, col, conf, colPath) else value
+      case (valueType: StructType, colType: StructType) =>
+        val resolvedValue = resolveStructType(
+          value, valueType, col, colType,
+          byName = true, conf, addError, colPath)
+        resolvedValue.getOrElse(value)
+      case (valueType: ArrayType, colType: ArrayType) =>
+        val resolvedValue = resolveArrayType(
+          value, valueType, col, colType,
+          byName = true, conf, addError, colPath)
+        resolvedValue.getOrElse(value)
+      case (valueType: MapType, colType: MapType) =>
+        val resolvedValue = resolveMapType(
+          value, valueType, col, colType,
+          byName = true, conf, addError, colPath)
+        resolvedValue.getOrElse(value)
+      case _ =>
+        checkUpdate(value, col, conf, addError, colPath)
+    }
+  }
+
+  private def checkUpdate(
+      value: Expression,
+      attr: Attribute,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Expression = {
+
+    val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(attr.dataType)
+    val attrTypeWithoutCharVarchar = if (attrTypeHasCharVarchar) {
+      CharVarcharUtils.replaceCharVarcharWithString(attr.dataType)
+    } else {
+      attr.dataType
+    }
+
+    val canWriteValue = canWrite(
+      value.dataType, attrTypeWithoutCharVarchar,
+      byName = true, conf, addError, colPath)
+
+    if (canWriteValue) {
+      val nullCheckedValue = checkNullability(value, attr, conf, colPath)
+      val casted = cast(nullCheckedValue, attrTypeWithoutCharVarchar, conf, colPath.quoted)
+      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+        casted
+      } else {
+        CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
+      }
+      Alias(exprWithStrLenCheck, attr.name)(explicitMetadata = Some(attr.metadata))
+    } else {
+      value
+    }
+  }
+
+  private def canWrite(
+      valueType: DataType,
+      expectedType: DataType,
+      byName: Boolean,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Boolean = {
+    conf.storeAssignmentPolicy match {
+      case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
+        DataTypeUtils.canWrite(
+          valueType, expectedType, byName, conf.resolver, colPath.quoted,
+          conf.storeAssignmentPolicy, addError)
+      case _ =>
+        true
+    }
+  }
+
   private def reorderColumnsByName(
       tableName: String,
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String] = Nil): Seq[NamedExpression] = {
+      colPath: Seq[String] = Nil,
+      fillDefaultValue: Boolean = false): Seq[NamedExpression] = {
     val matchedCols = mutable.HashSet.empty[String]
     val reordered = expectedCols.flatMap { expectedCol =>
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
-        throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-          tableName, newColPath.quoted
-        )
+        val defaultExpr = if (fillDefaultValue) {
+          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
+        } else {
+          None
+        }
+        if (defaultExpr.isEmpty) {
+          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+            tableName, newColPath.quoted
+          )
+        }
+        defaultExpr
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
           tableName, newColPath.quoted
@@ -175,7 +291,7 @@ object TableOutputResolver {
     }
   }
 
-  private def checkNullability(
+  private[sql] def checkNullability(
       input: Expression,
       expected: Attribute,
       conf: SQLConf,
@@ -196,7 +312,7 @@ object TableOutputResolver {
 
   private def resolveStructType(
       tableName: String,
-      input: NamedExpression,
+      input: Expression,
       inputType: StructType,
       expected: Attribute,
       expectedType: StructType,
@@ -229,7 +345,7 @@ object TableOutputResolver {
 
   private def resolveArrayType(
       tableName: String,
-      input: NamedExpression,
+      input: Expression,
       inputType: ArrayType,
       expected: Attribute,
       expectedType: ArrayType,
@@ -256,7 +372,7 @@ object TableOutputResolver {
 
   private def resolveMapType(
       tableName: String,
-      input: NamedExpression,
+      input: Expression,
       inputType: MapType,
       expected: Attribute,
       expectedType: MapType,
@@ -343,7 +459,6 @@ object TableOutputResolver {
     } else {
       tableAttr.dataType
     }
-    val storeAssignmentPolicy = conf.storeAssignmentPolicy
     lazy val outputField = if (isCompatible(tableAttr, queryExpr)) {
       if (requiresNullChecks(queryExpr, tableAttr, conf)) {
         val assert = AssertNotNull(queryExpr, colPath)
@@ -365,18 +480,11 @@ object TableOutputResolver {
       Some(Alias(exprWithStrLenCheck, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
     }
 
-    storeAssignmentPolicy match {
-      case StoreAssignmentPolicy.LEGACY =>
-        outputField
+    val canWriteExpr = canWrite(
+      tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
+      byName, conf, addError, colPath)
 
-      case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
-        // run the type check first to ensure type errors are present
-        val canWrite = DataType.canWrite(
-          tableName, queryExpr.dataType, attrTypeWithoutCharVarchar, byName, conf.resolver,
-          colPath.quoted, storeAssignmentPolicy, addError)
-
-        if (canWrite) outputField else None
-    }
+    if (canWriteExpr) outputField else None
   }
 
   private def cast(

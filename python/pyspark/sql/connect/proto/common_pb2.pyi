@@ -34,7 +34,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.message
 import sys
 
@@ -91,3 +93,31 @@ class StorageLevel(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StorageLevel = StorageLevel
+
+class ResourceInformation(google.protobuf.message.Message):
+    """ResourceInformation to hold information about a type of Resource.
+    The corresponding class is 'org.apache.spark.resource.ResourceInformation'
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    ADDRESSES_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    """(Required) The name of the resource"""
+    @property
+    def addresses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Required) An array of strings describing the addresses of the resource."""
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        addresses: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["addresses", b"addresses", "name", b"name"]
+    ) -> None: ...
+
+global___ResourceInformation = ResourceInformation

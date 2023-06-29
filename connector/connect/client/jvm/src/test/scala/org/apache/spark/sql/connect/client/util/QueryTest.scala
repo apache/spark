@@ -21,7 +21,7 @@ import java.util.TimeZone
 
 import org.scalatest.Assertions
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.util.sideBySide
 
 abstract class QueryTest extends RemoteSparkSession {
@@ -44,6 +44,40 @@ abstract class QueryTest extends RemoteSparkSession {
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect())
+  }
+
+  /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer.
+   */
+  protected def checkDataset[T](ds: => Dataset[T], expectedAnswer: T*): Unit = {
+    val result = ds.collect()
+
+    if (!QueryTest.compare(result.toSeq, expectedAnswer)) {
+      fail(s"""
+              |Decoded objects do not match expected objects:
+              |expected: $expectedAnswer
+              |actual:   ${result.toSeq}
+       """.stripMargin)
+    }
+  }
+
+  /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer, after sort.
+   */
+  protected def checkDatasetUnorderly[T: Ordering](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
+    val result = ds.collect()
+
+    if (!QueryTest.compare(result.toSeq.sorted, expectedAnswer.sorted)) {
+      fail(s"""
+              |Decoded objects do not match expected objects:
+              |expected: $expectedAnswer
+              |actual:   ${result.toSeq}
+       """.stripMargin)
+    }
   }
 }
 
