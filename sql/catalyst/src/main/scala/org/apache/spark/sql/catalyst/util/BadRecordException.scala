@@ -31,15 +31,25 @@ case class PartialResultException(
   extends Exception(cause)
 
 /**
+ * Exception thrown when the underlying parser returns partial result list of parsing.
+ * @param partialResults the partial result list of parsing bad records.
+ * @param cause the actual exception about why the parser cannot return full result.
+ */
+case class PartialResultArrayException(
+     partialResults: Array[InternalRow],
+     cause: Throwable)
+  extends Exception(cause)
+
+/**
  * Exception thrown when the underlying parser meet a bad record and can't parse it.
  * @param record a function to return the record that cause the parser to fail
- * @param partialResult a function that returns an optional row, which is the partial result of
+ * @param partialResults a function that returns an row array, which is the partial results of
  *                      parsing this bad record.
  * @param cause the actual exception about why the record is bad and can't be parsed.
  */
 case class BadRecordException(
     @transient record: () => UTF8String,
-    @transient partialResult: () => Option[InternalRow],
+    @transient partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
     cause: Throwable) extends Exception(cause)
 
 /**
