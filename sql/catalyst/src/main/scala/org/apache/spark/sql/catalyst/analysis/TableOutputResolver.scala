@@ -94,6 +94,7 @@ object TableOutputResolver {
   }
 
   def resolveUpdate(
+      tableName: String,
       value: Expression,
       col: Attribute,
       conf: SQLConf,
@@ -103,21 +104,22 @@ object TableOutputResolver {
     (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
-        val canWriteExpr = canWrite(valueType, colType, byName = true, conf, addError, colPath)
+        val canWriteExpr = canWrite(
+          tableName, valueType, colType, byName = true, conf, addError, colPath)
         if (canWriteExpr) checkNullability(value, col, conf, colPath) else value
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
-          value, valueType, col, colType,
+          tableName, value, valueType, col, colType,
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
-          value, valueType, col, colType,
+          tableName, value, valueType, col, colType,
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
-          value, valueType, col, colType,
+          tableName, value, valueType, col, colType,
           byName = true, conf, addError, colPath)
         resolvedValue.getOrElse(value)
       case _ =>
@@ -126,6 +128,7 @@ object TableOutputResolver {
   }
 
   private def checkUpdate(
+      tableName: String,
       value: Expression,
       attr: Attribute,
       conf: SQLConf,
@@ -140,7 +143,7 @@ object TableOutputResolver {
     }
 
     val canWriteValue = canWrite(
-      value.dataType, attrTypeWithoutCharVarchar,
+      tableName, value.dataType, attrTypeWithoutCharVarchar,
       byName = true, conf, addError, colPath)
 
     if (canWriteValue) {
@@ -158,6 +161,7 @@ object TableOutputResolver {
   }
 
   private def canWrite(
+      tableName: String,
       valueType: DataType,
       expectedType: DataType,
       byName: Boolean,
@@ -167,7 +171,7 @@ object TableOutputResolver {
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         DataTypeUtils.canWrite(
-          valueType, expectedType, byName, conf.resolver, colPath.quoted,
+          tableName, valueType, expectedType, byName, conf.resolver, colPath.quoted,
           conf.storeAssignmentPolicy, addError)
       case _ =>
         true

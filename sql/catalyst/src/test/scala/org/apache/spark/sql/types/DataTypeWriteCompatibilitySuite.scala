@@ -38,7 +38,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", widerPoint2, point2, true,
+        DataTypeUtils.canWrite("", widerPoint2, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -57,7 +57,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", arrayOfLong, arrayOfInt, true,
+        DataTypeUtils.canWrite("", arrayOfLong, arrayOfInt, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -76,7 +76,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", mapOfLong, mapOfInt, true,
+        DataTypeUtils.canWrite("", mapOfLong, mapOfInt, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -95,7 +95,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", mapKeyLong, mapKeyInt, true,
+        DataTypeUtils.canWrite("", mapKeyLong, mapKeyInt, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
@@ -112,7 +112,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       val errs = new mutable.ArrayBuffer[String]()
       checkError(
         exception = intercept[AnalysisException] (
-          DataType.canWrite("", NullType, t, true,
+          DataTypeUtils.canWrite("", NullType, t, true,
             analysis.caseSensitiveResolution, "nulls", storeAssignmentPolicy,
             errMsg => errs += errMsg)
         ),
@@ -140,7 +140,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     val errs = new mutable.ArrayBuffer[String]()
     checkError(
       exception = intercept[AnalysisException] (
-        DataType.canWrite("", mapOfString, mapOfInt, true,
+        DataTypeUtils.canWrite("", mapOfString, mapOfInt, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
