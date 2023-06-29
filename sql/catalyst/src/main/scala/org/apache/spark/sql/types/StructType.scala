@@ -29,9 +29,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.StringConcat
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
@@ -381,12 +381,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     findFieldInStruct(this, fieldNames, Nil)
   }
 
-  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
+  protected[sql] def toAttributes: Seq[AttributeReference] =
+    map(field => DataTypeUtils.toAttribute(field))
 
   def treeString: String = treeString(Int.MaxValue)
 
   def treeString(maxDepth: Int): String = {
-    val stringConcat = new StringUtils.StringConcat()
+    val stringConcat = new StringConcat()
     stringConcat.append("root\n")
     val prefix = " |"
     val depth = if (maxDepth > 0) maxDepth else Int.MaxValue
@@ -430,7 +431,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val stringConcat = new StringUtils.StringConcat()
+    val stringConcat = new StringConcat()
     val len = fields.length
     stringConcat.append("struct<")
     var i = 0

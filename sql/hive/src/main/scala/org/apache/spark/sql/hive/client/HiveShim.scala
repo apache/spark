@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, Type
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -987,7 +987,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)
-          case Cast(child @ IntegralType(), dt: IntegralType, _, _)
+          case Cast(child @ IntegralTypeExpression(), dt: IntegralType, _, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
@@ -1180,6 +1180,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           })
         }
 
+        recordHiveCall()
         val allPartitionNames = hive.getPartitionNames(
           table.getDbName, table.getTableName, -1).asScala
         val partNames = allPartitionNames.filter { p =>

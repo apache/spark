@@ -952,9 +952,10 @@ literalType
 
 constant
     : NULL                                                                                     #nullLiteral
-    | COLON identifier                                                                         #parameterLiteral
+    | QUESTION                                                                                 #posParameterLiteral
+    | COLON identifier                                                                         #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLit                                                                     #typeConstructor
+    | literalType stringLit                                                                    #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
