@@ -20,13 +20,10 @@ import java.io.Closeable
 import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
-
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.arrow.memory.RootAllocator
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
@@ -35,7 +32,7 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ChannelBuilder, ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -628,8 +625,13 @@ object SparkSession extends Logging {
   /**
    * Create a new [[SparkSession]] based on the connect client [[Configuration]].
    */
-  private[sql] def create(configuration: Configuration): SparkSession = {
-    new SparkSession(new SparkConnectClient(configuration), cleaner, planIdGenerator)
+  private[sql] def create(
+      configuration: Configuration,
+      channelBuilder: Option[ChannelBuilder] = None): SparkSession = {
+    new SparkSession(
+      new SparkConnectClient(configuration, channelBuilder),
+      cleaner,
+      planIdGenerator)
   }
 
   /**
@@ -650,9 +652,15 @@ object SparkSession extends Logging {
   class Builder() extends Logging {
     private val builder = SparkConnectClient.builder()
     private var client: SparkConnectClient = _
+    private var channelBuilder: Option[ChannelBuilder] = None
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
+      this
+    }
+
+    def channelBuilder(channelBuilder: ChannelBuilder): Builder = {
+      this.channelBuilder = Some(channelBuilder)
       this
     }
 
@@ -685,7 +693,8 @@ object SparkSession extends Logging {
      * @since 3.5.0
      */
     def create(): SparkSession = {
-      tryCreateSessionFromClient().getOrElse(SparkSession.this.create(builder.configuration))
+      tryCreateSessionFromClient().getOrElse(
+        SparkSession.this.create(builder.configuration, this.channelBuilder))
     }
 
     /**

@@ -16,6 +16,11 @@
  */
 package org.apache.spark.sql
 
+import scala.language.existentials
+
+import io.grpc.{ChannelCredentials, ManagedChannelBuilder}
+
+import org.apache.spark.sql.connect.client.ChannelBuilder
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 
 /**
@@ -72,5 +77,22 @@ class SparkSessionSuite extends ConnectFunSuite {
       session1.close()
       session2.close()
     }
+  }
+
+  class CustomChannelBuilder() extends ChannelBuilder() {
+    override def createChannelBuilder(
+        host: String,
+        port: Int,
+        credentials: ChannelCredentials): ManagedChannelBuilder[_] = {
+
+      val builder = super.createChannelBuilder(host, port, credentials)
+      builder.userAgent("Custom agent")
+      builder
+    }
+  }
+
+  test("channelBuilder") {
+    val channelBuilder = new CustomChannelBuilder()
+    SparkSession.builder().remote("sc://test.it:16845").channelBuilder(channelBuilder).create()
   }
 }

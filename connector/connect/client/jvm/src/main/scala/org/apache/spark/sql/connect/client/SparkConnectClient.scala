@@ -22,7 +22,7 @@ import java.util.UUID
 import java.util.concurrent.Executor
 
 import com.google.protobuf.ByteString
-import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
@@ -35,8 +35,17 @@ private[sql] class SparkConnectClient(
     private[sql] val configuration: SparkConnectClient.Configuration,
     private val channel: ManagedChannel) {
 
+  def this(
+      configuration: SparkConnectClient.Configuration,
+      channelBuilder: Option[ChannelBuilder]) =
+    this(
+      configuration,
+      channelBuilder
+        .getOrElse(new ChannelBuilder())
+        .createChannelFromConf(configuration))
+
   def this(configuration: SparkConnectClient.Configuration) =
-    this(configuration, configuration.createChannel())
+    this(configuration, None)
 
   private val userContext: UserContext = configuration.userContext
 
@@ -270,8 +279,10 @@ object SparkConnectClient {
    * This is a helper class that is used to create a GRPC channel based on either a set host and
    * port or a NameResolver-compliant URI connection string.
    */
-  class Builder(private var _configuration: Configuration) {
-    def this() = this(Configuration())
+  class Builder(
+      private var _configuration: Configuration,
+      private var _channelBuilder: Option[ChannelBuilder]) {
+    def this() = this(Configuration(), None)
 
     def configuration: Configuration = _configuration
 
@@ -449,6 +460,11 @@ object SparkConnectClient {
       this
     }
 
+    def channelBuilder(channelBuilder: ChannelBuilder): Builder = {
+      _channelBuilder = Some(channelBuilder)
+      this
+    }
+
     /**
      * Configure the builder with the given CLI arguments.
      */
@@ -457,7 +473,7 @@ object SparkConnectClient {
       this
     }
 
-    def build(): SparkConnectClient = new SparkConnectClient(_configuration)
+    def build(): SparkConnectClient = new SparkConnectClient(_configuration, _channelBuilder)
   }
 
   /**
@@ -498,15 +514,6 @@ object SparkConnectClient {
       } else {
         InsecureChannelCredentials.create()
       }
-    }
-
-    def createChannel(): ManagedChannel = {
-      val channelBuilder = Grpc.newChannelBuilderForAddress(host, port, credentials)
-      if (metadata.nonEmpty) {
-        channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
-      }
-      channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
-      channelBuilder.build()
     }
   }
 
