@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
