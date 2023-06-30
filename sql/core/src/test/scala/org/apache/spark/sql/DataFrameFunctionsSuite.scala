@@ -75,7 +75,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "udaf", "udf" // create function statement in sql
     )
 
-    val excludedSqlFunctions = Set("array_agg", "cardinality")
+    val excludedSqlFunctions = Set.empty[String]
 
     val expectedOnlyDataFrameFunctions = Set(
       "bucket", "days", "hours", "months", "years", // Datasource v2 partition transformations
@@ -883,6 +883,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
     checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.select(cardinality($"a")), Seq(Row(2L), Row(0L), Row(3L), Row(sizeOfNull)))
     checkAnswer(df.selectExpr("cardinality(a)"), Seq(Row(2L), Row(0L), Row(3L), Row(sizeOfNull)))
   }
 
@@ -1103,6 +1104,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.select(size($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
     checkAnswer(df.selectExpr("size(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.select(cardinality($"a")), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
+    checkAnswer(df.selectExpr("cardinality(a)"), Seq(Row(2), Row(0), Row(3), Row(sizeOfNull)))
   }
 
   test("map size function - legacy") {
@@ -1740,6 +1743,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.select(array_max(df("a"))), answer)
     checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
+  test("array_size function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      null,
+      Seq[Option[Int]](None, Some(1))
+    ).toDF("a")
+
+    val answer = Seq(Row(3), Row(0), Row(null), Row(2))
+
+    checkAnswer(df.select(array_size(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_size(a)"), answer)
+  }
+
+  test("cardinality function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      null,
+      Seq[Option[Int]](None, Some(1))
+    ).toDF("a")
+
+    val answer = Seq(Row(3), Row(0), Row(null), Row(2))
+
+    checkAnswer(df.select(array_size(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_size(a)"), answer)
   }
 
   test("sequence") {
@@ -5638,6 +5669,40 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("mask function") {
+    val df = Seq("AbCD123-@$#", "abcd-EFGH-8765-4321").toDF("a")
+
+    checkAnswer(df.selectExpr("mask(a)"),
+      Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a")),
+      Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, 'Y')"),
+      Seq(Row("YxYYnnn-@$#"), Row("xxxx-YYYY-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a", lit('Y'))),
+      Seq(Row("YxYYnnn-@$#"), Row("xxxx-YYYY-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, 'Y', 'y')"),
+      Seq(Row("YyYYnnn-@$#"), Row("yyyy-YYYY-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a", lit('Y'), lit('y'))),
+      Seq(Row("YyYYnnn-@$#"), Row("yyyy-YYYY-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, 'Y', 'y', 'd')"),
+      Seq(Row("YyYYddd-@$#"), Row("yyyy-YYYY-dddd-dddd")))
+    checkAnswer(df.select(mask($"a", lit('Y'), lit('y'), lit('d'))),
+      Seq(Row("YyYYddd-@$#"), Row("yyyy-YYYY-dddd-dddd")))
+
+    checkAnswer(df.selectExpr("mask(a, 'X', 'x', 'n', null)"),
+      Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
+    checkAnswer(df.select(mask($"a", lit('X'), lit('x'), lit('n'), lit(null))),
+      Seq(Row("XxXXnnn-@$#"), Row("xxxx-XXXX-nnnn-nnnn")))
+
+    checkAnswer(df.selectExpr("mask(a, null, null, null, '*')"),
+      Seq(Row("AbCD123****"), Row("abcd*EFGH*8765*4321")))
+    checkAnswer(df.select(mask($"a", lit(null), lit(null), lit(null), lit('*'))),
+      Seq(Row("AbCD123****"), Row("abcd*EFGH*8765*4321")))
+  }
+
   test("test array_compact") {
     val df = Seq(
       (Array[Integer](null, 1, 2, null, 3, 4),
@@ -5817,6 +5882,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("CURRENT_USER()"), df.select(current_user()))
     checkAnswer(df.selectExpr("USER()"), df.select(user()))
+  }
+
+  test("named_struct function") {
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val expectedSchema = StructType(
+      StructField(
+        "value",
+        StructType(StructField("x", IntegerType, false) ::
+          StructField("y", IntegerType, false) :: Nil),
+        false) :: Nil)
+    val df1 = df.selectExpr("named_struct('x', a, 'y', b) value")
+    val df2 = df.select(named_struct(lit("x"), $"a", lit("y"), $"b")).toDF("value")
+
+    checkAnswer(df1, Seq(Row(Row(1, 2))))
+    assert(df1.schema === expectedSchema)
+
+    checkAnswer(df2, Seq(Row(Row(1, 2))))
+    assert(df2.schema === expectedSchema)
   }
 }
 
