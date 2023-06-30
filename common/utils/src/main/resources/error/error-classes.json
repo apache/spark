@@ -680,6 +680,11 @@
       "The event time <eventName> has the invalid type <eventType>, but expected \"TIMESTAMP\"."
     ]
   },
+  "EXCEED_LIMIT_LENGTH" : {
+    "message" : [
+      "Exceeds char/varchar type length limitation: <limit>."
+    ]
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -775,6 +780,21 @@
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
+  },
+  "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
+    ]
+  },
+  "HLL_INVALID_LG_K" : {
+    "message" : [
+      "Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
+    ]
+  },
+  "HLL_UNION_DIFFERENT_LG_K" : {
+    "message" : [
+      "Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
     ]
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
@@ -1708,6 +1728,11 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ]
   },
+  "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
+    "message" : [
+      "Cannot call function <functionName> because named argument references are not enabled here. In this case, the named argument reference was <argument>. Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
+    ]
+  },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
@@ -1811,6 +1836,11 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "NOT_SUPPORTED_CHANGE_COLUMN" : {
+    "message" : [
+      "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
+    ]
   },
   "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE" : {
     "message" : [
@@ -2350,6 +2380,11 @@
       "Unsupported arrow type <typeName>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
+    "message" : [
+      "The char/varchar type can't be used in the table schema. If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
+    ]
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
@@ -3875,11 +3910,6 @@
       "Found different window function type in <windowExpressions>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1215" : {
-    "message" : [
-      "char/varchar type can only be used in the table schema. You can set <config> to true, so that Spark treat them as string type as same as Spark 3.0 and earlier."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1218" : {
     "message" : [
       "<tableIdentifier> should be converted to HadoopFsRelation."
@@ -3953,11 +3983,6 @@
   "_LEGACY_ERROR_TEMP_1241" : {
     "message" : [
       "CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory <tablePath>. To allow overwriting the existing non-empty directory, set '<config>' to true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1245" : {
-    "message" : [
-      "ALTER TABLE CHANGE COLUMN is not supported for changing column '<originName>' with type '<originType>' to '<newName>' with type '<newType>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1246" : {
@@ -5676,11 +5701,6 @@
   "_LEGACY_ERROR_TEMP_2328" : {
     "message" : [
       "Cannot update <table> field <fieldName> to interval type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2329" : {
-    "message" : [
-      "Cannot update <table> field <fieldName>: <oldType> cannot be cast to <newType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {

@@ -193,6 +193,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("configKey" -> configKey))
   }
 
+  def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "argument" -> toSQLId(argumentName))
+    )
+  }
+
   def unresolvedUsingColForJoinError(
       colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
@@ -2195,8 +2204,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1215",
-      messageParameters = Map("config" -> SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key))
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+      messageParameters = Map.empty)
   }
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
@@ -2418,15 +2427,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(
+      tableName: String,
       originColumn: StructField,
       newColumn: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1245",
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       messageParameters = Map(
-        "originName" -> originColumn.name,
-        "originType" -> originColumn.dataType.toString,
-        "newName" -> newColumn.name,
-        "newType"-> newColumn.dataType.toString))
+        "table" -> tableName,
+        "originName" -> toSQLId(originColumn.name),
+        "originType" -> toSQLType(originColumn.dataType),
+        "newName" -> toSQLId(newColumn.name),
+        "newType"-> toSQLType(newColumn.dataType)))
   }
 
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
@@ -2435,7 +2446,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "name" -> name,
         "fieldNames" -> fieldNames.mkString("[`", "`, `", "`]")))
-
   }
 
   def alterTableSetSerdeForSpecificPartitionNotSupportedError(): Throwable = {

@@ -428,8 +428,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
-          case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>
-            SubtractTimestamps(l, r)
+          case _ if AnyTimestampTypeExpression.unapply(l) ||
+            AnyTimestampTypeExpression.unapply(r) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
           case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
