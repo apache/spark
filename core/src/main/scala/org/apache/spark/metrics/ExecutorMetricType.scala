@@ -110,10 +110,12 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "MinorGCTime",
     "MajorGCCount",
     "MajorGCTime",
+    "ConcurrentGCCount",
+    "ConcurrentGCTime",
     "TotalGCTime"
   )
 
-  /* We builtin some common GC collectors which categorized as young generation and old */
+  /* We builtin some common GC collectors */
   private[spark] val YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS = Seq(
     "Copy",
     "PS Scavenge",
@@ -128,6 +130,8 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "G1 Old Generation"
   )
 
+  private[spark] val BUILTIN_CONCURRENT_GARBAGE_COLLECTOR = "G1 Concurrent GC"
+
   private lazy val youngGenerationGarbageCollector: Seq[String] = {
     SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS)
   }
@@ -139,7 +143,7 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = new Array[Long](names.length)
     val mxBeans = ManagementFactory.getGarbageCollectorMXBeans.asScala
-    gcMetrics(4) = mxBeans.map(_.getCollectionTime).sum
+    gcMetrics(6) = mxBeans.map(_.getCollectionTime).sum
     mxBeans.foreach { mxBean =>
       if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(0) = mxBean.getCollectionCount
@@ -147,6 +151,9 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
       } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(2) = mxBean.getCollectionCount
         gcMetrics(3) = mxBean.getCollectionTime
+      } else if (BUILTIN_CONCURRENT_GARBAGE_COLLECTOR.equals(mxBean.getName)) {
+        gcMetrics(4) = mxBean.getCollectionCount
+        gcMetrics(5) = mxBean.getCollectionTime
       } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
         nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
         // log it when first seen

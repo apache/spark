@@ -73,6 +73,8 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0,
     "TotalGCTime" : 0
   },
   "attributes" : { },
@@ -127,6 +129,8 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0,
     "TotalGCTime" : 0
   },
   "attributes" : { },
@@ -181,6 +185,8 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0,
     "TotalGCTime" : 0
   },
   "attributes" : { },
@@ -235,6 +241,8 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0,
     "TotalGCTime" : 0
   },
   "attributes" : { },

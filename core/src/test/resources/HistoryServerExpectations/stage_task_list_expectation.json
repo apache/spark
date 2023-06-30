@@ -42,11 +42,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -104,11 +104,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -166,11 +166,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -189,7 +189,6 @@
   "index" : 3,
   "attempt" : 0,
   "partitionId" : -1,
-"partitionId" : -1,
   "launchTime" : "2015-05-06T13:03:06.504GMT",
   "duration" : 423,
   "executorId" : "driver",
@@ -229,11 +228,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -291,11 +290,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -353,11 +352,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -415,11 +414,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -477,11 +476,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -539,11 +538,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -601,11 +600,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -663,11 +662,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -725,11 +724,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -787,11 +786,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -849,11 +848,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -911,11 +910,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -973,11 +972,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -1035,11 +1034,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -1097,11 +1096,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -1159,11 +1158,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }
@@ -1221,11 +1220,11 @@
       "shufflePushReadMetrics" : {
         "corruptMergedBlockChunks" : 0,
         "mergedFetchFallbackCount" : 0,
-        "remoteMergedBlocksFetched": 0,
-        "localMergedBlocksFetched" :  0,
-        "remoteMergedChunksFetched": 0,
-        "localMergedChunksFetched": 0,
-        "remoteMergedBytesRead": 0,
+        "remoteMergedBlocksFetched" : 0,
+        "localMergedBlocksFetched" : 0,
+        "remoteMergedChunksFetched" : 0,
+        "localMergedChunksFetched" : 0,
+        "remoteMergedBytesRead" : 0,
         "localMergedBytesRead" : 0,
         "remoteMergedReqsDuration" : 0
       }

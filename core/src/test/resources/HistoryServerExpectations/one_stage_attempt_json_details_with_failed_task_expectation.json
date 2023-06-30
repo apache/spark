@@ -30,6 +30,9 @@
   "shuffleFetchWaitTime" : 0,
   "shuffleRemoteBytesRead" : 0,
   "shuffleRemoteBytesReadToDisk" : 0,
+  "shuffleLocalBytesRead" : 0,
+  "shuffleReadBytes" : 0,
+  "shuffleReadRecords" : 0,
   "shuffleCorruptMergedBlockChunks" : 0,
   "shuffleMergedFetchFallbackCount" : 0,
   "shuffleMergedRemoteBlocksFetched" : 0,
@@ -40,11 +43,6 @@
   "shuffleMergedLocalBytesRead" : 0,
   "shuffleRemoteReqsDuration" : 0,
   "shuffleMergedRemoteReqsDuration" : 0,
-  "isShufflePushEnabled" : false,
-  "shuffleMergersCount" : 0,
-  "shuffleLocalBytesRead" : 0,
-  "shuffleReadBytes" : 0,
-  "shuffleReadRecords" : 0,
   "shuffleWriteBytes" : 13180,
   "shuffleWriteTime" : 692000,
   "shuffleWriteRecords" : 0,
@@ -92,6 +90,8 @@
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
         "MajorGCTime" : 0,
+        "ConcurrentGCCount" : 0,
+        "ConcurrentGCTime" : 0,
         "TotalGCTime" : 0
       },
       "isExcludedForStage" : false
@@ -120,6 +120,10 @@
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
     "MajorGCTime" : 0,
+    "ConcurrentGCCount" : 0,
+    "ConcurrentGCTime" : 0,
     "TotalGCTime" : 0
-  }
+  },
+  "isShufflePushEnabled" : false,
+  "shuffleMergersCount" : 0
 }
