@@ -63,9 +63,9 @@ class DefaultVectorReservePolicy extends VectorReservePolicy {
   @Override
   public int nextCapacity(int requiredCapacity) {
     if (hugeThreshold < 0 || requiredCapacity < hugeThreshold) {
-      currentCapacity = Math.min(MAX_CAPACITY, requiredCapacity * 2);
+      currentCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
     } else {
-      currentCapacity = Math.min(MAX_CAPACITY, (int) (requiredCapacity * hugeReserveRatio));
+      currentCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * hugeReserveRatio);
     }
     return currentCapacity;
   }
