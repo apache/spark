@@ -725,16 +725,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def nonTimeWindowNotSupportedInStreamingError(
-      windowFunc: String,
-      columnName: String,
-      windowSpec: String,
+      windowFuncList: Seq[String],
+      columnNameList: Seq[String],
+      windowSpecList: Seq[String],
       origin: Origin): AnalysisException = {
     new AnalysisException(
       errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
       messageParameters = Map(
-        "windowFunc" -> windowFunc,
-        "columnName" -> columnName,
-        "windowSpec" -> windowSpec),
+        "windowFunc" -> windowFuncList.map(toSQLStmt(_)).mkString(","),
+        "columnName" -> columnNameList.map(toSQLId(_)).mkString(","),
+        "windowSpec" -> windowSpecList.map(toSQLStmt(_)).mkString(",")),
         origin = origin)
   }
 
