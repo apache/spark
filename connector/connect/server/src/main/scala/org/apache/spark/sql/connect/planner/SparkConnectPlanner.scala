@@ -162,6 +162,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.CACHED_REMOTE_RELATION =>
+        transformCachedRemoteRelation(rel.getCachedRemoteRelation)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -894,6 +896,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
         stateSchema,
         rel.getOutputMode,
         rel.getTimeoutConf)
+      .logicalPlan
+  }
+
+  private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
+    sessionHolder
+      .getDataFrameOrThrow(rel.getRelationId)
       .logicalPlan
   }
 

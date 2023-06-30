@@ -28,10 +28,13 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.util.Utils
 
 /**
@@ -42,6 +45,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
+
+  // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
+  // foreachBatch() in Streaming. Lazy since most sessions don't need it.
+  private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
 
   private[connect] def createExecutePlanHolder(
       request: proto.ExecutePlanRequest): ExecutePlanHolder = {
@@ -162,6 +169,31 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         }
       }
     }
+  }
+
+  /**
+   * Caches given DataFrame with the ID. The cache does not expire. The entry needs to be
+   * explicitly removed by the owners of the DataFrame once it is not needed.
+   */
+  private[connect] def cacheDataFrameById(dfId: String, df: DataFrame): Unit = {
+    if (dataFrameCache.putIfAbsent(dfId, df) != null) {
+      SparkException.internalError(s"A dataframe is already associated with id $dfId")
+    }
+  }
+
+  /**
+   * Returns [[DataFrame]] cached for DataFrame ID `dfId`. If it is not found, throw
+   * [[InvalidPlanInput]].
+   */
+  private[connect] def getDataFrameOrThrow(dfId: String): DataFrame = {
+    Option(dataFrameCache.get(dfId))
+      .getOrElse {
+        throw InvalidPlanInput(s"No DataFrame with id $dfId is found in the session $sessionId")
+      }
+  }
+
+  private[connect] def removeCachedDataFrame(dfId: String): DataFrame = {
+    dataFrameCache.remove(dfId)
   }
 }
 
