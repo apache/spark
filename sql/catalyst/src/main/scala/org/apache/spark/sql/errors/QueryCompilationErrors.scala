@@ -252,6 +252,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("configKey" -> configKey))
   }
 
+  def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "argument" -> toSQLId(argumentName))
+    )
+  }
+
   def unresolvedUsingColForJoinError(
       colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
