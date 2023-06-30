@@ -112,7 +112,7 @@ class OptimizerSuite extends PlanTest {
      */
     object InvalidGroupingType extends Rule[LogicalPlan] {
       def apply(plan: LogicalPlan): LogicalPlan = {
-        Aggregate(plan.output, plan.output, plan, limit = None)
+        Aggregate(plan.output, plan.output, plan)
       }
     }
 
@@ -141,7 +141,7 @@ class OptimizerSuite extends PlanTest {
         val groupingExpressions = outputExpressions.head :: Nil
         val aggregateExpressions = outputExpressions
         // I.e INVALID: select a, b from T group by a
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -155,7 +155,7 @@ class OptimizerSuite extends PlanTest {
         val groupingExpressions = outputExpressions.head :: Nil
         val aggregateExpressions = outputExpressions.last :: Nil
         // I.e INVALID: select b from T group by a
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -170,7 +170,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions = outputExpressions.head ::
           Alias(Add(outputExpressions.last, Literal(1)), "mysum")() :: Nil
         // I.e INVALID: a, select b + 1 as mysum from T group by a
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -185,7 +185,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions =
           Alias(Remainder(outputExpressions.last, outputExpressions.head), "myexp")() :: Nil
         // I.e INVALID: select b % a as myexp from T group by a
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -203,13 +203,12 @@ class OptimizerSuite extends PlanTest {
         // I.e VALID: select a*sum(a) as myexp from T group by a
         // analyze() should not fail.
         val goodAggregate =
-          Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+          Aggregate(groupingExpressions, aggregateExpressions, plan)
             .analyze.asInstanceOf[Aggregate]
         assert(goodAggregate.analyzed)
         // I.e INVALID: select a*sum(a) as myexp from T group by b
         // Rule-validation should catch this.
-       Aggregate(outputExpressions.last :: Nil, goodAggregate.aggregateExpressions, plan,
-         limit = None)
+       Aggregate(outputExpressions.last :: Nil, goodAggregate.aggregateExpressions, plan)
       }
     }
 
@@ -223,7 +222,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions : Seq[NamedExpression] = outputExpressions.head ::
           Alias(Add(outputExpressions.head, Literal(1)), "mysum")() :: Nil
         // I.e VALID: select a, a + 1 as mysum from T group by a
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -237,7 +236,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions : Seq[NamedExpression] =
           Alias(Add(outputExpressions.head, Literal(1)), "mysum")() :: Nil
         // I.e VALID: select a + 1 as mysum from T group by a + 1
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -251,7 +250,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions : Seq[NamedExpression] =
           Alias(Add(Add(outputExpressions.head, Literal(1)), Literal(1)), "mysum")() :: Nil
         // I.e VALID: select a + 1 + 1 as mysum from T group by a + 1
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -265,7 +264,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions : Seq[NamedExpression] =
           Alias(Sum(outputExpressions.last).toAggregateExpression(), "mysum")() :: Nil
         // I.e VALID: select sum(b) as mysum from T group by a + 1
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -279,7 +278,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions : Seq[NamedExpression] =
           Alias(Sum(outputExpressions.head).toAggregateExpression(), "mysum")() :: Nil
         // I.e VALID: select sum(a) as mysum from T group by a
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -293,7 +292,7 @@ class OptimizerSuite extends PlanTest {
         val aggregateExpressions : Seq[NamedExpression] =
           Alias(Sum(outputExpressions.head).toAggregateExpression(), "mysum")() :: Nil
         // I.e VALID: select sum(a) as mysum from T group by a % 2
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None )
+        Aggregate(groupingExpressions, aggregateExpressions, plan)
       }
     }
 
@@ -308,7 +307,7 @@ class OptimizerSuite extends PlanTest {
           Alias(Add(Sum(outputExpressions.head).toAggregateExpression(),
             groupingExpressions.head), "mysum")() :: Nil
         // I.e VALID: select sum(a)*(a % 2) as mysum from T group by a % 2
-        Aggregate(groupingExpressions, aggregateExpressions, plan, limit = None ).analyze
+        Aggregate(groupingExpressions, aggregateExpressions, plan).analyze
       }
     }
 
