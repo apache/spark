@@ -954,6 +954,13 @@ def collect_list(col: "ColumnOrName") -> Column:
 collect_list.__doc__ = pysparkfuncs.collect_list.__doc__
 
 
+def array_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_agg", col)
+
+
+array_agg.__doc__ = pysparkfuncs.array_agg.__doc__
+
+
 def collect_set(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("collect_set", col)
 
@@ -1023,6 +1030,18 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
 
 grouping_id.__doc__ = pysparkfuncs.grouping_id.__doc__
+
+
+def count_min_sketch(
+    col: "ColumnOrName",
+    eps: "ColumnOrName",
+    confidence: "ColumnOrName",
+    seed: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+
+
+count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
 
 
 def kurtosis(col: "ColumnOrName") -> Column:
@@ -1593,6 +1612,20 @@ def array_min(col: "ColumnOrName") -> Column:
 array_min.__doc__ = pysparkfuncs.array_min.__doc__
 
 
+def array_size(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("array_size", col)
+
+
+array_size.__doc__ = pysparkfuncs.array_size.__doc__
+
+
+def cardinality(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("cardinality", col)
+
+
+cardinality.__doc__ = pysparkfuncs.cardinality.__doc__
+
+
 def array_position(col: "ColumnOrName", value: Any) -> Column:
     return _invoke_function("array_position", _to_col(col), lit(value))
 
@@ -1797,6 +1830,20 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
 
 
 get_json_object.__doc__ = pysparkfuncs.get_json_object.__doc__
+
+
+def json_array_length(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_array_length", col)
+
+
+json_array_length.__doc__ = pysparkfuncs.json_array_length.__doc__
+
+
+def json_object_keys(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_object_keys", col)
+
+
+json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
 
 
 def inline(col: "ColumnOrName") -> Column:
@@ -2037,6 +2084,13 @@ def struct(
 
 
 struct.__doc__ = pysparkfuncs.struct.__doc__
+
+
+def named_struct(*cols: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("named_struct", *cols)
+
+
+named_struct.__doc__ = pysparkfuncs.named_struct.__doc__
 
 
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
@@ -2665,6 +2719,26 @@ def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
 
 
 right.__doc__ = pysparkfuncs.right.__doc__
+
+
+def mask(
+    col: "ColumnOrName",
+    upperChar: Optional["ColumnOrName"] = None,
+    lowerChar: Optional["ColumnOrName"] = None,
+    digitChar: Optional["ColumnOrName"] = None,
+    otherChar: Optional["ColumnOrName"] = None,
+) -> Column:
+    _upperChar = lit("X") if upperChar is None else upperChar
+    _lowerChar = lit("x") if lowerChar is None else lowerChar
+    _digitChar = lit("n") if digitChar is None else digitChar
+    _otherChar = lit(None) if otherChar is None else otherChar
+
+    return _invoke_function_over_columns(
+        "mask", col, _upperChar, _lowerChar, _digitChar, _otherChar
+    )
+
+
+mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
 # Date/Timestamp functions
