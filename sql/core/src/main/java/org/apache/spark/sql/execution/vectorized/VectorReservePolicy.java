@@ -52,7 +52,7 @@ class DefaultVectorReservePolicy extends VectorReservePolicy {
   private double hugeReserveRatio;
   private int currentCapacity;
 
-  public DefaultVectorReservePolicy(int defaultCapacity) {
+  DefaultVectorReservePolicy(int defaultCapacity) {
     this.defaultCapacity = defaultCapacity;
     this.currentCapacity = defaultCapacity;
     SQLConf conf = SQLConf.get();
