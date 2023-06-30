@@ -6,12 +6,14 @@ import shutil
 from pyspark.ml.torch import ssh_manager
 
 from pyspark.ml.torch.ssh_manager import SSHEnvManager
-from ..utils import write_to_location
+from pyspark.ml.torch.ssh_manager import write_to_location
 
 KNOWN_HOSTS_TEST_TEMP = "/root/.ssh/known_hosts_before_test"
 KNOWN_HOSTS = "/root/.ssh/known_hosts"
 PRIVATE_SSH_KEY = "private test key here"
 PUBLIC_SSH_KEY = "public test key here"
+
+
 class SSHTestEnvSetup():
     def __init__(self):
         self.save_known_hosts() 
@@ -53,7 +55,7 @@ class SSHTestEnvSetup():
         yield 
         os.remove("/root/.ssh/known_hosts")
 
-class SSHEnvManagerUnitTest(unittest.TestCase):
+class TestSSHEnvManager(unittest.TestCase):
    
     def create_ssh_key_test(self):
        ssh_test_env = SSHTestEnvSetup()
@@ -101,10 +103,6 @@ class SSHEnvManagerUnitTest(unittest.TestCase):
                     self.assertEqual(contents, SSH_MSG)
             os.remove(SSHEnvManager.KNOWN_HOSTS)
             os.remove(SSHEnvManager.KNOWN_HOSTS_TEMP)
-        
-    def ssh_keyscan_test(self):
-        #idk how to test this, cuz this uses the actual ssh command. Should I use localhost or something?
-        pass
 
     def cleanup_ssh_env_test(self):
         ssh_test_env = SSHTestEnvSetup()
