@@ -1787,12 +1787,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       e.references.filter(!_.resolved).foreach { a =>
         // Note: This will throw error only on unresolved attribute issues,
         // not other resolution errors like mismatched data types.
-        val cols = p.inputSet.toSeq.map(toSQLExpr(_)).mkString(", ")
+        val cols = p.inputSet.toSeq.map(attr => toSQLId(attr.name)).mkString(", ")
         a.failAnalysis(
-          errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           messageParameters = Map(
-            "expr" -> toSQLExpr(a),
-            "cols" -> cols))
+            "objectName" -> toSQLExpr(a),
+            "proposal" -> cols))
       }
     }
 
@@ -2085,7 +2085,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           u.failAnalysis(
             errorClass = "NUM_TABLE_VALUE_ALIASES_MISMATCH",
             messageParameters = Map(
-              "funcName" -> toSQLId(u.name.quoted),
+              "funcName" -> toSQLId(u.name),
               "aliasesNum" -> u.outputNames.size.toString,
               "outColsNum" -> outputAttrs.size.toString))
         }
@@ -2103,7 +2103,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
-                errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION_UNSUPPORTED",
+                errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
             }.getOrElse {

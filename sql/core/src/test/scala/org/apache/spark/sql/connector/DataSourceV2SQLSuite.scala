@@ -2161,10 +2161,10 @@ class DataSourceV2SQLSuiteV1Filter
            |THEN INSERT *""".stripMargin
       checkError(
         exception = analysisException(sql1),
-        errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
-          "expr" -> "\"target.dummy\"",
-          "cols" -> "\"age\", \"id\", \"name\", \"p\""),
+          "objectName" -> "\"target.dummy\"",
+          "proposal" -> "`age`, `id`, `name`, `p`"),
         context = ExpectedContext("target.dummy = source.age", 206, 230))
 
       // UPDATE using non-existing column
@@ -2177,10 +2177,10 @@ class DataSourceV2SQLSuiteV1Filter
              |WHEN MATCHED AND (target.age > 10) THEN UPDATE SET target.age = source.dummy
              |WHEN NOT MATCHED AND (target.col2='insert')
              |THEN INSERT *""".stripMargin),
-        errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
-          "expr" -> "\"source.dummy\"",
-          "cols" -> "\"age\", \"age\", \"id\", \"id\", \"name\", \"name\", \"p\", \"p\""),
+          "objectName" -> "\"source.dummy\"",
+          "proposal" -> "`age`, `age`, `id`, `id`, `name`, `name`, `p`, `p`"),
         context = ExpectedContext("source.dummy", 219, 230))
 
       // MERGE INTO is not implemented yet.

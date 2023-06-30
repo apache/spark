@@ -2179,8 +2179,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // update value in not matched by source clause can only reference the target table.
       checkError(
         exception = intercept[AnalysisException](parseAndResolve(sql7)),
-        errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
-        parameters = Map("expr" -> s""""$source.s"""", "cols" -> "\"i\", \"s\""),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> s""""$source.s"""", "proposal" -> "`i`, `s`"),
         context = ExpectedContext(
           fragment = s"$source.s",
           start = 77 + target.length * 2 + source.length,
@@ -2212,8 +2212,8 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
-      parameters = Map("expr" -> "\"s\"", "cols" -> "\"i\", \"x\""),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "\"s\"", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
@@ -2224,8 +2224,8 @@ class PlanResolutionSuite extends AnalysisTest {
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
-      parameters = Map("expr" -> "\"s\"", "cols" -> "\"i\", \"x\""),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "\"s\"", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
