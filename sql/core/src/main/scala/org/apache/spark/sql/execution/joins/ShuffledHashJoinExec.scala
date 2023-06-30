@@ -415,10 +415,10 @@ case class ShuffledHashJoinExec(
       case BuildLeft => buildResultVars ++ streamedResultVars
       case BuildRight => streamedResultVars ++ buildResultVars
     }
-    val consumeFullOuterJoinRow = ctx.freshName("consumeFullOuterJoinRow")
-    ctx.addNewFunction(consumeFullOuterJoinRow,
+    val consumeOuterJoinRow = ctx.freshName("consumeOuterJoinRow")
+    ctx.addNewFunction(consumeOuterJoinRow,
       s"""
-         |private void $consumeFullOuterJoinRow() throws java.io.IOException {
+         |private void $consumeOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
          |  ${consume(ctx, resultVars)}
          |}
@@ -427,11 +427,11 @@ case class ShuffledHashJoinExec(
     val isFullOuterJoin = joinType == FullOuter
     val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
       isFullOuterJoin)
     val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeFullOuterJoinRow,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
       isFullOuterJoin)
 
     s"""
@@ -456,7 +456,7 @@ case class ShuffledHashJoinExec(
       streamedKeyValue: ExprValue,
       relationTerm: String,
       conditionCheck: String,
-      consumeFullOuterJoinRow: String,
+      consumeOuterJoinRow: String,
       isFullOuterJoin: Boolean): String = {
     // Inline mutable state since not many join operations in a task
     val matchedKeySetClsName = classOf[BitSet].getName
@@ -497,7 +497,7 @@ case class ShuffledHashJoinExec(
          |  }
          |
          |  if ($foundMatch || $isFullOuterJoin) {
-         |    $consumeFullOuterJoinRow();
+         |    $consumeOuterJoinRow();
          |  }
          |
          |  if (shouldStop()) return;
@@ -515,7 +515,7 @@ case class ShuffledHashJoinExec(
          |  // check if key index is not in matched keys set
          |  if (!$matchedKeySet.get($rowWithIndex.getKeyIndex())) {
          |    $buildRow = $rowWithIndex.getValue();
-         |    $consumeFullOuterJoinRow();
+         |    $consumeOuterJoinRow();
          |  }
          |
          |  if (shouldStop()) return;
@@ -541,7 +541,7 @@ case class ShuffledHashJoinExec(
       streamedKeyValue: ExprValue,
       relationTerm: String,
       conditionCheck: String,
-      consumeFullOuterJoinRow: String,
+      consumeOuterJoinRow: String,
       isFullOuterJoin: Boolean): String = {
     // Inline mutable state since not many join operations in a task
     val matchedRowSetClsName = classOf[OpenHashSet[_]].getName
@@ -588,14 +588,14 @@ case class ShuffledHashJoinExec(
          |      // set row index in matched row set
          |      $matchedRowSet.add($rowIndex);
          |      $foundMatch = true;
-         |      $consumeFullOuterJoinRow();
+         |      $consumeOuterJoinRow();
          |    }
          |  }
          |
          |  if (!$foundMatch) {
          |    $buildRow = null;
          |    if ($isFullOuterJoin) {
-         |      $consumeFullOuterJoinRow();
+         |      $consumeOuterJoinRow();
          |    }
          |  }
          |
@@ -621,7 +621,7 @@ case class ShuffledHashJoinExec(
          |  // check if row index is not in matched row set
          |  if (!$matchedRowSet.contains($rowIndex)) {
          |    $buildRow = $rowWithIndex.getValue();
-         |    $consumeFullOuterJoinRow();
+         |    $consumeOuterJoinRow();
          |  }
          |
          |  if (shouldStop()) return;
