@@ -51,8 +51,9 @@ __all__ = ["UDFRegistration"]
 
 
 def _wrap_function(
-    sc: SparkContext, func: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
+    sc: SparkContext, func: Callable[..., Any], returnType: Optional[DataType] = None
 ) -> JavaObject:
+    command: Any
     if returnType is None:
         command = func
     else:
