@@ -262,8 +262,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
 
     // Add the "Hello" classfile for the third user
     addHelloClass(holder3)
-    val instance3 = holder3
-      .classloader
+    val instance3 = holder3.classloader
       .loadClass("Hello")
       .getDeclaredConstructor(classOf[String])
       .newInstance("Ahri")
