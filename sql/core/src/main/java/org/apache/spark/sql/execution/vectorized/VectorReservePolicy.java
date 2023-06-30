@@ -26,25 +26,31 @@ public abstract class VectorReservePolicy {
 
   protected int defaultCapacity;
 
-  abstract int nextCapacity(int requiredCapacity);
-
-  boolean shouldCleanData() {
-    return false;
-  }
-
   /**
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
+  /**
+   * True if this column has default values. Return the default values instead of NULL when the
+   * corresponding columns are not present in storage. We can not reset the data of column vectors
+   * that has default values.
+   */
+  protected boolean hasDefaultValue;
+
+  abstract int nextCapacity(int requiredCapacity);
+
+  boolean shouldCleanData() {
+    return false;
+  }
 }
 
 class DefaultVectorReservePolicy extends VectorReservePolicy {
 
-  int hugeThreshold;
-  double hugeReserveRatio;
-
-  int currentCapacity;
+  private int hugeThreshold;
+  private double hugeReserveRatio;
+  private int currentCapacity;
 
   public DefaultVectorReservePolicy(int defaultCapacity) {
     this.defaultCapacity = defaultCapacity;
@@ -66,6 +72,6 @@ class DefaultVectorReservePolicy extends VectorReservePolicy {
 
   @Override
   public boolean shouldCleanData() {
-    return currentCapacity > hugeThreshold;
+    return !hasDefaultValue && currentCapacity > hugeThreshold;
   }
 }

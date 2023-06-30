@@ -21,8 +21,6 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
@@ -31,7 +29,6 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -95,7 +92,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = vectorReservePolicy.nextCapacity(requiredCapacity);
+      int newCapacity = reservePolicy.nextCapacity(requiredCapacity);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
@@ -848,6 +845,15 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public final void setIsConstant() { isConstant = true; }
 
+  public final void setHasDefaultValue() {
+    if (childColumns != null) {
+      for (WritableColumnVector c : childColumns) {
+        c.setHasDefaultValue();
+      }
+    }
+    reservePolicy.hasDefaultValue = true;
+  }
+
   /**
    * Marks this column only contains null values.
    */
@@ -867,7 +873,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   protected int capacity;
 
-  protected VectorReservePolicy vectorReservePolicy;
+  public VectorReservePolicy reservePolicy;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -918,7 +924,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector(int capacity, DataType dataType) {
     super(dataType);
     this.capacity = capacity;
-    this.vectorReservePolicy = new DefaultVectorReservePolicy(capacity);
+    this.reservePolicy = new DefaultVectorReservePolicy(capacity);
 
     if (isArray()) {
       DataType childType;
