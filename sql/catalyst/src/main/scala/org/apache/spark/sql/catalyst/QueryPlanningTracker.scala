@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.{DeveloperApi}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -89,8 +91,30 @@ object QueryPlanningTracker {
   }
 }
 
+/**
+ * Callbacks after planning phase completion.
+ */
+@DeveloperApi
+private[sql] abstract class QueryPlanningTrackerCallback {
+  /**
+   * Called when query has been analyzed.
+   * @param tracker tracker that triggered the callback
+   */
+  private[sql] def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
 
-class QueryPlanningTracker {
+  /**
+   * Called when query is ready for execution.
+   * This is after analysis for eager commands and after planning for other queries.
+   * @param tracker tracker that triggered the callback
+   */
+  private[sql] def readyForExecution(tracker: QueryPlanningTracker): Unit
+}
+
+/**
+ * @param trackerCallback Callback to be notified of planning phase completion.
+ */
+class QueryPlanningTracker(
+    trackerCallback: Option[QueryPlanningTrackerCallback] = None) {
 
   import QueryPlanningTracker._
 
@@ -100,6 +124,10 @@ class QueryPlanningTracker {
 
   // From a phase to its start time and end time, in ms.
   private val phasesMap = new java.util.HashMap[String, PhaseSummary]
+
+  private var readyForExecution = false
+
+  private var analyzed = false
 
   /**
    * Measure the start and end time of a phase. Note that if this function is called multiple
@@ -118,6 +146,32 @@ class QueryPlanningTracker {
       phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     }
     ret
+  }
+
+  /**
+   * Set when the query has been analysed.
+   * When called multiple times, ignores subsequent call.
+   * @param analyzedPlan The plan after analysis,
+   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  private[sql] def setAnalyzed(analyzedPlan: LogicalPlan): Unit = {
+    if (!analyzed) {
+      analyzed = true
+      trackerCallback.foreach(_.analyzed(this, analyzedPlan))
+    }
+  }
+
+  /**
+   * Set when the query is ready for execution. This is after analysis for
+   * eager commands and after planning for other queries.
+   * see @link org.apache.spark.sql.execution.CommandExecutionMode
+   * When called multiple times, ignores subsequent call.
+   */
+  private[sql] def setReadyForExecution(): Unit = {
+    if (!readyForExecution) {
+      readyForExecution = true
+      trackerCallback.foreach(_.readyForExecution(this))
+    }
   }
 
   /**

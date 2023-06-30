@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.mockito.Mockito.{times, verify}
+import org.scalatestplus.mockito.MockitoSugar.mock
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 class QueryPlanningTrackerSuite extends SparkFunSuite {
 
@@ -85,5 +89,19 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
 
     // k > total size
     assert(t.topRulesByTime(10).size == 4)
+  }
+
+  test("test ready for execution callback") {
+    val mockCallback = mock[QueryPlanningTrackerCallback]
+    val mockPlan = mock[LogicalPlan]
+    val t = new QueryPlanningTracker(Some(mockCallback))
+    t.setAnalyzed(mockPlan)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan)
+    t.setAnalyzed(mockPlan)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan)
+    t.setReadyForExecution()
+    verify(mockCallback, times(1)).readyForExecution(t)
+    t.setReadyForExecution()
+    verify(mockCallback, times(1)).readyForExecution(t)
   }
 }
