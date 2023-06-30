@@ -520,10 +520,12 @@ def _create_pandas_udf(f, returnType, evalType):
         )
 
     if evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF and len(argspec.args) not in (2, 3):
-        raise ValueError(
-            "Invalid function: the function in cogroup.applyInArrow "
-            "must take either two arguments (left, right) "
-            "or three arguments (key, left, right)."
+        raise PySparkValueError(
+            error_class="INVALID_PANDAS_UDF",
+            message_parameters={
+                "detail": "the function in cogroup.applyInArrow must take either two arguments "
+                "(left, right) or three arguments (key, left, right).",
+            },
         )
 
     if is_remote():
