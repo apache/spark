@@ -401,7 +401,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     checkParseSyntaxError("select * from my_tvf(arg1 => )", "')'")
     checkParseSyntaxError("select * from my_tvf(arg1 => , 42)", "','")
     checkParseSyntaxError("select * from my_tvf(my_tvf.arg1 => 'value1')", "'=>'")
-    checkParseSyntaxError("select * from my_tvf(arg1 => table t1)", "'t1'", hint = ": extra input 't1'")
   }
 
   test("PARSE_SYNTAX_ERROR: extraneous input") {
