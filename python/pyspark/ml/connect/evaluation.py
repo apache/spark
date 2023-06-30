@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import numpy as np
 
 import pandas as pd
 from typing import Any, Union
@@ -27,10 +28,6 @@ from pyspark.sql import DataFrame
 
 
 class _TorchMetricEvaluator(Evaluator):
-
-    def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
-        super().__init__()
-        self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
 
     metricName: Param[str] = Param(
         Params._dummy(),
@@ -80,6 +77,10 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
     .. versionadded:: 3.5.0
     """
 
+    def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
+        super().__init__()
+        self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
+
     def _get_torch_metric(self) -> Any:
         import torcheval.metrics as torchmetrics
 
@@ -110,6 +111,10 @@ class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProba
     .. versionadded:: 3.5.0
     """
 
+    def __init__(self, metricName: str, labelCol: str, probabilityCol: str) -> None:
+        super().__init__()
+        self._set(metricName=metricName, labelCol=labelCol, probabilityCol=probabilityCol)
+
     def _get_torch_metric(self) -> Any:
         import torcheval.metrics as torchmetrics
 
@@ -127,7 +132,9 @@ class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProba
 
     def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
         import torch
-        preds_tensor = torch.tensor(dataset[self.getProbabilityCol()].values)
+
+        values = np.stack(dataset[self.getProbabilityCol()].values)
+        preds_tensor = torch.tensor(values)
         if preds_tensor.dim() == 2:
             preds_tensor = preds_tensor[:, 1]
         labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
@@ -137,10 +144,14 @@ class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProba
 class MulticlassClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
     """
     Evaluator for multiclass classification, which expects input columns prediction and label.
-    Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
+    Supported metrics are 'f1' and 'accuracy'.
 
     .. versionadded:: 3.5.0
     """
+
+    def __init__(self, metricName: str, labelCol: str, predictionCol: str) -> None:
+        super().__init__()
+        self._set(metricName=metricName, labelCol=labelCol, predictionCol=predictionCol)
 
     def _get_torch_metric(self) -> Any:
         import torcheval.metrics as torchmetrics
