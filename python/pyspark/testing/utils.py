@@ -232,20 +232,15 @@ def assertSparkSchemaEquality(
 
 
 def assertSparkDFEquality(
-    left: PySparkDataFrame, right: PySparkDataFrame, ignore_row_order: bool = True
+    left: PySparkDataFrame, right: PySparkDataFrame,
 ):
     def assert_rows_equality(rows1, rows2):
         if rows1 != rows2:
             msg = "Dataframes are different"
             raise AssertionError(msg)
 
-    transforms = []
-
-    if ignore_row_order:
-        transforms.append(lambda df: df.sort(df.columns))
-
-    left = reduce(lambda acc, fn: fn(acc), transforms, left)
-    right = reduce(lambda acc, fn: fn(acc), transforms, right)
+    left = left.sort(left.columns)
+    right = right.sort(right.columns)
 
     assertSparkSchemaEquality(left.schema, right.schema)
     assert_rows_equality(left.collect(), right.collect())

@@ -61,6 +61,25 @@ class UtilsTestsMixin:
 
         assertDFEquality(df1, df2)
 
+    def test_ignore_row_order(self):
+        # test that row order is ignored by default
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("2", 3000.00),
+                ("1", 1000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+
+        assertDFEquality(df1, df2)
+
     def remove_non_word_characters(self, col):
         return F.regexp_replace(col, "[^\\w\\s]+", "")
 
