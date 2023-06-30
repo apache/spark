@@ -166,8 +166,6 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
     other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
 
   override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
-
-  def unapply(e: Expression): Boolean = acceptsType(e.dataType)
 }
 
 private[sql] abstract class DatetimeType extends AtomicType

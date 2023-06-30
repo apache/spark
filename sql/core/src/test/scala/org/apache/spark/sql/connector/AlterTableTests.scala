@@ -693,13 +693,24 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN id TYPE boolean")
-      }
-
-      assert(exc.getMessage.contains("id"))
-      assert(exc.getMessage.contains("int cannot be cast to boolean"))
+      val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE boolean"
+      checkErrorMatchPVals(
+        exception = intercept[AnalysisException] {
+          sql(sql1)
+        },
+        errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+        sqlState = None,
+        parameters = Map(
+          "originType" -> "\"INT\"",
+          "newType" -> "\"BOOLEAN\"",
+          "newName" -> "`id`",
+          "originName" -> "`id`",
+          "table" -> ".*table_name.*"),
+        context = ExpectedContext(
+          fragment = sql1,
+          start = 0,
+          stop = sql1.length - 1)
+      )
     }
   }
 

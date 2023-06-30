@@ -321,6 +321,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
+    .doc("If true, Spark will turn on support for named parameters for all functions that has" +
+      " it implemented.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
