@@ -356,7 +356,7 @@ object LogicalPlanIntegrity {
    */
   def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
     plan.collectFirst {
-      case a @ Aggregate(groupingExprs, _, _, _) =>
+      case a @ Aggregate(groupingExprs, _, _) =>
         val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
         if (badExprs.nonEmpty) {
           Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
@@ -417,7 +417,7 @@ object LogicalPlanIntegrity {
     }
 
     plan.collectFirst {
-      case a @ Aggregate(groupingExprs, aggrExprs, _, _) =>
+      case a @ Aggregate(groupingExprs, aggrExprs, _) =>
         // Collect all exprIds used in grouping keys that can be used in aggregate expressions
         // outside an aggregate function (like sum).
         val groupingExprIds = groupingExprs.collect {
