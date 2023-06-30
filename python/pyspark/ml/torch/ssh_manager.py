@@ -3,7 +3,7 @@ import subprocess
 import shutil
 from typing import (List)
 
-from pyspark.ml.torch.deepspeed_distributer import _write_to_location
+from pyspark.ml.torch.deepspeed_distributer import write_to_location
 
 class SSHEnvManager:
     """Is responsible for writing to the known_hosts file, setting up authorized users, and more"""
@@ -40,7 +40,7 @@ class SSHEnvManager:
             if error_code.returncode:
                 raise RuntimeError(f"Something went wrong when running ssh_keyscan {ip}. Command tried to run: ", cmd_args)
             cmd_output = error_code.stdout.decode('utf-8') # get the output from the command so we can write to right location
-            _write_to_location(SSHEnvManager.KNOWN_HOSTS, cmd_output)
+            write_to_location(SSHEnvManager.KNOWN_HOSTS, cmd_output)
         print("Successfully finished writing worker ssh public keys to known_hosts on driver")
 
     def cleanup_ssh_env(self):
