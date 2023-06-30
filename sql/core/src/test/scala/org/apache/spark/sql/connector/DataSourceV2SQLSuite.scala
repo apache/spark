@@ -91,9 +91,6 @@ class DataSourceV2SQLSuiteV1Filter
     v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
   }
 
-  protected def table(name: String): String =
-    toSQLId(catalogAndNamespace + name)
-
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
 

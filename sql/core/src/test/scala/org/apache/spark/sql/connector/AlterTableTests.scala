@@ -38,8 +38,6 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
   protected val v2Format: String
 
-  protected def table(name: String): String
-
   private def fullTableName(tableName: String): String = {
     if (catalogAndNamespace.isEmpty) {
       s"default.$tableName"
@@ -696,8 +694,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE boolean"
-      val name = table("table_name")
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException] {
           sql(sql1)
         },
@@ -708,11 +705,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           "newType" -> "\"BOOLEAN\"",
           "newName" -> "`id`",
           "originName" -> "`id`",
-          "table" -> name),
-        queryContext = Array(ExpectedContext(
+          "table" -> ".*table_name.*"),
+        context = ExpectedContext(
           fragment = sql1,
           start = 0,
-          stop = sql1.length - 1))
+          stop = sql1.length - 1)
       )
     }
   }
