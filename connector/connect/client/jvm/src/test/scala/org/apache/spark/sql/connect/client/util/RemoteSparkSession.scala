@@ -224,11 +224,11 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * SPARK-44259: override test function to skip `RemoteSparkSession-based` tests as default,
-   * we should delete this function after SPARK-44121 is completed.
+   * SPARK-44259: override test function to skip `RemoteSparkSession-based` tests as default, we
+   * should delete this function after SPARK-44121 is completed.
    */
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
     super.test(testName, testTags: _*) {
       // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
       assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
