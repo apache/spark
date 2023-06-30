@@ -144,7 +144,7 @@ class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProba
 class MulticlassClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
     """
     Evaluator for multiclass classification, which expects input columns prediction and label.
-    Supported metrics are 'f1' and 'accuracy'.
+    Supported metrics are 'accuracy'.
 
     .. versionadded:: 3.5.0
     """
@@ -158,8 +158,6 @@ class MulticlassClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasP
 
         metric_name = self.getOrDefault(self.metricName)
 
-        if metric_name == "f1":
-            return torchmetrics.MulticlassF1Score()
         if metric_name == "accuracy":
             return torchmetrics.MulticlassAccuracy()
 

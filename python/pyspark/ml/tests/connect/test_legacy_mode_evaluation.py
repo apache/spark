@@ -129,18 +129,6 @@ class EvaluationTestsMixin:
 
         local_df1 = df1.toPandas()
 
-        f1_evaluator = MulticlassClassificationEvaluator(
-            metricName="f1",
-            labelCol="label",
-            predictionCol="prediction",
-        )
-
-        expected_f1 = 0.600
-        f1 = f1_evaluator.evaluate(df1)
-        f1_local = f1_evaluator.evaluate(local_df1)
-        np.testing.assert_almost_equal(f1, expected_f1, decimal=2)
-        np.testing.assert_almost_equal(f1_local, expected_f1, decimal=2)
-
         accuracy_evaluator = MulticlassClassificationEvaluator(
             metricName="accuracy",
             labelCol="label",
