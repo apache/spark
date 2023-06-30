@@ -21,12 +21,8 @@ from typing import (
 from pyspark.ml.torch.distributor import Distributor, TorchDistributor
 from pyspark.ml.torch.ssh_manager import SSHEnvManager
 from pyspark.sql.functions import exists
+from utils import write_to_location
 
-
-def _write_to_location(location: str, content: str) -> None:
-    os.makedirs(os.path.dirname(location), exist_ok=True)
-    with open(location, "a") as f:
-        f.write(content)
 
 class DeepspeedDistributor(Distributor):
     KNOWN_HOSTS = "/root/.ssh/known_hosts"
@@ -72,7 +68,7 @@ class DeepspeedDistributor(Distributor):
         ssh_pub_path = f"{ssh_path}.pub"
         self.ssh_env_manager.create_ssh_key(ssh_path)
         public_key = self.ssh_env_manager.get_ssh_key(ssh_pub_path)
-        _write_to_location(DeepspeedDistributor.AUTHORIZED_LOCATION, public_key)
+        write_to_location(DeepspeedDistributor.AUTHORIZED_LOCATION, public_key)
 
         worker_hosts = [executor.host() for executor in self.spark.sparkContext._jsc.sc().statusTracker().getExecutorInfos()] # we should check if this returns the driver or not
         worker_count = len(worker_hosts) # find out if this number includes the driver or not
@@ -80,7 +76,7 @@ class DeepspeedDistributor(Distributor):
         auth_key = DeepspeedDistributor.AUTHORIZED_LOCATION # have to make this a separate variable to avoid a pickling error on next line
 
         # makes every worker write the driver public key to their own directory
-        _ = rdd.mapPartitions(lambda _: [_write_to_location(auth_key, public_key)]).collect()
+        _ = rdd.mapPartitions(lambda _: [write_to_location(auth_key, public_key)]).collect()
         # make sure there is no terminal prompt when deepspeed launcher uses ssh to coordinate
         self.ssh_env_manager.ssh_keyscan(worker_hosts)
         # what do I do if the use_gpu flag is false?
@@ -95,7 +91,7 @@ class DeepspeedDistributor(Distributor):
         print(f"Writing to {DeepspeedDistributor.HOSTFILE}")
         for worker_host in worker_hosts:
             line = f"{worker_host} slots={assigned_slots[worker_host]}\n"
-            _write_to_location(DeepspeedDistributor.HOSTFILE, line)
+            write_to_location(DeepspeedDistributor.HOSTFILE, line)
         return worker_hosts 
 
     def setup_env(self):
