@@ -2177,8 +2177,14 @@ class PlanResolutionSuite extends AnalysisTest {
            |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET $target.s = $source.s
          """.stripMargin
       // update value in not matched by source clause can only reference the target table.
-      val e7 = intercept[AnalysisException](parseAndResolve(sql7))
-      assert(e7.message.contains(s"cannot resolve $source.s in MERGE command"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql7)),
+        errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
+        parameters = Map("expr" -> s""""$source.s"""", "cols" -> "\"i\", \"s\""),
+        context = ExpectedContext(
+          fragment = s"$source.s",
+          start = 77 + target.length * 2 + source.length,
+          stop = 78 + target.length * 2 + source.length * 2))
     }
 
     val sql1 =
@@ -2206,8 +2212,8 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = "_LEGACY_ERROR_TEMP_2309",
-      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
+      parameters = Map("expr" -> "\"s\"", "cols" -> "\"i\", \"x\""),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
@@ -2218,8 +2224,8 @@ class PlanResolutionSuite extends AnalysisTest {
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = "_LEGACY_ERROR_TEMP_2309",
-      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      errorClass = "UNRESOLVED_EXPRESSION_IN_MERGE_COMMAND_COLUMNS",
+      parameters = Map("expr" -> "\"s\"", "cols" -> "\"i\", \"x\""),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
