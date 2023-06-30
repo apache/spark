@@ -260,7 +260,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 )
             raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
 
-
     def _create_batch(self, series):
         """
         Create an Arrow record batch from the given pandas.Series or list of Series,
