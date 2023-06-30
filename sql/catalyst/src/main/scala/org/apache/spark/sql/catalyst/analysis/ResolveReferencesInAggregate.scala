@@ -107,10 +107,9 @@ object ResolveReferencesInAggregate extends SQLConfHelper
       groupExprs.map { g =>
         g.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE,
           LATERAL_COLUMN_ALIAS_REFERENCE)) {
-          case u: UnresolvedAttribute =>
-            selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
-          case u: LateralColumnAliasReference =>
-            selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
+          case u @ (_: UnresolvedAttribute | _: LateralColumnAliasReference) =>
+            selectList.find(ne => conf.resolver(ne.name, u.asInstanceOf[NamedExpression].name))
+              .getOrElse(u)
         }
       }
     } else {
