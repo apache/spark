@@ -2756,6 +2756,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
+  def exceedMaxLimit(limit: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EXCEED_LIMIT_LENGTH",
+      messageParameters = Map("limit" -> limit.toString)
+    )
+  }
+
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
