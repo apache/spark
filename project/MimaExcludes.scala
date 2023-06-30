@@ -103,7 +103,7 @@ object MimaExcludes {
     
     // SPARK-44255: Relocate StorageLevel to common/utils
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel"),
-    roblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel$"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
