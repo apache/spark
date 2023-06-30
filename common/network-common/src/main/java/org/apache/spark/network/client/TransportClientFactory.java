@@ -245,12 +245,13 @@ public class TransportClientFactory implements Closeable {
     logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
+    int connCreateTimeout = conf.connectionCreationTimeoutMs();
     bootstrap.group(workerGroup)
       .channel(socketChannelClass)
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, true)
       .option(ChannelOption.SO_KEEPALIVE, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionCreationTimeoutMs())
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connCreateTimeout)
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
     if (conf.receiveBuf() > 0) {
@@ -276,10 +277,19 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.await(conf.connectionCreationTimeoutMs())) {
+
+    if (connCreateTimeout <= 0) {
+      cf.awaitUninterruptibly();
+      assert cf.isDone();
+      if (cf.isCancelled()) {
+        throw new IOException(String.format("Connecting to %s cancelled", address));
+      } else if (!cf.isSuccess()) {
+        throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+      }
+    } else if (!cf.await(connCreateTimeout)) {
       throw new IOException(
         String.format("Connecting to %s timed out (%s ms)",
-          address, conf.connectionCreationTimeoutMs()));
+          address, connCreateTimeout));
     } else if (cf.cause() != null) {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
     }

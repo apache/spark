@@ -2756,6 +2756,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
+  def exceedMaxLimit(limit: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EXCEED_LIMIT_LENGTH",
+      messageParameters = Map("limit" -> limit.toString)
+    )
+  }
+
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
@@ -2846,6 +2853,32 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "protobufColumn" -> protobufColumn,
         "data" -> data,
         "enumString" -> enumString))
+  }
+
+  def hllInvalidLgK(function: String, min: Int, max: Int, value: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_INVALID_LG_K",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "min" -> toSQLValue(min, IntegerType),
+        "max" -> toSQLValue(max, IntegerType),
+        "value" -> value))
+  }
+
+  def hllInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map(
+        "function" -> toSQLId(function)))
+  }
+
+  def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_UNION_DIFFERENT_LG_K",
+      messageParameters = Map(
+        "left" -> toSQLValue(left, IntegerType),
+        "right" -> toSQLValue(right, IntegerType),
+        "function" -> toSQLId(function)))
   }
 
   def mergeCardinalityViolationError(): SparkRuntimeException = {

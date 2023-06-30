@@ -368,6 +368,23 @@ object functions {
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result
+   * is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
+   * Count-min sketch is a probabilistic data structure used for cardinality estimation using
+   * sub-linear space.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_min_sketch(
+    e: Column,
+    eps: Column,
+    confidence: Column,
+    seed: Column): Column = withAggregateFunction {
+    new CountMinSketchAgg(e.expr, eps.expr, confidence.expr, seed.expr)
+  }
+
   private[spark] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
     withAggregateFunction { CollectTopK(e.expr, num, reverse) }
 
@@ -1623,6 +1640,14 @@ object functions {
    */
   @scala.annotation.varargs
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+
+  /**
+   * Creates a struct with the given field names and values.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def named_struct(cols: Column*): Column = withExpr { CreateNamedStruct(cols.map(_.expr)) }
 
   /**
    * Creates a new map column. The array in the first column is used for keys. The array in the
@@ -6611,6 +6636,29 @@ object functions {
     withExpr(SchemaOfJson(json.expr, options.asScala.toMap))
   }
 
+  /**
+   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
+   * any other valid JSON string, `NULL` or an invalid JSON.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_array_length(jsonArray: Column): Column = withExpr {
+    LengthOfJsonArray(jsonArray.expr)
+  }
+
+  /**
+   * Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+   * given, all the keys of the outermost object will be returned as an array. If it is any
+   * other valid JSON string, an invalid JSON string or an empty string, the function returns null.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_object_keys(json: Column): Column = withExpr {
+    JsonObjectKeys(json.expr)
+  }
+
   // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
@@ -6672,6 +6720,108 @@ object functions {
     to_json(e, Map.empty[String, String])
 
   /**
+   * Masks the given string value. The function replaces characters with 'X' or 'x', and numbers
+   * with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column): Column = withExpr {
+    new Mask(input.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case characters with specific
+   * character, lower-case characters with 'x', and numbers with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column): Column = withExpr {
+    new Mask(input.expr, upperChar.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case and lower-case characters with
+   * the characters specified respectively, and numbers with 'n'.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column): Column = withExpr {
+    new Mask(input.expr, upperChar.expr, lowerChar.expr)
+  }
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters and
+   * numbers with the characters specified respectively.
+   * This can be useful for creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column = {
+    withExpr {
+      new Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr)
+    }
+  }
+
+  /**
+   * Masks the given string value. This can be useful for creating copies of tables with sensitive
+   * information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(
+    input: Column,
+    upperChar: Column,
+    lowerChar: Column,
+    digitChar: Column,
+    otherChar: Column): Column = {
+    withExpr {
+      Mask(input.expr, upperChar.expr, lowerChar.expr, digitChar.expr, otherChar.expr)
+    }
+  }
+
+  /**
    * Returns length of array or map.
    *
    * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
@@ -6682,6 +6832,18 @@ object functions {
    * @since 1.5.0
    */
   def size(e: Column): Column = withExpr { Size(e.expr) }
+
+  /**
+   * Returns length of array or map. This is an alias of `size` function.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def cardinality(e: Column): Column = size(e)
 
   /**
    * Sorts the input array for the given column in ascending order,
@@ -6722,6 +6884,24 @@ object functions {
    * @since 2.4.0
    */
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
+   * Returns the total number of elements in the array. The function returns null for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_size(e: Column): Column = withExpr { ArraySize(e.expr) }
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note The function is non-deterministic because the order of collected results depends
+   *       on the order of the rows which may be non-deterministic after a shuffle.
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def array_agg(e: Column): Column = collect_list(e)
 
   /**
    * Returns a random permutation of the given array.
