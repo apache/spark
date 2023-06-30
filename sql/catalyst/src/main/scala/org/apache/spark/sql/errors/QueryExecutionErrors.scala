@@ -515,7 +515,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): SparkException = {
-    SqlApiQueryExecutionErrors.unsupportedRoundingMode(roundMode)
+    DataTypeErrors.unsupportedRoundingMode(roundMode)
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {
@@ -1265,7 +1265,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int, maxPrecision: Int): SparkArithmeticException = {
-    SqlApiQueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(precision, maxPrecision)
+    DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(precision, maxPrecision)
   }
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
@@ -1278,11 +1278,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
-    SqlApiQueryExecutionErrors.unsupportedJavaTypeError(clazz)
+    DataTypeErrors.unsupportedJavaTypeError(clazz)
   }
 
   def unsupportedJavaTypeError(clazz: Class[_]): SparkRuntimeException = {
-    SqlApiQueryExecutionErrors.unsupportedJavaTypeError(clazz)
+    DataTypeErrors.unsupportedJavaTypeError(clazz)
   }
 
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
@@ -2158,19 +2158,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
-    SqlApiQueryExecutionErrors.unsupportedOperationExceptionError()
+    DataTypeErrors.unsupportedOperationExceptionError()
   }
 
   def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
-    SqlApiQueryExecutionErrors.nullLiteralsCannotBeCastedError(name)
+    DataTypeErrors.nullLiteralsCannotBeCastedError(name)
   }
 
   def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    SqlApiQueryExecutionErrors.notUserDefinedTypeError(name, userClass)
+    DataTypeErrors.notUserDefinedTypeError(name, userClass)
   }
 
   def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    SqlApiQueryExecutionErrors.cannotLoadUserDefinedTypeError(name, userClass)
+    DataTypeErrors.cannotLoadUserDefinedTypeError(name, userClass)
   }
 
   def notPublicClassError(name: String): SparkUnsupportedOperationException = {

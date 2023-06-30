@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.errors.SqlApiQueryExecutionErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -108,7 +108,7 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
   override private[sql] def defaultConcreteType: DataType =
-    throw SqlApiQueryExecutionErrors.unsupportedOperationExceptionError()
+    throw DataTypeErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 

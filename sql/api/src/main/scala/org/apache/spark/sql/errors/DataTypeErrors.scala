@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-private[sql] object SqlApiQueryExecutionErrors {
+private[sql] object DataTypeErrors {
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2225",
