@@ -92,17 +92,16 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
   }
 
   test("test ready for execution callback") {
-    val mockCallback = mock[AnalyzedCallback]
+    val mockCallback = mock[QueryPlanningTrackerCallback]
     val mockPlan = mock[LogicalPlan]
-    val t = new QueryPlanningTracker(mockCallback.callback)
-    t.setReadyForExecution(mockPlan)
-    verify(mockCallback, times(1)).callback(t, mockPlan)
-    assertThrows[IllegalStateException] {
-      t.setReadyForExecution(mockPlan)
-    }
-  }
-
-  trait AnalyzedCallback {
-    def callback(tracker: QueryPlanningTracker, plan: LogicalPlan): Unit
+    val t = new QueryPlanningTracker(Some(mockCallback))
+    t.setAnalyzed(mockPlan)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan)
+    t.setAnalyzed(mockPlan)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan)
+    t.setReadyForExecution()
+    verify(mockCallback, times(1)).readyForExecution(t)
+    t.setReadyForExecution()
+    verify(mockCallback, times(1)).readyForExecution(t)
   }
 }

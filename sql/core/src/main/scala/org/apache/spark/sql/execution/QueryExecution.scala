@@ -71,9 +71,13 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
-    // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+  lazy val analyzed: LogicalPlan = {
+    val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
+      // We can't clone `logical` here, which will reset the `_analyzed` flag.
+      sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    }
+    tracker.setAnalyzed(plan)
+    plan
   }
 
   lazy val commandExecuted: LogicalPlan = mode match {
@@ -97,7 +101,7 @@ class QueryExecution(
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
-      tracker.setReadyForExecution(analyzed)
+      tracker.setReadyForExecution()
       val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
       val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
         qe.executedPlan.executeCollect()
@@ -183,7 +187,7 @@ class QueryExecution(
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
-    tracker.setReadyForExecution(analyzed)
+    tracker.setReadyForExecution()
     plan
   }
 

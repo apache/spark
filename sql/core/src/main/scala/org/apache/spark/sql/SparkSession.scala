@@ -658,7 +658,7 @@ class SparkSession private(
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Array[_]): DataFrame = withActive {
+  def sql(sqlText: String, args: Array[_]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
@@ -712,7 +712,7 @@ class SparkSession private(
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): DataFrame = withActive {
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
@@ -777,7 +777,7 @@ class SparkSession private(
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, tracker: QueryPlanningTracker): DataFrame = withActive {
+  def sql(sqlText: String, tracker: QueryPlanningTracker): DataFrame = {
     sql(sqlText, Map.empty[String, Any], tracker)
   }
 
