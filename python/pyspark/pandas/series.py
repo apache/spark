@@ -53,7 +53,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
-from pyspark import SparkContext
 from pyspark.sql import functions as F, Column as PySparkColumn, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -70,7 +69,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import get_column_class
+from pyspark.sql.utils import get_column_class, get_window_class
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
@@ -2257,10 +2256,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return self._psdf.copy()._psser_for(self._column_label)
 
         scol = self.spark.column
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
-        last_non_null = PySparkColumn(sql_utils.lastNonNull(scol._jc))
-        null_index = PySparkColumn(sql_utils.nullIndex(scol._jc))
+        last_non_null = SF.last_non_null(scol)
+        null_index = SF.null_index(scol)
 
+        Window = get_window_class()
         window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
