@@ -20,6 +20,7 @@ import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import org.apache.commons.io.output.ByteArrayOutputStream
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
@@ -42,26 +43,28 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    ammoniteOut = new ByteArrayOutputStream()
-    testSuiteOut = new PipedOutputStream()
-    // Connect the `testSuiteOut` and `ammoniteIn` pipes
-    ammoniteIn = new PipedInputStream(testSuiteOut)
-    errorStream = new ByteArrayOutputStream()
+    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      super.beforeAll()
+      ammoniteOut = new ByteArrayOutputStream()
+      testSuiteOut = new PipedOutputStream()
+      // Connect the `testSuiteOut` and `ammoniteIn` pipes
+      ammoniteIn = new PipedInputStream(testSuiteOut)
+      errorStream = new ByteArrayOutputStream()
 
-    val args = Array("--port", serverPort.toString)
-    val task = new Runnable {
-      override def run(): Unit = {
-        ConnectRepl.doMain(
-          args = args,
-          semaphore = Some(semaphore),
-          inputStream = ammoniteIn,
-          outputStream = ammoniteOut,
-          errorStream = errorStream)
+      val args = Array("--port", serverPort.toString)
+      val task = new Runnable {
+        override def run(): Unit = {
+          ConnectRepl.doMain(
+            args = args,
+            semaphore = Some(semaphore),
+            inputStream = ammoniteIn,
+            outputStream = ammoniteOut,
+            errorStream = errorStream)
+        }
       }
-    }
 
-    executorService.submit(task)
+      executorService.submit(task)
+    }
   }
 
   override def afterAll(): Unit = {
@@ -100,6 +103,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("Simple query") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // Run simple query to test REPL
     val input = """
         |spark.sql("select 1").collect()
@@ -109,6 +114,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF containing 'def'") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = """
         |class A(x: Int) { def get = x * 5 + 19 }
         |def dummyUdf(x: Int): Int = new A(x).get
@@ -134,6 +141,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF containing in-place lambda") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = """
         |class A(x: Int) { def get = x * 42 + 5 }
         |val myUdf = udf((x: Int) => new A(x).get)
@@ -144,6 +153,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("SPARK-43198: Filter does not throw ammonite-related class initialization exception") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = """
         |spark.range(10).filter(n => n % 2 == 0).collect()
       """.stripMargin

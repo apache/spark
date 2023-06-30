@@ -20,6 +20,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
@@ -33,6 +34,8 @@ import org.apache.spark.util.ThreadUtils
 class SparkSessionE2ESuite extends RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     implicit val ec: ExecutionContextExecutor = ExecutionContext.global
@@ -73,6 +76,8 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
   }
 
   test("interrupt all - foreground queries, background interrupt") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     implicit val ec: ExecutionContextExecutor = ExecutionContext.global

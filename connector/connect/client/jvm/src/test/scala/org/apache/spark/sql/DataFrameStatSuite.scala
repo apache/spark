@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Random
 
 import io.grpc.StatusRuntimeException
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
@@ -28,6 +29,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
   test("approxQuantile") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
 
@@ -79,6 +82,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("covariance") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
 
@@ -96,6 +101,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("correlation") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
 
@@ -110,6 +117,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("crosstab") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
 
@@ -132,6 +141,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("freqItems") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
 
@@ -151,6 +162,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("sampleBy") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val df = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
@@ -164,6 +177,8 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("countMinSketch") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(1000)
 
     val sketch1 = df.stat.countMinSketch("id", depth = 10, width = 20, seed = 42)

@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
+
 import org.apache.spark.sql.connect.client.util.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -68,6 +70,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("drop") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = createDF()
     val rows = input.collect()
 
@@ -95,6 +99,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("drop with how") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = createDF()
     val rows = input.collect()
 
@@ -112,6 +118,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("drop with threshold") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = createDF()
     val rows = input.collect()
 
@@ -124,6 +132,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("fill") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sparkSession = spark
     import sparkSession.implicits._
 
@@ -225,6 +235,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("fill with map") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sparkSession = spark
     import sparkSession.implicits._
 
@@ -271,12 +283,16 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("fill with col(*)") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = createDF()
     // If columns are specified with "*", they are ignored.
     checkAnswer(df.na.fill("new name", Seq("*")), df.collect())
   }
 
   test("drop with col(*)") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = createDF()
     val ex = intercept[RuntimeException] {
       df.na.drop("any", Seq("*")).collect()
@@ -285,11 +301,15 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("fill with nested columns") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = createDFWithNestedColumns
     checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), df)
   }
 
   test("drop with nested columns") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = createDFWithNestedColumns
 
     // Rows with the specified nested columns whose null values are dropped.
@@ -298,6 +318,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = createDF()
 
     val result1 = input.na
@@ -335,6 +357,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace with null") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = spark.sql(
       "select name, height, married from (values " +
         "('Bob', 176.5, true), " +
@@ -373,6 +397,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace nan with float") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     checkAnswer(
       createNaNDF().na.replace("*", Map(Float.NaN -> 10.0f)),
       Row(1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0) ::
@@ -380,6 +406,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace nan with double") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     checkAnswer(
       createNaNDF().na.replace("*", Map(Double.NaN -> 10.0)),
       Row(1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0) ::
@@ -387,6 +415,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace float with nan") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkAnswer(
         createNaNDF().na.replace("*", Map(1.0f -> Float.NaN)),
@@ -396,6 +426,8 @@ class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   }
 
   test("replace double with nan") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
       checkAnswer(
         createNaNDF().na.replace("*", Map(1.0 -> Double.NaN)),

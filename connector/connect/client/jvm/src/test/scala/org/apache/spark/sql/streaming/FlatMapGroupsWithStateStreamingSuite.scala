@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -49,6 +50,8 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
     Seq(ClickState("a", 2), ClickState("b", 1))
 
   test("flatMapGroupsWithState - streaming") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
 
@@ -90,6 +93,8 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
   }
 
   test("flatMapGroupsWithState - streaming - with initial state") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
 
@@ -135,6 +140,8 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
   }
 
   test("mapGroupsWithState - streaming") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
 
@@ -177,6 +184,8 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with SQLHelper {
   }
 
   test("mapGroupsWithState - streaming - with initial state") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
 

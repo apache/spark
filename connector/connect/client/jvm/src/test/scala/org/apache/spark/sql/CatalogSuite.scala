@@ -21,6 +21,7 @@ import java.io.{File, FilenameFilter}
 
 import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
@@ -29,6 +30,8 @@ import org.apache.spark.storage.StorageLevel
 class CatalogSuite extends RemoteSparkSession with SQLHelper {
 
   test("Database APIs") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val currentDb = spark.catalog.currentDatabase
     assert(currentDb == "default")
     withTempDatabase { db =>
@@ -60,6 +63,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("CatalogMetadata APIs") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val currentCatalog = spark.catalog.currentCatalog()
     assert(currentCatalog == "spark_catalog")
     try {
@@ -87,6 +92,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("Table APIs") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     assert(spark.catalog.listTables().collect().isEmpty)
     val parquetTableName = "parquet_table"
     val orcTableName = "orc_table"
@@ -150,6 +157,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("Cache Table APIs") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val parquetTableName = "parquet_table"
     withTable(parquetTableName) {
       withTempPath { table1Dir =>
@@ -175,6 +184,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("TempView APIs") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val viewName = "view1"
     val globalViewName = "g_view1"
     try {
@@ -197,6 +208,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("Function API") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val dbName = spark.catalog.currentDatabase
     val functions1 = spark.catalog.listFunctions().collect()
     assert(functions1.nonEmpty)
@@ -221,6 +234,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("recoverPartitions") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val tableName = "test"
     withTable(tableName) {
       withTempPath { dir =>
@@ -245,6 +260,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("refreshTable") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTempPath { dir =>
       val tableName = "spark_catalog.default.my_table"
       withTable(tableName) {
@@ -270,6 +287,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("refreshByPath") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTempPath { dir =>
       val tableName = "spark_catalog.default.my_table"
       withTable(tableName) {

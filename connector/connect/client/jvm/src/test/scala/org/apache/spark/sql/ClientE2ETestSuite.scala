@@ -46,6 +46,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   // Spark Result
   test("spark result schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
     df.withResult { result =>
       val schema = result.schema
@@ -54,6 +56,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("spark result array") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.sql("select val from (values ('Hello'), ('World')) as t(val)")
     val result = df.collect()
     assert(result.length == 2)
@@ -62,6 +66,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("eager execution of sql") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
@@ -80,6 +86,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("simple dataset") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(10).limit(3)
     val result = df.collect()
     assert(result.length == 3)
@@ -89,6 +97,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("read and write") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
@@ -129,6 +139,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("read path collision") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
@@ -159,6 +171,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("textFile") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
@@ -179,6 +193,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("write table") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("myTable") {
       val df = spark.range(10).limit(3)
       df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
@@ -194,6 +210,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("different spark session join/union") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(10).limit(3)
 
     val spark2 = SparkSession
@@ -222,11 +240,15 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("write without table or path") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // Should receive no error to write noop
     spark.range(10).write.format("noop").mode("append").save()
   }
 
   test("write jdbc") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
       val url = "jdbc:derby:memory:1234"
@@ -245,6 +267,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("writeTo with create") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.myTableV2") {
 
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
@@ -259,6 +283,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("writeTo with create and using") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.myTableV2") {
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
 
@@ -279,6 +305,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("writeTo with create and append") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.myTableV2") {
 
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
@@ -296,6 +324,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("WriteTo with overwrite") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.myTableV2") {
 
       val rows1 = (1L to 3L).map { i =>
@@ -327,6 +357,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("WriteTo with overwritePartitions") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withTable("testcat.myTableV2") {
 
       val rows = (4L to 7L).map { i =>
@@ -351,6 +383,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("write path collision") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(10)
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
     // Failed because the path cannot be provided both via option and save method.
@@ -397,6 +431,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
 
   // Dataset tests
   test("Dataset inspection") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(10)
     val local = spark.newDataFrame { builder =>
       builder.getLocalRelationBuilder.setSchema(simpleSchema.catalogString)
@@ -409,6 +445,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(10)
     assert(df.schema === simpleSchema)
     assert(df.dtypes === Array(("value", "LongType")))
@@ -418,6 +456,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataframe schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.sql("select * from range(10)")
     val expectedSchema = new StructType().add("id", "long", nullable = false)
     assert(df.schema === expectedSchema)
@@ -428,6 +468,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset explain") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(10)
     val simpleExplainFragments = Seq("== Physical Plan ==")
     testCapturedStdOut(df.explain(), simpleExplainFragments: _*)
@@ -448,6 +490,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset result collection") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
       rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {
         case (actual, expected) => assert(actual === expected)
@@ -473,6 +517,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset show") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(20)
     testCapturedStdOut(df.show(), 24, 5, "+---+", "| id|", "|  0|", "| 19|")
     testCapturedStdOut(
@@ -518,6 +564,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset randomSplit") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     implicit val tolerance = TolerantNumerics.tolerantDoubleEquality(0.01)
 
     val df = spark.range(100)
@@ -546,10 +594,14 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset count") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     assert(spark.range(10).count() === 10)
   }
 
   test("Dataset collect tuple") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val result = session
@@ -592,6 +644,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset collect complex type") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val result = session
@@ -603,17 +657,23 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset typed select - simple column") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val numRows = spark.range(1000).select(count("id")).first()
     assert(numRows === 1000)
   }
 
   test("Dataset typed select - multiple columns") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val result = spark.range(1000).select(count("id"), sum("id")).first()
     assert(result.getLong(0) === 1000)
     assert(result.getLong(1) === 499500)
   }
 
   test("Dataset typed select - complex column") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val ds = session
@@ -623,6 +683,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset typed select - multiple complex columns") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val s = struct(generateMyTypeColumns: _*).as[MyType]
@@ -633,6 +695,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("lambda functions") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // This test is mostly to validate lambda variables are properly resolved.
     val result = spark
       .range(3)
@@ -649,6 +713,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("shuffle array") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // We cannot do structural tests for shuffle because its random seed will always change.
     val result = spark
       .sql("select 1")
@@ -659,6 +725,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("ambiguous joins") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val left = spark.range(100).select(col("id"), rand(10).as("a"))
     val right = spark.range(100).select(col("id"), rand(12).as("a"))
     val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
@@ -671,6 +739,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("broadcast join") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
       val right = spark.range(100).select(col("id"), rand(12).as("a"))
@@ -682,6 +752,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("test temp view") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     try {
       spark.range(100).createTempView("test1")
       assert(spark.sql("SELECT * FROM test1").count() == 100)
@@ -698,11 +770,15 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("time") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val timeFragments = Seq("Time taken: ", " ms")
     testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
   }
 
   test("RuntimeConfig") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     intercept[NoSuchElementException](spark.conf.get("foo.bar"))
     assert(spark.conf.getOption("foo.bar").isEmpty)
     spark.conf.set("foo.bar", value = true)
@@ -722,6 +798,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("SparkVersion") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     assert(spark.version.nonEmpty)
     assert(spark.version == SPARK_VERSION)
   }
@@ -733,6 +811,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Local Relation implicit conversion") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
 
@@ -748,12 +828,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("SparkSession.createDataFrame - row") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = java.util.Arrays.asList(Row("bob", 99), Row("Club", 5), Row("Bag", 5))
     val schema = new StructType().add("key", "string").add("value", "int")
     checkSameResult(rows.asScala, spark.createDataFrame(rows, schema))
   }
 
   test("SparkSession.createDataFrame - bean") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     def bean(v: String): SimpleBean = {
       val bean = new SimpleBean
       bean.setValue(v)
@@ -766,6 +850,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("SparkSession typed createDataSet/createDataframe") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val list = java.util.Arrays.asList(KV("bob", 99), KV("Club", 5), KV("Bag", 5))
@@ -776,12 +862,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("SparkSession newSession") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val oldId = spark.sql("SELECT 1").analyze.getSessionId
     val newId = spark.newSession().sql("SELECT 1").analyze.getSessionId
     assert(oldId != newId)
   }
 
   test("createDataFrame from complex type schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val schema = new StructType()
       .add(
         "c1",
@@ -794,12 +884,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("SameSemantics") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val plan = spark.sql("select 1")
     val otherPlan = spark.sql("select 1")
     assert(plan.sameSemantics(otherPlan))
   }
 
   test("sameSemantics and semanticHash") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df1 = spark.createDataFrame(Seq((1, 2), (4, 5)))
     val df2 = spark.createDataFrame(Seq((1, 2), (4, 5)))
     val df3 = spark.createDataFrame(Seq((0, 2), (4, 5)))
@@ -815,6 +909,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("toJSON") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val expected = Array(
       """{"b":0.0,"id":0,"d":"world","a":0}""",
       """{"b":0.1,"id":1,"d":"world","a":1}""",
@@ -828,6 +924,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("json from Dataset[String] inferSchema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val expected = Seq(
@@ -840,6 +938,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("json from Dataset[String] with schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val schema = new StructType().add("city", StringType).add("name", StringType)
@@ -850,6 +950,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("json from Dataset[String] with invalid schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val message = intercept[ParseException] {
       spark.read.schema("123").json(spark.createDataset(Seq.empty[String])(StringEncoder))
     }.getMessage
@@ -857,6 +959,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("csv from Dataset[String] inferSchema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val expected = Seq(
@@ -872,6 +976,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("csv from Dataset[String] with schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session = spark
     import session.implicits._
     val schema = new StructType().add("name", StringType).add("age", LongType)
@@ -882,6 +988,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("csv from Dataset[String] with invalid schema") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val message = intercept[ParseException] {
       spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
     }.getMessage
@@ -889,6 +997,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("Dataset result destructive iterator") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // Helper methods for accessing private field `idxToBatches` from SparkResult
     val _idxToBatches =
       PrivateMethod[mutable.Map[Int, ColumnarBatch]](Symbol("idxToBatches"))
@@ -934,6 +1044,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("SparkSession.createDataFrame - large data set") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val threshold = 1024 * 1024
     withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
       val count = 2
@@ -949,6 +1061,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("sql() with positional parameters") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val result0 = spark.sql("select 1", Array.empty).collect()
     assert(result0.length == 1 && result0(0).getInt(0) === 1)
 
@@ -962,6 +1076,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("sql() with named parameters") {
+    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
+    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val result0 = spark.sql("select 1", Map.empty[String, Any]).collect()
     assert(result0.length == 1 && result0(0).getInt(0) === 1)
 
