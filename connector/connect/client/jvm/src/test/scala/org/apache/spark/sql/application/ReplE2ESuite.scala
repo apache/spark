@@ -43,6 +43,7 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   override def beforeAll(): Unit = {
+    // TODO(SPARK-44121) Remove this check condition
     if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
       super.beforeAll()
       ammoniteOut = new ByteArrayOutputStream()
@@ -103,8 +104,6 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("Simple query") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // Run simple query to test REPL
     val input = """
         |spark.sql("select 1").collect()
@@ -114,8 +113,6 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF containing 'def'") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = """
         |class A(x: Int) { def get = x * 5 + 19 }
         |def dummyUdf(x: Int): Int = new A(x).get
@@ -141,8 +138,6 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("UDF containing in-place lambda") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = """
         |class A(x: Int) { def get = x * 42 + 5 }
         |val myUdf = udf((x: Int) => new A(x).get)
@@ -153,8 +148,6 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   test("SPARK-43198: Filter does not throw ammonite-related class initialization exception") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val input = """
         |spark.range(10).filter(n => n % 2 == 0).collect()
       """.stripMargin

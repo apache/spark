@@ -20,7 +20,6 @@ import java.sql.Timestamp
 import java.util.Arrays
 
 import io.grpc.StatusRuntimeException
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.connect.client.util.QueryTest
@@ -41,8 +40,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   import session.implicits._
 
   test("mapGroups") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val values = spark
@@ -54,8 +51,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("flatGroupMap") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -65,8 +60,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keys") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -76,8 +69,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs - keys") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // It is okay to cast from Long to Double, but not Long to Int.
     val values = spark
       .range(10)
@@ -89,8 +80,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("groupByKey, keyAs - duplicates") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val result = spark
@@ -104,8 +93,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("groupByKey, keyAs, keys - duplicates") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val result = spark
@@ -119,8 +106,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs - flatGroupMap") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -131,8 +116,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("keyAs mapValues - cogroup") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -164,8 +147,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapValues - flatGroupMap") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -176,8 +157,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapValues - keys") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -188,8 +167,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("flatMapSortedGroups") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -213,8 +190,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("cogroup") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -231,8 +206,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("cogroupSorted") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -260,8 +233,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("agg, keyAs") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -272,8 +243,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
@@ -286,8 +255,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -298,8 +265,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -310,8 +275,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -327,8 +290,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -345,8 +306,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -364,8 +323,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -384,8 +341,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("typed aggregation: expr, expr, expr, expr, expr, expr, expr, expr") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkDatasetUnorderly(
@@ -405,8 +360,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-24762: Enable top-level Option of Product encoders") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val data = Seq(Some((1, "a")), Some((2, "b")), None)
     val ds = data.toDS()
 
@@ -441,8 +394,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-24762: Resolving Option[Product] field") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq((1, ("a", 1.0)), (2, ("b", 2.0)), (3, null))
       .toDS()
       .as[(Int, Option[(String, Double)])]
@@ -450,8 +401,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-24762: select Option[Product] field") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val ds1 = ds.select(expr("struct(_2, _2 + 1)").as[Option[(Int, Int)]])
     checkDataset(ds1, Some((1, 2)), Some((2, 3)), Some((3, 4)))
@@ -461,8 +410,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-24762: typed agg on Option[Product] type") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(Some((1, 2)), Some((2, 3)), Some((1, 3))).toDS()
     assert(ds.groupByKey(_.get._1).count().collect() === Seq((1, 2), (2, 1)))
 
@@ -472,8 +419,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-25942: typed aggregation on primitive type") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(1, 2, 3).toDS()
 
     val agg = ds
@@ -483,16 +428,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-25942: typed aggregation on product type") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq((1, 2), (2, 3), (3, 4)).toDS()
     val agg = ds.groupByKey(x => x).agg(sum("_1").as[Long], sum($"_2" + 1).as[Long])
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
   }
 
   test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // TODO(SPARK-43416): Recursively rename the position based tuple to the schema name from the
     //  server.
     val ds = Seq(1, 2, 3).toDS()
@@ -505,8 +446,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("reduceGroups") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq("abc", "xyz", "hello").toDS()
     checkDatasetUnorderly(
       ds.groupByKey(_.length).reduceGroups(_ + _),
@@ -515,8 +454,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("groupby") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
@@ -536,8 +473,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("groupby - keyAs, keys") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
@@ -547,8 +482,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("flatMapGroupsWithState") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         if (state.exists) throw new IllegalArgumentException("state.exists should be false")
@@ -572,8 +505,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("flatMapGroupsWithState - with initial state") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         val currState = state.getOption.getOrElse(ClickState(key, 0))
@@ -601,8 +532,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapGroupsWithState") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         if (state.exists) throw new IllegalArgumentException("state.exists should be false")
@@ -626,8 +555,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapGroupsWithState - with initial state") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val stateFunc =
       (key: String, values: Iterator[ClickEvent], state: GroupState[ClickState]) => {
         val currState = state.getOption.getOrElse(ClickState(key, 0))
@@ -655,8 +582,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("RowEncoder in udf") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
 
     checkDatasetUnorderly(
@@ -667,8 +592,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("mapGroups with row encoder") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
 
     checkDataset(
@@ -683,8 +606,6 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("coGroup with row encoder") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df1 = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
     val df2 = Seq(("x", 10), ("x", 20), ("y", 1), ("y", 2), ("a", 1)).toDF("c1", "c2")
 

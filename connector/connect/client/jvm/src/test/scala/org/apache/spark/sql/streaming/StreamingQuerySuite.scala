@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -36,8 +35,6 @@ import org.apache.spark.util.Utils
 class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
   test("Streaming API with windowed aggregate query") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // This verifies standard streaming API by starting a streaming query with windowed count.
     withSQLConf(
       "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
@@ -114,8 +111,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("Streaming table API") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withSQLConf(
       "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
     ) {
@@ -152,8 +147,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("awaitTermination") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     withSQLConf(
       "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
     ) {
@@ -179,8 +172,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("foreach Row") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val writer = new TestForeachWriter[Row]
 
     val df = spark.readStream
@@ -200,8 +191,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("foreach Int") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
 
@@ -227,8 +216,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("foreach Custom class") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
 
@@ -253,8 +240,6 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("streaming query manager") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     assert(spark.streams.active.isEmpty)
     val q = spark.readStream
       .format("rate")

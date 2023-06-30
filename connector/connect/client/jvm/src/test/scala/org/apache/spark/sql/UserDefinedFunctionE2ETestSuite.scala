@@ -23,8 +23,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
-
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
@@ -36,15 +34,11 @@ import org.apache.spark.sql.functions.{col, struct, udf}
  */
 class UserDefinedFunctionE2ETestSuite extends QueryTest {
   test("Dataset typed filter") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
   }
 
   test("Dataset typed filter - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = spark
       .range(10)
       .filter(new FilterFunction[JLong] {
@@ -55,15 +49,11 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset typed map") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = spark.range(10).map(n => n / 2)(PrimitiveLongEncoder).collectAsList()
     assert(rows == Arrays.asList[Long](0, 0, 1, 1, 2, 2, 3, 3, 4, 4))
   }
 
   test("filter with condition") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // This should go via `def filter(condition: Column)` rather than
     // `def filter(func: T => Boolean)`
     def func(i: Long): Boolean = i < 5
@@ -73,8 +63,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("filter with col(*)") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     // This should go via `def filter(condition: Column)` but it is executed as
     // `def filter(func: T => Boolean)`. This is fine as the result is the same.
     def func(i: Long): Boolean = i < 5
@@ -84,8 +72,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset typed map - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = spark
       .range(10)
       .map(
@@ -98,8 +84,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset typed flat map") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val rows = spark
@@ -111,8 +95,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset typed flat map - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val rows = spark
       .range(5)
       .flatMap(
@@ -126,8 +108,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset typed map partition") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val df = spark.range(0, 100, 1, 50).repartition(4)
@@ -137,8 +117,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset typed map partition - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val df = spark.range(0, 100, 1, 50).repartition(4)
     val result = df
       .mapPartitions(
@@ -153,8 +131,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset foreach") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val func: JLong => Unit = _ => {
       throw new RuntimeException("Hello foreach")
     }
@@ -165,8 +141,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset foreach - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val exception = intercept[Exception] {
       spark
         .range(2)
@@ -180,8 +154,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset foreachPartition") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
       f.foreach(v => sum.addAndGet(v))
@@ -198,8 +170,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset foreachPartition - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sum = new AtomicLong()
     val exception = intercept[Exception] {
       spark
@@ -220,8 +190,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset foreach: change not visible to client") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val sum = new AtomicLong()
     val func: Iterator[JLong] => Unit = f => {
       f.foreach(v => sum.addAndGet(v))
@@ -231,32 +199,24 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Dataset reduce without null partition inputs") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     assert(spark.range(0, 10, 1, 5).map(_ + 1).reduce(_ + _) == 55)
   }
 
   test("Dataset reduce with null partition inputs") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     assert(spark.range(0, 10, 1, 16).map(_ + 1).reduce(_ + _) == 55)
   }
 
   test("Dataset reduce with null partition inputs - java to scala long type") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     assert(spark.range(0, 5, 1, 10).as[Long].reduce(_ + _) == 10)
   }
 
   test("Dataset reduce with null partition inputs - java") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     assert(
@@ -269,8 +229,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("udf with row input encoder") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
@@ -279,8 +237,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("Filter with row input encoder") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
@@ -289,8 +245,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest {
   }
 
   test("mapPartitions with row input encoder") {
-    // TODO(SPARK-44121) Re-enable Arrow-based connect tests in Java 21
-    assume(SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17))
     val session: SparkSession = spark
     import session.implicits._
     val df = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("c1", "c2")
