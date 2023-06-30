@@ -37,7 +37,7 @@ public abstract class VectorReservePolicy {
    * corresponding columns are not present in storage. We can not reset the data of column vectors
    * that has default values.
    */
-  protected boolean hasDefaultValue;
+  protected boolean hasDefaultValue = false;
 
   abstract int nextCapacity(int requiredCapacity);
 
