@@ -92,18 +92,23 @@ object QueryPlanningTracker {
 
 /**
  * Callbacks after planning phase completion.
+ *
+ * @since 3.5.0
  */
-trait QueryPlanningTrackerCallback {
+abstract class QueryPlanningTrackerCallback {
   /**
    * Called when query has been analyzed.
-   * @param tracker tracker that triggered the callback
+   *
+   * @param tracker tracker that triggered the callback.
+   * @param analyzedPlan The plan after analysis,
+   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
    */
-  def analyzed(tracker: QueryPlanningTracker, plan: LogicalPlan): Unit
+  def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
 
   /**
    * Called when query is ready for execution.
    * This is after analysis for eager commands and after planning for other queries.
-   * @param tracker tracker that triggered the callback
+   * @param tracker tracker that triggered the callback.
    */
   def readyForExecution(tracker: QueryPlanningTracker): Unit
 }
