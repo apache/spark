@@ -343,10 +343,13 @@ class DataFrameSuite extends QueryTest
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
-    val e = intercept[AnalysisException] {
-      df.select(explode($"*"))
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in expression 'explode'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(explode($"*"))
+      },
+      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      parameters = Map("elem" -> "'*'", "prettyName" -> "expression `explode`")
+    )
   }
 
   test("explode on output of array-valued function") {

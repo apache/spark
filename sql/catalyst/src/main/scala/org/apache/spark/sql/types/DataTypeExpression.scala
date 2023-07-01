@@ -66,6 +66,11 @@ object IntegralTypeExpression {
   }
 }
 
+object AnyTimestampTypeExpression {
+  def unapply(e: Expression): Boolean =
+    e.dataType.isInstanceOf[TimestampType] || e.dataType.isInstanceOf[TimestampNTZType]
+}
+
 object DecimalExpression {
   def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
     case t: DecimalType => Some((t.precision, t.scale))
