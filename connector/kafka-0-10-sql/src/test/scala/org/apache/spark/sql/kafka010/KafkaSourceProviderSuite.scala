@@ -18,28 +18,106 @@
 package org.apache.spark.sql.kafka010
 
 import java.util.Locale
-
-import scala.collection.JavaConverters._
+import java.util.concurrent.ExecutionException
 
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkFunSuite, TestUtils}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.read.Scan
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class KafkaSourceProviderSuite extends SparkFunSuite {
+class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
+  import scala.collection.JavaConverters._
 
   private val expected = "1111"
 
+  protected var testUtils: KafkaTestUtils = _
+
   override protected def afterEach(): Unit = {
-    SparkEnv.set(null)
     super.afterEach()
+  }
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    testUtils = new KafkaTestUtils
+    testUtils.setup()
+  }
+
+  override protected def afterAll(): Unit = {
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("batch mode - options should be handled as case-insensitive") {
     verifyFieldsInBatch(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, batch => {
       assert(expected.toLong === batch.pollTimeoutMs)
     })
+  }
+
+  /* if testType contains source/sink, kafka is used as a source/sink option respectively
+  if testType contains stream/batch, it is used either in readStream/read or writeStream/write */
+  Seq("source and stream", "sink and stream",
+    "source and batch", "sink and batch").foreach { testType =>
+    test(s"test MSK IAM auth on kafka '$testType' side") {
+      val options: Map[String, String] = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> "msk-123",
+        "startingOffsets" -> "earliest",
+        "kafka.sasl.mechanism" -> "AWS_MSK_IAM",
+        "kafka.sasl.jaas.config" ->
+          "software.amazon.msk.auth.iam.IAMLoginModule required;",
+        "kafka.security.protocol" -> "SASL_SSL",
+        "kafka.sasl.client.callback.handler.class" ->
+          "software.amazon.msk.auth.iam.IAMClientCallbackHandler"
+      )
+
+      var e: Throwable = null
+      if (testType.contains("stream")) {
+        if (testType.contains("source")) {
+          e = intercept[StreamingQueryException] {
+            spark.readStream.format("kafka").options(options).load()
+              .writeStream.format("console").start().processAllAvailable()
+          }
+          TestUtils.assertExceptionMsg(e, "Timed out")
+        } else {
+          e = intercept[StreamingQueryException] {
+            spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+              .withColumn("value", col("value").cast(StringType)).writeStream
+              .format("kafka").options(options).option("checkpointLocation", "temp/testing")
+              .option("topic", "msk-123").start().processAllAvailable()
+          }
+          TestUtils.assertExceptionMsg(e, "Timeout")
+        }
+      } else {
+        if (testType.contains("source")) {
+          e = intercept[ExecutionException] {
+            spark.read.format("kafka").options(options).load()
+              .write.format("console").save()
+          }
+          TestUtils.assertExceptionMsg(e, "Timed out")
+        } else {
+          val schema = new StructType().add("value", "string")
+          e = intercept[SparkException] {
+            spark.createDataFrame(Seq(Row("test"), Row("test2")).asJava, schema)
+              .write.mode("append").format("kafka")
+              .options(options).option("checkpointLocation", "temp/testing/1")
+              .option("topic", "msk-123").save()
+          }
+          TestUtils.assertExceptionMsg(e, "Timeout")
+        }
+      }
+    }
   }
 
   test("micro-batch mode - options should be handled as case-insensitive") {
@@ -62,6 +140,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
         stream => {
       assert(expected.toLong === stream.kafkaOffsetReader.offsetFetchAttemptIntervalMs)
     })
+    SparkEnv.set(null)
   }
 
   test("continuous mode - options should be handled as case-insensitive") {
