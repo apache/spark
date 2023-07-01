@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
@@ -685,6 +686,33 @@ class StreamSuite extends StreamTest {
     query.stop()
     assert(query.exception.isEmpty)
   }
+
+  test("SPARK-44044: non-time-window") {
+    val inputData = MemoryStream[(Int, Int)]
+    val e = intercept[AnalysisException] {
+      val agg = inputData
+        .toDF()
+        .selectExpr("CAST(_1 AS timestamp) AS col1", "_2 AS col2")
+        .withWatermark("col1", "10 seconds")
+        .withColumn("rn_col", row_number().over(Window
+          .partitionBy("col1")
+          .orderBy(col("col2"))))
+        .select("rn_col", "col1", "col2")
+        .writeStream
+        .format("console")
+        .start()
+    }
+    checkError(
+      e,
+      "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING",
+      parameters = Map(
+        "windowFunc" -> "ROW_NUMBER()",
+        "columnName" -> "`rn_col`",
+        "windowSpec" ->
+          ("(PARTITION BY COL1 ORDER BY COL2 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING " +
+          "AND CURRENT ROW)")))
+  }
+
 
   test("SPARK-19873: streaming aggregation with change in number of partitions") {
     val inputData = MemoryStream[(Int, Int)]

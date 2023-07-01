@@ -1786,6 +1786,11 @@
     ],
     "sqlState" : "42000"
   },
+  "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING" : {
+    "message" : [
+      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets. Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
+    ]
+  },
   "NOT_ALLOWED_IN_FROM" : {
     "message" : [
       "Not allowed in the FROM clause:"
