@@ -2163,7 +2163,7 @@ class DataSourceV2SQLSuiteV1Filter
         exception = analysisException(sql1),
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
-          "objectName" -> "\"target.dummy\"",
+          "objectName" -> "`target`.`dummy`",
           "proposal" -> "`age`, `id`, `name`, `p`"),
         context = ExpectedContext("target.dummy = source.age", 206, 230))
 
@@ -2179,7 +2179,7 @@ class DataSourceV2SQLSuiteV1Filter
              |THEN INSERT *""".stripMargin),
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
-          "objectName" -> "\"source.dummy\"",
+          "objectName" -> "`source`.`dummy`",
           "proposal" -> "`age`, `age`, `id`, `id`, `name`, `name`, `p`, `p`"),
         context = ExpectedContext("source.dummy", 219, 230))
 

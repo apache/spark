@@ -1791,7 +1791,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         a.failAnalysis(
           errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           messageParameters = Map(
-            "objectName" -> toSQLExpr(a),
+            "objectName" -> toSQLId(a.name),
             "proposal" -> cols))
       }
     }
