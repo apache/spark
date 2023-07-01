@@ -1247,6 +1247,11 @@
         "message" : [
           "Found incompatible types in the column <colName> for inline table."
         ]
+      },
+      "NUM_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Inline table expected <expectedNumCols> columns but found <actualNumCols> columns in row <rowIndex>."
+        ]
       }
     }
   },
@@ -1270,6 +1275,11 @@
       "DUPLICATE_ARG_NAMES" : {
         "message" : [
           "The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to \"true\"."
+        ]
+      },
+      "NON_HIGHER_ORDER_FUNCTION" : {
+        "message" : [
+          "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
         ]
       },
       "NUM_ARGS_MISMATCH" : {
@@ -1949,6 +1959,11 @@
       "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ],
     "sqlState" : "42826"
+  },
+  "NUM_TABLE_VALUE_ALIASES_MISMATCH" : {
+    "message" : [
+      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
@@ -5613,26 +5628,6 @@
   "_LEGACY_ERROR_TEMP_2278" : {
     "message" : [
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2305" : {
-    "message" : [
-      "expected <numCols> columns but found <rowSize> columns in row <ri>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2306" : {
-    "message" : [
-      "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2307" : {
-    "message" : [
-      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2309" : {
-    "message" : [
-      "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2311" : {

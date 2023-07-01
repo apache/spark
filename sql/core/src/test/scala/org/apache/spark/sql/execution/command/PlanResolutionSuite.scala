@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -2177,8 +2178,14 @@ class PlanResolutionSuite extends AnalysisTest {
            |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET $target.s = $source.s
          """.stripMargin
       // update value in not matched by source clause can only reference the target table.
-      val e7 = intercept[AnalysisException](parseAndResolve(sql7))
-      assert(e7.message.contains(s"cannot resolve $source.s in MERGE command"))
+      checkError(
+        exception = intercept[AnalysisException](parseAndResolve(sql7)),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> s"${toSQLId(source)}.`s`", "proposal" -> "`i`, `s`"),
+        context = ExpectedContext(
+          fragment = s"$source.s",
+          start = 77 + target.length * 2 + source.length,
+          stop = 78 + target.length * 2 + source.length * 2))
     }
 
     val sql1 =
@@ -2206,8 +2213,8 @@ class PlanResolutionSuite extends AnalysisTest {
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      errorClass = "_LEGACY_ERROR_TEMP_2309",
-      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
@@ -2218,8 +2225,8 @@ class PlanResolutionSuite extends AnalysisTest {
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
     checkError(
       exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      errorClass = "_LEGACY_ERROR_TEMP_2309",
-      parameters = Map("sqlExpr" -> "s", "cols" -> "testcat.tab2.i, testcat.tab2.x"),
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
