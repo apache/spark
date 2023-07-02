@@ -476,7 +476,9 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
     val e = intercept[SparkException] {
-      val buffer = mock[ByteBuffer]
+      // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
+      // due to mockito 4 can't mock/spy sealed class
+      val buffer = ByteBuffer.allocate(0)
       batchedWal.write(buffer, 2L)
     }
     assert(e.getCause.getMessage === "Hello!")
@@ -546,7 +548,9 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     batchedWal.close()
     verify(wal, times(1)).close()
 
-    intercept[IllegalStateException](batchedWal.write(mock[ByteBuffer], 12L))
+    // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
+    // due to mockito 4 can't mock/spy sealed class
+    intercept[IllegalStateException](batchedWal.write(ByteBuffer.allocate(0), 12L))
   }
 
   test("BatchedWriteAheadLog - fail everything in queue during shutdown") {
