@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_PARAMETER_VALUE error class
-displayTitle: INVALID_PARAMETER_VALUE error class
+title: MALFORMED_RECORD_IN_PARSING error class
+displayTitle: MALFORMED_RECORD_IN_PARSING error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,36 +21,14 @@ license: |
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
+Malformed records are detected in record parsing: `<badRecord>`.
+Parse Mode: `<failFastMode>`. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'.
 
 This error class has the following derived error classes:
 
-## AES_CRYPTO_ERROR
+## CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS
 
-detail message: `<detailMessage>`
+Parsing JSON arrays as structs is forbidden.
 
-## AES_IV_LENGTH
-
-supports 16-byte CBC IVs and 12-byte GCM IVs, but got `<actualLength>` bytes for `<mode>`.
-
-## AES_KEY_LENGTH
-
-expects a binary value with 16, 24 or 32 bytes, but got `<actualLength>` bytes.
-
-## DATETIME_UNIT
-
-expects one of the units without quotes YEAR, QUARTER, MONTH, WEEK, DAY, DAYOFYEAR, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal `<invalidValue>`.
-
-## PATTERN
-
-`<value>`.
-
-## REGEX_GROUP_INDEX
-
-Expects group index between 0 and `<groupCount>`, but got `<groupIndex>`.
-
-## ZERO_INDEX
-
-expects `%1$`, `%2$` and so on, but got `%0$`.
-
+## WITHOUT_SUGGESTION
 
