@@ -515,7 +515,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedRoundingMode(roundMode: BigDecimal.RoundingMode.Value): SparkException = {
-    SparkException.internalError(s"Not supported rounding mode: ${roundMode.toString}.")
+    DataTypeErrors.unsupportedRoundingMode(roundMode)
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {
@@ -1279,14 +1279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int, maxPrecision: Int): SparkArithmeticException = {
-    new SparkArithmeticException(
-      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      messageParameters = Map(
-        "precision" -> precision.toString,
-        "maxPrecision" -> maxPrecision.toString
-      ),
-      context = Array.empty,
-      summary = "")
+    DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(precision, maxPrecision)
   }
 
   def outOfDecimalTypeRangeError(str: UTF8String): SparkArithmeticException = {
@@ -1299,15 +1292,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2120",
-      messageParameters = Map("clazz" -> clazz.toString()))
+    DataTypeErrors.unsupportedJavaTypeError(clazz)
   }
 
   def unsupportedJavaTypeError(clazz: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2121",
-      messageParameters = Map("clazz" -> clazz.toString()))
+    DataTypeErrors.unsupportedJavaTypeError(clazz)
   }
 
   def failedParsingStructTypeError(raw: String): SparkRuntimeException = {
@@ -2183,34 +2172,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unsupportedOperationExceptionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2225",
-      messageParameters = Map.empty)
+    DataTypeErrors.unsupportedOperationExceptionError()
   }
 
   def nullLiteralsCannotBeCastedError(name: String): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2226",
-      messageParameters = Map(
-        "name" -> name))
+    DataTypeErrors.nullLiteralsCannotBeCastedError(name)
   }
 
   def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2227",
-      messageParameters = Map(
-        "name" -> name,
-        "userClass" -> userClass),
-      cause = null)
+    DataTypeErrors.notUserDefinedTypeError(name, userClass)
   }
 
   def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2228",
-      messageParameters = Map(
-        "name" -> name,
-        "userClass" -> userClass),
-      cause = null)
+    DataTypeErrors.cannotLoadUserDefinedTypeError(name, userClass)
   }
 
   def notPublicClassError(name: String): SparkUnsupportedOperationException = {
