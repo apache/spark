@@ -1284,6 +1284,12 @@ The value `<value>` cannot be interpreted as a numeric since it has more than 38
 
 `<operator>` can only be performed on inputs with the same number of columns, but the first input has `<firstNumColumns>` columns and the `<invalidOrdinalNum>` input has `<invalidNumColumns>` columns.
 
+### NUM_TABLE_VALUE_ALIASES_MISMATCH
+
+SQLSTATE: none assigned
+
+Number of given aliases does not match number of output columns. Function name: `<funcName>`; number of aliases: `<aliasesNum>`; number of output columns: `<outColsNum>`.
+
 ### ORDER_BY_POS_OUT_OF_RANGE
 
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

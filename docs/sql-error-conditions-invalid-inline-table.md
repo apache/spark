@@ -34,3 +34,7 @@ Failed to evaluate the SQL expression `<sqlExpr>`. Please check your syntax and 
 ## INCOMPATIBLE_TYPES_IN_INLINE_TABLE
 
 Found incompatible types in the column `<colName>` for inline table.
+
+## NUM_COLUMNS_MISMATCH
+
+Inline table expected `<expectedNumCols>` columns but found `<actualNumCols>` columns in row `<rowIndex>`.
