@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringConcat
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.util.Utils
@@ -140,7 +140,7 @@ object DataType {
             if (e.isInstanceOf[SparkThrowable]) {
               throw e
             }
-            throw QueryCompilationErrors.schemaFailToParseError(schema, e)
+            throw DataTypeErrors.schemaFailToParseError(schema, e)
         }
     }
   }
