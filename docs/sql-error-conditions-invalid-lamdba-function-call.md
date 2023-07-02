@@ -27,6 +27,10 @@ This error class has the following derived error classes:
 
 The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to "true".
 
+## NON_HIGHER_ORDER_FUNCTION
+
+A lambda function should only be used in a higher order function. However, its class is `<class>`, which is not a higher order function.
+
 ## NUM_ARGS_MISMATCH
 
 A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>.
