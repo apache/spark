@@ -56,7 +56,8 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     }
 
     /*
-    * This simulate the isPublic method. It will return true if the result is cached in the statCache.
+    * This simulates the isPublic method. It will return true if the result is cached in the
+    *  statCache.
     * */
     def isPublicResultCached(uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
       statCache.get(uri) match {
@@ -66,8 +67,8 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     }
   }
 
-  test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can " +
-    "read from statCache") {
+  test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can read" +
+    " from statCache") {
     val distMgr = new CustomizedClientDistributedCacheManager()
     val fs = mock[FileSystem]
     val conf = new Configuration()

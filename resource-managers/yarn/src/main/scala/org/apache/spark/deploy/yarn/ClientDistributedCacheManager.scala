@@ -119,6 +119,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    */
   private def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
     val fs = FileSystem.get(uri, conf)
+    // the leaf level file should be readable by others
     if (!checkPermissionOfOther(fs, uri, FsAction.READ, statCache)) {
       return false
     }
@@ -126,8 +127,8 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
   }
 
   /**
-   * Get the Parent URI of the given URI. Notes the query & fragment of original URI will not
-   * be inherited when obtaining parent URI (Path instantiation will not preserve query & fragment).
+   * Get the Parent URI of the given URI. Notes the query & fragment of original URI will not be
+   * inherited when obtaining parent URI (Path instantiation will not preserve query & fragment).
    *
    * @return the parent URI, null if the given uri is the root
    */
