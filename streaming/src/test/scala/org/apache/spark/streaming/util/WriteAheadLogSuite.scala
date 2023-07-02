@@ -476,7 +476,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
     val e = intercept[SparkException] {
-      val buffer = mock[ByteBuffer]
+      val buffer = ByteBuffer.allocate(1)
       batchedWal.write(buffer, 2L)
     }
     assert(e.getCause.getMessage === "Hello!")
@@ -546,7 +546,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     batchedWal.close()
     verify(wal, times(1)).close()
 
-    intercept[IllegalStateException](batchedWal.write(mock[ByteBuffer], 12L))
+    intercept[IllegalStateException](batchedWal.write(ByteBuffer.allocate(1), 12L))
   }
 
   test("BatchedWriteAheadLog - fail everything in queue during shutdown") {
