@@ -45,6 +45,62 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     }
   }
 
+  /*
+  * This this a customized ClientDistributedCacheManager to test statCache.
+  * */
+  class CustomizedClientDistributedCacheManager extends ClientDistributedCacheManager {
+    override def addResource(fs: FileSystem, conf: Configuration, destPath: Path,
+      localResources: HashMap[String, LocalResource], resourceType: LocalResourceType,
+      link: String, statCache: Map[URI, FileStatus], appMasterOnly: Boolean): Unit = {
+      statCache.getOrElseUpdate(destPath.toUri(), fs.getFileStatus(destPath))
+    }
+
+    /*
+    * This simulate the isPublic method. It will return true if the result is cached in the statCache.
+    * */
+    def isPublicResultCached(uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
+      statCache.get(uri) match {
+        case Some(_) => true
+        case None => false
+      }
+    }
+  }
+
+  test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can " +
+    "read from statCache") {
+    val distMgr = new CustomizedClientDistributedCacheManager()
+    val fs = mock[FileSystem]
+    val conf = new Configuration()
+    val destPath = new Path("file:///foo.invalid.com:8080/tmp/testing")
+    val localResources = HashMap[String, LocalResource]()
+    val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+    assert(distMgr.isPublicResultCached(destPath.toUri(), statCache) === false)
+    distMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, "link",
+      statCache, false)
+    assert(distMgr.isPublicResultCached(destPath.toUri(), statCache) === true)
+  }
+
+  test("SPARK-44272: test getParentURI") {
+    val distMgr = new CustomizedClientDistributedCacheManager()
+    val scheme = "file"
+    val userInfo = "user"
+    val host = "foo.com"
+    val port = 8080
+    val path = "/tmp/testing"
+    val uri = new URI(scheme, userInfo, host, port, path, null, null)
+    val parentURI = distMgr.getParentURI(uri)
+    assert(uri.getScheme === parentURI.getScheme)
+    assert(uri.getUserInfo === parentURI.getUserInfo)
+    assert(uri.getHost === parentURI.getHost)
+    assert(uri.getPort === parentURI.getPort)
+    assert(new Path(uri.getPath).getParent.toString === parentURI.getPath)
+
+    val rootPath = "/"
+    val parentRootURI = distMgr.getParentURI(
+      new URI(scheme, userInfo, host, port, rootPath, null, null))
+    assert(parentRootURI === null)
+  }
+
   test("test getFileStatus empty") {
     val distMgr = new ClientDistributedCacheManager()
     val fs = mock[FileSystem]
