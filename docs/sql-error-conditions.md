@@ -1568,6 +1568,12 @@ If you did not qualify the name with a schema, verify the current_schema() outpu
 
 To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS.
 
+### TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS
+
+SQLSTATE: none assigned
+
+There are too many table arguments for table-valued function. It allows one table argument, but got: `<num>`. If you want to allow it, please set "spark.sql.allowMultipleTableArguments.enabled" to "true"
+
 ### TASK_WRITE_FAILED
 
 SQLSTATE: none assigned
