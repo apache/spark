@@ -2214,6 +2214,11 @@
     ],
     "sqlState" : "42P01"
   },
+  "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
+    "message" : [
+      "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
+    ]
+  },
   "TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
