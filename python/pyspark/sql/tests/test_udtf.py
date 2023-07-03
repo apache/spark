@@ -27,7 +27,7 @@ from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class UDTFTestsMixin(ReusedSQLTestCase):
+class UDTFTestsMixin:
     def test_simple_udtf(self):
         class TestUDTF:
             def eval(self):
@@ -396,6 +396,198 @@ class UDTFTestsMixin(ReusedSQLTestCase):
 
         with self.assertRaisesRegex(TypeError, err_msg):
             udtf(test_udtf, returnType="a: int")
+
+    def test_udtf_with_table_argument_query(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))").collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
+    def test_udtf_with_int_and_table_argument_query(self):
+        class TestUDTF:
+            def eval(self, i: int, row: Row):
+                if row["id"] > i:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                "SELECT * FROM test_udtf(5, TABLE (SELECT id FROM range(0, 8)))"
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
+    def test_udtf_with_table_argument_identifier(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+
+        with self.tempView("v"):
+            self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
+            self.assertEqual(
+                self.spark.sql("SELECT * FROM test_udtf(TABLE v)").collect(),
+                [Row(a=6), Row(a=7)],
+            )
+
+    def test_udtf_with_int_and_table_argument_identifier(self):
+        class TestUDTF:
+            def eval(self, i: int, row: Row):
+                if row["id"] > i:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+
+        with self.tempView("v"):
+            self.spark.sql("CREATE OR REPLACE TEMPORARY VIEW v as SELECT id FROM range(0, 8)")
+            self.assertEqual(
+                self.spark.sql("SELECT * FROM test_udtf(5, TABLE v)").collect(),
+                [Row(a=6), Row(a=7)],
+            )
+
+    def test_udtf_with_table_argument_unknown_identifier(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+
+        with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
+            self.spark.sql("SELECT * FROM test_udtf(TABLE v)").collect()
+
+    def test_udtf_with_table_argument_malformed_query(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+
+        with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT * FROM v))").collect()
+
+    def test_udtf_with_table_argument_cte_inside(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                SELECT * FROM test_udtf(TABLE (
+                  WITH t AS (
+                    SELECT id FROM range(0, 8)
+                  )
+                  SELECT * FROM t
+                ))
+                """
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
+    def test_udtf_with_table_argument_cte_outside(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(0, 8)
+                )
+                SELECT * FROM test_udtf(TABLE (SELECT id FROM t))
+                """
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
+        self.assertEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT id FROM range(0, 8)
+                )
+                SELECT * FROM test_udtf(TABLE t)
+                """
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
+    # TODO(SPARK-44233): Fix the subquery resolution.
+    @unittest.skip("Fails to resolve the subquery.")
+    def test_udtf_with_table_argument_lateral_join(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.spark.udtf.register("test_udtf", func)
+        self.assertEqual(
+            self.spark.sql(
+                """
+                SELECT * FROM
+                  range(0, 8) AS t,
+                  LATERAL test_udtf(TABLE t)
+                """
+            ).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
+    def test_udtf_with_table_argument_multiple(self):
+        class TestUDTF:
+            def eval(self, a: Row, b: Row):
+                yield a[0], b[0]
+
+        func = udtf(TestUDTF, returnType="a: int, b: int")
+        self.spark.udtf.register("test_udtf", func)
+
+        query = """
+          SELECT * FROM test_udtf(
+            TABLE (SELECT id FROM range(0, 2)),
+            TABLE (SELECT id FROM range(0, 3)))
+        """
+
+        with self.sql_conf({"spark.sql.tvf.allowMultipleTableArguments.enabled": False}):
+            with self.assertRaisesRegex(
+                AnalysisException, "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS"
+            ):
+                self.spark.sql(query).collect()
+
+        with self.sql_conf({"spark.sql.tvf.allowMultipleTableArguments.enabled": True}):
+            self.assertEqual(
+                self.spark.sql(query).collect(),
+                [
+                    Row(a=0, b=0),
+                    Row(a=1, b=0),
+                    Row(a=0, b=1),
+                    Row(a=1, b=1),
+                    Row(a=0, b=2),
+                    Row(a=1, b=2),
+                ],
+            )
 
 
 class UDTFTests(UDTFTestsMixin, ReusedSQLTestCase):
