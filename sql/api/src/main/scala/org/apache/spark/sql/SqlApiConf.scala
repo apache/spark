@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql
 
+import org.apache.spark.util.SparkClassUtils
+
 import java.util.concurrent.atomic.AtomicReference
+import scala.util.Try
 
 /**
  * Configuration for all objects that are placed in the `sql/api` project. The normal way of
@@ -31,6 +34,9 @@ private[sql] trait SqlApiConf {
 }
 
 private[sql] object SqlApiConf {
+  // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
+  Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))
+
   /**
    * Defines a getter that returns the [[SqlApiConf]] within scope.
    */

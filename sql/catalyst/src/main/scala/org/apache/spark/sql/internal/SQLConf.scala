@@ -181,6 +181,10 @@ object SQLConf {
     confGetter.set(getter)
   }
 
+  // Make sure SqlApiConf is always in sync with SQLConf. SqlApiConf will always try to
+  // load SqlConf to make sure both classes are in sync from the get go.
+  SqlApiConf.setConfGetter(() => SQLConf.get)
+
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
