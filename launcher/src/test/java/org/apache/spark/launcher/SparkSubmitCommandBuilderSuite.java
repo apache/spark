@@ -76,14 +76,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   public void testCheckJavaOptionsThrowException() throws Exception {
     Map<String, String> env = new HashMap<>();
     List<String> sparkSubmitArgs = Arrays.asList(
-            parser.MASTER,
-            "local",
-            parser.DRIVER_CLASS_PATH,
-            "/driverCp",
-            parser.DRIVER_JAVA_OPTIONS,
-            "-Xmx64g -Dprop=Other -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
-              "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
-            SparkLauncher.NO_RESOURCE);
+      parser.MASTER,
+      "local",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "-Xmx64g -Dprop=Other -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
+        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      SparkLauncher.NO_RESOURCE);
     buildCommand(sparkSubmitArgs, env);
   }
 
@@ -91,14 +91,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   public void testCheckJavaOptions() throws Exception {
     Map<String, String> env = new HashMap<>();
     List<String> sparkSubmitArgs = Arrays.asList(
-            parser.MASTER,
-            "local",
-            parser.DRIVER_CLASS_PATH,
-            "/driverCp",
-            parser.DRIVER_JAVA_OPTIONS,
-            "-Dprop=-Xmx -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
-              "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
-            SparkLauncher.NO_RESOURCE);
+      parser.MASTER,
+      "local",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "-Dprop=-Xmx -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
+        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      SparkLauncher.NO_RESOURCE);
     buildCommand(sparkSubmitArgs, env);
   }
 
