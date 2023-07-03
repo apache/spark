@@ -17,7 +17,7 @@
 import numpy as np
 
 import pandas as pd
-from typing import Any, Union
+from typing import Any, Union, List, Tuple
 
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasProbabilityCol
@@ -36,17 +36,18 @@ class _TorchMetricEvaluator(Evaluator):
         typeConverter=TypeConverters.toString,
     )
 
-    def _get_torch_metric(self):
+    def _get_torch_metric(self) -> Any:
         raise NotImplementedError()
 
-    def _get_input_cols(self):
+    def _get_input_cols(self) -> List[str]:
         raise NotImplementedError()
 
-    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame") -> Tuple[Any, Any]:
         raise NotImplementedError()
 
     def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
         import torch
+
         torch_metric = self._get_torch_metric()
 
         def local_agg_fn(pandas_df: "pd.DataFrame") -> "pd.DataFrame":
@@ -93,17 +94,20 @@ class RegressionEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, 
 
         raise ValueError(f"Unsupported regressor evaluator metric name: {metric_name}")
 
-    def _get_input_cols(self):
+    def _get_input_cols(self) -> List[str]:
         return [self.getPredictionCol(), self.getLabelCol()]
 
-    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame") -> Tuple[Any, Any]:
         import torch
+
         preds_tensor = torch.tensor(dataset[self.getPredictionCol()].values)
         labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
         return preds_tensor, labels_tensor
 
 
-class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProbabilityCol, ParamsReadWrite):
+class BinaryClassificationEvaluator(
+    _TorchMetricEvaluator, HasLabelCol, HasProbabilityCol, ParamsReadWrite
+):
     """
     Evaluator for binary classification, which expects input columns prediction and label.
     Supported metrics are 'areaUnderROC' and 'areaUnderPR'.
@@ -127,10 +131,10 @@ class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProba
 
         raise ValueError(f"Unsupported binary classification evaluator metric name: {metric_name}")
 
-    def _get_input_cols(self):
+    def _get_input_cols(self) -> List[str]:
         return [self.getProbabilityCol(), self.getLabelCol()]
 
-    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame") -> Tuple[Any, Any]:
         import torch
 
         values = np.stack(dataset[self.getProbabilityCol()].values)
@@ -141,7 +145,9 @@ class BinaryClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasProba
         return preds_tensor, labels_tensor
 
 
-class MulticlassClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite):
+class MulticlassClassificationEvaluator(
+    _TorchMetricEvaluator, HasLabelCol, HasPredictionCol, ParamsReadWrite
+):
     """
     Evaluator for multiclass classification, which expects input columns prediction and label.
     Supported metrics are 'accuracy'.
@@ -161,13 +167,16 @@ class MulticlassClassificationEvaluator(_TorchMetricEvaluator, HasLabelCol, HasP
         if metric_name == "accuracy":
             return torchmetrics.MulticlassAccuracy()
 
-        raise ValueError(f"Unsupported multiclass classification evaluator metric name: {metric_name}")
+        raise ValueError(
+            f"Unsupported multiclass classification evaluator metric name: {metric_name}"
+        )
 
-    def _get_input_cols(self):
+    def _get_input_cols(self) -> List[str]:
         return [self.getPredictionCol(), self.getLabelCol()]
 
-    def _get_metric_update_inputs(self, dataset: "pd.DataFrame"):
+    def _get_metric_update_inputs(self, dataset: "pd.DataFrame") -> Tuple[Any, Any]:
         import torch
+
         preds_tensor = torch.tensor(dataset[self.getPredictionCol()].values)
         labels_tensor = torch.tensor(dataset[self.getLabelCol()].values)
         return preds_tensor, labels_tensor
