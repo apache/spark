@@ -205,7 +205,6 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      SKIP_ON_JDK21: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -368,7 +367,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
-      SKIP_ON_JDK21: true
+      JAVA_VERSION: ${{ inputs.java }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
