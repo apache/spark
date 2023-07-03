@@ -46,8 +46,6 @@ class _TorchMetricEvaluator(Evaluator):
         raise NotImplementedError()
 
     def _evaluate(self, dataset: Union["DataFrame", "pd.DataFrame"]) -> float:
-        import torch
-
         torch_metric = self._get_torch_metric()
 
         def local_agg_fn(pandas_df: "pd.DataFrame") -> "pd.DataFrame":
