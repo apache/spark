@@ -1180,10 +1180,11 @@ To use IAM authentication, you can set the kafka config as in the [library docum
 
 ```
 val df = spark.readStream.format("kafka")
-  .option("kafka.bootstrap.servers", "your-msk-cluster:9094")
+  .option("kafka.bootstrap.servers", "<your-msk-cluster>")
   .option("kafka.security.protocol", "SASL_SSL")
   .option("kafka.sasl.mechanism", "AWS_MSK_IAM")
   .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
+  .option("kafka.sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler")
   .option("subscribe", "your-topic")
   .load()
 ```
