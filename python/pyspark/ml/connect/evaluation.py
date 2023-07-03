@@ -135,7 +135,7 @@ class BinaryClassificationEvaluator(
     def _get_metric_update_inputs(self, dataset: "pd.DataFrame") -> Tuple[Any, Any]:
         import torch
 
-        values = np.stack(dataset[self.getProbabilityCol()].values)
+        values = np.stack(dataset[self.getProbabilityCol()].values)  # type: ignore[call-overload]
         preds_tensor = torch.tensor(values)
         if preds_tensor.dim() == 2:
             preds_tensor = preds_tensor[:, 1]
