@@ -30,14 +30,10 @@ from typing import (
 )
 
 from pyspark import SparkContext, SparkConf
-from pyspark.errors import PySparkException
+from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql import SparkSession
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 from pyspark.sql.types import StructType, AtomicType
-from functools import reduce
-
-import pandas as pd
 
 have_scipy = False
 have_numpy = False
@@ -231,13 +227,14 @@ def assertSparkSchemaEquality(
         raise AssertionError(msg)
 
 
-def assertSparkDFEquality(
-    left: PySparkDataFrame, right: PySparkDataFrame,
+def assertSparkDFEqual(
+    left: PySparkDataFrame, right: PySparkDataFrame
 ):
     def assert_rows_equality(rows1, rows2):
         if rows1 != rows2:
-            msg = "Dataframes are different"
-            raise AssertionError(msg)
+            raise PySparkAssertionError(
+                error_class="DIFFERENT_DATAFRAME",
+            )
 
     left = left.sort(left.columns)
     right = right.sort(right.columns)
@@ -246,7 +243,7 @@ def assertSparkDFEquality(
     assert_rows_equality(left.collect(), right.collect())
 
 
-def assertDFEquality(
+def assertDFEqual(
     left: Union[
         PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
     ],
@@ -254,11 +251,15 @@ def assertDFEquality(
         PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
     ],
 ):
+    import pandas as pd
 
     from pyspark.testing.pandasutils import assertPandasDFEquality
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
         assertPandasDFEquality(left, right)
-
     elif isinstance(left, PySparkDataFrame) and isinstance(right, PySparkDataFrame):
-        assertSparkDFEquality(left, right)
+        assertSparkDFEqual(left, right)
+    else:
+        raise PySparkAssertionError(
+            error_class="UNSUPPORTED_DATAFRAME_TYPES",
+        )

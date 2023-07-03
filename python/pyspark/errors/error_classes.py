@@ -164,6 +164,11 @@ ERROR_CLASSES_JSON = """
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DIFFERENT_DATAFRAME" : {
+    "message" : [
+      "Dataframes are different"
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
@@ -674,6 +679,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
+  "UNSUPPORTED_DATAFRAME_TYPES" : {
+    "message" : [
+      "Can only assert DataFrame equality between two PySpark DataFrames or two pandas DataFrames."
     ]
   },
   "UNSUPPORTED_JOIN_TYPE" : {

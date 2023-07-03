@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-__all__ = ["assertSparkDFEquality", "assertDFEquality"]
+__all__ = ["assertSparkDFEqual", "assertDFEqual"]

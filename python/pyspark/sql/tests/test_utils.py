@@ -16,6 +16,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.functions import sha2
 from pyspark.errors import (
     AnalysisException,
@@ -23,17 +25,17 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDFEquality
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.utils import assertDFEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 
-import pandas as pd
-
 
 class UtilsTestsMixin:
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_assert_pandas_df_equal(self):
+        import pandas as pd
+
         df1 = pd.DataFrame(
             data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
         )
@@ -41,7 +43,7 @@ class UtilsTestsMixin:
             data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
         )
 
-        assertDFEquality(df1, df2)
+        assertDFEqual(df1, df2)
 
     def test_assert_pyspark_df_equal(self):
         df1 = self.spark.createDataFrame(
@@ -59,7 +61,7 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDFEquality(df1, df2)
+        assertDFEqual(df1, df2)
 
     def test_ignore_row_order(self):
         # test that row order is ignored by default
@@ -78,7 +80,7 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDFEquality(df1, df2)
+        assertDFEqual(df1, df2)
 
     def remove_non_word_characters(self, col):
         return F.regexp_replace(col, "[^\\w\\s]+", "")
@@ -94,7 +96,7 @@ class UtilsTestsMixin:
         expected_data = [("jo&&se", "jose"), ("**li**", "li"), ("#::luisa", "luisa"), (None, None)]
         expected_df = self.spark.createDataFrame(expected_data, ["name", "clean_name"])
 
-        assertDFEquality(actual_df, expected_df)
+        assertDFEqual(actual_df, expected_df)
 
     def test_assert_pyspark_df_not_equal(self):
         df1 = self.spark.createDataFrame(
@@ -113,7 +115,7 @@ class UtilsTestsMixin:
         )
 
         with self.assertRaises(AssertionError):
-            assertDFEquality(df1, df2)
+            assertDFEqual(df1, df2)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
@@ -163,10 +165,6 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
         except AnalysisException as e:
             self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
             self.assertEquals(e.getSqlState(), "42703")
-
-
-class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
-    pass
 
 
 if __name__ == "__main__":

@@ -53,10 +53,6 @@ except ImportError as e:
     plotly_requirement_message = str(e)
 have_plotly = plotly_requirement_message is None
 
-import pandas as pd
-from pandas.core.dtypes.common import is_numeric_dtype
-from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
-
 
 def assertPandasDFEquality(left, right, check_exact=True):
     import pandas as pd
