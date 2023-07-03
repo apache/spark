@@ -72,6 +72,6 @@ class DefaultVectorReservePolicy extends VectorReservePolicy {
 
   @Override
   public boolean shouldCleanData() {
-    return !hasDefaultValue && currentCapacity > hugeThreshold;
+    return hugeThreshold > 0 && !hasDefaultValue && currentCapacity > hugeThreshold;
   }
 }

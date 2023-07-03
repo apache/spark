@@ -492,7 +492,7 @@ object SQLConf {
       .doc("spark will reserve requiredCapacity * this ratio memory next time")
       .version("3.5.0")
       .doubleConf
-      .createWithDefault(1.1)
+      .createWithDefault(1.2)
 
   val VECTORIZED_HUGE_VECTOR_THRESHOLD =
     buildConf("spark.sql.inMemoryColumnarStorage.hugeVectorThreshold")
