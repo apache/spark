@@ -222,9 +222,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(dummyFn.counter == 1)
   }
 
-  test("SPARK-44275: retry uses can_retry to filter exceptions") {
+  test("SPARK-44275: retry uses should_retry to filter exceptions") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryParameters = SparkConnectClient.RetryParameters(can_retry = _ => false)
+    val retryParameters = SparkConnectClient.RetryParameters(should_retry = _ => false)
     val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
 
     assertThrows[StatusRuntimeException] {
@@ -236,7 +236,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   test("SPARK-44275: retry does not exceed max_retries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
     val retryParameters =
-      SparkConnectClient.RetryParameters(can_retry = _ => true, max_retries = 1)
+      SparkConnectClient.RetryParameters(should_retry = _ => true, max_retries = 1)
     val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
 
     assertThrows[StatusRuntimeException] {

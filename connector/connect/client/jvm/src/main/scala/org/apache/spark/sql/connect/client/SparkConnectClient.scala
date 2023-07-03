@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.Executor
 
 import scala.annotation.tailrec
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.ByteString
@@ -74,14 +75,10 @@ private[sql] class SparkConnectClient(
     } match {
       case Success(x) => x
       case Failure(e) =>
-        if (retryParameters.can_retry(e) && retries < retryParameters.max_retries) {
+        if (retryParameters.should_retry(e) && retries < retryParameters.max_retries) {
           Thread.sleep(
-            Math
-              .min(
-                retryParameters.max_backoff,
-                retryParameters.initial_backoff * Math
-                  .pow(retryParameters.backoff_multiplier, retries))
-              .toInt)
+            (retryParameters.max_backoff min retryParameters.initial_backoff * Math
+              .pow(retryParameters.backoff_multiplier, retries)).toMillis)
           retry(fn, retries + 1)
         } else { throw e }
     }
@@ -627,13 +624,13 @@ object SparkConnectClient {
    *   Maximal value of the exponential backoff (ms).
    * @param backoff_multiplier
    *   Multiplicative base of the exponential backoff.
-   * @param can_retry
+   * @param should_retry
    *   Function that determines whether a retry is to be performed in the event of an error.
    */
   private[client] case class RetryParameters(
       max_retries: Int = 15,
-      initial_backoff: Int = 50,
-      max_backoff: Int = 60000,
+      initial_backoff: FiniteDuration = FiniteDuration(50, "ms"),
+      max_backoff: FiniteDuration = FiniteDuration(1, "min"),
       backoff_multiplier: Double = 4.0,
-      can_retry: Throwable => Boolean = retryException) {}
+      should_retry: Throwable => Boolean = retryException) {}
 }
