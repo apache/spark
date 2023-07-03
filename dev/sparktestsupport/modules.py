@@ -436,11 +436,8 @@ pyspark_core = Module(
     ],
 )
 
-pyspark_sql = Module(
-    name="pyspark-sql",
-    dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql"],
-    python_test_goals=[
+if "SKIP_ON_JDK21" not in os.environ:
+    pyspark_sql_python_test_goals = [
         # doctests
         "pyspark.sql.types",
         "pyspark.sql.context",
@@ -504,7 +501,20 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_utils",
-    ],
+    ]
+else:
+    pyspark_sql_python_test_goals = [
+        # doctests
+        "pyspark.sql.types",
+        "pyspark.sql.context",
+        "pyspark.sql.session",
+    ]
+
+pyspark_sql = Module(
+    name="pyspark-sql",
+    dependencies=[pyspark_core, hive, avro, protobuf],
+    source_file_regexes=["python/pyspark/sql"],
+    python_test_goals=pyspark_sql_python_test_goals,
 )
 
 pyspark_resource = Module(

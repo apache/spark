@@ -38,6 +38,7 @@ jobs:
         {
           "SKIP_MIMA": "true",
           "SKIP_UNIDOC": "true",
+          "SKIP_ON_JDK21": "true",
         }
       jobs: >-
         {
