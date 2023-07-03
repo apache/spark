@@ -368,6 +368,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
+      SKIP_ON_JDK21: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
