@@ -196,7 +196,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     if (!shouldTestPythonUDFs) {
       throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
     }
-    var binaryPandasFunc: Array[Byte] = null
+    var binaryPythonUDTF: Array[Byte] = null
     withTempPath { codePath =>
       Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
       withTempPath { path =>
@@ -208,14 +208,14 @@ object IntegratedUDFTestUtils extends SQLHelper {
               s"f = open('$path', 'wb');" +
               s"exec(open('$codePath', 'r').read());" +
               "f.write(CloudPickleSerializer().dumps(" +
-              s"($funcName, returnType)))"),
+              s"$funcName))"),
           None,
           "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
-        binaryPandasFunc = Files.readAllBytes(path.toPath)
+        binaryPythonUDTF = Files.readAllBytes(path.toPath)
       }
     }
-    assert(binaryPandasFunc != null)
-    binaryPandasFunc
+    assert(binaryPythonUDTF != null)
+    binaryPythonUDTF
   }
 
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {

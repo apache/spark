@@ -416,7 +416,7 @@ class SessionCatalog(
     }
   }
 
-  private def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
+  def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
     if (locationUri.isAbsolute) {
       locationUri
     } else if (new Path(locationUri).isAbsolute) {

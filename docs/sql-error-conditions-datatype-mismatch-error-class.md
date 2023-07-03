@@ -121,6 +121,10 @@ The key of map cannot be/contain `<keyType>`.
 
 The `<functionName>` does not support ordering on type `<dataType>`.
 
+## INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS
+
+`<errors>`
+
 ## IN_SUBQUERY_DATA_TYPE_MISMATCH
 
 The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [`<mismatchedColumns>`], left side: [`<leftType>`], right side: [`<rightType>`].
