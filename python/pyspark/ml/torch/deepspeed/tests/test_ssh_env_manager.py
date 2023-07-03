@@ -21,7 +21,7 @@ import os
 import unittest
 import shutil
 
-from pyspark.ml.torch.utils import SSHEnvManager, write_to_location
+from pyspark.ml.torch.deepspeed.utils import SSHEnvManager, write_to_location
 
 KNOWN_HOSTS_TEST_TEMP = "/root/.ssh/known_hosts_before_test"
 KNOWN_HOSTS = "/root/.ssh/known_hosts"
