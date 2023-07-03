@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 8
+        default: 21-ea
       branch:
         description: Branch to run the build against
         required: false
@@ -205,6 +205,7 @@ jobs:
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_ON_JDK21: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
