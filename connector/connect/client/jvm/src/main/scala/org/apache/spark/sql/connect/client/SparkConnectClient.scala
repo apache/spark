@@ -25,7 +25,7 @@ import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.ByteString
-import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, StatusRuntimeException, TlsChannelCredentials}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
@@ -608,6 +608,14 @@ object SparkConnectClient {
     }
   }
 
+  private[client] def retryException(e: Throwable): Boolean = {
+    if (e.isInstanceOf[StatusRuntimeException]) {
+      e.asInstanceOf[StatusRuntimeException].getStatus().getCode() == Status.Code.UNAVAILABLE
+    } else {
+      false
+    }
+  }
+
   /**
    * [[RetryParameters]] configure the retry mechanism in [[SparkConnectClient]]
    *
@@ -627,5 +635,5 @@ object SparkConnectClient {
       initial_backoff: Int = 50,
       max_backoff: Int = 60000,
       backoff_multiplier: Double = 4.0,
-      can_retry: Throwable => Boolean = _ => false) {}
+      can_retry: Throwable => Boolean = retryException) {}
 }
