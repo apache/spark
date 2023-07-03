@@ -34,9 +34,6 @@ private[sql] trait SqlApiConf {
 }
 
 private[sql] object SqlApiConf {
-  // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
-  Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))
-
   /**
    * Defines a getter that returns the [[SqlApiConf]] within scope.
    */
@@ -50,6 +47,9 @@ private[sql] object SqlApiConf {
   }
 
   def get: SqlApiConf = confGetter.get()()
+
+  // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
+  Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))
 }
 
 /**
