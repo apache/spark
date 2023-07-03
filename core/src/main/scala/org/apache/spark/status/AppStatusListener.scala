@@ -443,6 +443,7 @@ private[spark] class AppStatusListener(
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
       .toSeq
+      .filter(!_.isEmpty)
       .sorted
     val sqlExecutionId = Option(event.properties)
       .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))

@@ -767,7 +767,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
-   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    *
    * @since 3.5.0
    */
