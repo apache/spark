@@ -188,6 +188,51 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       }
     }
   }
+
+  private class DummyFn(val e: Throwable) {
+    var counter = 0
+    def fn(): Int = {
+      if (counter < 3) {
+        counter += 1
+        throw e
+      } else {
+        42
+      }
+    }
+  }
+
+  test("retry actually retries") {
+    val dummyFn = new DummyFn(new Exception)
+    val retryParameters = SparkConnectClient.RetryParameters(can_retry = _ => true)
+    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+    val result = client.retry { dummyFn.fn() }
+
+    assert(result == 42)
+    assert(dummyFn.counter == 3)
+  }
+
+  test("retry uses can_retry to filter exceptions") {
+    val dummyFn = new DummyFn(new Exception)
+    val retryParameters = SparkConnectClient.RetryParameters(can_retry = _ => false)
+    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+
+    assertThrows[Exception] {
+      client.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 1)
+  }
+
+  test("retry does not exceed max_retries") {
+    val dummyFn = new DummyFn(new Exception)
+    val retryParameters =
+      SparkConnectClient.RetryParameters(can_retry = _ => true, max_retries = 1)
+    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+
+    assertThrows[Exception] {
+      client.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 2)
+  }
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {

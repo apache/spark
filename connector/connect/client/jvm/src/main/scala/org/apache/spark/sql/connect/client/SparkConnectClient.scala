@@ -21,6 +21,9 @@ import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
 
+import scala.annotation.tailrec
+import scala.util.{Failure, Success, Try}
+
 import com.google.protobuf.ByteString
 import io.grpc.{CallCredentials, CallOptions, Channel, ChannelCredentials, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 
@@ -60,6 +63,30 @@ private[sql] class SparkConnectClient(
     new ArtifactManager(userContext, sessionId, channel)
   }
 
+  private val retryParameters: SparkConnectClient.RetryParameters = configuration.retryParameters
+
+  @tailrec private[client] final def retry[T](fn: => T, retries: Int = 0): T = {
+    if (retries > retryParameters.max_retries) {
+      throw new IllegalArgumentException(s"retries must not exceed retryParameters.max_retries")
+    }
+    Try {
+      fn
+    } match {
+      case Success(x) => x
+      case Failure(e) =>
+        if (retryParameters.can_retry(e) && retries < retryParameters.max_retries) {
+          Thread.sleep(
+            Math
+              .min(
+                retryParameters.max_backoff,
+                retryParameters.initial_backoff * Math
+                  .pow(retryParameters.backoff_multiplier, retries))
+              .toInt)
+          retry(fn, retries + 1)
+        } else { throw e }
+    }
+  }
+
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
    * @return
@@ -67,7 +94,9 @@ private[sql] class SparkConnectClient(
    */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
     artifactManager.uploadAllClassFileArtifacts()
-    stub.analyzePlan(request)
+    retry {
+      stub.analyzePlan(request)
+    }
   }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
@@ -79,7 +108,11 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
-    stub.executePlan(request)
+    retry {
+      val result = stub.executePlan(request)
+      result.hasNext // moves evaluation of BlockingResponseStream to SparkConnectClient
+      result
+    }
   }
 
   /**
@@ -95,7 +128,9 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
-    stub.config(request)
+    retry {
+      stub.config(request)
+    }
   }
 
   /**
@@ -194,7 +229,9 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
-    stub.interrupt(request)
+    retry {
+      stub.interrupt(request)
+    }
   }
 
   def copy(): SparkConnectClient = new SparkConnectClient(configuration)
@@ -355,6 +392,11 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
+    def retryParameters(parameters: RetryParameters): Builder = {
+      _configuration = _configuration.copy(retryParameters = parameters)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -471,7 +513,8 @@ object SparkConnectClient {
       token: Option[String] = None,
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
-      userAgent: String = DEFAULT_USER_AGENT) {
+      userAgent: String = DEFAULT_USER_AGENT,
+      retryParameters: RetryParameters = RetryParameters()) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
@@ -564,4 +607,25 @@ object SparkConnectClient {
       }
     }
   }
+
+  /**
+   * [[RetryParameters]] configure the retry mechanism in [[SparkConnectClient]]
+   *
+   * @param max_retries
+   *   Maximum number of retries.
+   * @param initial_backoff
+   *   Start value of the exponential backoff (ms).
+   * @param max_backoff
+   *   Maximal value of the exponential backoff (ms).
+   * @param backoff_multiplier
+   *   Multiplicative base of the exponential backoff.
+   * @param can_retry
+   *   Function that determines whether a retry is to be performed in the event of an error.
+   */
+  private[client] case class RetryParameters(
+      max_retries: Int = 15,
+      initial_backoff: Int = 50,
+      max_backoff: Int = 60000,
+      backoff_multiplier: Double = 4.0,
+      can_retry: Throwable => Boolean = _ => false) {}
 }
