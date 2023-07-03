@@ -788,8 +788,29 @@ inlineTable
     : VALUES expression (COMMA expression)* tableAlias
     ;
 
+functionTableSubqueryArgument
+    : TABLE identifierReference
+    | TABLE LEFT_PAREN query RIGHT_PAREN
+    ;
+
+functionTableNamedArgumentExpression
+    : key=identifier FAT_ARROW table=functionTableSubqueryArgument
+    ;
+
+functionTableReferenceArgument
+    : functionTableSubqueryArgument
+    | functionTableNamedArgumentExpression
+    ;
+
+functionTableArgument
+    : functionArgument
+    | functionTableReferenceArgument
+    ;
+
 functionTable
-    : funcName=functionName LEFT_PAREN (functionArgument (COMMA functionArgument)*)? RIGHT_PAREN tableAlias
+    : funcName=functionName LEFT_PAREN
+      (functionTableArgument (COMMA functionTableArgument)*)?
+      RIGHT_PAREN tableAlias
     ;
 
 tableAlias
