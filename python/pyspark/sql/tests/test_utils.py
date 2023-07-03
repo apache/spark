@@ -127,6 +127,7 @@ class UtilsTestsMixin:
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_unsupported_df_types(self):
         import pandas as pd
+
         df1 = self.spark.createDataFrame(
             data=[
                 ("1", 1000.00),

@@ -252,10 +252,10 @@ def assertDFEqual(
 ):
     import pandas as pd
 
-    from pyspark.testing.pandasutils import assertPandasDFEquality
+    from pyspark.testing.pandasutils import assertPandasDFEqual
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
-        assertPandasDFEquality(left, right)
+        assertPandasDFEqual(left, right)
     elif isinstance(left, PySparkDataFrame) and isinstance(right, PySparkDataFrame):
         assertSparkDFEqual(left, right)
     else:
