@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.File
+import java.io.{DataOutputStream, File}
+import java.net.Socket
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -69,21 +71,17 @@ case class BatchEvalPythonUDTFExec(
         queue.close()
       }
 
-      val inputs = Seq(udtf.children)
-
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      val argOffsets = inputs.map { input =>
-        input.map { e =>
-          if (allInputs.exists(_.semanticEquals(e))) {
-            allInputs.indexWhere(_.semanticEquals(e))
-          } else {
-            allInputs += e
-            dataTypes += e.dataType
-            allInputs.length - 1
-          }
-        }.toArray
+      val argOffsets = udtf.children.map { e =>
+        if (allInputs.exists(_.semanticEquals(e))) {
+          allInputs.indexWhere(_.semanticEquals(e))
+        } else {
+          allInputs += e
+          dataTypes += e.dataType
+          allInputs.length - 1
+        }
       }.toArray
       val projection = MutableProjection.create(allInputs.toSeq, child.output)
       projection.initialize(context.partitionId())
@@ -101,7 +99,7 @@ case class BatchEvalPythonUDTFExec(
         projection(inputRow)
       }
 
-      val outputRowIterator = evaluate(udtf, argOffsets, projectedRowIter, schema, context)
+      val outputRowIterator = evaluate(argOffsets, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
         if (child.outputSet == AttributeSet(requiredChildOutput)) {
@@ -136,8 +134,7 @@ case class BatchEvalPythonUDTFExec(
    * an iterator of internal rows for every input row.
    */
   private def evaluate(
-      udtf: PythonUDTF,
-      argOffsets: Array[Array[Int]],
+      argOffsets: Array[Int],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
@@ -147,9 +144,8 @@ case class BatchEvalPythonUDTFExec(
     val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
 
     // Output iterator for results from Python.
-    val funcs = Seq(ChainedPythonFunctions(Seq(udtf.func)))
     val outputIterator =
-      new PythonUDFRunner(funcs, PythonEvalType.SQL_TABLE_UDF, argOffsets, pythonMetrics)
+      new PythonUDTFRunner(udtf, argOffsets, pythonMetrics)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -172,4 +168,33 @@ case class BatchEvalPythonUDTFExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
     copy(child = newChild)
+}
+
+class PythonUDTFRunner(
+    udtf: PythonUDTF,
+    argOffsets: Array[Int],
+    pythonMetrics: Map[String, SQLMetric])
+  extends BasePythonUDFRunner(
+    Seq(ChainedPythonFunctions(Seq(udtf.func))),
+    PythonEvalType.SQL_TABLE_UDF, Array(argOffsets), pythonMetrics) {
+
+  protected override def newWriterThread(
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[Array[Byte]],
+      partitionIndex: Int,
+      context: TaskContext): WriterThread = {
+    new PythonUDFWriterThread(env, worker, inputIterator, partitionIndex, context) {
+
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        dataOut.writeInt(argOffsets.length)
+        argOffsets.foreach { offset =>
+          dataOut.writeInt(offset)
+        }
+        dataOut.writeInt(udtf.func.command.length)
+        dataOut.write(udtf.func.command.toArray)
+        writeUTF(udtf.elementSchema.json, dataOut)
+      }
+    }
+  }
 }

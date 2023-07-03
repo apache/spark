@@ -30,12 +30,6 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonScript: String =
     """
-      |from pyspark.sql.types import StructType, StructField, IntegerType
-      |returnType = StructType([
-      |  StructField("a", IntegerType()),
-      |  StructField("b", IntegerType()),
-      |  StructField("c", IntegerType()),
-      |])
       |class SimpleUDTF:
       |    def eval(self, a: int, b: int):
       |        yield a, b, a + b
