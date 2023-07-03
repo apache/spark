@@ -321,7 +321,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           context: ./dev/infra/
           push: true
@@ -425,7 +425,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v3
       with:
         files: ./python/coverage.xml
         flags: unittests
