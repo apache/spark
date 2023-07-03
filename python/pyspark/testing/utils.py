@@ -32,7 +32,8 @@ from typing import (
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql import Row
 from pyspark.sql.types import StructType, AtomicType
 
 have_scipy = False
@@ -218,7 +219,7 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertSparkSchemaEquality(
+def assertSchemaEqual(
     s1: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
     s2: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
 ):
@@ -227,7 +228,9 @@ def assertSparkSchemaEquality(
         raise AssertionError(msg)
 
 
-def assertSparkDFEqual(left: PySparkDataFrame, right: PySparkDataFrame):
+def assertDataFrameEqual(df: DataFrame,
+                         expected: Union[DataFrame, List[Row]],
+                         ignore_row_order: bool = True):
     def assert_rows_equality(rows1, rows2):
         if rows1 != rows2:
             raise PySparkAssertionError(
@@ -235,31 +238,9 @@ def assertSparkDFEqual(left: PySparkDataFrame, right: PySparkDataFrame):
                 message_parameters={},
             )
 
-    left = left.sort(left.columns)
-    right = right.sort(right.columns)
+    if ignore_row_order:
+        df = df.sort(df.columns)
+        expected = expected.sort(expected.columns)
 
-    assertSparkSchemaEquality(left.schema, right.schema)
-    assert_rows_equality(left.collect(), right.collect())
-
-
-def assertDFEqual(
-    left: Union[
-        PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
-    ],
-    right: Union[
-        PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
-    ],
-):
-    import pandas as pd
-
-    from pyspark.testing.pandasutils import assertPandasDFEqual
-
-    if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
-        assertPandasDFEqual(left, right)
-    elif isinstance(left, PySparkDataFrame) and isinstance(right, PySparkDataFrame):
-        assertSparkDFEqual(left, right)
-    else:
-        raise PySparkAssertionError(
-            error_class="UNSUPPORTED_DATAFRAME_TYPES",
-            message_parameters={},
-        )
+    assertSchemaEqual(df.schema, df.schema)
+    assert_rows_equality(expected.collect(), expected.collect())
