@@ -17,14 +17,18 @@
 import os
 import subprocess
 import shutil
-from typing import (List)
+from typing import List
+
+
 def write_to_location(location: str, content: str) -> None:
     os.makedirs(os.path.dirname(location), exist_ok=True)
     with open(location, "a") as f:
         f.write(content)
 
+
 class SSHEnvManager:
     """Is responsible for writing to the known_hosts file, setting up authorized users"""
+
     KNOWN_HOSTS = "/root/.ssh/known_hosts"
     KNOWN_HOSTS_TEMP = "/root/.ssh/known_hosts_temp"
 
@@ -39,9 +43,13 @@ class SSHEnvManager:
         else:
             print(f"Creating the ssh key to {ssh_key_path}")
             # the empty string at the end of this command is used to provide an empty passphrase
-            cmd_status = subprocess.run(["ssh-keygen", "-t", "rsa", "-f", ssh_key_path, "-q", "-N", ""], capture_output=True)
+            cmd_status = subprocess.run(
+                ["ssh-keygen", "-t", "rsa", "-f", ssh_key_path, "-q", "-N", ""], capture_output=True
+            )
             if cmd_status.returncode != 0:
-                raise RuntimeError(f"Was unabled to create ssh-key to {ssh_key_path}\n. Output: {cmd_status.stdout.decode('utf-8')}")
+                raise RuntimeError(
+                    f"Was unabled to create ssh-key to {ssh_key_path}\n. Output: {cmd_status.stdout.decode('utf-8')}"
+                )
 
     def get_ssh_key(self, ssh_pub_key: str):
         with open(ssh_pub_key) as f:
@@ -49,7 +57,7 @@ class SSHEnvManager:
         return ssh_key
 
     def ssh_keyscan(self, ip_list: List[str]):
-        """ Runs the ssh-keyscan on each IP in the ip_list and then writes the public key of that IP to the known_hosts file in ssh"""
+        """Runs the ssh-keyscan on each IP in the ip_list and then writes the public key of that IP to the known_hosts file in ssh"""
         # if there is a known_hosts file, we need to preserve old one as we modify it
         # otherwise, just write to it
         print("Trying to add the worker node public ssh keys to the ssh known_hosts file")
@@ -57,8 +65,13 @@ class SSHEnvManager:
             cmd_args = ["ssh-keyscan", ip]
             error_code = subprocess.run(cmd_args, capture_output=True)
             if error_code.returncode != 0:
-                raise RuntimeError(f"Something went wrong when running ssh_keyscan {ip}. Command tried to run: ", cmd_args)
-            cmd_output = error_code.stdout.decode('utf-8') # get the output from the command so we can write to right location
+                raise RuntimeError(
+                    f"Something went wrong when running ssh_keyscan {ip}. Command tried to run: ",
+                    cmd_args,
+                )
+            cmd_output = error_code.stdout.decode(
+                "utf-8"
+            )  # get the output from the command so we can write to right location
             write_to_location(SSHEnvManager.KNOWN_HOSTS, cmd_output)
         print("Successfully finished writing worker ssh public keys to known_hosts on driver")
 
@@ -66,9 +79,14 @@ class SSHEnvManager:
         try:
             os.remove(SSHEnvManager.KNOWN_HOSTS)
         except OSError:
-            raise RuntimeError("Wow something went wrong when cleaning up known_hosts. I couldn't remove ", SSHEnvManager.KNOWN_HOSTS)
+            raise RuntimeError(
+                "Wow something went wrong when cleaning up known_hosts. I couldn't remove ",
+                SSHEnvManager.KNOWN_HOSTS,
+            )
         if self.known_hosts_exists:
             try:
                 os.rename(SSHEnvManager.KNOWN_HOSTS_TEMP, SSHEnvManager.KNOWN_HOSTS)
             except OSError:
-                raise RuntimeError("Couldn't rename the original known_hosts file - I wonder why this went wrong")
+                raise RuntimeError(
+                    "Couldn't rename the original known_hosts file - I wonder why this went wrong"
+                )
