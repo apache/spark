@@ -78,11 +78,11 @@ object SparkStringUtils extends Logging {
    * @return the trimmed and formatted string.
    */
   def truncatedString[T](
-    seq: Seq[T],
-    start: String,
-    sep: String,
-    end: String,
-    maxFields: Int): String = {
+      seq: Seq[T],
+      start: String,
+      sep: String,
+      end: String,
+      maxFields: Int): String = {
     if (seq.length > maxFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
