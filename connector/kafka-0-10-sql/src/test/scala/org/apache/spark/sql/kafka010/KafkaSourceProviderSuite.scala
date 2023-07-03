@@ -70,6 +70,11 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     how this test works:
     if testType contains source/sink, kafka is used as a source/sink option respectively
     if testType contains stream/batch, it is used either in readStream/read or writeStream/write
+
+    In each case, we test that the library paths are discoverable since
+    if the library was not to be found, another error message would be thrown.
+    Although this broker exists, it does not have IAM capabilities and thus
+    it is expected that a timeout error will be thrown.
   */
   Seq("source and stream", "sink and stream",
     "source and batch", "sink and batch").foreach { testType =>
