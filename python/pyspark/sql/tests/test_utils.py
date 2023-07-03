@@ -124,6 +124,29 @@ class UtilsTestsMixin:
             message_parameters={},
         )
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_unsupported_df_types(self):
+        import pandas as pd
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = pd.DataFrame(
+            data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDFEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_DATAFRAME_TYPES",
+            message_parameters={},
+        )
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
