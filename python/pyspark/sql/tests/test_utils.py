@@ -22,6 +22,7 @@ from pyspark.sql.functions import sha2
 from pyspark.errors import (
     AnalysisException,
     ParseException,
+    PySparkAssertionError,
     IllegalArgumentException,
     SparkUpgradeException,
 )
@@ -114,8 +115,14 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(PySparkAssertionError) as pe:
             assertDFEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_DATAFRAME",
+            message_parameters={},
+        )
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

@@ -227,13 +227,12 @@ def assertSparkSchemaEquality(
         raise AssertionError(msg)
 
 
-def assertSparkDFEqual(
-    left: PySparkDataFrame, right: PySparkDataFrame
-):
+def assertSparkDFEqual(left: PySparkDataFrame, right: PySparkDataFrame):
     def assert_rows_equality(rows1, rows2):
         if rows1 != rows2:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_DATAFRAME",
+                message_parameters={},
             )
 
     left = left.sort(left.columns)
@@ -262,4 +261,5 @@ def assertDFEqual(
     else:
         raise PySparkAssertionError(
             error_class="UNSUPPORTED_DATAFRAME_TYPES",
+            message_parameters={},
         )
