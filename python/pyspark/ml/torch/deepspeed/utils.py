@@ -29,8 +29,9 @@ def write_to_location(location: str, content: str) -> None:
 class SSHEnvManager:
     """Is responsible for writing to the known_hosts file, setting up authorized users"""
 
-    KNOWN_HOSTS = "/root/.ssh/known_hosts"
-    KNOWN_HOSTS_TEMP = "/root/.ssh/known_hosts_temp"
+    HOME = os.path.expanduser("~")
+    KNOWN_HOSTS = f"{HOME}/.ssh/known_hosts"
+    KNOWN_HOSTS_TEMP = f"/{HOME}/.ssh/known_hosts_temp"
 
     def __init__(self):
         self.known_hosts_exists = os.path.exists(SSHEnvManager.KNOWN_HOSTS)
