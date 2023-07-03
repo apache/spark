@@ -20,6 +20,8 @@ package org.apache.spark.sql.kafka010
 import java.util.Locale
 import java.util.concurrent.ExecutionException
 
+import scala.collection.JavaConverters._
+
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkFunSuite, TestUtils}
@@ -32,8 +34,6 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
-  import scala.collection.JavaConverters._
-
   private val expected = "1111"
 
   protected var testUtils: KafkaTestUtils = _
@@ -65,8 +65,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite with SharedSparkSession {
     })
   }
 
-  /* if testType contains source/sink, kafka is used as a source/sink option respectively
-  if testType contains stream/batch, it is used either in readStream/read or writeStream/write */
+  /*
+    the goal of this test is to verify the functionality of the aws msk IAM auth
+    how this test works:
+    if testType contains source/sink, kafka is used as a source/sink option respectively
+    if testType contains stream/batch, it is used either in readStream/read or writeStream/write
+  */
   Seq("source and stream", "sink and stream",
     "source and batch", "sink and batch").foreach { testType =>
     test(s"test MSK IAM auth on kafka '$testType' side") {
