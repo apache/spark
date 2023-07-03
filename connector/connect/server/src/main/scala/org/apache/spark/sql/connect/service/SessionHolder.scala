@@ -24,9 +24,6 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
-
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
@@ -114,7 +111,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @param f
    * @tparam T
    */
-  def withContext[T](f: => T): T = {
+  def withContextClassLoader[T](f: => T): T = {
     // Needed for deserializing and evaluating the UDF on the driver
     Utils.withContextClassLoader(classloader) {
       // Needed for propagating the dependencies to the executors.
@@ -125,48 +122,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Set the session-based Python paths to include in Python UDF.
-   * @param f
-   * @tparam T
-   */
-  def withSessionBasedPythonPaths[T](f: => T): T = {
-    try {
-      session.conf.set(
-        "spark.connect.pythonUDF.includes",
-        compact(render(artifactManager.getSparkConnectPythonIncludes)))
-      f
-    } finally {
-      session.conf.unset("spark.connect.pythonUDF.includes")
-    }
-  }
-
-  /**
    * Execute a block of code with this session as the active SparkConnect session.
    * @param f
    * @tparam T
    */
   def withSession[T](f: SparkSession => T): T = {
-    withSessionBasedPythonPaths {
-      withContext {
-        session.withActive {
-          f(session)
-        }
-      }
-    }
-  }
-
-  /**
-   * Execute a block of code using the session from this [[SessionHolder]] as the active
-   * SparkConnect session.
-   * @param f
-   * @tparam T
-   */
-  def withSessionHolder[T](f: SessionHolder => T): T = {
-    withSessionBasedPythonPaths {
-      withContext {
-        session.withActive {
-          f(this)
-        }
+    withContextClassLoader {
+      session.withActive {
+        f(session)
       }
     }
   }
