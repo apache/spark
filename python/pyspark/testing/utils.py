@@ -28,10 +28,12 @@ from typing import (
     List,
     Tuple,
 )
+from itertools import zip_longest
 
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
+from pyspark.sql import Row
 from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 from pyspark.sql.types import StructType, AtomicType
 
@@ -228,8 +230,8 @@ def assertSparkSchemaEquality(
 
 
 def assertSparkDFEqual(left: PySparkDataFrame, right: PySparkDataFrame):
-    def assert_rows_equality(rows1, rows2):
-        if rows1 != rows2:
+    def assert_rows_equal(r1, r2):
+        if r1 != r2:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_DATAFRAME",
                 message_parameters={},
@@ -239,7 +241,36 @@ def assertSparkDFEqual(left: PySparkDataFrame, right: PySparkDataFrame):
     right = right.sort(right.columns)
 
     assertSparkSchemaEquality(left.schema, right.schema)
-    assert_rows_equality(left.collect(), right.collect())
+    assert_rows_equal(left.collect(), right.collect())
+
+
+def assertSparkDFAlmostEqual(left: PySparkDataFrame,
+                             right: PySparkDataFrame,
+                             precision: float = 1e-5):
+    def assert_rows_approx_equal(r1: Row, r2: Row, precision: float):
+        if r1 is None and r2 is None:
+            return True
+        if (r1 is None and r2 is not None) or (r2 is None and r1 is not None):
+            return False
+        d1 = r1.asDict()
+        d2 = r2.asDict()
+        for key in d1.keys() & d2.keys():
+            if isinstance(d1[key], float) and isinstance(d2[key], float):
+                if abs(d1[key] - d2[key]) > precision:
+                    return False
+            elif d1[key] != d2[key]:
+                return False
+        return True
+
+    left = left.sort(left.columns)
+    right = right.sort(right.columns)
+
+    assertSparkSchemaEquality(left.schema, right.schema)
+
+    zipped = list(zip_longest(left.collect(), right.collect()))
+    for r1, r2 in zipped:
+        assert_rows_approx_equal(r1, r2, precision)
+
 
 
 def assertDFEqual(
@@ -249,15 +280,19 @@ def assertDFEqual(
     right: Union[
         PySparkDataFrame, Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]]
     ],
+    check_exact: bool = True,
 ):
     import pandas as pd
 
     from pyspark.testing.pandasutils import assertPandasDFEqual
 
     if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
-        assertPandasDFEqual(left, right)
+        assertPandasDFEqual(left, right, check_exact)
     elif isinstance(left, PySparkDataFrame) and isinstance(right, PySparkDataFrame):
-        assertSparkDFEqual(left, right)
+        if check_exact:
+            assertSparkDFEqual(left, right)
+        else:
+            assertSparkDFAlmostEqual(left, right)
     else:
         raise PySparkAssertionError(
             error_class="UNSUPPORTED_DATAFRAME_TYPES",

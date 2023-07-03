@@ -99,6 +99,24 @@ class UtilsTestsMixin:
 
         assertDFEqual(actual_df, expected_df)
 
+    def test_assert_pyspark_approx_equal(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1001.0000001),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+
+        assertDFEqual(df1, df2, check_exact=False)
+
     def test_assert_pyspark_df_not_equal(self):
         df1 = self.spark.createDataFrame(
             data=[

@@ -140,7 +140,7 @@ class PandasOnSparkTestUtils:
         """
         return lambda x: getattr(x, func)()
 
-    def assertPandasEqual(self, left, right, check_exact):
+    def assertPandasEqual(self, left, right, check_exact=True):
         assertPandasDFEqual(left, right, check_exact)
 
     def assertPandasAlmostEqual(self, left, right):
