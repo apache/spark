@@ -359,7 +359,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Refresh the given [[FileIndex]] if any of its root paths starts with `qualifiedPath`.
+   * Refresh the given [[FileIndex]] if any of its root paths is a subdirectory
+   * of the `qualifiedPath`.
    * @return whether the [[FileIndex]] is refreshed.
    */
   private def refreshFileIndexIfNecessary(
