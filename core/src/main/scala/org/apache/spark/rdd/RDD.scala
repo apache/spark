@@ -2064,10 +2064,9 @@ abstract class RDD[T: ClassTag](
    * candidate that is deterministic least. Please override [[getOutputDeterministicLevel]] to
    * provide custom logic of calculating output deterministic level.
    */
-  // TODO(SPARK-34612): make it public so users can set deterministic level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different deterministic level for
   // different partitions.
-  private[spark] final def outputDeterministicLevel: DeterministicLevel.Value = {
+  final def outputDeterministicLevel: DeterministicLevel.Value = {
     if (isReliablyCheckpointed) {
       DeterministicLevel.DETERMINATE
     } else {
@@ -2176,6 +2175,6 @@ object RDD {
  * Note that, the output of an RDD usually relies on the parent RDDs. When the parent RDD's output
  * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
  */
-private[spark] object DeterministicLevel extends Enumeration {
+object DeterministicLevel extends Enumeration {
   val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }
