@@ -42,7 +42,7 @@ class GroupbyAggregateMixin:
 
     @unittest.skipIf(
         LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
-        "TODO(SPARK-44267): Enable GroupbyAggregateTests.test_aggregate for pandas 2.0.0.",
+        "TODO(SPARK-44289): Enable GroupbyAggregateTests.test_aggregate for pandas 2.0.0.",
     )
     def test_aggregate(self):
         pdf = pd.DataFrame(
