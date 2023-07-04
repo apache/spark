@@ -532,7 +532,7 @@ class QueryCompilationErrorsSuite
 
       val query = "ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'"
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[AnalysisException] {
           sql(query)
         },
         errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",

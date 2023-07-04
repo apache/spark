@@ -335,7 +335,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         "path" -> "`s1`.`s12`"))
 
     // ambiguous name
-    var e2 = intercept[SparkException] {
+    var e2 = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
     checkError(
