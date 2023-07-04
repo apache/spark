@@ -24,7 +24,28 @@ import io.grpc.{ChannelCredentials, Grpc, ManagedChannel, ManagedChannelBuilder}
 import org.apache.spark.sql.connect.client.SparkConnectClient.MetadataHeaderClientInterceptor
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
+/**
+ * This class controls how the grpc channel is created.
+ *
+ * Implementations can override [[createChannelBuilder]] method to add custom behavior.
+ *
+ * The custom channel builder can be provided during [[org.apache.spark.sql.SparkSession]] creation as follows:
+ *
+ * {{{
+ *   SparkSession.builder().remote("...").channelBuilder(channelBuilder).create()
+ * }}}
+ */
 class ChannelBuilder() {
+  /**
+   * Implement this method to customize how the grpc channel is created
+   * @param host
+   *    Host part of the remote address
+   * @param port
+   *    Port part of the remote address
+   * @param credentials
+   *    Channel credentials
+   * @return ManagedChannelBuilder
+   */
   def createChannelBuilder(
       host: String,
       port: Int,
