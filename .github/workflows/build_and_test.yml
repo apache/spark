@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 21-ea
+        default: 8
       branch:
         description: Branch to run the build against
         required: false
@@ -367,7 +367,6 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
-      JAVA_VERSION: ${{ inputs.java }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
