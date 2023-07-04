@@ -277,13 +277,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 e.dataTypeMismatch(e, checkRes)
               case TypeCheckResult.TypeCheckFailure(message) =>
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
-                extraHintForAnsiTypeCoercionExpression(operator)
+                val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
                 e.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2315",
+                  errorClass = "TYPE_CHECK_FAILURE_WITH_HINT",
                   messageParameters = Map(
-                    "sqlExpr" -> e.sql,
+                    "expr" -> toSQLExpr(e),
                     "msg" -> message,
-                    "hint" -> extraHintForAnsiTypeCoercionExpression(operator)))
+                    "hint" -> extraHint))
               case checkRes: TypeCheckResult.InvalidFormat =>
                 e.setTagValue(INVALID_FORMAT_ERROR, true)
                 e.invalidFormat(checkRes)
@@ -486,8 +486,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case CollectMetrics(name, metrics, _) =>
             if (name == null || name.isEmpty) {
               operator.failAnalysis(
-                errorClass = "_LEGACY_ERROR_TEMP_2316",
-                messageParameters = Map("operator" -> operator.toString))
+                errorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
+                messageParameters = Map("operator" -> planToString(operator)))
             }
             // Check if an expression is a valid metric. A metric must meet the following criteria:
             // - Is not a window function;
@@ -498,11 +498,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             def checkMetric(s: Expression, e: Expression, seenAggregate: Boolean = false): Unit = {
               e match {
                 case _: WindowExpression =>
-                  e.failAnalysis("_LEGACY_ERROR_TEMP_2317", Map("sqlExpr" -> s.sql))
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
+                    Map("expr" -> toSQLExpr(s)))
                 case _ if !e.deterministic && !seenAggregate =>
-                  e.failAnalysis("_LEGACY_ERROR_TEMP_2318", Map("sqlExpr" -> s.sql))
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+                    Map("expr" -> toSQLExpr(s)))
                 case a: AggregateExpression if seenAggregate =>
-                  e.failAnalysis("_LEGACY_ERROR_TEMP_2319", Map("sqlExpr" -> s.sql))
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
+                    Map("expr" -> toSQLExpr(s)))
                 case a: AggregateExpression if a.isDistinct =>
                   e.failAnalysis("_LEGACY_ERROR_TEMP_2320", Map("sqlExpr" -> s.sql))
                 case a: AggregateExpression if a.filter.isDefined =>
