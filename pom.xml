@@ -2836,6 +2836,7 @@
                 <pattern>${maven.build.timestamp.format}</pattern>
                 <timeSource>current</timeSource>
                 <timeZone>America/Los_Angeles</timeZone>
+                <locale>en,US</locale>
               </configuration>
             </execution>
             <execution>
@@ -2849,6 +2850,7 @@
                 <pattern>${maven.build.timestamp.format}</pattern>
                 <timeSource>build</timeSource>
                 <timeZone>America/Los_Angeles</timeZone>
+                <locale>en,US</locale>
               </configuration>
             </execution>
           </executions>
