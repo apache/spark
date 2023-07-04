@@ -664,6 +664,12 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
+    "message" : [
+      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same name <parameterName>."
+    ],
+    "sqlState" : "42704K"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -1708,6 +1714,11 @@
       "Not allowed to implement multiple UDF interfaces, UDF class <className>."
     ]
   },
+  "NAMED_ARGUMENTS_NOT_SUPPORTED" : {
+    "message" : [
+      "Named arguments are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
+    ]
+  },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
@@ -2021,6 +2032,11 @@
     ],
     "sqlState" : "42614"
   },
+  "REQUIRED_PARAMETER_NOT_FOUND" : {
+    "message" : [
+      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
+    ]
+  },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
       "<sessionCatalog> requires a single-part namespace, but got <namespace>."
@@ -2206,6 +2222,11 @@
     ],
     "sqlState" : "42K09"
   },
+  "UNEXPECTED_POSITIONAL_ARGUMENT" : {
+    "message" : [
+      "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
+    ]
+  },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
       "Attempting to treat <descriptorName> as a Message, but it was <containingType>."
@@ -2234,6 +2255,11 @@
       "All unpivot value columns must have the same size as there are value column names (<names>)."
     ],
     "sqlState" : "428C4"
+  },
+  "UNRECOGNIZED_PARAMETER_NAME" : {
+    "message" : [
+      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name."
+    ]
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [

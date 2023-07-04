@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument, SupportsNamedArguments}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
@@ -207,4 +208,14 @@ case class CountMinSketchAgg(
       epsExpression = second,
       confidenceExpression = third,
       seedExpression = fourth)
+}
+object CountMinSketchAgg extends SupportsNamedArguments {
+  final val functionSignature = FunctionSignature(Seq(
+    NamedArgument("column",
+                  FixedArgumentType(TypeCollection(IntegralType, StringType, BinaryType))),
+    NamedArgument("epsilon", FixedArgumentType(DoubleType)),
+    NamedArgument("confidence", FixedArgumentType(DoubleType)),
+    NamedArgument("seed", FixedArgumentType(IntegerType))
+  ))
+  override def functionSignatures: Seq[FunctionSignature] = Seq(functionSignature)
 }

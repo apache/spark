@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Join, LogicalPlan, SerdeInfo, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, FunctionSignature, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
@@ -49,6 +49,65 @@ import org.apache.spark.sql.types._
  * commands, which users can see immediately.
  */
 private[sql] object QueryCompilationErrors extends QueryErrorsBase {
+
+  def cannotObtainCompanionObjectInstance(functionName: String): Throwable = {
+    SparkException.internalError(s"Cannot obtain companion object for " +
+      s"function expression: $functionName. Companion must be top-level object.")
+  }
+
+  def multipleFunctionSignatures(functionName: String,
+      functionSignatures: Seq[FunctionSignature]): Throwable = {
+    var errorMessage = s"Function $functionName cannot have multiple method signatures." +
+      s" The function signatures found were: \n"
+    for (functionSignature <- functionSignatures) {
+      errorMessage = errorMessage + s"${functionSignature}\n"
+    }
+    SparkException.internalError(errorMessage)
+  }
+
+  def namedArgumentsNotSupported(functionName: String) : Throwable = {
+    new AnalysisException(
+      errorClass = "NAMED_ARGUMENTS_NOT_SUPPORTED",
+      messageParameters = Map("functionName" -> toSQLId(functionName))
+    )
+  }
+
+  def duplicateRoutineParameterAssignment(
+      functionName: String, parameterName: String) : Throwable = {
+    new AnalysisException(
+      errorClass = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameterName" -> toSQLId(parameterName))
+    )
+  }
+
+  def requiredParameterNotFound(
+      functionName: String, parameterName: String) : Throwable = {
+    new AnalysisException(
+      errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameterName" -> toSQLId(parameterName))
+    )
+  }
+
+  def unrecognizedParameterName(
+      functionName: String, argumentName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "argumentName" -> toSQLId(argumentName))
+    )
+  }
+
+  def unexpectedPositionalArgument(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
+      messageParameters = Map("functionName" -> toSQLId(functionName))
+    )
+  }
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
