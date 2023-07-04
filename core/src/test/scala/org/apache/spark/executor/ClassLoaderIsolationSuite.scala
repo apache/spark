@@ -17,21 +17,31 @@
 
 package org.apache.spark.executor
 
+import scala.util.Properties
+
 import org.apache.spark.{JobArtifactSet, LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
 class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
+
+  private val scalaVersion = Properties.versionNumberString
+    .split("\\.")
+    .take(2)
+    .mkString(".")
+
   val jar1 = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
 
   // package com.example
   // object Hello { def test(): Int = 2 }
   // case class Hello(x: Int, y: Int)
-  val jar2 = Thread.currentThread().getContextClassLoader.getResource("TestHelloV2.jar").toString
+  val jar2 = Thread.currentThread().getContextClassLoader
+    .getResource(s"TestHelloV2_$scalaVersion.jar").toString
 
   // package com.example
   // object Hello { def test(): Int = 3 }
   // case class Hello(x: String)
-  val jar3 = Thread.currentThread().getContextClassLoader.getResource("TestHelloV3.jar").toString
+  val jar3 = Thread.currentThread().getContextClassLoader
+    .getResource(s"TestHelloV3_$scalaVersion.jar").toString
 
   test("Executor classloader isolation with JobArtifactSet") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
