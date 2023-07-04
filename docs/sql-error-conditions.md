@@ -1594,6 +1594,12 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
 
+### THRESHOLD_VALUE_OUT_OF_RANGE
+
+SQLSTATE: none assigned
+
+The threshold value must be between [0, 2147483647] (current value = <currentValue>).
+
 ### TOO_MANY_ARRAY_ELEMENTS
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
