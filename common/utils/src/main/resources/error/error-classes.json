@@ -1241,6 +1241,11 @@
         "message" : [
           "Found incompatible types in the column <colName> for inline table."
         ]
+      },
+      "NUM_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Inline table expected <expectedNumCols> columns but found <actualNumCols> columns in row <rowIndex>."
+        ]
       }
     }
   },
@@ -1264,6 +1269,11 @@
       "DUPLICATE_ARG_NAMES" : {
         "message" : [
           "The lambda function has duplicate arguments <args>. Please, consider to rename the argument names or set <caseSensitiveConfig> to \"true\"."
+        ]
+      },
+      "NON_HIGHER_ORDER_FUNCTION" : {
+        "message" : [
+          "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
         ]
       },
       "NUM_ARGS_MISMATCH" : {
@@ -1775,6 +1785,11 @@
     ],
     "sqlState" : "42000"
   },
+  "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING" : {
+    "message" : [
+      "Window function is not supported in <windowFunc> (as column <columnName>) on streaming DataFrames/Datasets. Structured Streaming only supports time-window aggregation using the WINDOW function. (window specification: <windowSpec>)"
+    ]
+  },
   "NOT_ALLOWED_IN_FROM" : {
     "message" : [
       "Not allowed in the FROM clause:"
@@ -1933,6 +1948,11 @@
       "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ],
     "sqlState" : "42826"
+  },
+  "NUM_TABLE_VALUE_ALIASES_MISMATCH" : {
+    "message" : [
+      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
+    ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
@@ -2177,6 +2197,11 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS" : {
+    "message" : [
+      "There are too many table arguments for table-valued function. It allows one table argument, but got: <num>. If you want to allow it, please set \"spark.sql.allowMultipleTableArguments.enabled\" to \"true\""
+    ]
   },
   "TASK_WRITE_FAILED" : {
     "message" : [
@@ -2528,11 +2553,6 @@
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING" : {
         "message" : [
           "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
-        ]
-      },
-      "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
-        "message" : [
-          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
@@ -5587,26 +5607,6 @@
   "_LEGACY_ERROR_TEMP_2278" : {
     "message" : [
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2305" : {
-    "message" : [
-      "expected <numCols> columns but found <rowSize> columns in row <ri>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2306" : {
-    "message" : [
-      "A lambda function should only be used in a higher order function. However, its class is <class>, which is not a higher order function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2307" : {
-    "message" : [
-      "Number of given aliases does not match number of output columns. Function name: <funcName>; number of aliases: <aliasesNum>; number of output columns: <outColsNum>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2309" : {
-    "message" : [
-      "cannot resolve <sqlExpr> in MERGE command given columns [<cols>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_2311" : {

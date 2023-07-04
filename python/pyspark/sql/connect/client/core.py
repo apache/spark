@@ -594,6 +594,7 @@ class SparkConnectClient(object):
             self._user_id = os.getenv("USER", None)
 
         self._channel = self._builder.toChannel()
+        self._closed = False
         self._stub = grpc_lib.SparkConnectServiceStub(self._channel)
         self._artifact_manager = ArtifactManager(self._user_id, self._session_id, self._channel)
         # Configure logging for the SparkConnect client.
@@ -835,6 +836,14 @@ class SparkConnectClient(object):
         Close the channel.
         """
         self._channel.close()
+        self._closed = True
+
+    @property
+    def is_closed(self) -> bool:
+        """
+        Returns if the channel was closed previously using close() method
+        """
+        return self._closed
 
     @property
     def host(self) -> str:

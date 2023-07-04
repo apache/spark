@@ -543,10 +543,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
-      Seq("Number of given aliases does not match number of output columns. "
-        + "Function name: range; number of aliases: 2; number of output columns: 1."))
+      "NUM_TABLE_VALUE_ALIASES_MISMATCH",
+      Map("funcName" -> "`range`", "aliasesNum" -> "2", "outColsNum" -> "1"))
   }
 
   test("SPARK-20841 Support table column aliases in FROM clause") {
