@@ -203,8 +203,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: retry actually retries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryParameters = SparkConnectClient.RetryParameters()
-    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+    val retryPolicy = SparkConnectClient.RetryPolicy()
+    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
     val result = client.retry { dummyFn.fn() }
 
     assert(result == 42)
@@ -213,8 +213,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
-    val retryParameters = SparkConnectClient.RetryParameters()
-    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+    val retryPolicy = SparkConnectClient.RetryPolicy()
+    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
 
     assertThrows[StatusRuntimeException] {
       client.retry { dummyFn.fn() }
@@ -222,10 +222,10 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(dummyFn.counter == 1)
   }
 
-  test("SPARK-44275: retry uses should_retry to filter exceptions") {
+  test("SPARK-44275: retry uses canRetry to filter exceptions") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryParameters = SparkConnectClient.RetryParameters(should_retry = _ => false)
-    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+    val retryPolicy = SparkConnectClient.RetryPolicy(canRetry = _ => false)
+    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
 
     assertThrows[StatusRuntimeException] {
       client.retry { dummyFn.fn() }
@@ -233,11 +233,11 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(dummyFn.counter == 1)
   }
 
-  test("SPARK-44275: retry does not exceed max_retries") {
+  test("SPARK-44275: retry does not exceed maxRetries") {
     val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryParameters =
-      SparkConnectClient.RetryParameters(should_retry = _ => true, max_retries = 1)
-    val client = SparkConnectClient.builder().retryParameters(retryParameters).build()
+    val retryPolicy =
+      SparkConnectClient.RetryPolicy(canRetry = _ => true, maxRetries = 1)
+    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
 
     assertThrows[StatusRuntimeException] {
       client.retry { dummyFn.fn() }
