@@ -1449,16 +1449,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
    * see SPARK-4080 for more context.
    */
   def tryOrIOException[T](block: => T): T = {
-    try {
-      block
-    } catch {
-      case e: IOException =>
-        logError("Exception encountered", e)
-        throw e
-      case NonFatal(e) =>
-        logError("Exception encountered", e)
-        throw new IOException(e)
-    }
+    SparkErrorUtils.tryOrIOException(block)
   }
 
   /** Executes the given block. Log non-fatal errors if any, and only throw fatal errors */
@@ -2094,22 +2085,7 @@ private[spark] object Utils extends Logging with SparkClassUtils {
    * converted into an absolute path with a file:// scheme.
    */
   def resolveURI(path: String): URI = {
-    try {
-      val uri = new URI(path)
-      if (uri.getScheme() != null) {
-        return uri
-      }
-      // make sure to handle if the path has a fragment (applies to yarn
-      // distributed cache)
-      if (uri.getFragment() != null) {
-        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
-        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
-          uri.getFragment())
-      }
-    } catch {
-      case e: URISyntaxException =>
-    }
-    new File(path).getCanonicalFile().toURI()
+    SparkFileUtils.resolveURI(path)
   }
 
   /** Resolve a comma-separated list of paths. */

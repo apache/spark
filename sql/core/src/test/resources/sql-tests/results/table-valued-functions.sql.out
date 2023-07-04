@@ -374,10 +374,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "2",
-    "funcName" : "explode",
+    "funcName" : "`explode`",
     "outColsNum" : "1"
   },
   "queryContext" : [ {
@@ -503,10 +503,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "3",
-    "funcName" : "inline",
+    "funcName" : "`inline`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {
@@ -668,10 +668,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "1",
-    "funcName" : "posexplode",
+    "funcName" : "`posexplode`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {
@@ -847,10 +847,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "1",
-    "funcName" : "json_tuple",
+    "funcName" : "`json_tuple`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {
@@ -944,10 +944,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "3",
-    "funcName" : "stack",
+    "funcName" : "`stack`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {

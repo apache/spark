@@ -29,9 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.catalyst.util.StringConcat
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
@@ -423,7 +422,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
-    truncatedString(
+    SparkStringUtils.truncatedString(
       fieldTypes,
       "struct<", ",", ">",
       SQLConf.get.maxToStringFields)

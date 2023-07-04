@@ -56,3 +56,10 @@ class SparkSessionTestCase(unittest.TestCase):
         test_session.stop()
 
         self.assertEqual("other", host)
+
+    def test_session_stop(self):
+        session = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
+
+        self.assertFalse(session.is_stopped)
+        session.stop()
+        self.assertTrue(session.is_stopped)
