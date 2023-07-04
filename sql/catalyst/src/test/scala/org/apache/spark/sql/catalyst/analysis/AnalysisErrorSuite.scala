@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.Assertions._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -1166,10 +1165,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     )
     assert(plan.resolved)
 
-    val error = intercept[AnalysisException] {
-      SimpleAnalyzer.checkAnalysis(plan)
-    }
-    assert(error.message.contains(s"Hint not found: ${hintName}"))
+    checkError(
+      exception = intercept[SparkException] {
+        SimpleAnalyzer.checkAnalysis(plan)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Hint not found: `some_random_hint_that_does_not_exist`"))
 
     // UnresolvedHint be removed by batch `Remove Unresolved Hints`
     assertAnalysisSuccess(plan, true)
