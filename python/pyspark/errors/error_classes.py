@@ -170,6 +170,13 @@ ERROR_CLASSES_JSON = """
       "<error_table>"
     ]
   },
+  "DIFFERENT_SCHEMA" : {
+    "message" : [
+      "Schemas do not match:",
+      "df schema: <df_schema>",
+      "expected schema: <expected_schema>"
+    ]
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"

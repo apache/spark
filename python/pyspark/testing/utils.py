@@ -60,18 +60,17 @@ except ImportError:
 SPARK_HOME = _find_spark_home()
 
 
-class bcolors:
-    NC = "\033[0m"  # No Color, reset all
-    LightRed = "\033[31m"
-    LightBlue = "\033[34m"
+NO_COLOR = "\033[0m"  # No Color, reset all
+LIGHT_RED = "\033[31m"
+LIGHT_BLUE = "\033[34m"
 
 
-def red(s: str) -> str:
-    return bcolors.LightRed + str(s) + bcolors.NC
+def red(s):
+    return LIGHT_RED + str(s) + NO_COLOR
 
 
-def blue(s: str) -> str:
-    return bcolors.LightBlue + str(s) + bcolors.NC
+def blue(s):
+    return LIGHT_BLUE + str(s) + NO_COLOR
 
 
 def read_int(b):
@@ -237,12 +236,14 @@ class PySparkErrorTestUtils:
 
 
 def assertSchemaEqual(
-    s1: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
-    s2: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+    df_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+    expected_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
 ):
-    if s1 != s2:
-        msg = "Schemas are different"
-        raise AssertionError(msg)
+    if df_schema != expected_schema:
+        raise PySparkAssertionError(
+            error_class="DIFFERENT_SCHEMA",
+            message_parameters={"s1": df_schema, "s2": expected_schema},
+        )
 
 
 def assertDataFrameEqual(

@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-__all__ = ["assertDataFrameEqual"]
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]

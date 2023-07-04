@@ -291,6 +291,31 @@ class UtilsTestsMixin:
             message_parameters={"error_table": expected_error_table.get_string()},
         )
 
+        def test_assert_notequal_schema(self):
+            df1 = self.spark.createDataFrame(
+                data=[
+                    (1, 1000),
+                    (2, 3000),
+                ],
+                schema=["id", "amount"],
+            )
+            df2 = self.spark.createDataFrame(
+                data=[
+                    ("1", 1000),
+                    ("2", 3000),
+                ],
+                schema=["id", "amount"],
+            )
+
+            with self.assertRaises(PySparkAssertionError) as pe:
+                assertDataFrameEqual(df1, df2)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="DIFFERENT_SCHEMA",
+                message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
+            )
+
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
     def test_capture_analysis_exception(self):
