@@ -86,6 +86,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result(0) == 0)
     assert(result(1) == 1)
     assert(result(2) == 2)
+
+    assert(df.columns.length == 1)
+    assert(df.columns(0) == "id")
   }
 
   test("read and write") {

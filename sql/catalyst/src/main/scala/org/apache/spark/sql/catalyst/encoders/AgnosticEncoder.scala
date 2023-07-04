@@ -41,7 +41,7 @@ trait AgnosticEncoder[T] extends Encoder[T] {
   def isPrimitive: Boolean
   def nullable: Boolean = !isPrimitive
   def dataType: DataType
-  override def schema: StructType = StructType(StructField("value", dataType, nullable) :: Nil)
+  override def schema: StructType = StructType(StructField("id", dataType, nullable) :: Nil)
   def lenientSerialization: Boolean = false
 }
 
