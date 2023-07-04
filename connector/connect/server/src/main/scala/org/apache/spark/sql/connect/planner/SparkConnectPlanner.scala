@@ -77,7 +77,7 @@ class SparkConnectPlanner(
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
 
-    private lazy val commandHandler: Option[SparkConnectCommandHandler] =
+  private lazy val commandHandler: Option[SparkConnectCommandHandler] =
     responseHandlerOpt
       .filter(_.isInstanceOf[SparkConnectStreamHandler])
       .map(_.asInstanceOf[SparkConnectStreamHandler])
