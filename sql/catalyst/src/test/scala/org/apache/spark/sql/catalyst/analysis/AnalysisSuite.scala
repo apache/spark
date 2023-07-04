@@ -774,7 +774,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CollectMetrics("", sum :: Nil, testRelation),
       expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
       expectedMessageParameters = Map(
-        "operator" -> "'CollectMetrics , [sum(a#0) AS sum#21L]\n+- LocalRelation <empty>, [a#0]\n")
+        "operator" -> "'CollectMetrics , [sum(a#x) AS sum#xL]\n+- LocalRelation <empty>, [a#x]\n")
     )
 
     // No columns

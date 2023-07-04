@@ -487,7 +487,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             if (name == null || name.isEmpty) {
               operator.failAnalysis(
                 errorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
-                messageParameters = Map("operator" -> operator.toString))
+                messageParameters = Map("operator" -> planToString(operator)))
             }
             // Check if an expression is a valid metric. A metric must meet the following criteria:
             // - Is not a window function;
