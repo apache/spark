@@ -21,7 +21,7 @@ import io.grpc.ManagedChannel
 import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ConfigRequest, ConfigResponse, ExecutePlanRequest, ExecutePlanResponse, InterruptRequest, InterruptResponse}
 import org.apache.spark.connect.proto
 
-private[client] class GrpcStub(channel: ManagedChannel) {
+private[client] class CustomSparkConnectBlockingStub(channel: ManagedChannel) {
 
   private val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
