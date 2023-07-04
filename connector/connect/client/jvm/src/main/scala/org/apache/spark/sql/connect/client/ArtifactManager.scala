@@ -38,7 +38,7 @@ import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -71,7 +71,7 @@ class ArtifactManager(
    * Currently only local files with extensions .jar and .class are supported.
    */
   def addArtifact(path: String): Unit = {
-    addArtifact(Utils.resolveURI(path))
+    addArtifact(SparkFileUtils.resolveURI(path))
   }
 
   private def parseArtifacts(uri: URI): Seq[Artifact] = {
@@ -201,7 +201,7 @@ class ArtifactManager(
       writeBatch()
     }
     stream.onCompleted()
-    ThreadUtils.awaitResult(promise.future, Duration.Inf)
+    SparkThreadUtils.awaitResult(promise.future, Duration.Inf)
     // TODO(SPARK-42658): Handle responses containing CRC failures.
   }
 

@@ -91,6 +91,11 @@
     ],
     "sqlState" : "22003"
   },
+  "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
+    "message" : [
+      "The method <methodName> can not be called on streaming Dataset/DataFrame."
+    ]
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -5612,26 +5617,6 @@
   "_LEGACY_ERROR_TEMP_2278" : {
     "message" : [
       "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2311" : {
-    "message" : [
-      "'writeTo' can not be called on streaming Dataset/DataFrame."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2312" : {
-    "message" : [
-      "'write' can not be called on streaming Dataset/DataFrame."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2313" : {
-    "message" : [
-      "Hint not found: <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2314" : {
-    "message" : [
-      "cannot resolve '<sqlExpr>' due to argument data type mismatch: <msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2315" : {

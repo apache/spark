@@ -111,6 +111,12 @@ Unable to find batch `<batchMetadataFile>`.
 
 `<value1>` `<symbol>` `<value2>` caused overflow.
 
+### CALL_ON_STREAMING_DATASET_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+The method `<methodName>` can not be called on streaming Dataset/DataFrame.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

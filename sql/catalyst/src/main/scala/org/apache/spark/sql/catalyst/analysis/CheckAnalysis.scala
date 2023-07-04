@@ -209,9 +209,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           u.origin)
 
       case u: UnresolvedHint =>
-        u.failAnalysis(
-          errorClass = "_LEGACY_ERROR_TEMP_2313",
-          messageParameters = Map("name" -> u.name))
+        throw SparkException.internalError(
+          msg = s"Hint not found: ${toSQLId(u.name)}",
+          context = u.origin.getQueryContext,
+          summary = u.origin.context.summary)
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -245,10 +246,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             hof.checkArgumentDataTypes() match {
               case checkRes: TypeCheckResult.DataTypeMismatch =>
                 hof.dataTypeMismatch(hof, checkRes)
-              case TypeCheckResult.TypeCheckFailure(message) =>
-                hof.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2314",
-                  messageParameters = Map("sqlExpr" -> hof.sql, "msg" -> message))
               case checkRes: TypeCheckResult.InvalidFormat =>
                 hof.setTagValue(INVALID_FORMAT_ERROR, true)
                 hof.invalidFormat(checkRes)
