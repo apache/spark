@@ -68,7 +68,9 @@ private[sql] class SparkConnectClient(
 
   @tailrec private[client] final def retry[T](fn: => T, retries: Int = 0): T = {
     if (retries > retryParameters.max_retries) {
-      throw new IllegalArgumentException(s"retries must not exceed retryParameters.max_retries")
+      throw new IllegalArgumentException(
+        s"The number of retries ($retries) must not exceed " +
+        s"the maximum number of retires (${retryParameters.max_retries}).")
     }
     Try {
       fn
