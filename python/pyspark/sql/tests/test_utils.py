@@ -17,6 +17,7 @@
 #
 
 import unittest
+from prettytable import PrettyTable
 
 from pyspark.sql.functions import sha2
 from pyspark.errors import (
@@ -26,43 +27,187 @@ from pyspark.errors import (
     IllegalArgumentException,
     SparkUpgradeException,
 )
-from pyspark.testing.utils import assertDFEqual
+from pyspark.testing.utils import assertDataFrameEqual, blue, red
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
+from pyspark.sql.types import StringType, ArrayType, LongType, StructType, MapType, StructField
 
 
 class UtilsTestsMixin:
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_assert_pandas_df_equal(self):
-        import pandas as pd
-
-        df1 = pd.DataFrame(
-            data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
-        )
-        df2 = pd.DataFrame(
-            data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
-        )
-
-        assertDFEqual(df1, df2)
-
-    def test_assert_pyspark_df_equal(self):
+    def test_assert_equal_inttype(self):
         df1 = self.spark.createDataFrame(
             data=[
-                ("1", 1000.00),
-                ("2", 3000.00),
+                ("1", 1000),
+                ("2", 3000),
             ],
             schema=["id", "amount"],
         )
         df2 = self.spark.createDataFrame(
             data=[
-                ("1", 1000.00),
-                ("2", 3000.00),
+                ("1", 1000),
+                ("2", 3000),
             ],
             schema=["id", "amount"],
         )
 
-        assertDFEqual(df1, df2)
+        assertDataFrameEqual(df1, df2)
+
+    def test_assert_equal_arraytype(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("john", ["Python", "Java"]),
+                ("jane", ["Scala", "SQL", "Java"]),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField("languages", ArrayType(StringType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("john", ["Python", "Java"]),
+                ("jane", ["Scala", "SQL", "Java"]),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField("languages", ArrayType(StringType()), True),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_assert_notequal_arraytype(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("John", ["Python", "Java"]),
+                ("Jane", ["Scala", "SQL", "Java"]),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField("languages", ArrayType(StringType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("John", ["Python", "Java"]),
+                ("Jane", ["Scala", "Java"]),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField("languages", ArrayType(StringType()), True),
+                ]
+            ),
+        )
+
+        expected_error_table = PrettyTable(["df", "expected"])
+        expected_error_table.add_row(
+            [red(df1.sort(df1.columns).collect()[0]), red(df2.sort(df2.columns).collect()[0])]
+        )
+        expected_error_table.add_row(
+            [blue(df1.sort(df1.columns).collect()[1]), blue(df2.sort(df2.columns).collect()[1])]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_DATAFRAME",
+            message_parameters={"error_table": expected_error_table.get_string()},
+        )
+
+    def test_assert_equal_maptype(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"id": 222342203655477580}),
+                ("student2", {"id": 422322203155477692}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("properties", MapType(StringType(), LongType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"id": 222342203655477580}),
+                ("student2", {"id": 422322203155477692}),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField("properties", MapType(StringType(), LongType()), True),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+
+    def test_assert_equal_nullrow(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000),
+                (None, None),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000),
+                (None, None),
+            ],
+            schema=["id", "amount"],
+        )
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_assert_notequal_nullval(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000),
+                ("2", 2000),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000),
+                ("2", None),
+            ],
+            schema=["id", "amount"],
+        )
+
+        expected_error_table = PrettyTable(["df", "expected"])
+        expected_error_table.add_row(
+            [blue(df1.sort(df1.columns).collect()[0]), blue(df2.sort(df2.columns).collect()[0])]
+        )
+        expected_error_table.add_row(
+            [red(df1.sort(df1.columns).collect()[1]), red(df2.sort(df2.columns).collect()[1])]
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="DIFFERENT_DATAFRAME",
+            message_parameters={"error_table": expected_error_table.get_string()},
+        )
+
+    def test_assert_equal_nulldf(self):
+        df1 = None
+        df2 = None
+
+        assertDataFrameEqual(df1, df2)
 
     def test_ignore_row_order(self):
         # test that row order is ignored by default
@@ -81,7 +226,7 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        assertDFEqual(df1, df2)
+        assertDataFrameEqual(df1, df2)
 
     def remove_non_word_characters(self, col):
         return F.regexp_replace(col, "[^\\w\\s]+", "")
@@ -97,7 +242,25 @@ class UtilsTestsMixin:
         expected_data = [("jo&&se", "jose"), ("**li**", "li"), ("#::luisa", "luisa"), (None, None)]
         expected_df = self.spark.createDataFrame(expected_data, ["name", "clean_name"])
 
-        assertDFEqual(actual_df, expected_df)
+        assertDataFrameEqual(actual_df, expected_df)
+
+    def test_assert_pyspark_approx_equal(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.00),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("1", 1000.0000001),
+                ("2", 3000.00),
+            ],
+            schema=["id", "amount"],
+        )
+
+        assertDataFrameEqual(df1, df2)
 
     def test_assert_pyspark_df_not_equal(self):
         df1 = self.spark.createDataFrame(
@@ -115,37 +278,17 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
+        expected_error_table = PrettyTable(["df", "expected"])
+        expected_error_table.add_row([red(df1.collect()[0]), red(df2.collect()[0])])
+        expected_error_table.add_row([blue(df1.collect()[1]), blue(df2.collect()[1])])
+
         with self.assertRaises(PySparkAssertionError) as pe:
-            assertDFEqual(df1, df2)
+            assertDataFrameEqual(df1, df2)
 
         self.check_error(
             exception=pe.exception,
             error_class="DIFFERENT_DATAFRAME",
-            message_parameters={},
-        )
-
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_unsupported_df_types(self):
-        import pandas as pd
-
-        df1 = self.spark.createDataFrame(
-            data=[
-                ("1", 1000.00),
-                ("2", 3000.00),
-            ],
-            schema=["id", "amount"],
-        )
-        df2 = pd.DataFrame(
-            data=[{"b": 2, "c": 3}, {"a": 10, "b": 20, "c": 30}], index=["first", "second"]
-        )
-
-        with self.assertRaises(PySparkAssertionError) as pe:
-            assertDFEqual(df1, df2)
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="UNSUPPORTED_DATAFRAME_TYPES",
-            message_parameters={},
+            message_parameters={"error_table": expected_error_table.get_string()},
         )
 
 

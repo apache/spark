@@ -76,9 +76,9 @@ class PandasOnSparkTestUtils:
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
                     check_exact = (
-                            check_exact
-                            and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
-                            and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
+                        check_exact
+                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
+                        and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
                     )
 
                 assert_frame_equal(
@@ -91,9 +91,9 @@ class PandasOnSparkTestUtils:
                 )
             except AssertionError as e:
                 msg = (
-                        str(e)
-                        + "\n\nLeft:\n%s\n%s" % (left, left.dtypes)
-                        + "\n\nRight:\n%s\n%s" % (right, right.dtypes)
+                    str(e)
+                    + "\n\nLeft:\n%s\n%s" % (left, left.dtypes)
+                    + "\n\nRight:\n%s\n%s" % (right, right.dtypes)
                 )
                 raise AssertionError(msg) from e
         elif isinstance(left, pd.Series) and isinstance(right, pd.Series):
@@ -105,9 +105,9 @@ class PandasOnSparkTestUtils:
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
                     check_exact = (
-                            check_exact
-                            and is_numeric_dtype(left.dtype)
-                            and is_numeric_dtype(right.dtype)
+                        check_exact
+                        and is_numeric_dtype(left.dtype)
+                        and is_numeric_dtype(right.dtype)
                     )
                 assert_series_equal(
                     left,
@@ -118,9 +118,9 @@ class PandasOnSparkTestUtils:
                 )
             except AssertionError as e:
                 msg = (
-                        str(e)
-                        + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                        + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+                    str(e)
+                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
                 )
                 raise AssertionError(msg) from e
         elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
@@ -128,16 +128,16 @@ class PandasOnSparkTestUtils:
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
                     check_exact = (
-                            check_exact
-                            and is_numeric_dtype(left.dtype)
-                            and is_numeric_dtype(right.dtype)
+                        check_exact
+                        and is_numeric_dtype(left.dtype)
+                        and is_numeric_dtype(right.dtype)
                     )
                 assert_index_equal(left, right, check_exact=check_exact)
             except AssertionError as e:
                 msg = (
-                        str(e)
-                        + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                        + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+                    str(e)
+                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
                 )
                 raise AssertionError(msg) from e
         else:
@@ -155,9 +155,9 @@ class PandasOnSparkTestUtils:
 
         if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
             msg = (
-                    "DataFrames are not almost equal: "
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtypes)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtypes)
+                "DataFrames are not almost equal: "
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtypes)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtypes)
             )
             self.assertEqual(left.shape, right.shape, msg=msg)
             for lcol, rcol in zip(left.columns, right.columns):
@@ -169,9 +169,9 @@ class PandasOnSparkTestUtils:
             self.assertEqual(left.columns.names, right.columns.names, msg=msg)
         elif isinstance(left, pd.Series) and isinstance(right, pd.Series):
             msg = (
-                    "Series are not almost equal: "
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+                "Series are not almost equal: "
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtype)
             )
             self.assertEqual(left.name, right.name, msg=msg)
             self.assertEqual(len(left), len(right), msg=msg)
@@ -181,18 +181,18 @@ class PandasOnSparkTestUtils:
                 self.assertAlmostEqual(lval, rval, msg=msg)
         elif isinstance(left, pd.MultiIndex) and isinstance(right, pd.MultiIndex):
             msg = (
-                    "MultiIndices are not almost equal: "
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+                "MultiIndices are not almost equal: "
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtype)
             )
             self.assertEqual(len(left), len(right), msg=msg)
             for lval, rval in zip(left, right):
                 self.assertAlmostEqual(lval, rval, msg=msg)
         elif isinstance(left, pd.Index) and isinstance(right, pd.Index):
             msg = (
-                    "Indices are not almost equal: "
-                    + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
-                    + "\n\nRight:\n%s\n%s" % (right, right.dtype)
+                "Indices are not almost equal: "
+                + "\n\nLeft:\n%s\n%s" % (left, left.dtype)
+                + "\n\nRight:\n%s\n%s" % (right, right.dtype)
             )
             self.assertEqual(len(left), len(right), msg=msg)
             for lnull, rnull in zip(left.isnull(), right.isnull()):
@@ -297,10 +297,10 @@ def compare_both(f=None, almost=True):
 
 @contextmanager
 def assert_produces_warning(
-        expected_warning=Warning,
-        filter_level="always",
-        check_stacklevel=True,
-        raise_on_extra_warnings=True,
+    expected_warning=Warning,
+    filter_level="always",
+    check_stacklevel=True,
+    raise_on_extra_warnings=True,
 ):
     """
     Context manager for running code expected to either raise a specific
@@ -371,7 +371,7 @@ def assert_produces_warning(
                 saw_warning = True
 
                 if check_stacklevel and issubclass(
-                        actual_warning.category, (FutureWarning, DeprecationWarning)
+                    actual_warning.category, (FutureWarning, DeprecationWarning)
                 ):
                     from inspect import getframeinfo, stack
 

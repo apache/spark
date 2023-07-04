@@ -166,7 +166,8 @@ ERROR_CLASSES_JSON = """
   },
   "DIFFERENT_DATAFRAME" : {
     "message" : [
-      "Dataframes are different"
+      "Results do not match:",
+      "<error_table>"
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
@@ -681,9 +682,9 @@ ERROR_CLASSES_JSON = """
       "<data_type> is only supported with pyarrow 2.0.0 and above."
     ]
   },
-  "UNSUPPORTED_DATAFRAME_TYPES" : {
+  "UNSUPPORTED_DTYPE_FOR_IGNORE_ROW_ORDER" : {
     "message" : [
-      "Can only assert DataFrame equality between two PySpark DataFrames or two pandas DataFrames."
+      "Cannot ignore row order for MapType because undefined sorting for maps."
     ]
   },
   "UNSUPPORTED_JOIN_TYPE" : {

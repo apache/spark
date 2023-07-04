@@ -22,12 +22,15 @@ import sys
 import unittest
 from time import time, sleep
 from typing import (
+    Any,
     Optional,
     Union,
     Dict,
     List,
     Tuple,
 )
+from itertools import zip_longest
+from prettytable import PrettyTable
 
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
@@ -55,6 +58,20 @@ except ImportError:
 
 
 SPARK_HOME = _find_spark_home()
+
+
+class bcolors:
+    NC = "\033[0m"  # No Color, reset all
+    LightRed = "\033[31m"
+    LightBlue = "\033[34m"
+
+
+def red(s: str) -> str:
+    return bcolors.LightRed + str(s) + bcolors.NC
+
+
+def blue(s: str) -> str:
+    return bcolors.LightBlue + str(s) + bcolors.NC
 
 
 def read_int(b):
@@ -228,19 +245,59 @@ def assertSchemaEqual(
         raise AssertionError(msg)
 
 
-def assertDataFrameEqual(df: DataFrame,
-                         expected: Union[DataFrame, List[Row]],
-                         ignore_row_order: bool = True):
-    def assert_rows_equality(rows1, rows2):
-        if rows1 != rows2:
+def assertDataFrameEqual(
+    df: DataFrame, expected: Union[DataFrame, List[Row]], ignore_row_order: bool = True
+):
+    if df is None and expected is None:
+        return True
+    elif df is None or expected is None:
+        return False
+
+    def compare(r1: Row, r2: Row):
+        if r1 is None and r2 is None:
+            return True
+        elif r1 is None or r2 is None:
+            return False
+
+        d1 = r1.asDict()
+        d2 = r2.asDict()
+
+        for key in d1.keys() & d2.keys():
+            if isinstance(d1[key], float) and isinstance(d2[key], float):
+                if abs(d1[key] - d2[key]) > 1e-5:
+                    return False
+            else:
+                if d1[key] != d2[key]:
+                    return False
+        return True
+
+    def assert_rows_equal(rows1: Row, rows2: Row):
+        zipped = list(zip_longest(rows1, rows2))
+        rows_equal = True
+        error_table = PrettyTable(["df", "expected"])
+
+        for r1, r2 in zipped:
+            if compare(r1, r2):
+                error_table.add_row([blue(r1), blue(r2)])
+            else:
+                rows_equal = False
+                error_table.add_row([red(r1), red(r2)])
+
+        if not rows_equal:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_DATAFRAME",
-                message_parameters={},
+                message_parameters={"error_table": error_table.get_string()},
             )
 
     if ignore_row_order:
-        df = df.sort(df.columns)
-        expected = expected.sort(expected.columns)
+        try:
+            df = df.sort(df.columns)
+            expected = expected.sort(expected.columns)
+        except:
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_DTYPE_FOR_IGNORE_ROW_ORDER",
+                message_parameters={},
+            )
 
     assertSchemaEqual(df.schema, df.schema)
-    assert_rows_equality(expected.collect(), expected.collect())
+    assert_rows_equal(df.collect(), expected.collect())
