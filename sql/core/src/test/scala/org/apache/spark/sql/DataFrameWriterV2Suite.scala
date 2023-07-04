@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
@@ -766,5 +767,23 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(BucketTransform(LiteralValue(4, IntegerType),
       Seq(FieldReference(Seq("ts", "timezone"))))))
+  }
+
+  test("can not be called on streaming Dataset/DataFrame") {
+    val ds = MemoryStream[Int].toDS()
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ds.write
+      },
+      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      parameters = Map("methodName" -> "`write`"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        ds.writeTo("testcat.table_name")
+      },
+      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      parameters = Map("methodName" -> "`writeTo`"))
   }
 }
