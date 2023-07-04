@@ -34,9 +34,11 @@ class SSHEnvManager:
     KNOWN_HOSTS_TEMP = f"/{HOME}/.ssh/known_hosts_temp"
 
     def __init__(self):
-        self.known_hosts_exists = os.path.exists(SSHEnvManager.KNOWN_HOSTS)
-        if self.known_hosts_exists:
-            shutil.copyfile(SSHEnvManager.KNOWN_HOSTS, SSHEnvManager.KNOWN_HOSTS_TEMP)
+        # TODO: DECIDE IF MODIFYING THE KNOWN_HOSTS FILE IS ALLOWED OR IF THERE IS A BETTER WAY TO DO IT
+        # self.known_hosts_exists = os.path.exists(SSHEnvManager.KNOWN_HOSTS)
+        # if self.known_hosts_exists:
+        #     shutil.copyfile(SSHEnvManager.KNOWN_HOSTS, SSHEnvManager.KNOWN_HOSTS_TEMP)
+        pass
 
     def create_ssh_key(self, ssh_key_path: str):
         if os.path.exists(ssh_key_path):
@@ -56,38 +58,39 @@ class SSHEnvManager:
         with open(ssh_pub_key) as f:
             ssh_key = f.read()
         return ssh_key
-
-    def ssh_keyscan(self, ip_list: List[str]):
-        """Runs the ssh-keyscan on each IP in the ip_list and then writes the public key of that IP to the known_hosts file in ssh"""
-        # if there is a known_hosts file, we need to preserve old one as we modify it
-        # otherwise, just write to it
-        print("Trying to add the worker node public ssh keys to the ssh known_hosts file")
-        for ip in ip_list:
-            cmd_args = ["ssh-keyscan", ip]
-            error_code = subprocess.run(cmd_args, capture_output=True)
-            if error_code.returncode != 0:
-                raise RuntimeError(
-                    f"Something went wrong when running ssh_keyscan {ip}. Command tried to run: ",
-                    cmd_args,
-                )
-            cmd_output = error_code.stdout.decode(
-                "utf-8"
-            )  # get the output from the command so we can write to right location
-            write_to_location(SSHEnvManager.KNOWN_HOSTS, cmd_output)
-        print("Successfully finished writing worker ssh public keys to known_hosts on driver")
-
-    def cleanup_ssh_env(self):
-        try:
-            os.remove(SSHEnvManager.KNOWN_HOSTS)
-        except OSError:
-            raise RuntimeError(
-                "Wow something went wrong when cleaning up known_hosts. I couldn't remove ",
-                SSHEnvManager.KNOWN_HOSTS,
-            )
-        if self.known_hosts_exists:
-            try:
-                os.rename(SSHEnvManager.KNOWN_HOSTS_TEMP, SSHEnvManager.KNOWN_HOSTS)
-            except OSError:
-                raise RuntimeError(
-                    "Couldn't rename the original known_hosts file - I wonder why this went wrong"
-                )
+# Code is commented for now, until we decide whether or not to modify the known_hosts file.
+# For now we assume that the workers are all ssh-keychained
+#     def ssh_keyscan(self, ip_list: List[str]):
+#         """Runs the ssh-keyscan on each IP in the ip_list and then writes the public key of that IP to the known_hosts file in ssh"""
+#         # if there is a known_hosts file, we need to preserve old one as we modify it
+#         # otherwise, just write to it
+#         print("Trying to add the worker node public ssh keys to the ssh known_hosts file")
+#         for ip in ip_list:
+#             cmd_args = ["ssh-keyscan", ip]
+#             error_code = subprocess.run(cmd_args, capture_output=True)
+#             if error_code.returncode != 0:
+#                 raise RuntimeError(
+#                     f"Something went wrong when running ssh_keyscan {ip}. Command tried to run: ",
+#                     cmd_args,
+#                 )
+#             cmd_output = error_code.stdout.decode(
+#                 "utf-8"
+#             )  # get the output from the command so we can write to right location
+#             write_to_location(SSHEnvManager.KNOWN_HOSTS, cmd_output)
+#         print("Successfully finished writing worker ssh public keys to known_hosts on driver")
+# 
+#    def cleanup_ssh_env(self):
+#        try:
+#            os.remove(SSHEnvManager.KNOWN_HOSTS)
+#        except OSError:
+#            raise RuntimeError(
+#                "Wow something went wrong when cleaning up known_hosts. I couldn't remove ",
+#                SSHEnvManager.KNOWN_HOSTS,
+#            )
+#        if self.known_hosts_exists:
+#            try:
+#                os.rename(SSHEnvManager.KNOWN_HOSTS_TEMP, SSHEnvManager.KNOWN_HOSTS)
+#            except OSError:
+#                raise RuntimeError(
+#                    "Couldn't rename the original known_hosts file - I wonder why this went wrong"
+#                )
