@@ -62,7 +62,7 @@ private[spark] object ShutdownHookManager extends Logging {
     shutdownDeletePaths.toArray.foreach { dirPath =>
       try {
         logInfo("Deleting directory " + dirPath)
-        Utils.deleteRecursively(new File(dirPath))
+        JavaFileUtils.deleteRecursively(new File(dirPath))
       } catch {
         case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
       }
@@ -185,7 +185,7 @@ private [util] class SparkShutdownHookManager {
     shuttingDown = true
     var nextHook: SparkShutdownHook = null
     while ({ nextHook = hooks.synchronized { hooks.poll() }; nextHook != null }) {
-      Try(Utils.logUncaughtExceptions(nextHook.run()))
+      Try(SparkErrorUtils.logUncaughtExceptions(nextHook.run()))
     }
   }
 

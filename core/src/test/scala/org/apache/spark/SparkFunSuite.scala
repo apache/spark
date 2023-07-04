@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, Path}
+import java.nio.file.Files
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
@@ -68,6 +68,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
  */
 abstract class SparkFunSuite
   extends AnyFunSuite // scalastyle:ignore funsuite
+  with SparkFunBase
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
@@ -87,8 +88,6 @@ abstract class SparkFunSuite
   Locale.setDefault(Locale.US)
 
   protected val enableAutoThreadAudit = true
-
-  protected val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
@@ -128,17 +127,6 @@ abstract class SparkFunSuite
     file.deleteOnExit()
     FileUtils.copyURLToFile(url, file)
     file
-  }
-
-  /**
-   * Get a Path relative to the root project. It is assumed that a spark home is set.
-   */
-  protected final def getWorkspaceFilePath(first: String, more: String*): Path = {
-    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
-      fail("spark.test.home or SPARK_HOME is not set.")
-    }
-    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-    java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
   // subclasses can override this to exclude certain tests by name
@@ -233,17 +221,6 @@ abstract class SparkFunSuite
       outcome
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
-    }
-  }
-
-  /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir()
-    try f(dir) finally {
-      Utils.deleteRecursively(dir)
     }
   }
 

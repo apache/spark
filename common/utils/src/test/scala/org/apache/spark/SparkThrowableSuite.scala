@@ -31,14 +31,22 @@ import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.SparkThrowableHelper._
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Test suite for Spark Throwables.
  */
-class SparkThrowableSuite extends SparkFunSuite {
+class SparkThrowableSuite
+  extends AnyFunSuite
+  with SparkFunBase
+  with BeforeAndAfterAll
+  with BeforeAndAfterEach
+  with Logging {
 
   /* Used to regenerate the error class file. Run:
    {{{
@@ -106,7 +114,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("SQLSTATE invariants") {
     val sqlStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState)
-    val errorClassReadMe = Utils.getSparkClassLoader.getResource("error/README.md")
+    val errorClassReadMe = SparkClassUtils.getSparkClassLoader.getResource("error/README.md")
     val errorClassReadMeContents =
       IOUtils.toString(errorClassReadMe.openStream(), StandardCharsets.UTF_8)
     val sqlStateTableRegex =

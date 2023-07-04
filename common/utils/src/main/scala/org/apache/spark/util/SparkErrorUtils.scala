@@ -18,7 +18,7 @@ package org.apache.spark.util
 
 import java.io.IOException
 
-import scala.util.control.NonFatal
+import scala.util.control.{ControlThrowable, NonFatal}
 
 import org.apache.spark.internal.Logging
 
@@ -39,6 +39,23 @@ object SparkErrorUtils extends Logging {
       case NonFatal(e) =>
         logError("Exception encountered", e)
         throw new IOException(e)
+    }
+  }
+
+  /**
+   * Execute the given block, logging and re-throwing any uncaught exception.
+   * This is particularly useful for wrapping code that runs in a thread, to ensure
+   * that exceptions are printed, and to avoid having to catch Throwable.
+   */
+  def logUncaughtExceptions[T](f: => T): T = {
+    try {
+      f
+    } catch {
+      case ct: ControlThrowable =>
+        throw ct
+      case t: Throwable =>
+        logError(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
+        throw t
     }
   }
 }

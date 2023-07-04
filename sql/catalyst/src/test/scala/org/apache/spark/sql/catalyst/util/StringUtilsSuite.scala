@@ -67,50 +67,6 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(filterPattern(names, " d* ") === Nil)
   }
 
-  test("string concatenation") {
-    def concat(seq: String*): String = {
-      seq.foldLeft(new StringConcat()) { (acc, s) => acc.append(s); acc }.toString
-    }
-
-    assert(new StringConcat().toString == "")
-    assert(concat("") === "")
-    assert(concat(null) === "")
-    assert(concat("a") === "a")
-    assert(concat("1", "2") === "12")
-    assert(concat("abc", "\n", "123") === "abc\n123")
-  }
-
-  test("string concatenation with limit") {
-    def concat(seq: String*): String = {
-      seq.foldLeft(new StringConcat(7)) { (acc, s) => acc.append(s); acc }.toString
-    }
-    assert(concat("under") === "under")
-    assert(concat("under", "over", "extra") === "underov")
-    assert(concat("underover") === "underov")
-    assert(concat("under", "ov") === "underov")
-  }
-
-  test("string concatenation return value") {
-    def checkLimit(s: String): Boolean = {
-      val sc = new StringConcat(7)
-      sc.append(s)
-      sc.atLimit
-    }
-    assert(!checkLimit("under"))
-    assert(checkLimit("1234567"))
-    assert(checkLimit("1234567890"))
-  }
-
-  test("SPARK-31916: StringConcat doesn't overflow on many inputs") {
-    val concat = new StringConcat(maxLength = 100)
-    val stringToAppend = "Test internal index of StringConcat does not overflow with many " +
-      "append calls"
-    0.to((Integer.MAX_VALUE / stringToAppend.length) + 1).foreach { _ =>
-      concat.append(stringToAppend)
-    }
-    assert(concat.toString.length === 100)
-  }
-
   test("SPARK-31916: verify that PlanStringConcat's output shows the actual length of the plan") {
     withSQLConf(SQLConf.MAX_PLAN_STRING_LENGTH.key -> "0") {
       val concat = new PlanStringConcat()

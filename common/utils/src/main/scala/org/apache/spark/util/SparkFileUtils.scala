@@ -44,4 +44,43 @@ private[spark] object SparkFileUtils {
     }
     new File(path).getCanonicalFile().toURI()
   }
+
+  /**
+   * Create a directory inside the given parent directory. The directory is guaranteed to be
+   * newly created, and is not marked for automatic deletion.
+   */
+  def createDirectory(root: String, namePrefix: String = "spark"): File = {
+    JavaFileUtils.createDirectory(root, namePrefix)
+  }
+
+  /**
+   * Create a temporary directory inside the `java.io.tmpdir` prefixed with `spark`.
+   * The directory will be automatically deleted when the VM shuts down.
+   */
+  def createTempDir(): File =
+    createTempDir(System.getProperty("java.io.tmpdir"), "spark")
+
+  /**
+   * Create a temporary directory inside the given parent directory. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  def createTempDir(
+      root: String = System.getProperty("java.io.tmpdir"),
+      namePrefix: String = "spark"): File = {
+    val dir = createDirectory(root, namePrefix)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
+    dir
+  }
+
+  /**
+   * Delete a file or directory and its contents recursively.
+   * Don't follow directories if they are symlinks.
+   * Throws an exception if deletion is unsuccessful.
+   */
+  def deleteRecursively(file: File): Unit = {
+    if (file != null) {
+      JavaFileUtils.deleteRecursively(file)
+      ShutdownHookManager.removeShutdownDeleteDir(file)
+    }
+  }
 }
