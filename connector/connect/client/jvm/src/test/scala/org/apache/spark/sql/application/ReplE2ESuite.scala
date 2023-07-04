@@ -20,6 +20,8 @@ import java.io.{PipedInputStream, PipedOutputStream}
 import java.nio.file.Paths
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
+import scala.util.Properties
+
 import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.BeforeAndAfterEach
 
@@ -35,6 +37,11 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   private var errorStream: ByteArrayOutputStream = _
   private var ammoniteIn: PipedInputStream = _
   private val semaphore: Semaphore = new Semaphore(0)
+
+  private val scalaVersion = Properties.versionNumberString
+    .split("\\.")
+    .take(2)
+    .mkString(".")
 
   private def getCleanString(out: ByteArrayOutputStream): String = {
     // Remove ANSI colour codes
@@ -97,7 +104,10 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
-    assert(isContain, "Ammonite output did not contain '" + message + "':\n" + output)
+    assert(
+      isContain,
+      "Ammonite output did not contain '" + message + "':\n" + output +
+        s"\nError Output: ${getCleanString(errorStream)}")
   }
 
   test("Simple query") {
@@ -156,7 +166,8 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
     // scalastyle:off classforname line.size.limit
     val sparkHome = IntegrationTestUtils.sparkHome
     val testJar = Paths
-      .get(s"$sparkHome/connector/connect/client/jvm/src/test/resources/TestHelloV2.jar")
+      .get(
+        s"$sparkHome/connector/connect/client/jvm/src/test/resources/TestHelloV2_$scalaVersion.jar")
       .toFile
 
     assert(testJar.exists(), "Missing TestHelloV2 jar!")
@@ -171,7 +182,7 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
         |}
         |val classLoaderUdf = udf(classLoadingTest _)
         |
-        |val jarPath = Paths.get("$sparkHome/connector/connect/client/jvm/src/test/resources/TestHelloV2.jar").toUri
+        |val jarPath = Paths.get("${testJar.toString}").toUri
         |spark.addArtifact(jarPath)
         |
         |spark.range(5).select(classLoaderUdf(col("id"))).as[Int].collect()
