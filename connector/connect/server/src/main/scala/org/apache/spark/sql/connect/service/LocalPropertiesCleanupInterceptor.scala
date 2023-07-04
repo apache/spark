@@ -28,26 +28,24 @@ import org.apache.spark.SparkContext
 class LocalPropertiesCleanupInterceptor extends ServerInterceptor {
 
   override def interceptCall[ReqT, RespT](
-    serverCall: ServerCall[ReqT, RespT],
-    metadata: Metadata,
-    serverCallHandler: ServerCallHandler[ReqT, RespT]
-  ): ServerCall.Listener[ReqT] = {
+      serverCall: ServerCall[ReqT, RespT],
+      metadata: Metadata,
+      serverCallHandler: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
     new SimpleForwardingServerCallListener[ReqT](
-      serverCallHandler.startCall(serverCall, metadata)
-    ) {
-        override def onComplete(): Unit = {
-          cleanupLocalProperties()
-          super.onComplete()
-        }
-
-        override def onCancel(): Unit = {
-          cleanupLocalProperties()
-          super.onCancel()
-        }
-
-        private def cleanupLocalProperties(): Unit = {
-          SparkContext.getActive.foreach(_.getLocalProperties.clear())
-        }
+      serverCallHandler.startCall(serverCall, metadata)) {
+      override def onComplete(): Unit = {
+        cleanupLocalProperties()
+        super.onComplete()
       }
+
+      override def onCancel(): Unit = {
+        cleanupLocalProperties()
+        super.onCancel()
+      }
+
+      private def cleanupLocalProperties(): Unit = {
+        SparkContext.getActive.foreach(_.getLocalProperties.clear())
+      }
+    }
   }
 }
