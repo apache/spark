@@ -188,7 +188,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     blockManager.removeCache(sessionHolder.userId, sessionHolder.sessionId)
 
     // Clean up artifacts folder
-    FileUtils.deleteDirectory(artifactRootPath.toFile)
+    FileUtils.deleteDirectory(artifactPath.toFile)
   }
 
   private[connect] def uploadArtifactToFs(

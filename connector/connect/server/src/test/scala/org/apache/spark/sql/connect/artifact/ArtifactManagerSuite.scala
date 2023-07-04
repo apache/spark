@@ -274,6 +274,24 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       assert(result.forall(_.getString(0).contains("Ahri")))
     }
   }
+
+  test("SPARK-44300: Cleaning up resources only deletes session-specific resources") {
+    val copyDir = Utils.createTempDir().toPath
+    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    val stagingPath = copyDir.resolve("Hello.class")
+    val remotePath = Paths.get("classes/Hello.class")
+
+    val sessionHolder = SparkConnectService.getOrCreateIsolatedSession("c1", "session")
+    sessionHolder.addArtifact(remotePath, stagingPath, None)
+
+    val sessionDirectory =
+      SparkConnectArtifactManager.getArtifactDirectoryAndUriForSession(sessionHolder)._1.toFile
+    assert(sessionDirectory.exists())
+
+    sessionHolder.artifactManager.cleanUpResources()
+    assert(!sessionDirectory.exists())
+    assert(SparkConnectArtifactManager.artifactRootPath.toFile.exists())
+  }
 }
 
 class ArtifactUriSuite extends SparkFunSuite with LocalSparkContext {
