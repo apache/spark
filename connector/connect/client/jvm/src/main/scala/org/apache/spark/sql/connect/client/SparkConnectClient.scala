@@ -95,11 +95,35 @@ private[sql] class SparkConnectClient(
     }
   }
 
-  private class executeRetryIterator(result: java.util.Iterator[proto.ExecutePlanResponse])
+  private class executeRetryIterator(
+      request: proto.ExecutePlanRequest,
+      origIterator: java.util.Iterator[proto.ExecutePlanResponse])
       extends java.util.Iterator[proto.ExecutePlanResponse] {
-    override def next(): proto.ExecutePlanResponse = retry { result.next() }
-    override def hasNext(): Boolean = retry { result.hasNext() }
-    override def remove(): Unit = retry { result.remove() }
+
+    private var hasNextCalled = false
+    private var iterator = origIterator
+
+    override def next(): proto.ExecutePlanResponse = {
+      iterator.next()
+    }
+
+    override def hasNext(): Boolean = {
+      if (!hasNextCalled) {
+        hasNextCalled = true
+        var firstTry = true
+        retry {
+          if (firstTry) {
+            firstTry = false
+            iterator.hasNext()
+          } else {
+            iterator = stub.executePlan(request)
+            iterator.hasNext()
+          }
+        }
+      } else {
+        iterator.hasNext()
+      }
+    }
   }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
@@ -112,7 +136,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .build()
 
-    new executeRetryIterator(stub.executePlan(request))
+    new executeRetryIterator(request, stub.executePlan(request))
   }
 
   /**
