@@ -106,9 +106,29 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
+   * Converts an instance of `java.sql.Timestamp` to the number of microseconds since
+   * 1970-01-01T00:00:00.000000Z. It extracts date-time fields from the input, builds
+   * a local timestamp in Proleptic Gregorian calendar from the fields, and binds
+   * the timestamp to the system time zone. The resulted instant is converted to
+   * microseconds since the epoch.
+   * JDBC dialects can override this function to provide implementations that suit their
+   * JDBC drivers (e.g. if there are special "infinity" values that would overflow)
+   *
+   * @param t represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return The number of micros since epoch from `java.sql.Timestamp`.
+   * @throws IllegalArgumentException if t is null
+   */
+  def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
+    require(t != null, "Timestamp must be non-null")
+    DateTimeUtils.fromJavaTimestamp(t)
+  }
+
+  /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
    * value stored in a remote database.
-   * JDBC dialects should override this function to provide implementations that suite their
+   * JDBC dialects should override this function to provide implementations that suit their
    * JDBC drivers.
    * @param t Timestamp returned from JDBC driver getTimestamp method.
    * @return A LocalDateTime representing the same wall clock time as the timestamp in database.

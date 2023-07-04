@@ -25,6 +25,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -280,5 +281,30 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
     }
     s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
+  }
+
+  /**
+   * PostgreSQL has four special "infinity values" that we need clamp to avoid overflow.
+   * If it is not one of the infinity values, fall back to default behavior. */
+  override def convertJavaTimestampToTimestamp(t: Timestamp): Long = {
+
+    // variable names come from PostgreSQL "constant field docs":
+    // https://jdbc.postgresql.org/documentation/publicapi/index.html?constant-values.html
+    val POSTGRESQL_DATE_NEGATIVE_INFINITY = -9223372036832400000L
+    val POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY = -185543533774800000L
+    val POSTGRESQL_DATE_POSITIVE_INFINITY = 9223372036825200000L
+    val POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY = 185543533774800000L
+
+    val time = t.getTime
+
+    if (time == POSTGRESQL_DATE_POSITIVE_INFINITY ||
+      time == POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY) {
+      Long.MaxValue
+    } else if (time == POSTGRESQL_DATE_NEGATIVE_INFINITY ||
+      time == POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY) {
+      Long.MinValue
+    } else {
+      DateTimeUtils.fromJavaTimestamp(t)
+    }
   }
 }
