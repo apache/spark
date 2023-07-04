@@ -49,7 +49,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_udtf
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -15514,6 +15514,7 @@ def udtf(
     cls: Optional[Type] = None,
     *,
     returnType: Union[StructType, str],
+    useArrow: Optional[bool] = None,
 ) -> Union[UserDefinedTableFunction, functools.partial]:
     """Creates a user defined table function (UDTF).
 
@@ -15526,6 +15527,9 @@ def udtf(
     returnType : :class:`pyspark.sql.types.StructType` or str
         the return type of the user-defined table function. The value can be either a
         :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+    useArrow : bool or None
+        whether to use Arrow to optimize the (de)serializations. When it is None, the
+        Spark config "spark.sql.execution.pythonUDTF.arrow.enabled" takes effect.
 
     Examples
     --------
@@ -15599,9 +15603,9 @@ def udtf(
     User-defined table functions do not accept keyword arguments on the calling side.
     """
     if cls is None:
-        return functools.partial(_create_udtf, returnType=returnType)
+        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
     else:
-        return _create_udtf(cls=cls, returnType=returnType)
+        return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 
 
 def _test() -> None:

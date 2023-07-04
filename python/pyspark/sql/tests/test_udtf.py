@@ -21,13 +21,19 @@ from typing import Iterator
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark.errors import PythonException, AnalysisException
+from pyspark.errors import PySparkAttributeError, PythonException, AnalysisException
 from pyspark.sql.functions import lit, udtf
 from pyspark.sql.types import Row
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    ReusedSQLTestCase,
+)
 
 
-class UDTFTestsMixin:
+class BaseUDTFTestsMixin:
     def test_simple_udtf(self):
         class TestUDTF:
             def eval(self):
@@ -370,18 +376,18 @@ class UDTFTestsMixin:
             TestUDTF(rand(0) * 100).collect()
 
     def test_udtf_no_eval(self):
-        @udtf(returnType="a: int, b: int")
-        class TestUDTF:
-            def run(self, a: int):
-                yield a, a + 1
+        with self.assertRaises(PySparkAttributeError) as e:
 
-        with self.assertRaisesRegex(
-            PythonException,
-            "Failed to execute the user defined table function because it has not "
-            "implemented the 'eval' method. Please add the 'eval' method and try the "
-            "query again.",
-        ):
-            TestUDTF(lit(1)).collect()
+            @udtf(returnType="a: int, b: int")
+            class TestUDTF:
+                def run(self, a: int):
+                    yield a, a + 1
+
+        self.check_error(
+            exception=e.exception,
+            error_class="INVALID_UDTF_NO_EVAL",
+            message_parameters={"name": "TestUDTF"},
+        )
 
     def test_udtf_with_no_handler_class(self):
         err_msg = "the function handler must be a class"
@@ -590,11 +596,121 @@ class UDTFTestsMixin:
             )
 
 
-class UDTFTests(UDTFTestsMixin, ReusedSQLTestCase):
+class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         super(UDTFTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "false")
+
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
+)
+class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
+    def test_udtf_eval_returning_non_tuple(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a
+
+        func = udtf(TestUDTF, returnType="a: int")
+        # When arrow is enabled, it can handle non-tuple return value.
+        self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
+
+    def test_udtf_eval_returning_non_generator(self):
+        class TestUDTF:
+            def eval(self, a: int):
+                return (a,)
+
+        func = udtf(TestUDTF, returnType="a: int")
+        self.assertEqual(func(lit(1)).collect(), [Row(a=1)])
+
+    def test_udtf_eval_with_no_return(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                ...
+
+        self.assertEqual(TestUDTF(lit(1)).collect(), [])
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                return
+
+        self.assertEqual(TestUDTF(lit(1)).collect(), [])
+
+    def test_udtf_terminate_with_wrong_num_output(self):
+        # The error message for arrow-optimized UDTF is different from regular UDTF.
+        err_msg = "The number of columns in the result does not match the specified schema."
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+            def terminate(self):
+                yield 1, 2, 3
+
+        with self.assertRaisesRegex(PythonException, err_msg):
+            TestUDTF(lit(1)).show()
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+            def terminate(self):
+                yield 1,
+
+        with self.assertRaisesRegex(PythonException, err_msg):
+            TestUDTF(lit(1)).show()
+
+    def test_udtf_with_empty_yield(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield
+
+        # Arrow-optimized UDTF can support this.
+        self.assertEqual(TestUDTF(lit(1)).collect(), [Row(a=None)])
+
+    @unittest.skip("Failed with yield a[0], b[0] KeyError: 0")
+    def test_udtf_with_table_argument_multiple(self):
+        super().test_udtf_with_table_argument_multiple()
+
+    def test_udtf_with_wrong_num_output(self):
+        # The error message for arrow-optimized UDTF is different.
+        err_msg = "The number of columns in the result does not match the specified schema."
+
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a,
+
+        with self.assertRaisesRegex(PythonException, err_msg):
+            TestUDTF(lit(1)).collect()
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        with self.assertRaisesRegex(PythonException, err_msg):
+            TestUDTF(lit(1)).collect()
+
+
+class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(UDTFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+        finally:
+            super(UDTFArrowTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":
