@@ -325,10 +325,10 @@ select * from explode(array(1, 2)) t(c1, c2)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "2",
-    "funcName" : "explode",
+    "funcName" : "`explode`",
     "outColsNum" : "1"
   },
   "queryContext" : [ {
@@ -448,10 +448,10 @@ select * from inline(array(struct(1, 2), struct(2, 3))) t(a, b, c)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "3",
-    "funcName" : "inline",
+    "funcName" : "`inline`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {
@@ -604,10 +604,10 @@ select * from posexplode(array(1, 2)) t(x)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "1",
-    "funcName" : "posexplode",
+    "funcName" : "`posexplode`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {
@@ -773,10 +773,10 @@ select * from json_tuple('{"a": 1, "b": 2}', 'a', 'b') AS t(x)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "1",
-    "funcName" : "json_tuple",
+    "funcName" : "`json_tuple`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {
@@ -866,10 +866,10 @@ select * from stack(2, 1, 2, 3) t(a, b, c)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2307",
+  "errorClass" : "NUM_TABLE_VALUE_ALIASES_MISMATCH",
   "messageParameters" : {
     "aliasesNum" : "3",
-    "funcName" : "stack",
+    "funcName" : "`stack`",
     "outColsNum" : "2"
   },
   "queryContext" : [ {

@@ -58,7 +58,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.prettyJson"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
     // [SPARK-43952][CORE][CONNECT][SQL] Add SparkContext APIs for query cancellation by tag
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.JobData.this"),
+    // [SPARK-44205][SQL] Extract Catalyst Code from DecimalType
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DecimalType.unapply")
   )
 
   // Defulat exclude rules
@@ -98,6 +100,10 @@ object MimaExcludes {
     // SPARK-44104: shaded protobuf code and Apis with parameters relocated
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+    
+    // SPARK-44255: Relocate StorageLevel to common/utils
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.StorageLevel$"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

@@ -451,16 +451,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private[sql] def foreachImplementation(writer: ForeachWriter[Any],
-      encoder: ExpressionEncoder[Any] = null): DataStreamWriter[T] = {
+      encoder: Option[ExpressionEncoder[Any]] = None): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
       throw new IllegalArgumentException("foreach writer cannot be null")
     }
-    if (encoder != null) {
-      this.foreachWriterEncoder = encoder
-    }
+    encoder.foreach(e => this.foreachWriterEncoder = e)
     this
   }
 

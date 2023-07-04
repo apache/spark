@@ -273,7 +273,7 @@ private[spark] class DiskBlockManager(
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
           val mergeDir = new File(rootDir, mergeDirName)
-          if (!mergeDir.exists()) {
+          if (!mergeDir.exists() || mergeDir.listFiles().length < subDirsPerLocalDir) {
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +

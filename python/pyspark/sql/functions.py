@@ -3146,6 +3146,32 @@ def collect_list(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def array_agg(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: returns a list of objects with duplicates.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        list of objects with duplicates.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
+    >>> df.agg(array_agg('c').alias('r')).collect()
+    [Row(r=[1, 1, 2])]
+    """
+    return _invoke_function_over_columns("array_agg", col)
+
+
+@try_remote_functions
 def collect_set(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
@@ -4070,6 +4096,47 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
+def count_min_sketch(
+    col: "ColumnOrName",
+    eps: "ColumnOrName",
+    confidence: "ColumnOrName",
+    seed: "ColumnOrName",
+) -> Column:
+    """
+    Returns a count-min sketch of a column with the given esp, confidence and seed.
+    The result is an array of bytes, which can be deserialized to a `CountMinSketch` before usage.
+    Count-min sketch is a probabilistic data structure used for cardinality estimation
+    using sub-linear space.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    eps : :class:`~pyspark.sql.Column` or str
+        relative error, must be positive
+    confidence : :class:`~pyspark.sql.Column` or str
+        confidence, must be positive and less than 1.0
+    seed : :class:`~pyspark.sql.Column` or str
+        random seed
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        count-min sketch of the column
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1], [2], [1]], ['data'])
+    >>> df = df.agg(count_min_sketch(df.data, lit(0.5), lit(0.5), lit(1)).alias('sketch'))
+    >>> df.select(hex(df.sketch).alias('r')).collect()
+    [Row(r='0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000')]
+    """
+    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+
+
+@try_remote_functions
 def input_file_name() -> Column:
     """
     Creates a string column for the file name of the current Spark task.
@@ -4891,6 +4958,31 @@ def struct(
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
     return _invoke_function_over_seq_of_columns("struct", cols)  # type: ignore[arg-type]
+
+
+@try_remote_functions
+def named_struct(*cols: "ColumnOrName") -> Column:
+    """
+    Creates a struct with the given field names and values.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        list of columns to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
+    >>> df.select(named_struct(lit('x'), df.a, lit('y'), df.b).alias('r')).collect()
+    [Row(r=Row(x=1, y=2))]
+    """
+    return _invoke_function_over_seq_of_columns("named_struct", cols)
 
 
 @try_remote_functions
@@ -10542,6 +10634,61 @@ def right(str: "ColumnOrName", len: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("right", str, len)
 
 
+@try_remote_functions
+def mask(
+    col: "ColumnOrName",
+    upperChar: Optional["ColumnOrName"] = None,
+    lowerChar: Optional["ColumnOrName"] = None,
+    digitChar: Optional["ColumnOrName"] = None,
+    otherChar: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Masks the given string value. This can be useful for creating copies of tables with sensitive
+    information removed.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+    upperChar: :class:`~pyspark.sql.Column` or str
+        character to replace upper-case characters with. Specify NULL to retain original character.
+    lowerChar: :class:`~pyspark.sql.Column` or str
+        character to replace lower-case characters with. Specify NULL to retain original character.
+    digitChar: :class:`~pyspark.sql.Column` or str
+        character to replace digit characters with. Specify NULL to retain original character.
+    otherChar: :class:`~pyspark.sql.Column` or str
+        character to replace all other characters with. Specify NULL to retain original character.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("AbCD123-@$#",), ("abcd-EFGH-8765-4321",)], ['data'])
+    >>> df.select(mask(df.data).alias('r')).collect()
+    [Row(r='XxXXnnn-@$#'), Row(r='xxxx-XXXX-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y')).alias('r')).collect()
+    [Row(r='YxYYnnn-@$#'), Row(r='xxxx-YYYY-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y')).alias('r')).collect()
+    [Row(r='YyYYnnn-@$#'), Row(r='yyyy-YYYY-nnnn-nnnn')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y'), lit('d')).alias('r')).collect()
+    [Row(r='YyYYddd-@$#'), Row(r='yyyy-YYYY-dddd-dddd')]
+    >>> df.select(mask(df.data, lit('Y'), lit('y'), lit('d'), lit('*')).alias('r')).collect()
+    [Row(r='YyYYddd****'), Row(r='yyyy*YYYY*dddd*dddd')]
+    """
+
+    _upperChar = lit("X") if upperChar is None else upperChar
+    _lowerChar = lit("x") if lowerChar is None else lowerChar
+    _digitChar = lit("n") if digitChar is None else digitChar
+    _otherChar = lit(None) if otherChar is None else otherChar
+    return _invoke_function_over_columns(
+        "mask", col, _upperChar, _lowerChar, _digitChar, _otherChar
+    )
+
+
 # ---------------------- Collection functions ------------------------------
 
 
@@ -11865,6 +12012,61 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
 
 
 @try_remote_functions
+def json_array_length(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of elements in the outermost JSON array. `NULL` is returned in case of
+    any other valid JSON string, `NULL` or an invalid JSON.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        length of json array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), ('[1, 2, 3]',), ('[]',)], ['data'])
+    >>> df.select(json_array_length(df.data).alias('r')).collect()
+    [Row(r=None), Row(r=3), Row(r=0)]
+    """
+    return _invoke_function_over_columns("json_array_length", col)
+
+
+@try_remote_functions
+def json_object_keys(col: "ColumnOrName") -> Column:
+    """
+    Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+    given, all the keys of the outermost object will be returned as an array. If it is any
+    other valid JSON string, an invalid JSON string or an empty string, the function returns null.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        all the keys of the outermost JSON object.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(None,), ('{}',), ('{"key1":1, "key2":2}',)], ['data'])
+    >>> df.select(json_object_keys(df.data).alias('r')).collect()
+    [Row(r=None), Row(r=[]), Row(r=['key1', 'key2'])]
+    """
+    return _invoke_function_over_columns("json_object_keys", col)
+
+
+@try_remote_functions
 def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Parses a CSV string and infers its schema in DDL format.
@@ -12035,6 +12237,58 @@ def array_max(col: "ColumnOrName") -> Column:
     [Row(max=3), Row(max=10)]
     """
     return _invoke_function_over_columns("array_max", col)
+
+
+@try_remote_functions
+def array_size(col: "ColumnOrName") -> Column:
+    """
+    Returns the total number of elements in the array. The function returns null for null input.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        total number of elements in the array.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 1, 3],), (None,)], ['data'])
+    >>> df.select(array_size(df.data).alias('r')).collect()
+    [Row(r=3), Row(r=None)]
+    """
+    return _invoke_function_over_columns("array_size", col)
+
+
+@try_remote_functions
+def cardinality(col: "ColumnOrName") -> Column:
+    """
+    Collection function: returns the length of the array or map stored in the column.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        length of the array/map.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([1, 2, 3],),([1],),([],)], ['data'])
+    >>> df.select(cardinality(df.data).alias('r')).collect()
+    [Row(r=3), Row(r=1), Row(r=0)]
+    """
+    return _invoke_function_over_columns("cardinality", col)
 
 
 @try_remote_functions

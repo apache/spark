@@ -193,6 +193,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("configKey" -> configKey))
   }
 
+  def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NAMED_ARGUMENTS_SUPPORT_DISABLED",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "argument" -> toSQLId(argumentName))
+    )
+  }
+
   def unresolvedUsingColForJoinError(
       colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
@@ -466,7 +475,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     }
     val elem = Seq(starMsg, resExprMsg).flatten.mkString(" and ")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1020",
+      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
       messageParameters = Map("elem" -> elem, "prettyName" -> prettyName))
   }
 
@@ -1600,7 +1609,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1154",
+      errorClass = "ALL_PARTITION_COLUMNS_NOT_ALLOWED",
       messageParameters = Map.empty)
   }
 
@@ -1898,6 +1907,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "ability" -> ability))
   }
 
+  def tableValuedFunctionTooManyTableArgumentsError(num: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "TABLE_VALUED_FUNCTION_TOO_MANY_TABLE_ARGUMENTS",
+      messageParameters = Map("num" -> num.toString)
+    )
+  }
+
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
@@ -2188,8 +2204,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def charOrVarcharTypeAsStringUnsupportedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1215",
-      messageParameters = Map("config" -> SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key))
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+      messageParameters = Map.empty)
   }
 
   def escapeCharacterInTheMiddleError(pattern: String, char: String): Throwable = {
@@ -2411,15 +2427,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(
+      tableName: String,
       originColumn: StructField,
       newColumn: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1245",
+      errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       messageParameters = Map(
-        "originName" -> originColumn.name,
-        "originType" -> originColumn.dataType.toString,
-        "newName" -> newColumn.name,
-        "newType"-> newColumn.dataType.toString))
+        "table" -> tableName,
+        "originName" -> toSQLId(originColumn.name),
+        "originType" -> toSQLType(originColumn.dataType),
+        "newName" -> toSQLId(newColumn.name),
+        "newType"-> toSQLType(newColumn.dataType)))
   }
 
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
@@ -2428,7 +2446,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "name" -> name,
         "fieldNames" -> fieldNames.mkString("[`", "`, `", "`]")))
-
   }
 
   def alterTableSetSerdeForSpecificPartitionNotSupportedError(): Throwable = {
@@ -3161,22 +3178,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1340",
-      messageParameters = Map.empty)
-  }
-
-  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
-  // inside an UPDATE command's WHERE clause; this is not allowed.
-  def defaultReferencesNotAllowedInUpdateWhereClause(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1341",
-      messageParameters = Map.empty)
-  }
-
-  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
-  // inside an UPDATE command's WHERE clause; this is not allowed.
-  def defaultReferencesNotAllowedInMergeCondition(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1342",
       messageParameters = Map.empty)
   }
 

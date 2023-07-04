@@ -44,6 +44,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
@@ -877,7 +878,11 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkContext.throwIfInvalidTag(tag)
     val existingTags = getJobTags()
     val newTags = (existingTags - tag).mkString(SparkContext.SPARK_JOB_TAGS_SEP)
-    setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+    if (newTags.isEmpty) {
+      clearJobTags()
+    } else {
+      setLocalProperty(SparkContext.SPARK_JOB_TAGS, newTags)
+    }
   }
 
   /**
@@ -889,6 +894,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Option(getLocalProperty(SparkContext.SPARK_JOB_TAGS))
       .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
       .getOrElse(Set())
+      .filter(!_.isEmpty) // empty string tag should not happen, but be defensive
   }
 
   /**
@@ -1737,12 +1743,10 @@ class SparkContext(config: SparkConf) extends Logging {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
-        throw new SparkException(s"addFile does not support local directories when not running " +
-          "local mode.")
+        throw SparkCoreErrors.addLocalDirectoryError(hadoopPath)
       }
       if (!recursive && isDir) {
-        throw new SparkException(s"Added file $hadoopPath is a directory and recursive is not " +
-          "turned on.")
+        throw SparkCoreErrors.addDirectoryError(hadoopPath)
       }
     } else {
       // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
@@ -2545,7 +2549,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
-   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    *
    * @since 3.5.0
    */

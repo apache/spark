@@ -137,6 +137,15 @@ object functions {
     case s: Symbol => new Column(s.name)
     case _ => createLiteral(create(literal))
   }
+
+  /**
+   * Creates a struct with the given field names and values.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Sort functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1274,6 +1283,29 @@ object functions {
    * @since 3.5.0
    */
   def bit_xor(e: Column): Column = Column.fn("bit_xor", e)
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def array_agg(e: Column): Column = Column.fn("array_agg", e)
+
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
+   * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
+   * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
+   * space.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
+    Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -4454,6 +4486,94 @@ object functions {
    */
   def right(str: Column, len: Column): Column = Column.fn("right", str, len)
 
+  /**
+   * Masks the given string value. The function replaces characters with 'X' or 'x', and numbers
+   * with 'n'. This can be useful for creating copies of tables with sensitive information
+   * removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column): Column = Column.fn("mask", input)
+
+  /**
+   * Masks the given string value. The function replaces upper-case characters with specific
+   * character, lower-case characters with 'x', and numbers with 'n'. This can be useful for
+   * creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column): Column =
+    Column.fn("mask", input, upperChar)
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters with
+   * specific characters, and numbers with 'n'. This can be useful for creating copies of tables
+   * with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar)
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters and
+   * numbers with specific characters. This can be useful for creating copies of tables with
+   * sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar, digitChar)
+
+  /**
+   * Masks the given string value. This can be useful for creating copies of tables with sensitive
+   * information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(
+      input: Column,
+      upperChar: Column,
+      lowerChar: Column,
+      digitChar: Column,
+      otherChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -6926,6 +7046,45 @@ object functions {
    * @since 3.4.0
    */
   def to_csv(e: Column): Column = to_csv(e, Collections.emptyMap())
+
+  /**
+   * Returns the total number of elements in the array. The function returns null for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_size(e: Column): Column = Column.fn("array_size", e)
+
+  /**
+   * Returns length of array or map. This is an alias of `size` function.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def cardinality(e: Column): Column = Column.fn("cardinality", e)
+
+  /**
+   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of any
+   * other valid JSON string, `NULL` or an invalid JSON.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_array_length(e: Column): Column = Column.fn("json_array_length", e)
+
+  /**
+   * Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+   * given, all the keys of the outermost object will be returned as an array. If it is any other
+   * valid JSON string, an invalid JSON string or an empty string, the function returns null.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Partition Transforms functions

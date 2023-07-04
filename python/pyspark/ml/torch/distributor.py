@@ -995,4 +995,11 @@ def _get_spark_partition_data_loader(
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    return DataLoader(dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor)
+    if num_workers > 0:
+        return DataLoader(
+            dataset, batch_size, num_workers=num_workers, prefetch_factor=prefetch_factor
+        )
+    else:
+        # if num_workers is zero, we cannot set `prefetch_factor` otherwise
+        # torch will raise error.
+        return DataLoader(dataset, batch_size, num_workers=num_workers)
