@@ -157,7 +157,7 @@ jobs:
           repository: databricks/tpch-dbgen
           ref: 6985da461c641fd0d255b214f2d693f1bf08bc33
           path: ./tpch-dbgen
-      - name: Build tpcds-kit
+      - name: Build tpch-dbgen
         if: steps.cache-tpch-sf-1.outputs.cache-hit != 'true'
         run: cd tpch-dbgen && make all
       - name: Install Java ${{ github.event.inputs.jdk }}
