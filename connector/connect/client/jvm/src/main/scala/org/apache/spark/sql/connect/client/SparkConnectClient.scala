@@ -40,7 +40,7 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+  private[this] val stub = new CustomSparkConnectBlockingStub(channel)
 
   private[client] def userAgent: String = configuration.userAgent
 
