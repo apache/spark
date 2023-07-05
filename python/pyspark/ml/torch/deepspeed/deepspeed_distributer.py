@@ -23,7 +23,7 @@ class DeepspeedDistributor(Distributor):
     """The user must ensure that their cluster is ssh-keychained and that deepspeed is able to use ssh to coordinate among the nodes for the distributed training"""
 
     HOME = os.path.expanduser("~")
-    HOSTFILE = "/root/hostfile"
+    HOSTFILE = f"/{HOME}/hostfile"
 
     def __init__(
         self,
@@ -95,7 +95,7 @@ class DeepspeedDistributor(Distributor):
         try:
             subprocess.run("deepspeed --version".split())
             subprocess.run("ninja --version".split())
-            with open("/root/.deepspeed_env", "w") as f:
+            with open(f"/{DeepspeedDistributor.HOME}/.deepspeed_env", "w") as f:
                 # if this is open; don't add that to path if they're not running on databricks
                 # TODO: figure out what paths to add to this, because if this is OSS we don't want to constantly add a databricks filepath
                 f.write(
