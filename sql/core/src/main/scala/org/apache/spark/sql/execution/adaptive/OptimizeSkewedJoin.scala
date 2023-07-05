@@ -253,12 +253,12 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
       }.getOrElse(shj)
 
-    // Try to optimize BroadcastHashJoin skew when localShuffleReader is disabled.
     case bhj @ BroadcastHashJoinExec(_, _, _, BuildRight, _,
         ShuffleStage(left: ShuffleQueryStageExec), _, _, _) =>
       tryOptimizeBroadcastHashJoinStreamedPlan(left).map {
         case newLeft => bhj.copy(left = newLeft, isSkewJoin = true)
       }.getOrElse(bhj)
+
     case bhj @ BroadcastHashJoinExec(_, _, _, BuildLeft, _, _,
         ShuffleStage(right: ShuffleQueryStageExec), _, _) =>
       tryOptimizeBroadcastHashJoinStreamedPlan(right).map {
