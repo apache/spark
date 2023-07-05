@@ -498,10 +498,6 @@
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk</artifactId>
         </exclusion>
-        <exclusion>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk-bundle</artifactId>
-        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
