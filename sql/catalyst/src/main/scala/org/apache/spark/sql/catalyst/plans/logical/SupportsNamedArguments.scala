@@ -23,42 +23,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.AbstractDataType
 
 /**
- * Identifies which forms of provided argument values are expected for each call
- * to the associated SQL function
- */
-trait NamedArgumentType
-
-/**
- * Represents a named argument that expects a scalar value of one specific DataType
- *
- * @param dataType The data type of some argument
- */
-case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentType
-
-/**
- * Represents a parameter of a function expression. Function expressions should use this class
- * to construct the argument lists returned in [[SupportsNamedArguments.functionSignatures]]
- *
- * @param name     The name of the string.
- * @param dataType The datatype of the argument.
- * @param default  The default value of the argument. If the default is none, then that means the
- *                 argument is required. If no argument is provided, an exception is thrown.
- */
-case class NamedArgument(
-    name: String,
-    dataType: NamedArgumentType,
-    default: Option[Expression] = None)
-
-/**
- * Represents a method signature and the list of arguments it receives as input.
- * Currently, overloads are not supported and only one FunctionSignature is allowed
- * per function expression.
- *
- * @param parameters The list of arguments which the function takes
- */
-case class FunctionSignature(parameters: Seq[NamedArgument])
-
-/**
  * The class which companion objects of function expression may implement to
  * support named arguments for that function expression.
  *
@@ -216,3 +180,39 @@ object SupportsNamedArguments {
     positionalArgs ++ rearrangedNamedArgs
   }
 }
+
+/**
+ * Identifies which forms of provided argument values are expected for each call
+ * to the associated SQL function
+ */
+trait NamedArgumentType
+
+/**
+ * Represents a named argument that expects a scalar value of one specific DataType
+ *
+ * @param dataType The data type of some argument
+ */
+case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentType
+
+/**
+ * Represents a parameter of a function expression. Function expressions should use this class
+ * to construct the argument lists returned in [[SupportsNamedArguments.functionSignatures]]
+ *
+ * @param name     The name of the string.
+ * @param dataType The datatype of the argument.
+ * @param default  The default value of the argument. If the default is none, then that means the
+ *                 argument is required. If no argument is provided, an exception is thrown.
+ */
+case class NamedArgument(
+                          name: String,
+                          dataType: NamedArgumentType,
+                          default: Option[Expression] = None)
+
+/**
+ * Represents a method signature and the list of arguments it receives as input.
+ * Currently, overloads are not supported and only one FunctionSignature is allowed
+ * per function expression.
+ *
+ * @param parameters The list of arguments which the function takes
+ */
+case class FunctionSignature(parameters: Seq[NamedArgument])
