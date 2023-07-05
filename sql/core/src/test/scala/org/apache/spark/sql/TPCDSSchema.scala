@@ -211,7 +211,7 @@ trait TPCDSSchema {
         |`wr_returning_addr_sk` INT,
         |`wr_web_page_sk` INT,
         |`wr_reason_sk` INT,
-        |`wr_order_number` LONG,
+        |`wr_order_number` INT,
         |`wr_return_quantity` INT,
         |`wr_return_amt` DECIMAL(7,2),
         |`wr_return_tax` DECIMAL(7,2),
