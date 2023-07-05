@@ -209,6 +209,7 @@ case class CountMinSketchAgg(
       confidenceExpression = third,
       seedExpression = fourth)
 }
+
 object CountMinSketchAgg extends SupportsNamedArguments {
   final val functionSignature = FunctionSignature(Seq(
     NamedArgument("column",
