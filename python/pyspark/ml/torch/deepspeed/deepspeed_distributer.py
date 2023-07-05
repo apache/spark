@@ -99,7 +99,7 @@ class DeepspeedDistributor(Distributor):
                 # if this is open; don't add that to path if they're not running on databricks
                 # TODO: figure out what paths to add to this, because if this is OSS we don't want to constantly add a databricks filepath
                 f.write(
-                    "PATH=/databricks/python3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
                 )
         except:
             raise ImportError("Install deepspeed and ninja on the cluster using PyPi")
