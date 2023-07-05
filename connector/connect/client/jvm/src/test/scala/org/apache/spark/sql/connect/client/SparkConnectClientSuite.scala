@@ -110,9 +110,12 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("SparkSession initialisation with connection string") {
-    val testPort = 16002
-    client = SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
-    startDummyServer(testPort)
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
     val session = SparkSession.builder().client(client).create()
     val df = session.range(10)
     df.analyze // Trigger RPC
@@ -133,11 +136,17 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI(
       "sc://localhost:1234/",
       isCorrect = true,
-      client => testClientConnection(1234)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == 1234)
+      }),
     TestPackURI(
       "sc://localhost/;",
       isCorrect = true,
-      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+      }),
     TestPackURI("sc://host:123", isCorrect = true),
     TestPackURI(
       "sc://host:123/;user_id=a94",

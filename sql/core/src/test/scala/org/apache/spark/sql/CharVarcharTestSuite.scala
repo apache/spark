@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -147,17 +147,28 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       withTable("t") {
         sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
         Seq("ADD", "DROP").foreach { op =>
-          val e = intercept[RuntimeException](sql(s"ALTER TABLE t $op PARTITION(c='abcdef')"))
-          assert(e.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql(s"ALTER TABLE t $op PARTITION(c='abcdef')")
+            },
+            errorClass = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
         }
-        val e1 = intercept[RuntimeException] {
-          sql(s"ALTER TABLE t PARTITION (c='abcdef') RENAME TO PARTITION (c='2')")
-        }
-        assert(e1.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
-        val e2 = intercept[RuntimeException] {
-          sql(s"ALTER TABLE t PARTITION (c='1') RENAME TO PARTITION (c='abcdef')")
-        }
-        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"ALTER TABLE t PARTITION (c='abcdef') RENAME TO PARTITION (c='2')")
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"ALTER TABLE t PARTITION (c='1') RENAME TO PARTITION (c='abcdef')")
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -304,8 +315,17 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c $typeName(5)) USING $format")
       sql("INSERT INTO t VALUES (null)")
       checkAnswer(spark.table("t"), Row(null))
-      val e = intercept[SparkException](sql("INSERT INTO t VALUES ('123456')"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      val e = intercept[SparkException] {
+        sql("INSERT INTO t VALUES ('123456')")
+      }
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -333,8 +353,13 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c STRUCT<c: $typeName(5)>) USING $format")
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
-      val e = intercept[RuntimeException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("INSERT INTO t SELECT struct('123456')")
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -343,8 +368,17 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c ARRAY<$typeName(5)>) USING $format")
       sql("INSERT INTO t VALUES (array(null))")
       checkAnswer(spark.table("t"), Row(Seq(null)))
-      val e = intercept[SparkException](sql("INSERT INTO t VALUES (array('a', '123456'))"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      val e = intercept[SparkException] {
+        sql("INSERT INTO t VALUES (array('a', '123456'))")
+      }
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -352,7 +386,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), STRING>) USING $format")
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -362,7 +403,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (map('a', null))")
       checkAnswer(spark.table("t"), Row(Map("a" -> null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -370,9 +418,23 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), $typeName(5)>) USING $format")
       val e1 = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
-      assert(e1.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e1.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
       val e2 = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
-      assert(e2.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e2.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -382,7 +444,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t SELECT struct(array(null))")
       checkAnswer(spark.table("t"), Row(Row(Seq(null))))
       val e = intercept[SparkException](sql("INSERT INTO t SELECT struct(array('123456'))"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -392,7 +461,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(struct(null)))")
       checkAnswer(spark.table("t"), Row(Seq(Row(null))))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array(struct('123456')))"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -402,7 +478,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(array(null)))")
       checkAnswer(spark.table("t"), Row(Seq(Seq(null))))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array(array('123456')))"))
-      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -423,9 +506,23 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (1234, 1234)")
       checkAnswer(spark.table("t"), Row("1234 ", "1234"))
       val e1 = intercept[SparkException](sql("INSERT INTO t VALUES (123456, 1)"))
-      assert(e1.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e1.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
       val e2 = intercept[SparkException](sql("INSERT INTO t VALUES (1, 123456)"))
-      assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      checkError(
+        exception = e2.getCause match {
+          case c: SparkRuntimeException => c
+          case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
     }
   }
 
@@ -695,13 +792,18 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  def failWithInvalidCharUsage[T](fn: => T): Unit = {
-    val e = intercept[AnalysisException](fn)
-    assert(e.getMessage contains "char/varchar type can only be used in the table schema")
-  }
-
   test("invalidate char/varchar in functions") {
-    failWithInvalidCharUsage(sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')"""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "from_json('{\"a\": \"str\"}', 'a CHAR(5)')",
+        start = 7,
+        stop = 44)
+    )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       val df = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
       checkAnswer(df, Row(Row("str")))
@@ -713,9 +815,24 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   test("invalidate char/varchar in SparkSession createDataframe") {
     val df = spark.range(10).map(_.toString).toDF()
     val schema = new StructType().add("id", CharType(5))
-    failWithInvalidCharUsage(spark.createDataFrame(df.collectAsList(), schema))
-    failWithInvalidCharUsage(spark.createDataFrame(df.rdd, schema))
-    failWithInvalidCharUsage(spark.createDataFrame(df.toJavaRDD, schema))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.createDataFrame(df.collectAsList(), schema)
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.createDataFrame(df.rdd, schema)
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.createDataFrame(df.toJavaRDD, schema)
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       val df1 = spark.createDataFrame(df.collectAsList(), schema)
       checkAnswer(df1, df)
@@ -724,8 +841,17 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   }
 
   test("invalidate char/varchar in spark.read.schema") {
-    failWithInvalidCharUsage(spark.read.schema(new StructType().add("id", CharType(5))))
-    failWithInvalidCharUsage(spark.read.schema("id char(5)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(new StructType().add("id", CharType(5)))
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema("id char(5)")
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       val ds = spark.range(10).map(_.toString)
       val df1 = spark.read.schema(new StructType().add("id", CharType(5))).csv(ds)
@@ -757,8 +883,18 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   }
 
   test("invalidate char/varchar in udf's result type") {
-    failWithInvalidCharUsage(spark.udf.register("testchar", () => "B", VarcharType(1)))
-    failWithInvalidCharUsage(spark.udf.register("testchar2", (x: String) => x, VarcharType(1)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.udf.register("testchar", () => "B", VarcharType(1))
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.udf.register("testchar2", (x: String) => x, VarcharType(1))
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       spark.udf.register("testchar", () => "B", VarcharType(1))
       spark.udf.register("testchar2", (x: String) => x, VarcharType(1))
@@ -772,8 +908,18 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   }
 
   test("invalidate char/varchar in spark.readStream.schema") {
-    failWithInvalidCharUsage(spark.readStream.schema(new StructType().add("id", CharType(5))))
-    failWithInvalidCharUsage(spark.readStream.schema("id char(5)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.schema(new StructType().add("id", CharType(5)))
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.schema("id char(5)")
+      },
+      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+    )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       withTempPath { dir =>
         spark.range(2).write.save(dir.toString)
@@ -891,8 +1037,13 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           matchPVals = true
         )
 
-        val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
-        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("ALTER TABLE t DROP PARTITION(c=100000)")
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -919,10 +1070,22 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         }
 
         val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE t VALUES ('1', 100000)"))
-        assert(e1.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = e1.getCause match {
+            case c: SparkRuntimeException => c
+            case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
 
-        val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
-        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("ALTER TABLE t DROP PARTITION(c=100000)")
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -934,8 +1097,13 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
 
         val inputDF = sql("SELECT named_struct('n_i', 1, 'n_c', '123456') AS s")
 
-        val e = intercept[RuntimeException](inputDF.writeTo("t").append())
-        assert(e.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            inputDF.writeTo("t").append()
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -948,7 +1116,14 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         val inputDF = sql("SELECT array(named_struct('n_i', 1, 'n_c', '123456')) AS a")
 
         val e = intercept[SparkException](inputDF.writeTo("t").append())
-        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = e.getCause match {
+            case c: SparkRuntimeException => c
+            case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -961,7 +1136,14 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         val inputDF = sql("SELECT map(named_struct('n_i', 1, 'n_c', '123456'), 1) AS m")
 
         val e = intercept[SparkException](inputDF.writeTo("t").append())
-        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = e.getCause match {
+            case c: SparkRuntimeException => c
+            case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }
@@ -974,7 +1156,14 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         val inputDF = sql("SELECT map(1, named_struct('n_i', 1, 'n_c', '123456')) AS m")
 
         val e = intercept[SparkException](inputDF.writeTo("t").append())
-        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        checkError(
+          exception = e.getCause match {
+            case c: SparkRuntimeException => c
+            case c: SparkException => c.getCause.asInstanceOf[SparkRuntimeException]
+          },
+          errorClass = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
       }
     }
   }

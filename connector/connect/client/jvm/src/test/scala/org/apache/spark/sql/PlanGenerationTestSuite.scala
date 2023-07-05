@@ -2698,6 +2698,54 @@ class PlanGenerationTestSuite
     fn.right(fn.col("g"), fn.col("g"))
   }
 
+  functionTest("array_agg") {
+    fn.array_agg(fn.col("a"))
+  }
+
+  functionTest("array_size") {
+    fn.array_size(fn.col("e"))
+  }
+
+  functionTest("cardinality") {
+    fn.cardinality(fn.col("f"))
+  }
+
+  functionTest("count_min_sketch") {
+    fn.count_min_sketch(fn.col("a"), fn.lit(0.1), fn.lit(0.95), fn.lit(11))
+  }
+
+  functionTest("named_struct") {
+    fn.named_struct(fn.lit("x"), fn.col("a"), fn.lit("y"), fn.col("id"))
+  }
+
+  functionTest("json_array_length") {
+    fn.json_array_length(fn.col("g"))
+  }
+
+  functionTest("json_object_keys") {
+    fn.json_object_keys(fn.col("g"))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar otherChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'), fn.lit('*'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar digitChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'))
+  }
+
+  functionTest("mask with specific upperChar lowerChar") {
+    fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'))
+  }
+
+  functionTest("mask with specific upperChar") {
+    fn.mask(fn.col("g"), fn.lit('X'))
+  }
+
+  functionTest("mask") {
+    fn.mask(fn.col("g"))
+  }
+
   functionTest("aes_encrypt with mode padding iv aad") {
     fn.aes_encrypt(
       fn.col("g"),

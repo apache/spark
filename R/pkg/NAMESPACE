@@ -77,13 +77,19 @@ exportMethods("glm",
               "spark.lm",
               "spark.fmRegressor")
 
-# Job group lifecycle management methods
+# Job group and job tag lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup",
        "setJobDescription",
+       "setInterruptOnCancel",
        "setLocalProperty",
-       "getLocalProperty")
+       "getLocalProperty",
+       "addJobTag",
+       "removeJobTag",
+       "getJobTags",
+       "clearJobTags",
+       "cancelJobsWithTag")
 
 # Export Utility methods
 export("setLogLevel")

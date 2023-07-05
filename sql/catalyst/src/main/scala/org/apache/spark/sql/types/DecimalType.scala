@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.annotation.tailrec
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -48,7 +48,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
+    throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
       precision, DecimalType.MAX_PRECISION)
   }
 
