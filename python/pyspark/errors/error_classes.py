@@ -689,9 +689,9 @@ ERROR_CLASSES_JSON = """
       "<data_type> is only supported with pyarrow 2.0.0 and above."
     ]
   },
-  "UNSUPPORTED_DTYPE_FOR_IGNORE_ROW_ORDER" : {
+  "UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER" : {
     "message" : [
-      "Cannot ignore row order for MapType because undefined sorting for maps."
+      "Cannot ignore row order because undefined sorting for data type."
     ]
   },
   "UNSUPPORTED_JOIN_TYPE" : {

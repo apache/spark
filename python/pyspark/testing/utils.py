@@ -31,6 +31,7 @@ from typing import (
 )
 from itertools import zip_longest
 from prettytable import PrettyTable
+from functools import reduce
 
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
@@ -235,40 +236,48 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertDataFrameEqual(
-    df: DataFrame, expected: Union[DataFrame, List[Row]], ignore_row_order: bool = True
-):
+def assertDataFrameEqual(df: DataFrame, expected: DataFrame, ignore_row_order: bool = True):
     if df is None and expected is None:
         return True
     elif df is None or expected is None:
         return False
 
-    def compare(r1: Row, r2: Row):
+    def compare_rows(r1: Row, r2: Row):
+        def compare_vals(val1, val2):
+            if isinstance(val1, list) and isinstance(val2, list):
+                return all([compare_vals(x, y) for x, y in list(zip(val1, val2))])
+            elif isinstance(val1, dict) and isinstance(val2, dict):
+                return all([compare_vals(x, y) for x, y in list(zip(val1.values(), val2.values()))])
+            elif isinstance(val1, float) and isinstance(val2, float):
+                if abs(val1 - val2) > 1e-5:
+                    return False
+            else:
+                if val1 != val2:
+                    return False
+            return True
+
         if r1 is None and r2 is None:
             return True
         elif r1 is None or r2 is None:
             return False
 
-        d1 = r1.asDict()
-        d2 = r2.asDict()
+        zipped = zip(r1, r2)
 
-        for key in d1.keys() & d2.keys():
-            if isinstance(d1[key], float) and isinstance(d2[key], float):
-                if abs(d1[key] - d2[key]) > 1e-5:
-                    return False
-            else:
-                if d1[key] != d2[key]:
-                    return False
-        return True
+        result = True
+
+        for val1, val2 in zipped:
+            result &= compare_vals(val1, val2)
+
+        return result
 
     def assert_schema_equal(
-        df_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
-        expected_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+        df_schema: StructType,
+        expected_schema: StructType,
     ):
         if df_schema != expected_schema:
             raise PySparkAssertionError(
                 error_class="DIFFERENT_SCHEMA",
-                message_parameters={"df_schema": df.schema, "expected_schema": expected.schema},
+                message_parameters={"df_schema": df_schema, "expected_schema": expected_schema},
             )
 
     def assert_rows_equal(rows1: Row, rows2: Row):
@@ -277,7 +286,7 @@ def assertDataFrameEqual(
         error_table = PrettyTable(["df", "expected"])
 
         for r1, r2 in zipped:
-            if compare(r1, r2):
+            if compare_rows(r1, r2):
                 error_table.add_row([blue(r1), blue(r2)])
             else:
                 rows_equal = False
@@ -295,7 +304,7 @@ def assertDataFrameEqual(
             expected = expected.sort(expected.columns)
         except:
             raise PySparkAssertionError(
-                error_class="UNSUPPORTED_DTYPE_FOR_IGNORE_ROW_ORDER",
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
                 message_parameters={},
             )
 

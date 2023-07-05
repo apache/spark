@@ -19,7 +19,7 @@
 import unittest
 from prettytable import PrettyTable
 
-from pyspark.sql.functions import sha2
+from pyspark.sql.functions import sha2, to_timestamp
 from pyspark.errors import (
     AnalysisException,
     ParseException,
@@ -31,7 +31,17 @@ from pyspark.testing.utils import assertDataFrameEqual, blue, red
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
-from pyspark.sql.types import StringType, ArrayType, LongType, StructType, MapType, StructField
+from pyspark.sql.types import (
+    StringType,
+    ArrayType,
+    LongType,
+    StructType,
+    MapType,
+    FloatType,
+    DoubleType,
+    StructField,
+    TimestampType,
+)
 
 
 class UtilsTestsMixin:
@@ -75,6 +85,34 @@ class UtilsTestsMixin:
                 [
                     StructField("name", StringType(), True),
                     StructField("languages", ArrayType(StringType()), True),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2)
+
+    def test_assert_approx_equal_arraytype_float(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", [97.01, 89.23]),
+                ("student2", [91.86, 84.34]),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grades", ArrayType(FloatType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", [97.01, 89.23]),
+                ("student2", [91.86, 84.339999]),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grades", ArrayType(FloatType()), True),
                 ]
             ),
         )
@@ -149,6 +187,76 @@ class UtilsTestsMixin:
                 ]
             ),
         )
+
+        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+
+    def test_assert_approx_equal_maptype_double(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"math": 76.23, "english": 92.64}),
+                ("student2", {"math": 87.89, "english": 84.48}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grades", MapType(StringType(), DoubleType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"math": 76.23, "english": 92.63999999}),
+                ("student2", {"math": 87.89, "english": 84.48}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grades", MapType(StringType(), DoubleType()), True),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+
+    def test_assert_approx_equal_maptype_double(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"math": 76.23, "english": 92.64}),
+                ("student2", {"math": 87.89, "english": 84.48}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grades", MapType(StringType(), DoubleType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"math": 76.23, "english": 92.63999999}),
+                ("student2", {"math": 87.89, "english": 84.48}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("grades", MapType(StringType(), DoubleType()), True),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2, ignore_row_order=False)
+
+    def test_assert_equal_timestamp(self):
+        df1 = self.spark.createDataFrame(
+            data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
+        )
+
+        df1 = df1.withColumn("timestamp", to_timestamp("timestamp"))
+        df2 = df2.withColumn("timestamp", to_timestamp("timestamp"))
 
         assertDataFrameEqual(df1, df2, ignore_row_order=False)
 
