@@ -51,13 +51,14 @@ import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
 class ArtifactManager(
     userContext: proto.UserContext,
     sessionId: String,
-    channel: ManagedChannel) {
+    channel: ManagedChannel,
+    retryPolicy: GrpcRetryHandler.RetryPolicy) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024
 
-  private[this] val stub = proto.SparkConnectServiceGrpc.newStub(channel)
-  private[this] val bstub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+  private[this] val stub = new CustomSparkConnectStub(channel, retryPolicy)
+  private[this] val bstub = new CustomSparkConnectBlockingStub(channel, retryPolicy)
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
 
   /**

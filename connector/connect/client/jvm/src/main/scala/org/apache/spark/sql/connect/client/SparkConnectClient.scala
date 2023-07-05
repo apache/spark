@@ -21,10 +21,6 @@ import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
 
-import scala.annotation.tailrec
-import scala.concurrent.duration.FiniteDuration
-import scala.util.control.NonFatal
-
 import com.google.protobuf.ByteString
 import io.grpc._
 
@@ -44,7 +40,7 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stub = new CustomSparkConnectBlockingStub(channel)
+  private[this] val stub = new CustomSparkConnectBlockingStub(channel, configuration.retryPolicy)
 
   private[client] def userAgent: String = configuration.userAgent
 
@@ -61,37 +57,7 @@ private[sql] class SparkConnectClient(
   private[sql] val sessionId: String = UUID.randomUUID.toString
 
   private[client] val artifactManager: ArtifactManager = {
-    new ArtifactManager(userContext, sessionId, channel)
-  }
-
-  private val retryPolicy: SparkConnectClient.RetryPolicy = configuration.retryPolicy
-
-  /**
-   * Retries the given function with exponential backoff according to the client's retryPolicy.
-   * @param fn
-   *  The function to retry.
-   * @param currentRetryNum
-   *  Current number of retries.
-   * @tparam T
-   *  The return type of the function.
-   * @return
-   *  The result of the function.
-   */
-  @tailrec private[client] final def retry[T](fn: => T, currentRetryNum: Int = 0): T = {
-    if (currentRetryNum > retryPolicy.maxRetries) {
-      throw new IllegalArgumentException(
-        s"The number of retries ($currentRetryNum) must not exceed " +
-          s"the maximum number of retires (${retryPolicy.maxRetries}).")
-    }
-    try {
-      return fn
-    } catch {
-      case NonFatal(e) if retryPolicy.canRetry(e) && currentRetryNum < retryPolicy.maxRetries =>
-        Thread.sleep(
-          (retryPolicy.maxBackoff min retryPolicy.initialBackoff * Math
-            .pow(retryPolicy.backoffMultiplier, currentRetryNum)).toMillis)
-    }
-    retry(fn, currentRetryNum + 1)
+    new ArtifactManager(userContext, sessionId, channel, configuration.retryPolicy)
   }
 
   /**
@@ -101,54 +67,7 @@ private[sql] class SparkConnectClient(
    */
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
     artifactManager.uploadAllClassFileArtifacts()
-    retry {
-      stub.analyzePlan(request)
-    }
-  }
-
-  /**
-   * Generalizes the retry logic for RPC calls that return an iterator.
-   * @param request
-   *   The request to send to the server.
-   * @param call
-   *   The function that calls the RPC.
-   * @tparam T
-   *   The type of the request.
-   * @tparam U
-   *   The type of the response.
-   */
-  private[client] class RetryIterator[T, U](request: T, call: T => java.util.Iterator[U])
-      extends java.util.Iterator[U] {
-
-    private var opened = false // we only retry if it fails on first call when using the iterator
-    private var iterator = call(request)
-
-    private def retryIter[V](f: java.util.Iterator[U] => V) = {
-      if (!opened) {
-        opened = true
-        var firstTry = true
-        retry {
-          if (firstTry) {
-            // on first try, we use the iterator provided by constructor
-            firstTry = false
-          } else {
-            // on retry, we need to call the RPC again.
-            iterator = call(request)
-          }
-          f(iterator)
-        }
-      } else {
-        f(iterator)
-      }
-    }
-
-    override def next(): U = {
-      retryIter(_.next())
-    }
-
-    override def hasNext(): Boolean = {
-      retryIter(_.hasNext())
-    }
+    stub.analyzePlan(request)
   }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
@@ -160,8 +79,7 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
-
-    new RetryIterator(request, stub.executePlan)
+    stub.executePlan(request)
   }
 
   /**
@@ -177,9 +95,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
-    retry {
-      stub.config(request)
-    }
+    stub.config(request)
   }
 
   /**
@@ -278,9 +194,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
-    retry {
-      stub.interrupt(request)
-    }
+    stub.interrupt(request)
   }
 
   def copy(): SparkConnectClient = new SparkConnectClient(configuration)
@@ -441,7 +355,7 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
-    def retryPolicy(policy: RetryPolicy): Builder = {
+    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
       _configuration = _configuration.copy(retryPolicy = policy)
       this
     }
@@ -563,7 +477,7 @@ object SparkConnectClient {
       isSslEnabled: Option[Boolean] = None,
       metadata: Map[String, String] = Map.empty,
       userAgent: String = DEFAULT_USER_AGENT,
-      retryPolicy: RetryPolicy = RetryPolicy()) {
+      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy()) {
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()
@@ -656,33 +570,4 @@ object SparkConnectClient {
       }
     }
   }
-
-  private[client] def retryException(e: Throwable): Boolean = {
-    if (e.isInstanceOf[StatusRuntimeException]) {
-      e.asInstanceOf[StatusRuntimeException].getStatus().getCode() == Status.Code.UNAVAILABLE
-    } else {
-      false
-    }
-  }
-
-  /**
-   * [[RetryPolicy]] configure the retry mechanism in [[SparkConnectClient]]
-   *
-   * @param maxRetries
-   *   Maximum number of retries.
-   * @param initialBackoff
-   *   Start value of the exponential backoff (ms).
-   * @param maxBackoff
-   *   Maximal value of the exponential backoff (ms).
-   * @param backoffMultiplier
-   *   Multiplicative base of the exponential backoff.
-   * @param canRetry
-   *   Function that determines whether a retry is to be performed in the event of an error.
-   */
-  private[client] case class RetryPolicy(
-      maxRetries: Int = 15,
-      initialBackoff: FiniteDuration = FiniteDuration(50, "ms"),
-      maxBackoff: FiniteDuration = FiniteDuration(1, "min"),
-      backoffMultiplier: Double = 4.0,
-      canRetry: Throwable => Boolean = retryException) {}
 }
