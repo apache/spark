@@ -41,9 +41,10 @@ object TPCDSQueryBenchmark extends TPCBenchmarkUtils {
     "web_sales", "store_sales", "web_returns", "web_site", "reason", "call_center",
     "warehouse", "ship_mode", "income_band", "time_dim", "web_page")
   override val queryType: String = "TPCDS"
+  val dataLocationEnv: String = "SPARK_TPCDS_DATA"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val benchmarkArgs = new TPCQueryBenchmarkArguments(mainArgs)
+    val benchmarkArgs = new TPCQueryBenchmarkArguments(mainArgs, dataLocationEnv)
 
     // List of all TPC-DS v1.4 queries
     val tpcdsQueries = Seq(

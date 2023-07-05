@@ -113,10 +113,67 @@ jobs:
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
 
+  # Any TPC-H related updates on this job need to be applied to tpch-1g job of build_and_test.yml as well
+  tpch-1g-gen:
+    name: "Generate an input dataset for TPCHQueryBenchmark with SF=1"
+    if: contains(github.event.inputs.class, 'TPCHQueryBenchmark') || contains(github.event.inputs.class, '*')
+    runs-on: ubuntu-20.04
+    env:
+      SPARK_LOCAL_IP: localhost
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v3
+        # In order to get diff files
+        with:
+          fetch-depth: 0
+      - name: Cache Scala, SBT and Maven
+        uses: actions/cache@v3
+        with:
+          path: |
+            build/apache-maven-*
+            build/scala-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Coursier local repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/coursier
+          key: benchmark-coursier-${{ github.event.inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          restore-keys: |
+            benchmark-coursier-${{ github.event.inputs.jdk }}
+      - name: Cache TPC-H generated data
+        id: cache-tpch-sf-1
+        uses: actions/cache@v3
+        with:
+          path: ./tpch-sf-1
+          key: tpch-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCHSchema.scala') }}
+      - name: Checkout tpch-dbgen repository
+        if: steps.cache-tpch-sf-1.outputs.cache-hit != 'true'
+        uses: actions/checkout@v3
+        with:
+          repository: databricks/tpch-dbgen
+          ref: 6985da461c641fd0d255b214f2d693f1bf08bc33
+          path: ./tpch-dbgen
+      - name: Build tpcds-kit
+        if: steps.cache-tpch-sf-1.outputs.cache-hit != 'true'
+        run: cd tpch-dbgen && make all
+      - name: Install Java ${{ github.event.inputs.jdk }}
+        if: steps.cache-tpch-sf-1.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: ${{ github.event.inputs.jdk }}
+      - name: Generate TPC-H (SF=1) table data
+        if: steps.cache-tpch-sf-1.outputs.cache-hit != 'true'
+        run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCHData --dbgenDir `pwd`/tpch-dbgen --location `pwd`/tpch-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+
   benchmark:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
     if: always()
-    needs: [matrix-gen, tpcds-1g-gen]
+    needs: [matrix-gen, tpcds-1g-gen, tpch-1g-gen]
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -132,6 +189,7 @@ jobs:
       # To prevent spark.test.home not being set. See more detail in SPARK-36007.
       SPARK_HOME: ${{ github.workspace }}
       SPARK_TPCDS_DATA: ${{ github.workspace }}/tpcds-sf-1
+      SPARK_TPCH_DATA: ${{ github.workspace }}/tpch-sf-1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -168,6 +226,13 @@ jobs:
       with:
         path: ./tpcds-sf-1
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+    - name: Cache TPC-H generated data
+      if: contains(github.event.inputs.class, 'TPCHQueryBenchmark') || contains(github.event.inputs.class, '*')
+      id: cache-tpch-sf-1
+      uses: actions/cache@v3
+      with:
+        path: ./tpch-sf-1
+        key: tpch-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCHSchema.scala') }}
     - name: Run benchmarks
       run: |
         dev/change-scala-version.sh ${{ github.event.inputs.scala }}
@@ -186,7 +251,7 @@ jobs:
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude-standard`
+        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}-${{ github.event.inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude=tpch-sf-1 --exclude-standard`
     - name: Upload benchmark results
       uses: actions/upload-artifact@v3
       with:

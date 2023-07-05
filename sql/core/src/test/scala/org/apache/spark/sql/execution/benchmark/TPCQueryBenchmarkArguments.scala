@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.benchmark
 import java.util.Locale
 
 
-class TPCQueryBenchmarkArguments(val args: Array[String]) {
-  var dataLocation: String = sys.env.getOrElse("SPARK_TPC_DATA", null)
+class TPCQueryBenchmarkArguments(val args: Array[String], val dataLocationEnv: String) {
+  var dataLocation: String = sys.env.getOrElse(dataLocationEnv, null)
   var queryFilter: Set[String] = Set.empty
   var cboEnabled: Boolean = false
 

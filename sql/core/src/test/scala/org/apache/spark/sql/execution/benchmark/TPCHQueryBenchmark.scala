@@ -37,9 +37,10 @@ object TPCHQueryBenchmark extends TPCBenchmarkUtils {
   override val tables: Seq[String] = Seq("part", "supplier", "partsupp", "customer", "orders",
     "lineitem", "nation", "region")
   override val queryType: String = "TPCH"
+  val dataLocationEnv: String = "SPARK_TPCH_DATA"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val benchmarkArgs = new TPCQueryBenchmarkArguments(mainArgs)
+    val benchmarkArgs = new TPCQueryBenchmarkArguments(mainArgs, dataLocationEnv)
 
     // List of all TPC-H queries
     val tpchQueries = Seq("q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
