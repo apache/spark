@@ -37,8 +37,9 @@ object SparkConnectServer extends Logging {
         SparkConnectService.start()
         SparkConnectService.server.getListenSockets.foreach { sa =>
           val isa = sa.asInstanceOf[InetSocketAddress]
-          logInfo(s"Spark Connect server started at: " +
-            s"${isa.getAddress.getHostAddress}:${isa.getPort}")
+          logInfo(
+            s"Spark Connect server started at: " +
+              s"${isa.getAddress.getHostAddress}:${isa.getPort}")
         }
       } catch {
         case e: Exception =>
