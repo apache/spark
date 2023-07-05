@@ -676,7 +676,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same name <parameterName>."
+      "Call to function <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "sqlState" : "4274K"
   },
