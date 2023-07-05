@@ -66,6 +66,17 @@ private[sql] class SparkConnectClient(
 
   private val retryPolicy: SparkConnectClient.RetryPolicy = configuration.retryPolicy
 
+  /**
+   * Retries the given function with exponential backoff according to the client's retryPolicy.
+   * @param fn
+   *  The function to retry.
+   * @param currentRetryNum
+   *  Current number of retries.
+   * @tparam T
+   *  The return type of the function.
+   * @return
+   *  The result of the function.
+   */
   @tailrec private[client] final def retry[T](fn: => T, currentRetryNum: Int = 0): T = {
     if (currentRetryNum > retryPolicy.maxRetries) {
       throw new IllegalArgumentException(
@@ -95,34 +106,48 @@ private[sql] class SparkConnectClient(
     }
   }
 
-  private class executeRetryIterator(
-      request: proto.ExecutePlanRequest,
-      origIterator: java.util.Iterator[proto.ExecutePlanResponse])
-      extends java.util.Iterator[proto.ExecutePlanResponse] {
+  /**
+   * Generalizes the retry logic for RPC calls that return an iterator.
+   * @param request
+   *   The request to send to the server.
+   * @param call
+   *   The function that calls the RPC.
+   * @tparam T
+   *   The type of the request.
+   * @tparam U
+   *   The type of the response.
+   */
+  private[client] class RetryIterator[T, U](request: T, call: T => java.util.Iterator[U])
+      extends java.util.Iterator[U] {
 
-    private var hasNextCalled = false
-    private var iterator = origIterator
+    private var opened = false // we only retry if it fails on first call when using the iterator
+    private var iterator = call(request)
 
-    override def next(): proto.ExecutePlanResponse = {
-      iterator.next()
-    }
-
-    override def hasNext(): Boolean = {
-      if (!hasNextCalled) {
-        hasNextCalled = true
+    private def retryIter[V](f: java.util.Iterator[U] => V) = {
+      if (!opened) {
+        opened = true
         var firstTry = true
         retry {
           if (firstTry) {
+            // on first try, we use the iterator provided by constructor
             firstTry = false
-            iterator.hasNext()
           } else {
-            iterator = stub.executePlan(request)
-            iterator.hasNext()
+            // on retry, we need to call the RPC again.
+            iterator = call(request)
           }
+          f(iterator)
         }
       } else {
-        iterator.hasNext()
+        f(iterator)
       }
+    }
+
+    override def next(): U = {
+      retryIter(_.next())
+    }
+
+    override def hasNext(): Boolean = {
+      retryIter(_.hasNext())
     }
   }
 
@@ -136,7 +161,7 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .build()
 
-    new executeRetryIterator(request, stub.executePlan(request))
+    new RetryIterator(request, stub.executePlan)
   }
 
   /**
