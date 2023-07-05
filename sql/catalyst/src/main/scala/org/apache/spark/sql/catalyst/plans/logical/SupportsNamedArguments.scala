@@ -204,7 +204,7 @@ case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentTy
  *                 argument is required. If no argument is provided, an exception is thrown.
  */
 case class NamedArgument(
-                          name: String,
+    name: String,
                           dataType: NamedArgumentType,
                           default: Option[Expression] = None)
 
