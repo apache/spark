@@ -17,13 +17,12 @@
 
 
 ===
-UDF
+Testing
 ===
 
-.. currentmodule:: pyspark.sql
+.. currentmodule:: pyspark.testing
 
 .. autosummary::
     :toctree: api/
 
-    utils.assertDataframeEqual
-    utils.assertSchemaEqual
+    assertDataframeEqual

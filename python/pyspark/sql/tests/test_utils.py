@@ -246,6 +246,53 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2, ignore_row_order=False)
 
+    def test_assert_approx_equal_nested_struct_double(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("jane", (64.57, 76.63, 97.81)),
+                ("john", (93.92, 91.57, 84.36)),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField(
+                        "grades",
+                        StructType(
+                            [
+                                StructField("math", DoubleType(), True),
+                                StructField("english", DoubleType(), True),
+                                StructField("biology", DoubleType(), True),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("jane", (64.57, 76.63, 97.81000001)),
+                ("john", (93.92, 91.57, 84.36)),
+            ],
+            schema=StructType(
+                [
+                    StructField("name", StringType(), True),
+                    StructField(
+                        "grades",
+                        StructType(
+                            [
+                                StructField("math", DoubleType(), True),
+                                StructField("english", DoubleType(), True),
+                                StructField("biology", DoubleType(), True),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
+        )
+
+        assertDataFrameEqual(df1, df2)
+
     def test_assert_equal_timestamp(self):
         df1 = self.spark.createDataFrame(
             data=[("1", "2023-01-01 12:01:01.000")], schema=["id", "timestamp"]
@@ -422,6 +469,41 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="DIFFERENT_SCHEMA",
             message_parameters={"df_schema": df1.schema, "expected_schema": df2.schema},
+        )
+
+    def test_assert_equal_maptype(self):
+        df1 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"id": 222342203655477580}),
+                ("student2", {"grad_year": 422322203155477692}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("properties", MapType(StringType(), LongType()), True),
+                ]
+            ),
+        )
+        df2 = self.spark.createDataFrame(
+            data=[
+                ("student1", {"id": 222342203655477580}),
+                ("student2", {"id": 422322203155477692}),
+            ],
+            schema=StructType(
+                [
+                    StructField("student", StringType(), True),
+                    StructField("properties", MapType(StringType(), LongType()), True),
+                ]
+            ),
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNSUPPORTED_DATA_TYPE_FOR_IGNORE_ROW_ORDER",
+            message_parameters={},
         )
 
 

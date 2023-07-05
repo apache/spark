@@ -245,9 +245,17 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, ignore_row_order: b
     def compare_rows(r1: Row, r2: Row):
         def compare_vals(val1, val2):
             if isinstance(val1, list) and isinstance(val2, list):
-                return all([compare_vals(x, y) for x, y in list(zip(val1, val2))])
+                return len(val1) == len(val2) and all(
+                    compare_vals(x, y) for x, y in zip(val1, val2)
+                )
+            elif isinstance(val1, Row) and isinstance(val2, Row):
+                return all(compare_vals(x, y) for x, y in zip(val1, val2))
             elif isinstance(val1, dict) and isinstance(val2, dict):
-                return all([compare_vals(x, y) for x, y in list(zip(val1.values(), val2.values()))])
+                return (
+                    len(val1.keys()) == len(val2.keys())
+                    and val1.keys() == val2.keys()
+                    and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
+                )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > 1e-5:
                     return False
@@ -261,14 +269,7 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, ignore_row_order: b
         elif r1 is None or r2 is None:
             return False
 
-        zipped = zip(r1, r2)
-
-        result = True
-
-        for val1, val2 in zipped:
-            result &= compare_vals(val1, val2)
-
-        return result
+        return compare_vals(r1, r2)
 
     def assert_schema_equal(
         df_schema: StructType,
