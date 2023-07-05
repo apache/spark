@@ -21,11 +21,12 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.{Server, Status, StatusRuntimeException}
+import io.grpc.Server
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
@@ -104,7 +105,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
 
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       client.analyze(request)
     }
   }
@@ -187,62 +188,6 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         checkTestPack(testPack)
       }
     }
-  }
-
-  private class DummyFn(val e: Throwable) {
-    var counter = 0
-    def fn(): Int = {
-      if (counter < 3) {
-        counter += 1
-        throw e
-      } else {
-        42
-      }
-    }
-  }
-
-  test("SPARK-44275: retry actually retries") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = SparkConnectClient.RetryPolicy()
-    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
-    val result = client.retry { dummyFn.fn() }
-
-    assert(result == 42)
-    assert(dummyFn.counter == 3)
-  }
-
-  test("SPARK-44275: default retryException retries only on UNAVAILABLE") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.ABORTED))
-    val retryPolicy = SparkConnectClient.RetryPolicy()
-    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
-
-    assertThrows[StatusRuntimeException] {
-      client.retry { dummyFn.fn() }
-    }
-    assert(dummyFn.counter == 1)
-  }
-
-  test("SPARK-44275: retry uses canRetry to filter exceptions") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy = SparkConnectClient.RetryPolicy(canRetry = _ => false)
-    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
-
-    assertThrows[StatusRuntimeException] {
-      client.retry { dummyFn.fn() }
-    }
-    assert(dummyFn.counter == 1)
-  }
-
-  test("SPARK-44275: retry does not exceed maxRetries") {
-    val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE))
-    val retryPolicy =
-      SparkConnectClient.RetryPolicy(canRetry = _ => true, maxRetries = 1)
-    val client = SparkConnectClient.builder().retryPolicy(retryPolicy).build()
-
-    assertThrows[StatusRuntimeException] {
-      client.retry { dummyFn.fn() }
-    }
-    assert(dummyFn.counter == 2)
   }
 }
 
