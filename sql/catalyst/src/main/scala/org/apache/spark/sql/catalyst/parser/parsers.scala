@@ -24,10 +24,7 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl
 import org.apache.spark.{QueryContext, SparkThrowableHelper}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -35,38 +32,10 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with Logging {
-
+abstract class AbstractParser extends DataTypeParserInterface with SQLConfHelper with Logging {
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
-  }
-
-  /** Creates Expression for a given SQL string. */
-  override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
-    val ctx = parser.singleExpression()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitSingleExpression(ctx)
-    }
-  }
-
-  /** Creates TableIdentifier for a given SQL string. */
-  override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
-    astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
-  }
-
-  /** Creates FunctionIdentifier for a given SQL string. */
-  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
-    parse(sqlText) { parser =>
-      astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
-    }
-  }
-
-  /** Creates a multi-part identifier for a given SQL string */
-  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
-    parse(sqlText) { parser =>
-      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
-    }
   }
 
   /**
@@ -77,29 +46,8 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
-  /** Creates LogicalPlan for a given SQL string of query. */
-  override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    val ctx = parser.query()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitQuery(ctx)
-    }
-  }
-
-  /** Creates LogicalPlan for a given SQL string. */
-  override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    val ctx = parser.singleStatement()
-    withOrigin(ctx, Some(sqlText)) {
-      astBuilder.visitSingleStatement(ctx) match {
-        case plan: LogicalPlan => plan
-        case _ =>
-          val position = Origin(None, None)
-          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
-      }
-    }
-  }
-
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
-  protected def astBuilder: AstBuilder
+  protected def astBuilder: DataTypeAstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
@@ -152,16 +100,6 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     }
   }
 }
-
-/**
- * Concrete SQL parser for Catalyst-only SQL statements.
- */
-class CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder
-}
-
-/** For test-only. */
-object CatalystSqlParser extends CatalystSqlParser
 
 /**
  * This string stream provides the lexer with upper case characters only. This greatly simplifies
@@ -438,5 +376,8 @@ case class UnclosedCommentProcessor(
         stop = Origin(Option(failedToken.getStopIndex)))
     }
   }
+}
 
+object DataTypeParser extends AbstractParser {
+  override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder
 }
