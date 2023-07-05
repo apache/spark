@@ -262,7 +262,7 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testFailureAfterData() throws IOException {
     StreamCallbackWithID stream =
       pushResolver.receiveBlockDataAsStream(
@@ -270,12 +270,9 @@ public class RemoteBlockPushResolverSuite {
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
     stream.onFailure(stream.getID(), new RuntimeException("Forced Failure"));
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
-    try {
-      pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    } catch (RuntimeException e) {
-      assertTrue(e.getMessage().contains("is empty"));
-      throw e;
-    }
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
+    assertTrue(e.getMessage().contains("is empty"));
   }
 
   @Test(expected = RuntimeException.class)
@@ -288,12 +285,9 @@ public class RemoteBlockPushResolverSuite {
     stream.onData(stream.getID(), ByteBuffer.wrap(new byte[4]));
     stream.onFailure(stream.getID(), new RuntimeException("Forced Failure"));
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
-    try {
-      pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    } catch (RuntimeException e) {
-      assertTrue(e.getMessage().contains("is empty"));
-      throw e;
-    }
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
+    assertTrue(e.getMessage().contains("is empty"));
   }
 
   @Test
