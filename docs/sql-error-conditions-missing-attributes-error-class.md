@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNSUPPORTED_INSERT error class
-displayTitle: UNSUPPORTED_INSERT error class
+title: MISSING_ATTRIBUTES error class
+displayTitle: MISSING_ATTRIBUTES error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,22 +21,17 @@ license: |
 
 SQLSTATE: none assigned
 
-Can't insert into the target.
+Resolved attribute(s) `<missingAttributes>` missing from `<input>` in operator `<operator>`.
 
 This error class has the following derived error classes:
 
-## NOT_ALLOWED
+## RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION
 
-The target relation `<relationId>` does not allow insertion.
+Attribute(s) with the same name appear in the operation: `<operation>`.
+Please check if the right attribute(s) are used.
 
-## NOT_PARTITIONED
+## RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT
 
-The target relation `<relationId>` is not partitioned.
 
-## RDD_BASED
 
-An RDD-based table is not allowed.
 
-## READ_FROM
-
-The target relation `<relationId>` is also being read from.

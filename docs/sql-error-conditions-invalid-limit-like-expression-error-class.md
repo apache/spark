@@ -1,7 +1,7 @@
 ---
 layout: global
-title: MISSING_ATTRIBUTES error class
-displayTitle: MISSING_ATTRIBUTES error class
+title: INVALID_LIMIT_LIKE_EXPRESSION error class
+displayTitle: INVALID_LIMIT_LIKE_EXPRESSION error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,14 +21,24 @@ license: |
 
 SQLSTATE: none assigned
 
-Resolved attribute(s) `<missingAttributes>` missing from `<input>` in operator `<operator>`.
+The limit like expression `<expr>` is invalid.
 
 This error class has the following derived error classes:
 
-## RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION
+## DATA_TYPE
 
-Attribute(s) with the same name appear in the operation: `<operation>`.
-Please check if the right attribute(s) are used.
+The `<name>` expression must be integer type, but got `<dataType>`.
 
-## RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT
+## IS_NEGATIVE
+
+The `<name>` expression must be equal to or greater than 0, but got `<v>`.
+
+## IS_NULL
+
+The evaluated `<name>` expression must not be null.
+
+## IS_UNFOLDABLE
+
+The `<name>` expression must evaluate to a constant value.
+
 

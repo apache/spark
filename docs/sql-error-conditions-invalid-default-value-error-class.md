@@ -1,7 +1,7 @@
 ---
 layout: global
-title: AS_OF_JOIN error class
-displayTitle: AS_OF_JOIN error class
+title: INVALID_DEFAULT_VALUE error class
+displayTitle: INVALID_DEFAULT_VALUE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,14 +19,22 @@ license: |
   limitations under the License.
 ---
 
-Invalid as-of join
+SQLSTATE: none assigned
+
+Failed to execute `<statement>` command because the destination table column `<colName>` has a DEFAULT value `<defaultValue>`,
 
 This error class has the following derived error classes:
 
-## TOLERANCE_IS_NON_NEGATIVE
+## DATA_TYPE
 
-The input argument `tolerance` must be non-negative.
+which requires `<expectedType>` type, but the statement provided a value of incompatible `<actualType>` type.
 
-## TOLERANCE_IS_UNFOLDABLE
+## SUBQUERY_EXPRESSION
 
-The input argument `tolerance` must be a constant.
+which contains subquery expressions.
+
+## UNRESOLVED_EXPRESSION
+
+which fails to resolve as a valid expression.
+
+

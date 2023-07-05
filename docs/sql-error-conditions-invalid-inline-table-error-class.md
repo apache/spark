@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_BOUNDARY error class
-displayTitle: INVALID_BOUNDARY error class
+title: INVALID_INLINE_TABLE error class
+displayTitle: INVALID_INLINE_TABLE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,14 +19,26 @@ license: |
   limitations under the License.
 ---
 
-The boundary `<boundary>` is invalid: `<invalidValue>`.
+SQLSTATE: none assigned
+
+Invalid inline table.
 
 This error class has the following derived error classes:
 
-## END
+## CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE
 
-Expected the value is '0', '`<longMaxValue>`', '[`<intMinValue>`, `<intMaxValue>`]'.
+Cannot evaluate the expression `<expr>` in inline table definition.
 
-## START
+## FAILED_SQL_EXPRESSION_EVALUATION
 
-Expected the value is '0', '`<longMinValue>`', '[`<intMinValue>`, `<intMaxValue>`]'.
+Failed to evaluate the SQL expression `<sqlExpr>`. Please check your syntax and ensure all required tables and columns are available.
+
+## INCOMPATIBLE_TYPES_IN_INLINE_TABLE
+
+Found incompatible types in the column `<colName>` for inline table.
+
+## NUM_COLUMNS_MISMATCH
+
+Inline table expected `<expectedNumCols>` columns but found `<actualNumCols>` columns in row `<rowIndex>`.
+
+

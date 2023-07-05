@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INVALID_LIMIT_LIKE_EXPRESSION error class
-displayTitle: INVALID_LIMIT_LIKE_EXPRESSION error class
+title: UNSUPPORTED_INSERT error class
+displayTitle: UNSUPPORTED_INSERT error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,22 +19,26 @@ license: |
   limitations under the License.
 ---
 
-The limit like expression `<expr>` is invalid.
+SQLSTATE: none assigned
+
+Can't insert into the target.
 
 This error class has the following derived error classes:
 
-## DATA_TYPE
+## NOT_ALLOWED
 
-The `<name>` expression must be integer type, but got `<dataType>`.
+The target relation `<relationId>` does not allow insertion.
 
-## IS_NEGATIVE
+## NOT_PARTITIONED
 
-The `<name>` expression must be equal to or greater than 0, but got `<v>`.
+The target relation `<relationId>` is not partitioned.
 
-## IS_NULL
+## RDD_BASED
 
-The evaluated `<name>` expression must not be null.
+An RDD-based table is not allowed.
 
-## IS_UNFOLDABLE
+## READ_FROM
 
-The `<name>` expression must evaluate to a constant value.
+The target relation `<relationId>` is also being read from.
+
+
