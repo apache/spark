@@ -444,7 +444,7 @@ case class Add(
   override def symbol: String = "+"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"$value1.$$plus($value2)"
+    String = s"$value1.$$plus($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -531,7 +531,7 @@ case class Subtract(
   override def symbol: String = "-"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"$value1.$$minus($value2)"
+   String = s"$value1.$$minus($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -609,8 +609,8 @@ case class Multiply(
   override def symbol: String = "*"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"Decimal.apply($value1.toJavaBigDecimal()" +
-    s".multiply($value2.toJavaBigDecimal(), $mathContextValue))"
+    String = s"Decimal.apply($value1.toJavaBigDecimal()" +
+      s".multiply($value2.toJavaBigDecimal(), $mathContextValue))"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -820,7 +820,7 @@ case class Divide(
   override def symbol: String = "/"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"$value1.$$div($value2)"
+    String = s"$value1.$$div($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -897,7 +897,7 @@ case class IntegralDivide(
   override def symbol: String = "/"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"$value1.quot($value2)"
+    String = s"$value1.quot($value2)"
 
   override def decimalToDataTypeCodeGen(decimalResult: String): String = s"$decimalResult.toLong()"
 
@@ -968,7 +968,7 @@ case class Remainder(
   override def symbol: String = "%"
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"$value1.remainder($value2)"
+    String = s"$value1.remainder($value2)"
 
   // scalastyle:off
   // The formula follows Hive which is based on the SQL standard and MS SQL:
@@ -1052,7 +1052,7 @@ case class Pmod(
   override def nullable: Boolean = true
 
   override def decimalMethod(mathContextValue: GlobalValue, value1: String, value2: String):
-  String = s"$value1.remainder($value2)"
+    String = s"$value1.remainder($value2)"
 
   // This follows Remainder rule
   override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
