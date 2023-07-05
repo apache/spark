@@ -1388,10 +1388,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (i) values (true)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colPath" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean default true, s bigint) using parquet")
@@ -1399,10 +1399,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (i) values (default)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colPath" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42) using parquet")
@@ -1410,10 +1410,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t (s) values (default)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 'i'"))
+            "colPath" -> "`i`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1421,10 +1421,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='true') (s) values(5)")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 'q'"))
+            "colPath" -> "`q`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1432,10 +1432,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='false') (q) select 43")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colPath" -> "`s`"))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
@@ -1443,10 +1443,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t partition(i='false') (q) select default")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1204",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "errors" -> "Cannot find data for output column 's'"))
+            "colPath" -> "`s`"))
       }
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required
