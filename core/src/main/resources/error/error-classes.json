@@ -689,6 +689,11 @@
     ],
     "sqlState" : "42K04"
   },
+  "FAILED_RENAME_TEMP_FILE" : {
+    "message" : [
+      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false."
+    ]
+  },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
@@ -5005,11 +5010,6 @@
   "_LEGACY_ERROR_TEMP_2198" : {
     "message" : [
       "Failed to rename as <dstPath> already exists."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2199" : {
-    "message" : [
-      "Failed to rename temp file <srcPath> to <dstPath> as rename returned false."
     ]
   },
   "_LEGACY_ERROR_TEMP_2200" : {

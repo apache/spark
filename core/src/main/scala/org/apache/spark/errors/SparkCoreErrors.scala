@@ -469,7 +469,7 @@ private[spark] object SparkCoreErrors {
 
   def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2199",
+      errorClass = "FAILED_RENAME_TEMP_FILE",
       messageParameters = Map(
         "srcPath" -> srcFile.toString,
         "dstPath" -> dstFile.toString),
