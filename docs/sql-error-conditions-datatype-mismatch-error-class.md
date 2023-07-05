@@ -207,6 +207,10 @@ The lower bound of a window frame must be `<comparison>` to the upper bound.
 
 The data type of the column (`<columnIndex>`) do not have the same type: `<leftType>` (`<leftParamIndex>`) <> `<rightType>` (`<rightParamIndex>`).
 
+## TYPE_CHECK_FAILURE_WITH_HINT
+
+`<msg>``<hint>`.
+
 ## UNEXPECTED_CLASS_TYPE
 
 class `<className>` not found.

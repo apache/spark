@@ -246,6 +246,10 @@ class SeriesStringTestsMixin:
         with self.assertRaises(TypeError):
             self.check_func(lambda x: x.str.repeat(repeats=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) >= LooseVersion("2.0.0"),
+        "TODO(SPARK-43476): Enable SeriesStringTests.test_string_replace for pandas 2.0.0.",
+    )
     def test_string_replace(self):
         self.check_func(lambda x: x.str.replace("a.", "xx", regex=True))
         self.check_func(lambda x: x.str.replace("a.", "xx", regex=False))
@@ -255,11 +259,10 @@ class SeriesStringTestsMixin:
         def repl(m):
             return m.group(0)[::-1]
 
-        regex_pat = re.compile(r"[a-z]+")
-        self.check_func(lambda x: x.str.replace(regex_pat, repl, regex=True))
+        self.check_func(lambda x: x.str.replace(r"[a-z]+", repl))
         # compiled regex with flags
         regex_pat = re.compile(r"WHITESPACE", flags=re.IGNORECASE)
-        self.check_func(lambda x: x.str.replace(regex_pat, "---", regex=True))
+        self.check_func(lambda x: x.str.replace(regex_pat, "---"))
 
     def test_string_rfind(self):
         self.check_func(lambda x: x.str.rfind("a"))

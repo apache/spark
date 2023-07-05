@@ -770,8 +770,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // Bad name
     assert(!CollectMetrics("", sum :: Nil, testRelation).resolved)
-    assertAnalysisError(CollectMetrics("", sum :: Nil, testRelation),
-      "observed metrics should be named" :: Nil)
+    assertAnalysisErrorClass(
+      CollectMetrics("", sum :: Nil, testRelation),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.MISSING_NAME",
+      expectedMessageParameters = Map(
+        "operator" -> "'CollectMetrics , [sum(a#x) AS sum#xL]\n+- LocalRelation <empty>, [a#x]\n")
+    )
 
     // No columns
     assert(!CollectMetrics("evt", Nil, testRelation).resolved)
@@ -786,9 +790,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "Attribute", "can only be used as an argument to an aggregate function")
 
     // Unwrapped non-deterministic expression
-    checkAnalysisError(
-      Rand(10).as("rnd") :: Nil,
-      "non-deterministic expression", "can only be used as an argument to an aggregate function")
+    assertAnalysisErrorClass(
+      CollectMetrics("event", Rand(10).as("rnd") :: Nil, testRelation),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+      expectedMessageParameters = Map("expr" -> "\"rand(10) AS rnd\"")
+    )
 
     // Distinct aggregate
     checkAnalysisError(
@@ -796,18 +802,30 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     "distinct aggregates are not allowed in observed metrics, but found")
 
     // Nested aggregate
-    checkAnalysisError(
-      Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
-      "nested aggregates are not allowed in observed metrics, but found")
+    assertAnalysisErrorClass(
+      CollectMetrics(
+        "event",
+        Sum(Sum(a).toAggregateExpression()).toAggregateExpression().as("sum") :: Nil,
+        testRelation),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
+      expectedMessageParameters = Map("expr" -> "\"sum(sum(a)) AS sum\"")
+    )
 
     // Windowed aggregate
     val windowExpr = WindowExpression(
       RowNumber(),
       WindowSpecDefinition(Nil, a.asc :: Nil,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-    checkAnalysisError(
-      windowExpr.as("rn") :: Nil,
-      "window expressions are not allowed in observed metrics, but found")
+    assertAnalysisErrorClass(
+      CollectMetrics("event", windowExpr.as("rn") :: Nil, testRelation),
+      expectedErrorClass = "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
+      expectedMessageParameters = Map(
+        "expr" ->
+          """
+            |"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS
+            | BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rn"
+            |""".stripMargin.replace("\n", ""))
+    )
   }
 
   test("check CollectMetrics duplicates") {
