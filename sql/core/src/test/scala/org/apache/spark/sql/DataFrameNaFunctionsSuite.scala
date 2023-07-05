@@ -551,8 +551,8 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         df.na.replace("c1.c1-1", Map("b1" ->"a1"))
       },
-      errorClass = "REPLACE_NESTED_COLUMN_IS_UNSUPPORTED",
-      parameters = Map("colName" -> "c1.c1-1")
+      errorClass = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
+      parameters = Map("colName" -> "`c1`.`c1-1`")
     )
   }
 }

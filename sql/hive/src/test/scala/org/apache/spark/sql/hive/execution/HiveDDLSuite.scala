@@ -3311,7 +3311,7 @@ class HiveDDLSuite
           exception = intercept[SparkUnsupportedOperationException] {
             sql(sqlCmd)
           },
-          errorClass = "HIVE_WITH_ANSI_INTERVALS_IS_UNSUPPORTED",
+          errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
           parameters = Map("tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tbl`")
         )
       }

@@ -69,6 +69,10 @@ DESC TABLE COLUMN for a specific partition.
 
 Drop the namespace `<namespace>`.
 
+## HIVE_WITH_ANSI_INTERVALS
+
+Hive table <tableName> with ANSI intervals.
+
 ## INSERT_PARTITION_SPEC_IF_NOT_EXISTS
 
 INSERT INTO `<tableName>` with IF NOT EXISTS in the PARTITION spec.
@@ -116,6 +120,10 @@ Parameter markers are not allowed in `<statement>`.
 ## PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED
 
 Invalid partitioning: `<cols>` is missing or is in a map or array.
+
+## REPLACE_NESTED_COLUMN
+
+The replace function does not support nested column <colName>.
 
 ## PIVOT_AFTER_GROUP_BY
 

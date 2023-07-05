@@ -2592,9 +2592,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def nestedFieldUnsupportedError(colName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "REPLACE_NESTED_COLUMN_IS_UNSUPPORTED",
-      messageParameters = Map(
-        "colName" -> colName))
+      errorClass = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
+      messageParameters = Map("colName" -> toSQLId(colName)))
   }
 
   def transformationsAndActionsNotInvokedByDriverError(): Throwable = {
@@ -2672,10 +2671,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def hiveTableWithAnsiIntervalsError(
-      tableName: String): SparkUnsupportedOperationException = {
+      table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "HIVE_WITH_ANSI_INTERVALS_IS_UNSUPPORTED",
-      messageParameters = Map("tableName" -> tableName))
+      errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
+      messageParameters = Map("tableName" -> toSQLId(table.nameParts)))
   }
 
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
@@ -2709,11 +2708,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidNumberFormatError(
-      valueType: String, input: String, format: String): SparkIllegalArgumentException = {
+      dataType: DataType, input: String, format: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "MISMATCH_NUMBER_FORMAT",
+      errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
       messageParameters = Map(
-        "valueType" -> valueType,
+        "inputType" -> toSQLType(dataType),
         "input" -> input,
         "format" -> format))
   }

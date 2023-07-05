@@ -569,12 +569,6 @@ SQLSTATE: none assigned
 
 The expression `<sqlExpr>` cannot be used as a grouping expression because its data type <dataType> is not an orderable data type.
 
-### HIVE_WITH_ANSI_INTERVALS_IS_UNSUPPORTED
-
-SQLSTATE: none assigned
-
-Hive table <tableName> with ANSI intervals is not supported.
-
 ### HLL_INVALID_INPUT_SKETCH_BUFFER
 
 SQLSTATE: none assigned
@@ -1104,12 +1098,6 @@ Parse Mode: `<failFastMode>`. To process malformed records as null result, try s
 The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.
 This could result in the target row being operated on more than once with an update or delete operation and is not allowed.
 
-### MISMATCH_NUMBER_FORMAT
-
-SQLSTATE: none assigned
-
-The input <valueType> '<input>' does not match the given number format: '<format>'.
-
 ### MISSING_AGGREGATION
 
 [SQLSTATE: 42803](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1451,12 +1439,6 @@ Failed to rename as `<sourcePath>` was not found.
 [SQLSTATE: 42614](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The `<clause>` clause may be used at most once per `<operation>` operation.
-
-### REPLACE_NESTED_COLUMN_IS_UNSUPPORTED
-
-SQLSTATE: none assigned
-
-The replace function does not support nested column <colName>.
 
 ### REQUIRES_SINGLE_PART_NAMESPACE
 

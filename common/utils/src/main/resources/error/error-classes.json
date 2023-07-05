@@ -797,11 +797,6 @@
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
     ]
   },
-  "HIVE_WITH_ANSI_INTERVALS_IS_UNSUPPORTED" : {
-    "message" : [
-      "Hive table <tableName> with ANSI intervals is not supported."
-    ]
-  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."
@@ -1194,6 +1189,11 @@
       "ESC_IN_THE_MIDDLE" : {
         "message" : [
           "The escape character is not allowed to precede <char>."
+        ]
+      },
+      "MISMATCH_INPUT" : {
+        "message" : [
+          "The input <inputType> '<input>' does not match the format."
         ]
       },
       "THOUSANDS_SEPS_MUST_BEFORE_DEC" : {
@@ -1750,11 +1750,6 @@
     ],
     "sqlState" : "23K01"
   },
-  "MISMATCH_NUMBER_FORMAT" : {
-    "message" : [
-      "The input <valueType> '<input>' does not match the given number format: '<format>'."
-    ]
-  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -2128,11 +2123,6 @@
       "The <clause> clause may be used at most once per <operation> operation."
     ],
     "sqlState" : "42614"
-  },
-  "REPLACE_NESTED_COLUMN_IS_UNSUPPORTED" : {
-    "message" : [
-      "The replace function does not support nested column <colName>."
-    ]
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
@@ -2597,6 +2587,11 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "HIVE_WITH_ANSI_INTERVALS" : {
+        "message" : [
+          "Hive table <tableName> with ANSI intervals."
+        ]
+      },
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
@@ -2675,6 +2670,11 @@
       "REMOVE_NAMESPACE_COMMENT" : {
         "message" : [
           "Remove a comment from the namespace <namespace>."
+        ]
+      },
+      "REPLACE_NESTED_COLUMN" : {
+        "message" : [
+          "The replace function does not support nested column <colName>."
         ]
       },
       "SET_NAMESPACE_PROPERTY" : {
