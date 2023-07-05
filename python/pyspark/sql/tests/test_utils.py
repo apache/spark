@@ -15,10 +15,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-import unittest
-from prettytable import PrettyTable
-
 from pyspark.sql.functions import sha2, to_timestamp
 from pyspark.errors import (
     AnalysisException,
@@ -145,21 +141,30 @@ class UtilsTestsMixin:
             ),
         )
 
-        expected_error_table = PrettyTable(["df", "expected"])
-        expected_error_table.add_row(
-            [red(df1.sort(df1.columns).collect()[0]), red(df2.sort(df2.columns).collect()[0])]
+        expected_error_message = "Results do not match: "
+        percent_diff = 1 / 2
+        expected_error_message += "( %.5f %% )" % percent_diff
+        diff_msg = (
+            "[df]"
+            + "\n"
+            + str(df1.collect()[1])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.collect()[1])
+            + "\n\n"
+            + "********************"
+            + "\n\n"
         )
-        expected_error_table.add_row(
-            [blue(df1.sort(df1.columns).collect()[1]), blue(df2.sort(df2.columns).collect()[1])]
-        )
+        expected_error_message += "\n" + diff_msg
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_DATAFRAME",
-            message_parameters={"error_table": expected_error_table.get_string()},
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": expected_error_message},
         )
 
     def test_assert_equal_maptype(self):
@@ -341,21 +346,30 @@ class UtilsTestsMixin:
             schema=["id", "amount"],
         )
 
-        expected_error_table = PrettyTable(["df", "expected"])
-        expected_error_table.add_row(
-            [blue(df1.sort(df1.columns).collect()[0]), blue(df2.sort(df2.columns).collect()[0])]
+        expected_error_message = "Results do not match: "
+        percent_diff = 1 / 2
+        expected_error_message += "( %.5f %% )" % percent_diff
+        diff_msg = (
+            "[df]"
+            + "\n"
+            + str(df1.collect()[1])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.collect()[1])
+            + "\n\n"
+            + "********************"
+            + "\n\n"
         )
-        expected_error_table.add_row(
-            [red(df1.sort(df1.columns).collect()[1]), red(df2.sort(df2.columns).collect()[1])]
-        )
+        expected_error_message += "\n" + diff_msg
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_DATAFRAME",
-            message_parameters={"error_table": expected_error_table.get_string()},
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": expected_error_message},
         )
 
     def test_assert_equal_nulldf(self):
@@ -422,6 +436,7 @@ class UtilsTestsMixin:
             data=[
                 ("1", 1000.00),
                 ("2", 3000.00),
+                ("3", 2000.00),
             ],
             schema=["id", "amount"],
         )
@@ -429,21 +444,47 @@ class UtilsTestsMixin:
             data=[
                 ("1", 1001.00),
                 ("2", 3000.00),
+                ("3", 2003.00),
             ],
             schema=["id", "amount"],
         )
 
-        expected_error_table = PrettyTable(["df", "expected"])
-        expected_error_table.add_row([red(df1.collect()[0]), red(df2.collect()[0])])
-        expected_error_table.add_row([blue(df1.collect()[1]), blue(df2.collect()[1])])
+        expected_error_message = "Results do not match: "
+        percent_diff = 2 / 3
+        expected_error_message += "( %.5f %% )" % percent_diff
+        diff_msg = (
+            "[df]"
+            + "\n"
+            + str(df1.collect()[0])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.collect()[0])
+            + "\n\n"
+            + "********************"
+            + "\n\n"
+        )
+        diff_msg += (
+            "[df]"
+            + "\n"
+            + str(df1.collect()[2])
+            + "\n\n"
+            + "[expected]"
+            + "\n"
+            + str(df2.collect()[2])
+            + "\n\n"
+            + "********************"
+            + "\n\n"
+        )
+        expected_error_message += "\n" + diff_msg
 
         with self.assertRaises(PySparkAssertionError) as pe:
             assertDataFrameEqual(df1, df2)
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_DATAFRAME",
-            message_parameters={"error_table": expected_error_table.get_string()},
+            error_class="DIFFERENT_ROWS",
+            message_parameters={"error_msg": expected_error_message},
         )
 
     def test_assert_notequal_schema(self):

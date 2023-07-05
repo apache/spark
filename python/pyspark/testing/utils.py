@@ -30,8 +30,6 @@ from typing import (
     Tuple,
 )
 from itertools import zip_longest
-from prettytable import PrettyTable
-from functools import reduce
 
 from pyspark import SparkContext, SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
@@ -284,19 +282,26 @@ def assertDataFrameEqual(df: DataFrame, expected: DataFrame, ignore_row_order: b
     def assert_rows_equal(rows1: Row, rows2: Row):
         zipped = list(zip_longest(rows1, rows2))
         rows_equal = True
-        error_table = PrettyTable(["df", "expected"])
+        error_msg = "Results do not match: "
+        diff_msg = ""
+        diff_rows_cnt = 0
 
         for r1, r2 in zipped:
-            if compare_rows(r1, r2):
-                error_table.add_row([blue(r1), blue(r2)])
-            else:
+            if not compare_rows(r1, r2):
                 rows_equal = False
-                error_table.add_row([red(r1), red(r2)])
+                diff_rows_cnt += 1
+                diff_msg += (
+                    "[df]" + "\n" + str(r1) + "\n\n" + "[expected]" + "\n" + str(r2) + "\n\n"
+                )
+                diff_msg += "********************" + "\n\n"
 
         if not rows_equal:
+            percent_diff = diff_rows_cnt / len(zipped)
+            error_msg += "( %.5f %% )" % percent_diff
+            error_msg += "\n" + diff_msg
             raise PySparkAssertionError(
-                error_class="DIFFERENT_DATAFRAME",
-                message_parameters={"error_table": error_table.get_string()},
+                error_class="DIFFERENT_ROWS",
+                message_parameters={"error_msg": error_msg},
             )
 
     if ignore_row_order:
