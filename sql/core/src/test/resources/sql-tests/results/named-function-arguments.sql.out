@@ -69,6 +69,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`"
   },
@@ -90,7 +91,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
-  "sqlState" : "42704",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
     "parameterName" : "`digitChar`"
@@ -113,7 +114,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
-  "sqlState" : "42704",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
     "parameterName" : "`str`"
@@ -136,6 +137,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
     "parameterName" : "`str`"
@@ -158,8 +160,10 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
+    "arguments" : "`str`\n`upperChar`\n`otherChar`\n",
     "functionName" : "`mask`"
   },
   "queryContext" : [ {
@@ -180,6 +184,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`encode`"
   },

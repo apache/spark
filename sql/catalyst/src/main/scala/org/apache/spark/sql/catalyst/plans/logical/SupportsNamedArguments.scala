@@ -174,7 +174,8 @@ object SupportsNamedArguments {
               functionName, namedArg.key)
           }
           if (!parameterNamesSet.contains(namedArg.key)) {
-            throw QueryCompilationErrors.unrecognizedParameterName(functionName, namedArg.key)
+            throw QueryCompilationErrors.unrecognizedParameterName(functionName, namedArg.key,
+              parameterNamesSet.toSeq)
           }
           assignedParameterSet.add(namedArg.key)
         case _ =>

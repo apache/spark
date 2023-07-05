@@ -678,7 +678,7 @@
     "message" : [
       "Call to function <functionName> is invalid because it includes multiple argument assignments to the same name <parameterName>."
     ],
-    "sqlState" : "42704"
+    "sqlState" : "4274K"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -1789,8 +1789,9 @@
   },
   "NAMED_ARGUMENTS_NOT_SUPPORTED" : {
     "message" : [
-      "Named arguments are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
-    ]
+      "Named arguments are not supported for function <functionName>; please retry the query with positional arguments to the function call instead or enable the feature using the SQL config \"spark.sql.allowNamedFunctionArguments\"."
+    ],
+    "sqlState" : "4274K"
   },
   "NAMED_ARGUMENTS_SUPPORT_DISABLED" : {
     "message" : [
@@ -2128,7 +2129,8 @@
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
       "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally or by name) and retry the query again."
-    ]
+    ],
+    "sqlState" : "4274K"
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
@@ -2323,7 +2325,8 @@
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
       "Cannot invoke function <functionName> because it contains positional argument(s) following named argument(s); please rearrange them so the positional arguments come first and then retry the query again."
-    ]
+    ],
+    "sqlState" : "4274K"
   },
   "UNKNOWN_PROTOBUF_MESSAGE_TYPE" : {
     "message" : [
@@ -2356,8 +2359,9 @@
   },
   "UNRECOGNIZED_PARAMETER_NAME" : {
     "message" : [
-      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name."
-    ]
+      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name. Here are some potential candidates: \n<arguments>"
+    ],
+    "sqlState" : "4274K"
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [

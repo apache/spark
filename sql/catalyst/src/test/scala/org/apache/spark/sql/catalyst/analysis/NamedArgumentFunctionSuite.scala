@@ -151,7 +151,8 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
       exception = parseRearrangeException(DummyExpression.defaultFunctionSignature,
         Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
-      parameters = Map("functionName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"))
+      parameters = Map("functionName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
+        "arguments" -> (toSQLId("k1") + "\n" + toSQLId("k2") + "\n" + toSQLId("k3") + "\n"))
     )
   }
 

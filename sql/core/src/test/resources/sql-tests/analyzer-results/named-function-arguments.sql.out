@@ -82,6 +82,7 @@ SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o',
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`"
   },
@@ -101,7 +102,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
-  "sqlState" : "42704",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
     "parameterName" : "`digitChar`"
@@ -122,7 +123,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
-  "sqlState" : "42704",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
     "parameterName" : "`str`"
@@ -143,6 +144,7 @@ SELECT mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => '
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`mask`",
     "parameterName" : "`str`"
@@ -163,8 +165,10 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
+    "arguments" : "`str`\n`upperChar`\n`otherChar`\n",
     "functionName" : "`mask`"
   },
   "queryContext" : [ {
@@ -183,6 +187,7 @@ SELECT encode(str => 'a', charset => 'utf-8')
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NAMED_ARGUMENTS_NOT_SUPPORTED",
+  "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`encode`"
   },

@@ -93,12 +93,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unrecognizedParameterName(
-      functionName: String, argumentName: String): Throwable = {
+      functionName: String, argumentName: String, candidates: Seq[String]): Throwable = {
+    import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
+
+    val inputs = candidates.map(candidate => Seq(candidate)).toSeq
+    val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
+      .take(3)
+    var candidatesString = ""
+    recommendations.foreach(candidatesString += _ + "\n")
     new AnalysisException(
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
-        "argumentName" -> toSQLId(argumentName))
+        "argumentName" -> toSQLId(argumentName),
+        "arguments" -> candidatesString)
     )
   }
 
