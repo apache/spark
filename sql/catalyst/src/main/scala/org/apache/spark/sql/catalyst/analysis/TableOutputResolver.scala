@@ -260,14 +260,14 @@ object TableOutputResolver {
 
     if (inputCols.size > expectedCols.size) {
       val extraColsStr = inputCols.takeRight(inputCols.size - expectedCols.size)
-        .map(col => s"${toSQLId(col.name)}")
+        .map(col => toSQLId(col.name))
         .mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
         tableName, colPath.quoted, extraColsStr
       )
     } else if (inputCols.size < expectedCols.size) {
       val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
-        .map(col => s"${toSQLId(col.name)}")
+        .map(col => toSQLId(col.name))
         .mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
         tableName, colPath.quoted, missingColsStr

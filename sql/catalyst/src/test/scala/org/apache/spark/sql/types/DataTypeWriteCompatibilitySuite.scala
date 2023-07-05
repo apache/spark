@@ -121,7 +121,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
           "tableName" -> "``",
           "colPath" -> "`nulls`",
           "from" -> "\"VOID\"",
-          "to" -> toSQLType(t.catalogString))
+          "to" -> toSQLType(t))
       )
     }
   }
