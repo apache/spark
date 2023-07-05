@@ -42,7 +42,8 @@ case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentTy
  * @param default  The default value of the argument. If the default is none, then that means the
  *                 argument is required. If no argument is provided, an exception is thrown.
  */
-case class NamedArgument(name: String,
+case class NamedArgument(
+    name: String,
     dataType: NamedArgumentType,
     default: Option[Expression] = None)
 
@@ -60,6 +61,13 @@ case class FunctionSignature(parameters: Seq[NamedArgument])
  * support named arguments for that function expression.
  */
 abstract class SupportsNamedArguments {
+  /**
+   * This is the method overridden by function expressions to define their method signatures.
+   * Currently, we don't support overloads, so we restrict each function expression to return
+   * only one FunctionSignature.
+   *
+   * @return the signature of the function expression
+   */
   def functionSignatures: Seq[FunctionSignature]
 
   /**

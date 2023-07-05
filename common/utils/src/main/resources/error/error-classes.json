@@ -678,7 +678,7 @@
     "message" : [
       "Call to function <functionName> is invalid because it includes multiple argument assignments to the same name <parameterName>."
     ],
-    "sqlState" : "42704K"
+    "sqlState" : "42704"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
