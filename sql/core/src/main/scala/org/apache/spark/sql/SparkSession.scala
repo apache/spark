@@ -628,7 +628,7 @@ class SparkSession private(
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
+  private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
@@ -681,7 +681,10 @@ class SparkSession private(
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, Any], tracker: QueryPlanningTracker): DataFrame =
+  private[sql] def sql(
+      sqlText: String,
+      args: Map[String, Any],
+      tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
@@ -735,7 +738,7 @@ class SparkSession private(
    * @since 3.5.0
    */
   @Experimental
-  def sql(
+  private[sql] def sql(
       sqlText: String,
       args: java.util.Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame = {
