@@ -23,19 +23,21 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.AbstractDataType
 
 /**
- * A general trait which is used to identify the DataType of the argument
+ * Identifies which forms of provided argument values are expected for each call
+ * to the associated SQL function
  */
 trait NamedArgumentType
 
 /**
- * The standard case class used to represent a simple data type
+ * Represents a named argument that expects a scalar value of one specific DataType
  *
  * @param dataType The data type of some argument
  */
 case class FixedArgumentType(dataType: AbstractDataType) extends NamedArgumentType
 
 /**
- * A named parameter
+ * Represents a parameter of a function expression. Function expressions should use this class
+ * to construct the argument lists returned in [[SupportsNamedArguments.functionSignatures]]
  *
  * @param name     The name of the string.
  * @param dataType The datatype of the argument.
@@ -57,8 +59,20 @@ case class NamedArgument(
 case class FunctionSignature(parameters: Seq[NamedArgument])
 
 /**
- * The class which companion objects of function expression implement to
+ * The class which companion objects of function expression may implement to
  * support named arguments for that function expression.
+ *
+ * Example:
+ *  object CountMinSketchAgg extends SupportsNamedArguments {
+ *    final val functionSignature = FunctionSignature(Seq(
+ *      NamedArgument("column",
+ *          FixedArgumentType(TypeCollection(IntegralType, StringType, BinaryType))),
+ *      NamedArgument("epsilon", FixedArgumentType(DoubleType)),
+ *      NamedArgument("confidence", FixedArgumentType(DoubleType)),
+ *      NamedArgument("seed", FixedArgumentType(IntegerType))
+ *    ))
+ *    override def functionSignatures: Seq[FunctionSignature] = Seq(functionSignature)
+ *  }
  */
 abstract class SupportsNamedArguments {
   /**
@@ -72,19 +86,21 @@ abstract class SupportsNamedArguments {
 
   /**
    * This function rearranges the list of expressions according to the function signature
-   * It is recommended to use the provided version rearrange as it is consistent with
+   * It is recommended to use this provided implementation as it is consistent with
    * the SQL standard. If absolutely necessary the developer can choose to override the default
    * behavior for additional flexibility.
    *
-   * @param functionSignature Function signature that denotes positional order of arguments
-   * @param args The sequence of expressions from function invocation
+   * @param expectedSignature Function signature that denotes positional order of arguments
+   * @param providedArguments The sequence of expressions from function invocation
    * @param functionName The name of the function invoked for debugging purposes
-   * @return positional order of arguments according to FunctionSignature
+   * @return positional order of arguments according to FunctionSignature obtained
+   *         by changing the order of the above provided arguments
    */
-  protected def rearrange(functionSignature: FunctionSignature,
-      args: Seq[Expression],
+  protected def rearrange(
+      expectedSignature: FunctionSignature,
+      providedArguments: Seq[Expression],
       functionName: String): Seq[Expression] = {
-    SupportsNamedArguments.defaultRearrange(functionSignature, args, functionName)
+    SupportsNamedArguments.defaultRearrange(expectedSignature, providedArguments, functionName)
   }
 }
 
@@ -130,36 +146,33 @@ object SupportsNamedArguments {
     val parentClass = scala.reflect.classTag[SupportsNamedArguments].runtimeClass
     val parentSymbol = currentMirror.classSymbol(parentClass)
 
-    targetModuleSymbol match {
-      case scala.reflect.runtime.universe.NoSymbol =>
-        throw QueryCompilationErrors.namedArgumentsNotSupported(functionName)
-      case _ =>
-        val moduleClassSymbol = targetModuleSymbol.asModule.moduleClass.asClass
-        if (moduleClassSymbol.baseClasses.contains(parentSymbol)) {
-          if (currentMirror.runtimeClass(moduleClassSymbol).getEnclosingClass != null) {
-            throw QueryCompilationErrors.cannotObtainCompanionObjectInstance(functionName)
-          }
-          val instance = currentMirror.reflectModule(targetModuleSymbol.asModule)
-            .instance.asInstanceOf[SupportsNamedArguments]
-          if (instance.functionSignatures.size != 1) {
-            throw QueryCompilationErrors.multipleFunctionSignatures(
-              functionName, instance.functionSignatures)
-          }
-          instance.rearrange(instance.functionSignatures.head, expressions, functionName)
-        } else {
-          throw QueryCompilationErrors.namedArgumentsNotSupported(functionName)
-        }
+    if(targetModuleSymbol == scala.reflect.runtime.universe.NoSymbol) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(functionName)
     }
+
+    val moduleClassSymbol = targetModuleSymbol.asModule.moduleClass.asClass
+    if (!moduleClassSymbol.baseClasses.contains(parentSymbol)) {
+      throw QueryCompilationErrors.namedArgumentsNotSupported(functionName)
+    }
+    if (currentMirror.runtimeClass(moduleClassSymbol).getEnclosingClass != null) {
+      throw QueryCompilationErrors.cannotObtainCompanionObjectInstance(functionName)
+    }
+    val instance = currentMirror.reflectModule(targetModuleSymbol.asModule)
+      .instance.asInstanceOf[SupportsNamedArguments]
+    if (instance.functionSignatures.size != 1) {
+      throw QueryCompilationErrors.multipleFunctionSignatures(
+        functionName, instance.functionSignatures)
+    }
+    instance.rearrange(instance.functionSignatures.head, expressions, functionName)
   }
 
-  // Exposed for testing
   final def defaultRearrange(functionSignature: FunctionSignature,
       args: Seq[Expression],
       functionName: String): Seq[Expression] = {
-    val parameters = functionSignature.parameters
-    val firstNamedArgIdx = args.indexWhere(_.isInstanceOf[NamedArgumentExpression])
+    val parameters: Seq[NamedArgument] = functionSignature.parameters
+    val firstNamedArgIdx: Int = args.indexWhere(_.isInstanceOf[NamedArgumentExpression])
     val (positionalArgs, namedArgs) = args.splitAt(firstNamedArgIdx)
-    val namedParameters = parameters.drop(positionalArgs.size)
+    val namedParameters: Seq[NamedArgument] = parameters.drop(positionalArgs.size)
 
     // Performing some checking to ensure valid argument list
     val allParameterNames: Seq[String] = parameters.map(_.name)
@@ -190,7 +203,7 @@ object SupportsNamedArguments {
     }.toMap
 
     // Rearrange named arguments to match their positional order
-    val rearrangedNamedArgs = namedParameters.map { param =>
+    val rearrangedNamedArgs: Seq[Expression] = namedParameters.map { param =>
       namedArgMap.getOrElse(
         param.name,
         if (param.default.isEmpty) {
