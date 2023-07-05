@@ -568,6 +568,14 @@ $(document).ready(function () {
             {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],
