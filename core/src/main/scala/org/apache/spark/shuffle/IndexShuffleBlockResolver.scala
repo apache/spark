@@ -25,6 +25,7 @@ import java.nio.file.Files
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -264,8 +265,7 @@ private[spark] class IndexShuffleBlockResolver(
             file.delete()
           }
           if (!fileTmp.renameTo(file)) {
-            throw SparkException.internalError(
-              s"fail to rename file $fileTmp to $file", category = "SHUFFLE")
+            throw SparkCoreErrors.failedRenameTempFileError(fileTmp, file)
           }
         }
         blockManager.reportBlockStatus(blockId, BlockStatus(StorageLevel.DISK_ONLY, 0, diskSize))
@@ -391,8 +391,7 @@ private[spark] class IndexShuffleBlockResolver(
             dataFile.delete()
           }
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
-            throw SparkException.internalError(
-              s"fail to rename file $dataTmp to $dataFile", category = "SHUFFLE")
+            throw SparkCoreErrors.failedRenameTempFileError(dataTmp, dataFile)
           }
 
           // write the checksum file
@@ -465,11 +464,10 @@ private[spark] class IndexShuffleBlockResolver(
     }
 
     if (!tmpFile.renameTo(targetFile)) {
-      val errorMsg = s"fail to rename file $tmpFile to $targetFile"
       if (propagateError) {
-        throw SparkException.internalError(errorMsg, category = "SHUFFLE")
+        throw SparkCoreErrors.failedRenameTempFileError(tmpFile, targetFile)
       } else {
-        logWarning(errorMsg)
+        logWarning(s"fail to rename file $tmpFile to $targetFile")
       }
     }
   }
