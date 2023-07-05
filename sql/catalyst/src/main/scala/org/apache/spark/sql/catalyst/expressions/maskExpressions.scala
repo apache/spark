@@ -321,6 +321,7 @@ object Mask extends SupportsNamedArguments {
       case _ => maskedChar(c, maskOther)
     }
   }
+
   override def functionSignatures: Seq[FunctionSignature] = {
     val strArg = NamedArgument("str", FixedArgumentType(StringType))
     val upperCharArg = NamedArgument("upperChar",
