@@ -63,8 +63,8 @@ class DeepspeedDistributor(Distributor):
             procs_left -= gpu_mapped_to_node[worker]
             workers_left_to_serve -= 1
         if procs_left != 0:
-            print(
-                f"There are not enough GPUS to fully assign processes to nodes; there are {procs_left} processes left over"
+            self.logger.warning(
+                msg=f"There are not enough GPUS to fully assign processes to nodes; there are {procs_left} processes left over"
             )
         return gpu_mapped_to_node
 
@@ -85,7 +85,7 @@ class DeepspeedDistributor(Distributor):
             raise RuntimeError("Deepspeed doesn't work with non-GPU clusters at this time")
 
         assigned_slots = self._assign_procs_to_worker(slots_on_workers)
-        print(f"Writing to {DeepspeedDistributor.HOSTFILE}")
+        self.logger.info(f"Writing to {DeepspeedDistributor.HOSTFILE}")
         for worker_host in worker_hosts:
             line = f"{worker_host} slots={assigned_slots[worker_host]}\n"
             write_to_location(DeepspeedDistributor.HOSTFILE, line)
