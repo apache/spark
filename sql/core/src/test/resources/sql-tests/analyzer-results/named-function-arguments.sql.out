@@ -2,93 +2,29 @@
 -- !query
 SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputExpr" : "\"namedargumentexpression(q)\"",
-    "inputName" : "upperChar",
-    "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(AbCD123-@$#, namedargumentexpression(q), namedargumentexpression(Q), namedargumentexpression(o), namedargumentexpression(d))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 98,
-    "fragment" : "mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd')"
-  } ]
-}
+Project [mask(AbCD123-@$#, Q, q, d, o) AS mask(AbCD123-@$#, Q, q, d, o)#x]
++- OneRowRelation
 
 
 -- !query
 SELECT mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', str => 'AbCD123-@$#')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputExpr" : "\"namedargumentexpression(Q)\"",
-    "inputName" : "upperChar",
-    "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(namedargumentexpression(q), namedargumentexpression(Q), namedargumentexpression(o), namedargumentexpression(d), namedargumentexpression(AbCD123-@$#))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 105,
-    "fragment" : "mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', str => 'AbCD123-@$#')"
-  } ]
-}
+Project [mask(AbCD123-@$#, Q, q, d, o) AS mask(AbCD123-@$#, Q, q, d, o)#x]
++- OneRowRelation
 
 
 -- !query
 SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', digitChar => 'd')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputExpr" : "\"namedargumentexpression(q)\"",
-    "inputName" : "upperChar",
-    "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(AbCD123-@$#, namedargumentexpression(q), namedargumentexpression(Q), namedargumentexpression(d), NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 80,
-    "fragment" : "mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', digitChar => 'd')"
-  } ]
-}
+Project [mask(AbCD123-@$#, Q, q, d, null) AS mask(AbCD123-@$#, Q, q, d, NULL)#x]
++- OneRowRelation
 
 
 -- !query
 SELECT mask(lowerChar => 'q', upperChar => 'Q', digitChar => 'd', str => 'AbCD123-@$#')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputExpr" : "\"namedargumentexpression(Q)\"",
-    "inputName" : "upperChar",
-    "inputType" : "\"STRING\"",
-    "sqlExpr" : "\"mask(namedargumentexpression(q), namedargumentexpression(Q), namedargumentexpression(d), namedargumentexpression(AbCD123-@$#), NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 87,
-    "fragment" : "mask(lowerChar => 'q', upperChar => 'Q', digitChar => 'd', str => 'AbCD123-@$#')"
-  } ]
-}
+Project [mask(AbCD123-@$#, Q, q, d, null) AS mask(AbCD123-@$#, Q, q, d, NULL)#x]
++- OneRowRelation
 
 
 -- !query
@@ -96,11 +32,9 @@ SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
-  "sqlState" : "42K09",
+  "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "messageParameters" : {
-    "exprName" : "upperChar",
-    "sqlExpr" : "\"mask(namedargumentexpression(q), AbCD123-@$#, namedargumentexpression(Q), namedargumentexpression(o), namedargumentexpression(d))\""
+    "functionName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -108,5 +42,66 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 8,
     "stopIndex" : 98,
     "fragment" : "mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd')"
+  } ]
+}
+
+
+-- !query
+SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', digitChar => 'e')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT",
+  "sqlState" : "42704K",
+  "messageParameters" : {
+    "functionName" : "`mask`",
+    "parameterName" : "`digitChar`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 116,
+    "fragment" : "mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', digitChar => 'e')"
+  } ]
+}
+
+
+-- !query
+SELECT mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
+  "messageParameters" : {
+    "functionName" : "`mask`",
+    "parameterName" : "`str`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 83,
+    "fragment" : "mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd')"
+  } ]
+}
+
+
+-- !query
+SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', cellular => 'automata')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
+  "messageParameters" : {
+    "argumentName" : "`cellular`",
+    "functionName" : "`mask`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 122,
+    "fragment" : "mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => 'd', cellular => 'automata')"
   } ]
 }
