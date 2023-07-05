@@ -235,17 +235,6 @@ class PySparkErrorTestUtils:
         )
 
 
-def assertSchemaEqual(
-    df_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
-    expected_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
-):
-    if df_schema != expected_schema:
-        raise PySparkAssertionError(
-            error_class="DIFFERENT_SCHEMA",
-            message_parameters={"s1": df_schema, "s2": expected_schema},
-        )
-
-
 def assertDataFrameEqual(
     df: DataFrame, expected: Union[DataFrame, List[Row]], ignore_row_order: bool = True
 ):
@@ -271,6 +260,16 @@ def assertDataFrameEqual(
                 if d1[key] != d2[key]:
                     return False
         return True
+
+    def assert_schema_equal(
+        df_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+        expected_schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]],
+    ):
+        if df_schema != expected_schema:
+            raise PySparkAssertionError(
+                error_class="DIFFERENT_SCHEMA",
+                message_parameters={"df_schema": df.schema, "expected_schema": expected.schema},
+            )
 
     def assert_rows_equal(rows1: Row, rows2: Row):
         zipped = list(zip_longest(rows1, rows2))
@@ -300,5 +299,5 @@ def assertDataFrameEqual(
                 message_parameters={},
             )
 
-    assertSchemaEqual(df.schema, df.schema)
+    assert_schema_equal(df.schema, expected.schema)
     assert_rows_equal(df.collect(), expected.collect())
