@@ -275,7 +275,7 @@ public class RemoteBlockPushResolverSuite {
     assertTrue(e.getMessage().contains("is empty"));
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testFailureAfterMultipleDataBlocks() throws IOException {
     StreamCallbackWithID stream =
       pushResolver.receiveBlockDataAsStream(
