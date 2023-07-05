@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -170,14 +171,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def isProbablyShuffleJoin(left: LogicalPlan,
-      right: LogicalPlan, hint: JoinHint): Boolean = {
-    !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
-      !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
+                                    right: LogicalPlan,
+                                    hint: JoinHint,
+                                    joinType: JoinType): Boolean = {
+    // If any of the side can be broadcast, then it is not a shuffle join.
+    !canLeftSideBeBroadcast(left, conf, hint, joinType) &&
+      !canRightSideBeBroadcast(right, conf, hint, joinType)
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
     plan.exists {
-      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
+      case Join(left, right, joinType, _, hint) =>
+        isProbablyShuffleJoin(left, right, hint, joinType)
       case _: Aggregate => true
       case _: Window => true
       case _ => false
@@ -266,6 +271,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
         var newLeft = left
         var newRight = right
+        // Whether it is a shuffle join or not should be based on the actual left and
+        // right table. For some join like left outer join, it will be a shuffle join
+        // even if left side table size is smaller than broadcast threshold.
+        val hasShuffle = isProbablyShuffleJoin(left, right, hint, joinType)
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
           // Check if:
           // 1. There is already a DPP filter on the key
@@ -280,7 +289,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the left key yet
-            val hasShuffle = isProbablyShuffleJoin(left, right, hint)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach {

@@ -484,6 +484,20 @@ trait JoinSelectionHelper {
     hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_AND_REPLICATION))
   }
 
+  def canLeftSideBeBroadcast(left: LogicalPlan, conf: SQLConf,
+                             hint: JoinHint, joinType: JoinType): Boolean = {
+    // Left side can not be broadcast for left outer join and left semi join.
+    canBuildBroadcastLeft(joinType) &&
+      (canBroadcastBySize(left, conf) || hintToBroadcastLeft(hint))
+  }
+
+  def canRightSideBeBroadcast(right: LogicalPlan, conf: SQLConf,
+                              hint: JoinHint, joinType: JoinType): Boolean = {
+    // Right side can not be broadcast for right outer join.
+    canBuildBroadcastRight(joinType) &&
+      (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))
+  }
+
   private def getBuildSide(
       canBuildLeft: Boolean,
       canBuildRight: Boolean,
