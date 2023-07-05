@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 
-import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -46,7 +46,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(databasesWithPattern.length == 0)
         val database = spark.catalog.getDatabase(db)
         assert(database.name == db)
-        val message = intercept[StatusRuntimeException] {
+        val message = intercept[SparkException] {
           spark.catalog.getDatabase("notExists")
         }.getMessage
         assert(message.contains("SCHEMA_NOT_FOUND"))
@@ -66,7 +66,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       val catalogs = spark.catalog.listCatalogs().collect()
       assert(catalogs.length == 1)
       assert(catalogs.map(_.name) sameElements Array("spark_catalog"))
-      val message = intercept[StatusRuntimeException] {
+      val message = intercept[SparkException] {
         spark.catalog.setCurrentCatalog("notExists")
       }.getMessage
       assert(message.contains("plugin class not found"))
@@ -141,7 +141,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(spark.catalog.listTables().collect().map(_.name).toSet == Set(parquetTableName))
       }
     }
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       spark.catalog.getTable(parquetTableName)
     }.getMessage
     assert(message.contains("TABLE_OR_VIEW_NOT_FOUND"))
@@ -207,7 +207,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     assert(spark.catalog.getFunction(absFunctionName).name == absFunctionName)
     val notExistsFunction = "notExists"
     assert(!spark.catalog.functionExists(notExistsFunction))
-    val message = intercept[StatusRuntimeException] {
+    val message = intercept[SparkException] {
       spark.catalog.getFunction(notExistsFunction)
     }.getMessage
     assert(message.contains("UNRESOLVED_ROUTINE"))
