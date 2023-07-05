@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -497,6 +497,22 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
         assert(!executedPlan(df).isInstanceOf[CollectLimitExec])
         df.collect()
         assert(executedPlan(df).isInstanceOf[CollectLimitExec])
+      }
+    }
+  }
+
+  test("SPARK-42963: Extend SparkSessionExtensions to inject rules into AQE query stage " +
+    "optimizer") {
+    val extensions = create { extensions =>
+      extensions.injectQueryStageOptimizerRule(_ => RequireAtLeaseTwoPartitions)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
+        .contains(RequireAtLeaseTwoPartitions))
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+        val df = session.range(1).repartition()
+        df.collect()
+        assert(df.rdd.partitions.length == 3)
       }
     }
   }
@@ -1159,5 +1175,18 @@ object AddLimit extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case Limit(_, _) => plan
     case _ => Limit(Literal(1), plan)
+  }
+}
+
+object RequireAtLeaseTwoPartitions extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    val readOpt = plan.find(_.isInstanceOf[AQEShuffleReadExec])
+    if (readOpt.exists(_.outputPartitioning.numPartitions == 1)) {
+      plan.transform {
+        case read: AQEShuffleReadExec => read.child
+      }
+    } else {
+      plan
+    }
   }
 }

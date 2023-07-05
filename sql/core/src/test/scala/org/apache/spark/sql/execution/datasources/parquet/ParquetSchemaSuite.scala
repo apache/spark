@@ -28,6 +28,7 @@ import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
 import org.apache.spark.sql.internal.SQLConf
@@ -980,20 +981,24 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
-  test("schema merging failure error message") {
+  test("CANNOT_MERGE_SCHEMAS: Failed merging schemas") {
     import testImplicits._
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).select($"id" cast IntegerType as Symbol("id"))
-        .write.parquet(s"$path/p=2")
-
-      val message = intercept[SparkException] {
-        spark.read.option("mergeSchema", "true").parquet(path).schema
-      }.getMessage
-
-      assert(message.contains("Failed merging schema"))
+      val df1 = spark.range(3)
+      df1.write.parquet(s"$path/p=1")
+      val df2 = spark.range(3).select($"id" cast IntegerType as Symbol("id"))
+      df2.write.parquet(s"$path/p=2")
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.option("mergeSchema", "true").parquet(path)
+        },
+        errorClass = "CANNOT_MERGE_SCHEMAS",
+        sqlState = "42KD9",
+        parameters = Map(
+          "left" -> toSQLType(df1.schema),
+          "right" -> toSQLType(df2.schema)))
     }
   }
 

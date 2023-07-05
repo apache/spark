@@ -22,7 +22,7 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class DefaultIndexTest(PandasOnSparkTestCase):
+class DefaultIndexTestsMixin:
     def test_default_index_sequence(self):
         with ps.option_context("compute.default_index_type", "sequence"):
             sdf = self.spark.range(1000)
@@ -90,6 +90,10 @@ class DefaultIndexTest(PandasOnSparkTestCase):
                             for rdd_id in self.spark._jsc.getPersistentRDDs()
                         )
                     )
+
+
+class DefaultIndexTests(DefaultIndexTestsMixin, PandasOnSparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

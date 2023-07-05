@@ -50,11 +50,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_repartitionByRange_dataframe(self):
         super().test_repartitionByRange_dataframe()
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_repr_behaviors(self):
-        super().test_repr_behaviors()
-
     @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()

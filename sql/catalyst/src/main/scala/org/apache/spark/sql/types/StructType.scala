@@ -25,13 +25,12 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalStructType}
-import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
@@ -328,8 +327,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       resolver: Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
-    @scala.annotation.tailrec
-    def findField(
+    def findFieldInStruct(
         struct: StructType,
         searchPath: Seq[String],
         normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
@@ -341,63 +339,54 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       } else if (found.isEmpty) {
         None
       } else {
-        val field = found.head
-        val currentPath = normalizedPath :+ field.name
-        val newSearchPath = searchPath.tail
-        if (newSearchPath.isEmpty) {
-          Some(normalizedPath -> field)
-        } else {
-          (newSearchPath, field.dataType) match {
-            case (_, s: StructType) =>
-              findField(s, newSearchPath, currentPath)
-
-            case _ if !includeCollections =>
-              throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
-
-            case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
-              findFieldInCollection(keyType, false, rest, currentPath, "key")
-
-            case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
-              findFieldInCollection(valueType, isNullable, rest, currentPath, "value")
-
-            case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
-              findFieldInCollection(elementType, isNullable, rest, currentPath, "element")
-
-            case _ =>
-              throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
-          }
-        }
+        findField(
+          parent = found.head,
+          searchPath = searchPath.tail,
+          normalizedPath)
       }
     }
 
-    def findFieldInCollection(
-        dt: DataType,
-        nullable: Boolean,
+    @scala.annotation.tailrec
+    def findField(
+        parent: StructField,
         searchPath: Seq[String],
-        normalizedPath: Seq[String],
-        collectionFieldName: String): Option[(Seq[String], StructField)] = {
+        normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
       if (searchPath.isEmpty) {
-        Some(normalizedPath -> StructField(collectionFieldName, dt, nullable))
+        Some(normalizedPath -> parent)
       } else {
-        val newPath = normalizedPath :+ collectionFieldName
-        dt match {
-          case s: StructType =>
-            findField(s, searchPath, newPath)
+        val currentPath = normalizedPath :+ parent.name
+        (searchPath, parent.dataType) match {
+          case (_, s: StructType) =>
+            findFieldInStruct(s, searchPath, currentPath)
+
+          case _ if !includeCollections =>
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
+
+          case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
+            findField(StructField("key", keyType, nullable = false), rest, currentPath)
+
+          case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
+            findField(StructField("value", valueType, isNullable), rest, currentPath)
+
+          case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
+            findField(StructField("element", elementType, isNullable), rest, currentPath)
+
           case _ =>
-            throw QueryCompilationErrors.invalidFieldName(fieldNames, newPath, context)
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
         }
       }
     }
 
-    findField(this, fieldNames, Nil)
+    findFieldInStruct(this, fieldNames, Nil)
   }
 
-  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
+  protected[sql] def toAttributes: Seq[AttributeReference] =
+    map(field => DataTypeUtils.toAttribute(field))
 
   def treeString: String = treeString(Int.MaxValue)
 
   def treeString(maxDepth: Int): String = {
-    val stringConcat = new StringUtils.StringConcat()
+    val stringConcat = new StringConcat()
     stringConcat.append("root\n")
     val prefix = " |"
     val depth = if (maxDepth > 0) maxDepth else Int.MaxValue
@@ -431,11 +420,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
-
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
-    truncatedString(
+    SparkStringUtils.truncatedString(
       fieldTypes,
       "struct<", ",", ">",
       SQLConf.get.maxToStringFields)
@@ -443,7 +430,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val stringConcat = new StringUtils.StringConcat()
+    val stringConcat = new StringConcat()
     val len = fields.length
     stringConcat.append("struct<")
     var i = 0
@@ -511,10 +498,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
-
-  @transient
-  private[sql] lazy val interpretedOrdering =
-    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 
   /**
    * These define and cache existence default values for the struct fields for efficiency purposes.

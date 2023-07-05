@@ -620,7 +620,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       readStore: PageReadStore,
       expected: Seq[Row],
       batchSize: Int = NUM_VALUES): Unit = {
-    import collection.JavaConverters._
+    import scala.collection.JavaConverters._
 
     val recordReader = new VectorizedParquetRecordReader(
       DateTimeUtils.getZoneId("EST"),

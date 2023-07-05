@@ -217,7 +217,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2": ["-Phadoop-2"],
         "hadoop3": ["-Phadoop-3"],
     }
 

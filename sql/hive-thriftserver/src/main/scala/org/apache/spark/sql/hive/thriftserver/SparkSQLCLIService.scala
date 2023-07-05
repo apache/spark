@@ -36,6 +36,7 @@ import org.apache.hive.service.server.HiveServer2
 import org.slf4j.Logger
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
@@ -103,7 +104,8 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sqlContext.sparkContext.version)
-      case GetInfoType.CLI_ODBC_KEYWORDS => new GetInfoValue("Unimplemented")
+      case GetInfoType.CLI_ODBC_KEYWORDS =>
+        new GetInfoValue(SQLKeywordUtils.keywords.mkString(","))
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }

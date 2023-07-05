@@ -71,14 +71,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <artifactId>hadoop-client-api</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <artifactId>hadoop-client-runtime</artifactId>
       <version>${hadoop.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -121,8 +122,18 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j2-impl</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.xerial.snappy</groupId>
       <artifactId>snappy-java</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>javax.activation</groupId>
+      <artifactId>activation</artifactId>
       <scope>provided</scope>
     </dependency>
   </dependencies>

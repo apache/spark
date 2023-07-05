@@ -39,7 +39,6 @@ import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
-import org.apache.spark.network.util.JavaUtils;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -82,6 +81,7 @@ import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.StatCounter;
+import org.apache.spark.util.Utils;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -93,7 +93,7 @@ public class JavaAPISuite implements Serializable {
   @Before
   public void setUp() throws IOException {
     sc = new JavaSparkContext("local", "JavaAPISuite");
-    tempDir = JavaUtils.createTempDir();
+    tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
   }
 

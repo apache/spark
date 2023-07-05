@@ -344,13 +344,19 @@ class SingletonReplSuite extends SparkFunSuite {
         |}
         |import org.apache.spark.storage.StorageLevel._
         |case class Foo(i: Int)
-        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
-        |ret.count()
-        |val res = sc.getRDDStorageInfo.filter(_.id == ret.id).map(_.numCachedPartitions).sum
+        |val rdd1 = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_ONLY)
+        |val rdd2 = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_ONLY_2)
+        |rdd1.count()
+        |rdd2.count()
+        |val cached1 = sc.getRDDStorageInfo.filter(_.id == rdd1.id).map(_.numCachedPartitions).sum
+        |val size1 = sc.getRDDStorageInfo.filter(_.id == rdd1.id).map(_.memSize).sum
+        |val size2 = sc.getRDDStorageInfo.filter(_.id == rdd2.id).map(_.memSize).sum
+        |assert(size2 == size1 * 2, s"Blocks not replicated properly size1=$size1, size2=$size2")
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res: Int = 10", output)
+    assertContains("cached1: Int = 10", output)
+    assertDoesNotContain("AssertionError", output)
   }
 
   test("should clone and clean line object in ClosureCleaner") {

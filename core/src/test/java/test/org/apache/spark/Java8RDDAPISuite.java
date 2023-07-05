@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 
-import org.apache.spark.network.util.JavaUtils;
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
@@ -246,7 +245,7 @@ public class Java8RDDAPISuite implements Serializable {
 
   @Test
   public void sequenceFile() throws IOException {
-    File tempDir = JavaUtils.createTempDir();
+    File tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(

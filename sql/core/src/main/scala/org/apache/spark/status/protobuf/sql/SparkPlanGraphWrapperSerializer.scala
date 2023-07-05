@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf.sql
 
-import collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.execution.ui.{SparkPlanGraphClusterWrapper, SparkPlanGraphEdge, SparkPlanGraphNode, SparkPlanGraphNodeWrapper, SparkPlanGraphWrapper}
 import org.apache.spark.status.protobuf.ProtobufSerDe

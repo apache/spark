@@ -29,6 +29,7 @@ import org.apache.commons.lang3.reflect.ConstructorUtils
 
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
 import org.apache.spark.sql.catalyst.SerializerBuildHelper._
@@ -37,6 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -728,10 +730,10 @@ object ScalaReflection extends ScalaReflection {
     FloatType -> classOf[Float],
     DoubleType -> classOf[Double],
     StringType -> classOf[UTF8String],
-    DateType -> classOf[DateType.InternalType],
-    TimestampType -> classOf[TimestampType.InternalType],
-    TimestampNTZType -> classOf[TimestampNTZType.InternalType],
-    BinaryType -> classOf[BinaryType.InternalType],
+    DateType -> classOf[PhysicalIntegerType.InternalType],
+    TimestampType -> classOf[PhysicalLongType.InternalType],
+    TimestampNTZType -> classOf[PhysicalLongType.InternalType],
+    BinaryType -> classOf[PhysicalBinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval]
   )
 
@@ -751,8 +753,8 @@ object ScalaReflection extends ScalaReflection {
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
-      case it: DayTimeIntervalType => classOf[it.InternalType]
-      case it: YearMonthIntervalType => classOf[it.InternalType]
+      case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
+      case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
@@ -806,24 +808,37 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
+   * Same as [[encoderFor]] but with extended support to return [[UnboundRowEncoder]] for [[Row]]
+   * type.
+   */
+  def encoderForWithRowEncoderSupport[E: TypeTag]: AgnosticEncoder[E] = {
+    encoderFor(typeTag[E].in(mirror).tpe, isRowEncoderSupported = true)
+      .asInstanceOf[AgnosticEncoder[E]]
+  }
+
+  /**
    * Create an [[AgnosticEncoder]] for a [[Type]].
    */
-  def encoderFor(tpe: `Type`): AgnosticEncoder[_] = cleanUpReflectionObjects {
+  def encoderFor(
+     tpe: `Type`,
+     isRowEncoderSupported: Boolean = false): AgnosticEncoder[_] = cleanUpReflectionObjects {
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = WalkedTypePath().recordRoot(clsName)
-    encoderFor(tpe, Set.empty, walkedTypePath)
+    encoderFor(tpe, Set.empty, walkedTypePath, isRowEncoderSupported)
   }
 
   private def encoderFor(
       tpe: `Type`,
       seenTypeSet: Set[`Type`],
-      path: WalkedTypePath): AgnosticEncoder[_] = {
+      path: WalkedTypePath,
+      isRowEncoderSupported: Boolean): AgnosticEncoder[_] = {
     def createIterableEncoder(t: `Type`, fallbackClass: Class[_]): AgnosticEncoder[_] = {
       val TypeRef(_, _, Seq(elementType)) = t
       val encoder = encoderFor(
         elementType,
         seenTypeSet,
-        path.recordArray(getClassNameFromType(elementType)))
+        path.recordArray(getClassNameFromType(elementType)),
+        isRowEncoderSupported)
       val companion = t.dealias.typeSymbol.companion.typeSignature
       val targetClass = companion.member(TermName("newBuilder")) match {
         case NoSymbol => fallbackClass
@@ -887,6 +902,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) => STRICT_TIMESTAMP_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.Instant]) => STRICT_INSTANT_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) => LocalDateTimeEncoder
+      case t if isSubtype(t, localTypeOf[Row]) => UnboundRowEncoder
 
       // UDT encoders
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
@@ -906,7 +922,8 @@ object ScalaReflection extends ScalaReflection {
         val encoder = encoderFor(
           optType,
           seenTypeSet,
-          path.recordOption(getClassNameFromType(optType)))
+          path.recordOption(getClassNameFromType(optType)),
+          isRowEncoderSupported)
         OptionEncoder(encoder)
 
       case t if isSubtype(t, localTypeOf[Array[_]]) =>
@@ -914,7 +931,8 @@ object ScalaReflection extends ScalaReflection {
         val encoder = encoderFor(
           elementType,
           seenTypeSet,
-          path.recordArray(getClassNameFromType(elementType)))
+          path.recordArray(getClassNameFromType(elementType)),
+          isRowEncoderSupported)
         ArrayEncoder(encoder, encoder.nullable)
 
       case t if isSubtype(t, localTypeOf[scala.collection.Seq[_]]) =>
@@ -928,11 +946,13 @@ object ScalaReflection extends ScalaReflection {
         val keyEncoder = encoderFor(
           keyType,
           seenTypeSet,
-          path.recordKeyForMap(getClassNameFromType(keyType)))
+          path.recordKeyForMap(getClassNameFromType(keyType)),
+          isRowEncoderSupported)
         val valueEncoder = encoderFor(
           valueType,
           seenTypeSet,
-          path.recordValueForMap(getClassNameFromType(valueType)))
+          path.recordValueForMap(getClassNameFromType(valueType)),
+          isRowEncoderSupported)
         MapEncoder(ClassTag(getClassFromType(t)), keyEncoder, valueEncoder, valueEncoder.nullable)
 
       case t if definedByConstructorParams(t) =>
@@ -950,7 +970,8 @@ object ScalaReflection extends ScalaReflection {
             val encoder = encoderFor(
               fieldType,
               seenTypeSet + t,
-              path.recordField(getClassNameFromType(fieldType), fieldName))
+              path.recordField(getClassNameFromType(fieldType), fieldName),
+              isRowEncoderSupported)
             EncoderField(fieldName, encoder, encoder.nullable, Metadata.empty)
         }
         ProductEncoder(ClassTag(getClassFromType(t)), params)

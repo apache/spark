@@ -26,6 +26,55 @@ PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
 
 BLACK_BUILD="$PYTHON_EXECUTABLE -m black"
 
+function exit_with_usage {
+  set +x
+  echo "lint-python - linter for Python"
+  echo ""
+  echo "usage:"
+  cl_options="[--compile] [--black] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
+  echo "lint-python $cl_options"
+  echo ""
+  exit 1
+}
+
+# Parse arguments
+while (( "$#" )); do
+  case $1 in
+    --compile)
+      COMPILE_TEST=true
+      ;;
+    --black)
+      BLACK_TEST=true
+      ;;
+    --flake8)
+      FLAKE8_TEST=true
+      ;;
+    --mypy)
+      MYPY_TEST=true
+      ;;
+    --mypy-examples)
+      MYPY_EXAMPLES_TEST=true
+      ;;
+    --mypy-data)
+      MYPY_DATA_TEST=true
+      ;;
+    *)
+      echo "Error: $1 is not supported"
+      exit_with_usage
+      ;;
+  esac
+  shift
+done
+
+if [[ -z "$COMPILE_TEST$BLACK_TEST$FLAKE8_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+  COMPILE_TEST=true
+  BLACK_TEST=true
+  FLAKE8_TEST=true
+  MYPY_TEST=true
+  MYPY_EXAMPLES_TEST=true
+  MYPY_DATA_TEST=true
+fi
+
 function satisfies_min_version {
     local provided_version="$1"
     local expected_version="$2"
@@ -162,9 +211,15 @@ function mypy_test {
         return
     fi
 
-    mypy_annotation_test
-    mypy_examples_test
-    mypy_data_test
+    if [[ "$MYPY_TEST" == "true" ]]; then
+        mypy_annotation_test
+    fi
+    if [[ "$MYPY_EXAMPLES_TEST" == "true" ]]; then
+        mypy_examples_test
+    fi
+    if [[ "$MYPY_DATA_TEST" == "true" ]]; then
+        mypy_data_test
+    fi
 }
 
 
@@ -241,10 +296,18 @@ pushd "$SPARK_ROOT_DIR" &> /dev/null
 
 PYTHON_SOURCE="$(git ls-files '*.py')"
 
-compile_python_test "$PYTHON_SOURCE"
-black_test
-flake8_test
-mypy_test
+if [[ "$COMPILE_TEST" == "true" ]]; then
+    compile_python_test "$PYTHON_SOURCE"
+fi
+if [[ "$BLACK_TEST" == "true" ]]; then
+    black_test
+fi
+if [[ "$FLAKE8_TEST" == "true" ]]; then
+    flake8_test
+fi
+if [[ "$MYPY_TEST" == "true" ]] || [[ "$MYPY_EXAMPLES_TEST" == "true" ]] || [[ "$MYPY_DATA_TEST" == "true" ]]; then
+    mypy_test
+fi
 
 echo
 echo "all lint-python tests passed!"

@@ -19,8 +19,9 @@ package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
-import org.mockito.Mockito._
 import scala.xml.{Node, Text}
+
+import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.StreamBlockData

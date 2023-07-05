@@ -131,7 +131,7 @@ object InternalRow {
   def getAccessor(dt: DataType, nullable: Boolean = true): (SpecializedGetters, Int) => Any = {
     val getValueNullSafe: (SpecializedGetters, Int) => Any = dt match {
       case u: UserDefinedType[_] => getAccessor(u.sqlType, nullable)
-      case _ => dt.physicalDataType match {
+      case _ => PhysicalDataType(dt) match {
         case PhysicalBooleanType => (input, ordinal) => input.getBoolean(ordinal)
         case PhysicalByteType => (input, ordinal) => input.getByte(ordinal)
         case PhysicalShortType => (input, ordinal) => input.getShort(ordinal)

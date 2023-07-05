@@ -15,7 +15,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -35,7 +36,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -55,7 +57,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -75,7 +78,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -95,7 +99,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -115,7 +120,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -135,7 +141,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -155,7 +162,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -175,7 +183,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -194,7 +203,8 @@ ShowCreateTable false, [createtab_stmt#x]
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
 
 
 -- !query
@@ -292,4 +302,5 @@ DropTableCommand `spark_catalog`.`default`.`view_SPARK_30302`, false, true, fals
 -- !query
 DROP TABLE tbl
 -- !query analysis
-DropTableCommand `spark_catalog`.`default`.`tbl`, false, false, false
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl

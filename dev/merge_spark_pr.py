@@ -240,7 +240,8 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 def fix_version_from_branch(branch, versions):
     # Note: Assumes this is a sorted (newest->oldest) list of un-released versions
     if branch == "master":
-        return versions[0]
+        # TODO(SPARK-44130) Revert SPARK-44129 after creating branch-3.5
+        return [v for v in versions if v.name == "3.5.0"][0]
     else:
         branch_ver = branch.replace("branch-", "")
         return list(filter(lambda x: x.name.startswith(branch_ver), versions))[-1]

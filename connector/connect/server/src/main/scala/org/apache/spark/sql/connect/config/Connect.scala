@@ -21,6 +21,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 
 object Connect {
+  import org.apache.spark.sql.internal.SQLConf.buildStaticConf
 
   val CONNECT_GRPC_BINDING_PORT =
     ConfigBuilder("spark.connect.grpc.binding.port")
@@ -90,4 +91,28 @@ object Connect {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val CONNECT_JVM_STACK_TRACE_MAX_SIZE =
+    ConfigBuilder("spark.connect.jvmStacktrace.maxSize")
+      .doc("""
+          |Sets the maximum stack trace size to display when
+          |`spark.sql.pyspark.jvmStacktrace.enabled` is true.
+          |""".stripMargin)
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(2048)
+
+  val CONNECT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.connect.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc("""
+            |Allow `spark.copyFromLocalToFs` destination to be local file system
+            | path on spark driver node when
+            |`spark.connect.copyFromLocalToFs.allowDestLocal` is true.
+            |This will allow user to overwrite arbitrary file on spark
+            |driver node we should only enable it for testing purpose.
+            |""".stripMargin)
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 }

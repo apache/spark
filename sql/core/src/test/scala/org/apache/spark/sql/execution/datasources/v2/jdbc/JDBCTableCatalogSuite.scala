@@ -21,10 +21,11 @@ import java.util.Properties
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -136,9 +137,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType, true, defaultMetadata)
+      .add("NAME", VarcharType(32), true, defaultMetadata)
       .add("ID", IntegerType, true, defaultMetadata)
-    assert(t.schema === expectedSchema)
+    assert(t.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     Seq(
       "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
       "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
@@ -338,8 +339,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val exp = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
       }
-      assert(exp.getMessage.contains("Failed table altering: test.alt_table"))
-      assert(exp.cause.get.getMessage.contains("Unsupported TableChange"))
+      assert(exp.getErrorClass === "_LEGACY_ERROR_TEMP_1305")
+      assert("Unsupported TableChange (.*) in JDBC catalog\\.".r.pattern.matcher(exp.getMessage)
+        .matches())
       // Update comment for not existing column
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")
@@ -465,5 +467,29 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
     }
     assert(e.getCause.getMessage.contains("1000000001"))
+  }
+
+  test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](
+        sql("CREATE TABLE h2.test.new_table(c array<int>)")
+      ),
+      errorClass = "_LEGACY_ERROR_TEMP_2082",
+      parameters = Map("catalogString" -> "array<int>")
+    )
+  }
+
+  test("SPARK-42916: Keep Char/Varchar meta information on the read-side") {
+    val tableName = "h2.test.alt_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (ID CHAR(10), deptno VARCHAR(20))")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE VARCHAR(30)")
+      val t = spark.table(tableName)
+      val expected = new StructType()
+        .add("ID", CharType(10), true, defaultMetadata)
+        .add("deptno", VarcharType(30), true, defaultMetadata)
+      val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expected)
+      assert(t.schema === replaced)
+    }
   }
 }

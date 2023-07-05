@@ -32,7 +32,18 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
 
   @transient private val encoder = implicitly[Encoder[T]]
 
-  override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
+  private val _zero = encoder.clsTag.runtimeClass match {
+    case java.lang.Boolean.TYPE => false
+    case java.lang.Byte.TYPE => 0.toByte
+    case java.lang.Short.TYPE => 0.toShort
+    case java.lang.Integer.TYPE => 0
+    case java.lang.Long.TYPE => 0L
+    case java.lang.Float.TYPE => 0f
+    case java.lang.Double.TYPE => 0d
+    case _ => null
+  }
+
+  override def zero: (Boolean, T) = (false, _zero.asInstanceOf[T])
 
   override def bufferEncoder: Encoder[(Boolean, T)] =
     ExpressionEncoder.tuple(
@@ -64,5 +75,11 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
       throw new IllegalStateException("ReduceAggregator requires at least one input row")
     }
     reduction._2
+  }
+}
+
+private[sql] object ReduceAggregator {
+  def apply[T: Encoder](f: AnyRef): ReduceAggregator[T] = {
+    new ReduceAggregator(f.asInstanceOf[(T, T) => T])
   }
 }

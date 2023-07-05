@@ -25,7 +25,6 @@ import io.grpc.inprocess.InProcessChannelBuilder
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
@@ -38,9 +37,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    val client = SparkConnectClient(
-      proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null"))
+    val client = SparkConnectClient(InProcessChannelBuilder.forName("/dev/null").build())
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }

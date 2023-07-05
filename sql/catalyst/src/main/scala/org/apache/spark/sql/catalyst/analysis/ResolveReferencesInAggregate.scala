@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, LateralColumnAliasReference, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
@@ -74,12 +73,6 @@ object ResolveReferencesInAggregate extends SQLConfHelper
         resolvedAggExprsWithOuter,
         resolveGroupByAlias(resolvedAggExprsWithOuter, resolvedGroupExprsNoOuter)
       ).map(resolveOuterRef)
-      // TODO: currently we don't support LCA in `groupingExpressions` yet.
-      if (resolved.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE))) {
-        throw new AnalysisException(
-          errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GROUP_BY",
-          messageParameters = Map.empty)
-      }
       resolved
     } else {
       // Do not resolve columns in grouping expressions to outer references here, as the aggregate
@@ -112,9 +105,11 @@ object ResolveReferencesInAggregate extends SQLConfHelper
     assert(selectList.forall(_.resolved))
     if (conf.groupByAliases) {
       groupExprs.map { g =>
-        g.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
-          case u: UnresolvedAttribute =>
-            selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
+        g.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE,
+          LATERAL_COLUMN_ALIAS_REFERENCE)) {
+          case u @ (_: UnresolvedAttribute | _: LateralColumnAliasReference) =>
+            selectList.find(ne => conf.resolver(ne.name, u.asInstanceOf[NamedExpression].name))
+              .getOrElse(u)
         }
       }
     } else {
@@ -133,8 +128,9 @@ object ResolveReferencesInAggregate extends SQLConfHelper
         // tell the user in checkAnalysis that we cannot resolve the all in group by.
         groupExprs
       } else {
-        // This is a valid GROUP BY ALL aggregate.
-        expandedGroupExprs.get
+        // This is a valid GROUP BY ALL aggregate, resolve group by alias again to transform the
+        // LCA reference
+        resolveGroupByAlias(selectList, expandedGroupExprs.get)
       }
     } else {
       groupExprs
@@ -148,7 +144,7 @@ object ResolveReferencesInAggregate extends SQLConfHelper
    * Aggregate.
    */
   private def expandGroupByAll(selectList: Seq[NamedExpression]): Option[Seq[Expression]] = {
-    val groupingExprs = selectList.filter(!_.exists(AggregateExpression.isAggregate))
+    val groupingExprs = selectList.filter(e => !AggregateExpression.containsAggregate(e))
     // If the grouping exprs are empty, this could either be (1) a valid global aggregate, or
     // (2) we simply fail to infer the grouping columns. As an example, in "i + sum(j)", we will
     // not automatically infer the grouping column to be "i".
@@ -181,7 +177,7 @@ object ResolveReferencesInAggregate extends SQLConfHelper
    *  "sum(j) / 2" -> false
    */
   private def containsAttribute(expr: Expression): Boolean = expr match {
-    case _ if AggregateExpression.isAggregate(expr) =>
+    case _: AggregateExpression =>
       // Don't recurse into AggregateExpressions
       false
     case _: Attribute =>

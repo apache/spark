@@ -152,7 +152,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
       // Store a copy of the broadcast variable in the driver so that tasks run on the driver
       // do not create a duplicate copy of the broadcast variable's value.
       if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
-        throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+        throw SparkException.internalError(
+          s"Failed to store $broadcastId in BlockManager", category = "BROADCAST")
       }
     }
     try {
@@ -168,8 +169,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
         val pieceId = BroadcastBlockId(id, "piece" + i)
         val bytes = new ChunkedByteBuffer(block.duplicate())
         if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
-          throw new SparkException(s"Failed to store $pieceId of $broadcastId " +
-            s"in local BlockManager")
+          throw SparkException.internalError(s"Failed to store $pieceId of $broadcastId " +
+            s"in local BlockManager", category = "BROADCAST")
         }
       }
       blocks.length
@@ -204,19 +205,22 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
               if (checksumEnabled) {
                 val sum = calcChecksum(b.chunks(0))
                 if (sum != checksums(pid)) {
-                  throw new SparkException(s"corrupt remote block $pieceId of $broadcastId:" +
-                    s" $sum != ${checksums(pid)}")
+                  throw SparkException.internalError(
+                    s"corrupt remote block $pieceId of $broadcastId: $sum != ${checksums(pid)}",
+                    category = "BROADCAST")
                 }
               }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
               if (!bm.putBytes(pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
-                throw new SparkException(
-                  s"Failed to store $pieceId of $broadcastId in local BlockManager")
+                throw SparkException.internalError(
+                  s"Failed to store $pieceId of $broadcastId in local BlockManager",
+                  category = "BROADCAST")
               }
               blocks(pid) = new ByteBufferBlockData(b, true)
             case None =>
-              throw new SparkException(s"Failed to get $pieceId of $broadcastId")
+              throw SparkException.internalError(
+                s"Failed to get $pieceId of $broadcastId", category = "BROADCAST")
           }
       }
     }
@@ -265,7 +269,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
 
               x
             } else {
-              throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
+              throw SparkException.internalError(
+                s"Failed to get locally stored broadcast data: $broadcastId",
+                category = "BROADCAST")
             }
           case None =>
             val estimatedTotalSize = Utils.bytesToString(numBlocks.toLong * blockSize)
@@ -284,7 +290,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
                 // need to re-fetch it.
                 val storageLevel = StorageLevel.MEMORY_AND_DISK
                 if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
-                  throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+                  throw SparkException.internalError(
+                    s"Failed to store $broadcastId in BlockManager", category = "BROADCAST")
                 }
               }
 
