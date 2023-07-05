@@ -20,13 +20,10 @@ package org.apache.spark.sql.execution.benchmark
 import java.util.Locale
 
 
-class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
-  var dataLocation: String = sys.env.getOrElse("SPARK_TPCDS_DATA", null)
+class TPCQueryBenchmarkArguments(val args: Array[String]) {
+  var dataLocation: String = sys.env.getOrElse("SPARK_TPC_DATA", null)
   var queryFilter: Set[String] = Set.empty
   var cboEnabled: Boolean = false
-
-  parseArgs(args.toList)
-  validateArguments()
 
   private def optionMatch(optionName: String, s: String): Boolean = {
     optionName == s.toLowerCase(Locale.ROOT)
@@ -63,15 +60,15 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
     System.err.println("""
       |Usage: spark-submit --class <this class> <spark sql test jar> [Options]
       |Options:
-      |  --data-location      Path to TPCDS data
+      |  --data-location      Path to TPCDS/H data
       |  --query-filter       Queries to filter, e.g., q3,q5,q13
       |  --cbo                Whether to enable cost-based optimization
       |
       |------------------------------------------------------------------------------------------------------------------
       |In order to run this benchmark, please follow the instructions at
       |https://github.com/databricks/spark-sql-perf/blob/master/README.md
-      |to generate the TPCDS data locally (preferably with a scale factor of 5 for benchmarking).
-      |Thereafter, the value of <TPCDS data location> needs to be set to the location where the generated data is stored.
+      |to generate the TPCDS/H data locally (preferably with a scale factor of 5 for benchmarking).
+      |Thereafter, the value of <TPCDS/H data location> needs to be set to the location where the generated data is stored.
       """.stripMargin)
     // scalastyle:on
     System.exit(exitCode)
