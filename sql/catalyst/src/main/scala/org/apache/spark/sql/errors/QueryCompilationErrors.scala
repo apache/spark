@@ -52,7 +52,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotObtainCompanionObjectInstance(functionName: String): Throwable = {
     SparkException.internalError(s"Cannot obtain companion object for " +
-      s"function expression: $functionName. Companion must be top-level object.")
+      s"function expression: $functionName. Please note that this companion must be a top-level object.")
   }
 
   def multipleFunctionSignatures(functionName: String,
