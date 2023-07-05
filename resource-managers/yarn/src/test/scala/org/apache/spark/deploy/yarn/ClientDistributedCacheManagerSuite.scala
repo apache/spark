@@ -59,10 +59,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
     *  statCache.
     * */
     def isPublicResultCached(uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
-      statCache.get(uri) match {
-        case Some(_) => true
-        case None => false
-      }
+      statCache.contains(uri)
     }
   }
 
@@ -81,7 +78,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
   }
 
   test("SPARK-44272: test getParentURI") {
-    val distMgr = new CustomizedClientDistributedCacheManager()
+    val distMgr = new ClientDistributedCacheManager()
     val scheme = "file"
     val userInfo = "user"
     val host = "foo.com"
