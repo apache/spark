@@ -16,10 +16,11 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.util.SparkClassUtils
-
 import java.util.concurrent.atomic.AtomicReference
+
 import scala.util.Try
+
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Configuration for all objects that are placed in the `sql/api` project. The normal way of
