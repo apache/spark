@@ -22,6 +22,7 @@ import scala.util.{Failure, Success}
 
 import org.scalatest.concurrent.Eventually._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.util.ThreadUtils
 
@@ -85,11 +86,11 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       }
       finished
     }
-    val e1 = intercept[io.grpc.StatusRuntimeException] {
+    val e1 = intercept[SparkException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
     assert(e1.getMessage.contains("cancelled"), s"Unexpected exception: $e1")
-    val e2 = intercept[io.grpc.StatusRuntimeException] {
+    val e2 = intercept[SparkException] {
       spark.range(10).map(n => { Thread.sleep(30.seconds.toMillis); n }).collect()
     }
     assert(e2.getMessage.contains("cancelled"), s"Unexpected exception: $e2")
