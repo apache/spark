@@ -434,14 +434,12 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
   }
 
   test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
-    // TODO(SPARK-43416): Recursively rename the position based tuple to the schema name from the
-    //  server.
     val ds = Seq(1, 2, 3).toDS()
-    assert(ds.groupByKey(x => x).count().schema.head.name == "_1")
+    assert(ds.groupByKey(x => x).count().schema.head.name == "key")
 
     // Enable legacy flag to follow previous Spark behavior
     withSQLConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue" -> "true") {
-      assert(ds.groupByKey(x => x).count().schema.head.name == "_1")
+      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
     }
   }
 
