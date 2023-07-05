@@ -133,7 +133,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
       Files.move(serverLocalStagingPath, target)
       if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
         jarsList.add(target)
-        jarsURI.add(artifactURI + "/" + target.toString)
+        jarsURI.add(artifactURI + "/" + remoteRelativePath.toString)
       } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         sessionHolder.session.sparkContext.addFile(target.toString)
         val stringRemotePath = remoteRelativePath.toString
@@ -188,7 +188,7 @@ class SparkConnectArtifactManager(sessionHolder: SessionHolder) extends Logging 
     blockManager.removeCache(sessionHolder.userId, sessionHolder.sessionId)
 
     // Clean up artifacts folder
-    FileUtils.deleteDirectory(artifactRootPath.toFile)
+    FileUtils.deleteDirectory(artifactPath.toFile)
   }
 
   private[connect] def uploadArtifactToFs(
