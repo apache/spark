@@ -296,7 +296,10 @@ class ChannelBuilder:
             or "_SPARK_CONNECT_PYTHON" when not specified.
             The returned value will be percent encoded.
         """
-        user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        user_agent = self.params.get(
+            ChannelBuilder.PARAM_USER_AGENT,
+            os.getenv("SPARK_CONNECT_USER_AGENT", "_SPARK_CONNECT_PYTHON"),
+        )
         ua_len = len(urllib.parse.quote(user_agent))
         if ua_len > 2048:
             raise SparkConnectException(
