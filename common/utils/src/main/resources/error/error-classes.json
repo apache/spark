@@ -1789,7 +1789,7 @@
   },
   "NAMED_ARGUMENTS_NOT_SUPPORTED" : {
     "message" : [
-      "Named arguments are not supported for function <functionName>; please retry the query with positional arguments to the function call instead or enable the feature using the SQL config \"spark.sql.allowNamedFunctionArguments\"."
+      "Named arguments are not supported for function <functionName>; please retry the query with positional arguments to the function call instead."
     ],
     "sqlState" : "4274K"
   },

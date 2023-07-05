@@ -77,6 +77,30 @@ Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_ske
 
 
 -- !query
+SELECT hex(count_min_sketch(seed => 1, epsilon => 0.5d, confidence => 0.5d, column => t2d)) FROM t2
+-- !query analysis
+Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_sketch(t2d, 0.5, 0.5, 1))#x]
++- SubqueryAlias t2
+   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+            +- SubqueryAlias t2
+               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+
+
+-- !query
+SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2
+-- !query analysis
+Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_sketch(t2d, 0.5, 0.5, 1))#x]
++- SubqueryAlias t2
+   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+      +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+         +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+            +- SubqueryAlias t2
+               +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+
+
+-- !query
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -168,8 +192,8 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
-    "arguments" : "`str`\n`upperChar`\n`otherChar`\n",
-    "functionName" : "`mask`"
+    "functionName" : "`mask`",
+    "proposal" : "`str` `upperChar` `otherChar` "
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -325,16 +325,21 @@ object Mask extends SupportsNamedArguments {
   override def functionSignatures: Seq[FunctionSignature] = {
     val strArg = NamedArgument("str", FixedArgumentType(StringType))
     val upperCharArg = NamedArgument(
-      name = "upperChar",
-      dataType = FixedArgumentType(StringType),
-      ...
-      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_UPPERCASE)))
-    val lowerCharArg = NamedArgument("lowerChar",
-      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_LOWERCASE)))
-    val digitCharArg = NamedArgument("digitChar",
-      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_DIGIT)))
-    val otherCharArg = NamedArgument("otherChar",
-      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_IGNORE)))
+      "upperChar",
+      FixedArgumentType(StringType),
+      Some(Literal(Mask.MASKED_UPPERCASE)))
+    val lowerCharArg = NamedArgument(
+      "lowerChar",
+      FixedArgumentType(StringType),
+      Some(Literal(Mask.MASKED_LOWERCASE)))
+    val digitCharArg = NamedArgument(
+      "digitChar",
+      FixedArgumentType(StringType),
+      Some(Literal(Mask.MASKED_DIGIT)))
+    val otherCharArg = NamedArgument(
+      "otherChar",
+      FixedArgumentType(StringType),
+      Some(Literal(Mask.MASKED_IGNORE)))
     val functionSignature: FunctionSignature = FunctionSignature(Seq(
       strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
     Seq(functionSignature)

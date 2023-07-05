@@ -101,13 +101,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     val recommendations = orderSuggestedIdentifiersBySimilarity(argumentName, inputs)
       .take(3)
     var candidatesString = ""
-    recommendations.foreach(candidatesString += _ + "\n")
+    recommendations.foreach(candidatesString += _ + " ")
     new AnalysisException(
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argumentName" -> toSQLId(argumentName),
-        "arguments" -> candidatesString)
+        "proposal" -> candidatesString)
     )
   }
 

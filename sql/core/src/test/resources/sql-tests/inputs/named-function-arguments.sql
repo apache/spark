@@ -22,6 +22,8 @@ create temporary view t2 as select * from values
   as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i);
 
 SELECT hex(count_min_sketch(t2d, seed => 1, epsilon => 0.5d, confidence => 0.5d)) FROM t2;
+SELECT hex(count_min_sketch(seed => 1, epsilon => 0.5d, confidence => 0.5d, column => t2d)) FROM t2;
+SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2;
 
 -- Unexpected positional argument
 SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o', digitChar => 'd');
