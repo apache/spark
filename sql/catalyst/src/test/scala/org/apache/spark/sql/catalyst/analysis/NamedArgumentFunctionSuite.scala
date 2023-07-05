@@ -170,7 +170,7 @@ class NamedArgumentFunctionSuite extends AnalysisTest {
       exception = parseExternalException[IllegalExpression](args, "foo"),
       errorClass = "INTERNAL_ERROR",
       parameters = Map("message" -> ("Cannot obtain companion object for function expression:" +
-        " foo. Companion must be top-level object."))
+        " foo. Please note that this companion must be a top-level object."))
     )
   }
 
