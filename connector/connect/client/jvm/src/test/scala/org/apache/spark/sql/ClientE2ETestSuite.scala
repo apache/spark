@@ -392,7 +392,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     checkFragments(result, fragmentsToCheck)
   }
 
-  private val simpleSchema = new StructType().add("value", "long", nullable = true)
+  private val simpleSchema = new StructType().add("id", "long", nullable = false)
 
   // Dataset tests
   test("Dataset inspection") {
@@ -403,15 +403,15 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(!df.isLocal)
     assert(local.isLocal)
     assert(!df.isStreaming)
-    assert(df.toString.contains("[value: bigint]"))
+    assert(df.toString.contains("[id: bigint]"))
     assert(df.inputFiles.isEmpty)
   }
 
   test("Dataset schema") {
     val df = spark.range(10)
     assert(df.schema === simpleSchema)
-    assert(df.dtypes === Array(("value", "LongType")))
-    assert(df.columns === Array("value"))
+    assert(df.dtypes === Array(("id", "LongType")))
+    assert(df.columns === Array("id"))
     testCapturedStdOut(df.printSchema(), simpleSchema.treeString)
     testCapturedStdOut(df.printSchema(5), simpleSchema.treeString(5))
   }
