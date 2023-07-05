@@ -4697,7 +4697,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "errorClass" : "MISMATCH_NUMBER_FORMAT",
   "messageParameters" : {
     "format" : "99G999G999",
     "input" : "-34,338,492",
@@ -4797,7 +4797,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2278",
+  "errorClass" : "MISMATCH_NUMBER_FORMAT",
   "messageParameters" : {
     "format" : "999G999",
     "input" : "123456",

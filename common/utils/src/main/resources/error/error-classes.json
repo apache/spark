@@ -128,6 +128,11 @@
     ],
     "sqlState" : "22546"
   },
+  "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
+    "message" : [
+      "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
+    ]
+  },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
       "Cannot load class <className> when registering the function <functionName>, please make sure it is on the classpath."
@@ -785,6 +790,11 @@
   "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ]
+  },
+  "HIVE_WITH_ANSI_INTERVALS_IS_UNSUPPORTED" : {
+    "message" : [
+      "Hive table <tableName> with ANSI intervals is not supported."
     ]
   },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
@@ -1708,6 +1718,11 @@
     ],
     "sqlState" : "23K01"
   },
+  "MISMATCH_NUMBER_FORMAT" : {
+    "message" : [
+      "The input <valueType> '<input>' does not match the given number format: '<format>'."
+    ]
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -2081,6 +2096,11 @@
       "The <clause> clause may be used at most once per <operation> operation."
     ],
     "sqlState" : "42614"
+  },
+  "REPLACE_NESTED_COLUMN_IS_UNSUPPORTED" : {
+    "message" : [
+      "The replace function does not support nested column <colName>."
+    ]
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
@@ -5589,29 +5609,9 @@
       "<message>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2274" : {
-    "message" : [
-      "Nested field <colName> is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2275" : {
-    "message" : [
-      "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2276" : {
-    "message" : [
-      "Hive table <tableName> with ANSI intervals is not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2277" : {
     "message" : [
       "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2278" : {
-    "message" : [
-      "The input <valueType> '<input>' does not match the given number format: '<format>'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2315" : {

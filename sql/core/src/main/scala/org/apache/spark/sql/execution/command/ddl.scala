@@ -994,7 +994,7 @@ object DDLUtils extends Logging {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
           if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
-            throw hiveTableWithAnsiIntervalsError(table.identifier.toString)
+            throw hiveTableWithAnsiIntervalsError(toSQLId(table.identifier.nameParts))
           } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||

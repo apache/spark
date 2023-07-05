@@ -2592,14 +2592,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def nestedFieldUnsupportedError(colName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2274",
+      errorClass = "REPLACE_NESTED_COLUMN_IS_UNSUPPORTED",
       messageParameters = Map(
         "colName" -> colName))
   }
 
   def transformationsAndActionsNotInvokedByDriverError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2275",
+      errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       messageParameters = Map.empty,
       cause = null)
   }
@@ -2671,9 +2671,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "functionName" -> toSQLId("aes_encrypt")))
   }
 
-  def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
+  def hiveTableWithAnsiIntervalsError(
+      tableName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2276",
+      errorClass = "HIVE_WITH_ANSI_INTERVALS_IS_UNSUPPORTED",
       messageParameters = Map("tableName" -> tableName))
   }
 
@@ -2710,7 +2711,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def invalidNumberFormatError(
       valueType: String, input: String, format: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2278",
+      errorClass = "MISMATCH_NUMBER_FORMAT",
       messageParameters = Map(
         "valueType" -> valueType,
         "input" -> input,
