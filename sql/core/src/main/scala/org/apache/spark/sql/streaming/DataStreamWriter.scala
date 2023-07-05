@@ -30,7 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
@@ -293,6 +293,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val tableSpec = UnresolvedTableSpec(
         Map.empty[String, String],
         Some(source),
+        OptionList(Seq.empty),
         extraOptions.get("path"),
         None,
         None,
@@ -450,16 +451,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private[sql] def foreachImplementation(writer: ForeachWriter[Any],
-      encoder: ExpressionEncoder[Any] = null): DataStreamWriter[T] = {
+      encoder: Option[ExpressionEncoder[Any]] = None): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
       throw new IllegalArgumentException("foreach writer cannot be null")
     }
-    if (encoder != null) {
-      this.foreachWriterEncoder = encoder
-    }
+    encoder.foreach(e => this.foreachWriterEncoder = e)
     this
   }
 

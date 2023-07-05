@@ -50,10 +50,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, DecimalData, StringWrapper, TestData2}
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
+@SlowSQLTest
 class DataFrameSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -341,10 +343,13 @@ class DataFrameSuite extends QueryTest
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
-    val e = intercept[AnalysisException] {
-      df.select(explode($"*"))
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in expression 'explode'"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(explode($"*"))
+      },
+      errorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      parameters = Map("elem" -> "'*'", "prettyName" -> "expression `explode`")
+    )
   }
 
   test("explode on output of array-valued function") {
@@ -360,6 +365,20 @@ class DataFrameSuite extends QueryTest
     checkAnswer(
       df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
+  }
+
+  test("more than one generator in SELECT clause") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(explode($"a").as("a"), explode($"a").as("b"))
+      },
+      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+      parameters = Map(
+        "clause" -> "SELECT",
+        "num" -> "2",
+        "generators" -> "\"explode(a)\", \"explode(a)\""))
   }
 
   test("sort after generate with join=true") {
@@ -1829,25 +1848,34 @@ class DataFrameSuite extends QueryTest
 
         // error cases: insert into an RDD
         df.createOrReplaceTempView("rdd_base")
-        val e1 = intercept[AnalysisException] {
-          insertion.write.insertInto("rdd_base")
-        }
-        assert(e1.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            insertion.write.insertInto("rdd_base")
+          },
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          parameters = Map.empty
+        )
 
         // error case: insert into a logical plan that is not a LeafNode
         val indirectDS = pdf.select("_1").filter($"_1" > 5)
         indirectDS.createOrReplaceTempView("indirect_ds")
-        val e2 = intercept[AnalysisException] {
-          insertion.write.insertInto("indirect_ds")
-        }
-        assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            insertion.write.insertInto("indirect_ds")
+          },
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          parameters = Map.empty
+        )
 
         // error case: insert into an OneRowRelation
         Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
-        val e3 = intercept[AnalysisException] {
-          insertion.write.insertInto("one_row")
-        }
-        assert(e3.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        checkError(
+          exception = intercept[AnalysisException] {
+            insertion.write.insertInto("one_row")
+          },
+          errorClass = "UNSUPPORTED_INSERT.RDD_BASED",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -3612,6 +3640,14 @@ class DataFrameSuite extends QueryTest
   test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
+  }
+
+  test("SPARK-44206: Dataset.selectExpr scope Session.active") {
+    val _spark = spark.newSession()
+    _spark.conf.set("spark.sql.legacy.interval.enabled", "true")
+    val df1 = _spark.sql("select '2023-01-01'+ INTERVAL 1 YEAR as b")
+    val df2 = _spark.sql("select '2023-01-01' as a").selectExpr("a + INTERVAL 1 YEAR as b")
+    checkAnswer(df1, df2)
   }
 }
 

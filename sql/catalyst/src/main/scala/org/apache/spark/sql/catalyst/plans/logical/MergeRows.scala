@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.Instruction
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types.DataType
 
@@ -73,6 +74,15 @@ object MergeRows {
     override protected def withNewChildrenInternal(
         newChildren: IndexedSeq[Expression]): Expression = {
       copy(condition = newChildren.head, output = newChildren.tail)
+    }
+  }
+
+  case class Discard(condition: Expression) extends Instruction with UnaryLike[Expression] {
+    override def outputs: Seq[Seq[Expression]] = Seq.empty
+    override def child: Expression = condition
+
+    override protected def withNewChildInternal(newChild: Expression): Expression = {
+      copy(condition = newChild)
     }
   }
 

@@ -1654,7 +1654,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def selectExpr(exprs: String*): DataFrame = {
+  def selectExpr(exprs: String*): DataFrame = sparkSession.withActive {
     select(exprs.map { expr =>
       Column(sparkSession.sessionState.sqlParser.parseExpression(expr))
     }: _*)
@@ -4036,8 +4036,8 @@ class Dataset[T] private[sql](
   def write: DataFrameWriter[T] = {
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2312",
-        messageParameters = Map.empty)
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("write")))
     }
     new DataFrameWriter[T](this)
   }
@@ -4065,8 +4065,8 @@ class Dataset[T] private[sql](
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        errorClass = "_LEGACY_ERROR_TEMP_2311",
-        messageParameters = Map.empty)
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("writeTo")))
     }
     new DataFrameWriterV2[T](table, this)
   }

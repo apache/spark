@@ -21,11 +21,12 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.grpc.{Server, StatusRuntimeException}
+import io.grpc.Server
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
@@ -104,15 +105,18 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
 
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
-    assertThrows[StatusRuntimeException] {
+    assertThrows[SparkException] {
       client.analyze(request)
     }
   }
 
   test("SparkSession initialisation with connection string") {
-    val testPort = 16002
-    client = SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
-    startDummyServer(testPort)
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .build()
+
     val session = SparkSession.builder().client(client).create()
     val df = session.range(10)
     df.analyze // Trigger RPC
@@ -133,11 +137,17 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     TestPackURI(
       "sc://localhost:1234/",
       isCorrect = true,
-      client => testClientConnection(1234)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == 1234)
+      }),
     TestPackURI(
       "sc://localhost/;",
       isCorrect = true,
-      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+      }),
     TestPackURI("sc://host:123", isCorrect = true),
     TestPackURI(
       "sc://host:123/;user_id=a94",

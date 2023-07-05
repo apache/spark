@@ -118,7 +118,7 @@ class UserDefinedTableFunction:
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, func, self.returnType)
+        wrapped_func = _wrap_function(sc, func)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judtf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonTableFunction(
@@ -193,6 +193,7 @@ class UDTFRegistration:
         ... class PlusOne:
         ...     def eval(self, x: int):
         ...         yield x, x + 1
+        ...
         >>> _ = spark.udtf.register(name="plus_one", f=PlusOne)
         >>> spark.sql("SELECT * FROM plus_one(1)").collect()
         [Row(c1=1, c2=2)]

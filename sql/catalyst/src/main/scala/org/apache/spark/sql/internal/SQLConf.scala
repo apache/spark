@@ -321,6 +321,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
+    .doc("If true, Spark will turn on support for named parameters for all functions that has" +
+      " it implemented.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -1749,6 +1756,16 @@ object SQLConf {
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
     .createOptional
 
+  val FILES_MAX_PARTITION_NUM = buildConf("spark.sql.files.maxPartitionNum")
+    .doc("The suggested (not guaranteed) maximum number of split file partitions. If it is set, " +
+      "Spark will rescale each partition to make the number of partitions is close to this " +
+      "value if the initial number of partitions exceeds this value. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+    .version("3.5.0")
+    .intConf
+    .checkValue(v => v > 0, "The maximum number of partitions must be a positive integer.")
+    .createOptional
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -2162,6 +2179,15 @@ object SQLConf {
       .internal()
       .doc("When true, enable code-gen for FULL OUTER shuffled hash join.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.buildSideOuterShuffledHashJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for an OUTER shuffled hash join where outer side" +
+        " is the build side.")
+      .version("3.5.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2727,6 +2753,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
+    buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
+      .doc("When true, allows multiple table arguments for table-valued functions, " +
+        "receiving the cartesian product of all the rows of these tables.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION =
     buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
       .internal()
@@ -2831,8 +2865,9 @@ object SQLConf {
       .doc("When using Apache Arrow, use large variable width vectors for string and binary " +
         "types. Regular string and binary types have a 2GiB limit for a column in a single " +
         "record batch. Large variable types remove this limitation at the cost of higher memory " +
-        "usage per value.")
+        "usage per value. Note that this only works for DataFrame.mapInArrow.")
       .version("3.5.0")
+      .internal()
       .booleanConf
       .createWithDefault(false)
 
@@ -4509,6 +4544,8 @@ class SQLConf extends Serializable with Logging {
 
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
+  def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
+
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
@@ -4896,6 +4933,8 @@ class SQLConf extends Serializable with Logging {
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
+
+  def tvfAllowMultipleTableArguments: Boolean = getConf(TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED)
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 

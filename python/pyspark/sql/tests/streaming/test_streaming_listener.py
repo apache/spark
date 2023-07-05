@@ -19,6 +19,7 @@ import time
 import uuid
 from datetime import datetime
 
+from pyspark import Row
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.listener import (
     QueryStartedEvent,
@@ -51,21 +52,21 @@ class StreamingListenerTests(ReusedSQLTestCase):
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"
             ),
-            14,
+            15,
             msg,
         )
         self.assertEquals(
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryProgressEvent"
             ),
-            11,
+            12,
             msg,
         )
         self.assertEquals(
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryTerminatedEvent"
             ),
-            14,
+            15,
             msg,
         )
         self.assertEquals(
@@ -112,7 +113,15 @@ class StreamingListenerTests(ReusedSQLTestCase):
             self.spark.streams.addListener(test_listener)
 
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-            q = df.writeStream.format("noop").queryName("test").start()
+
+            # check successful stateful query
+            df_stateful = df.groupBy().count()  # make query stateful
+            q = (
+                df_stateful.writeStream.format("noop")
+                .queryName("test")
+                .outputMode("complete")
+                .start()
+            )
             self.assertTrue(q.isActive)
             time.sleep(10)
             q.stop()
@@ -123,6 +132,17 @@ class StreamingListenerTests(ReusedSQLTestCase):
             self.check_start_event(start_event)
             self.check_progress_event(progress_event)
             self.check_terminated_event(terminated_event)
+
+            # Check query terminated with exception
+            from pyspark.sql.functions import col, udf
+
+            bad_udf = udf(lambda x: 1 / 0)
+            q = df.select(bad_udf(col("value"))).writeStream.format("noop").start()
+            time.sleep(5)
+            q.stop()
+            self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
+            self.check_terminated_event(terminated_event, "ZeroDivisionError")
+
         finally:
             self.spark.streams.removeListener(test_listener)
 
@@ -131,7 +151,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(event, QueryStartedEvent))
         self.assertTrue(isinstance(event.id, uuid.UUID))
         self.assertTrue(isinstance(event.runId, uuid.UUID))
-        self.assertEquals(event.name, "test")
+        self.assertTrue(event.name is None or event.name == "test")
         try:
             datetime.strptime(event.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
         except ValueError:
@@ -142,14 +162,20 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertTrue(isinstance(event, QueryProgressEvent))
         self.check_streaming_query_progress(event.progress)
 
-    def check_terminated_event(self, event):
+    def check_terminated_event(self, event, exception=None, error_class=None):
         """Check QueryTerminatedEvent"""
         self.assertTrue(isinstance(event, QueryTerminatedEvent))
         self.assertTrue(isinstance(event.id, uuid.UUID))
         self.assertTrue(isinstance(event.runId, uuid.UUID))
-        # TODO: Needs a test for exception.
-        self.assertEquals(event.exception, None)
-        self.assertEquals(event.errorClassOnException, None)
+        if exception:
+            self.assertTrue(exception in event.exception)
+        else:
+            self.assertEquals(event.exception, None)
+
+        if error_class:
+            self.assertTrue(error_class in event.errorClassOnException)
+        else:
+            self.assertEquals(event.errorClassOnException, None)
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""
@@ -191,13 +217,15 @@ class StreamingListenerTests(ReusedSQLTestCase):
         )
         self.assertTrue(all(map(lambda v: isinstance(v, int), progress.durationMs.values())))
 
-        self.assertEquals(progress.eventTime, {})
+        self.assertTrue(all(map(lambda v: isinstance(v, str), progress.eventTime.values())))
 
         self.assertTrue(isinstance(progress.stateOperators, list))
+        self.assertTrue(len(progress.stateOperators) >= 1)
         for so in progress.stateOperators:
             self.check_state_operator_progress(so)
 
         self.assertTrue(isinstance(progress.sources, list))
+        self.assertTrue(len(progress.sources) >= 1)
         for so in progress.sources:
             self.check_source_progress(so)
 
@@ -298,6 +326,179 @@ class StreamingListenerTests(ReusedSQLTestCase):
         self.assertEqual(num_listeners + 1, len(self.spark.streams._jsqm.listListeners()))
         self.spark.streams.removeListener(test_listener)
         self.assertEqual(num_listeners, len(self.spark.streams._jsqm.listListeners()))
+
+    def test_query_started_event_fromJson(self):
+        start_event = """
+            {
+                "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
+                "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
+                "name" : null,
+                "timestamp" : "2023-06-09T18:13:29.741Z"
+            }
+        """
+        start_event = QueryStartedEvent.fromJson(json.loads(start_event))
+        self.check_start_event(start_event)
+        self.assertEqual(start_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(start_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIsNone(start_event.name)
+        self.assertEqual(start_event.timestamp, "2023-06-09T18:13:29.741Z")
+
+    def test_query_terminated_event_fromJson(self):
+        terminated_json = """
+            {
+                "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
+                "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
+                "exception" : "org.apache.spark.SparkException: Job aborted due to stage failure",
+                "errorClassOnException" : null}
+        """
+        terminated_event = QueryTerminatedEvent.fromJson(json.loads(terminated_json))
+        self.check_terminated_event(terminated_event, "SparkException")
+        self.assertEqual(terminated_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(terminated_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIn("SparkException", terminated_event.exception)
+        self.assertIsNone(terminated_event.errorClassOnException)
+
+    def test_streaming_query_progress_fromJson(self):
+        progress_json = """
+            {
+              "id" : "00000000-0000-0001-0000-000000000001",
+              "runId" : "00000000-0000-0001-0000-000000000002",
+              "name" : "test",
+              "timestamp" : "2016-12-05T20:54:20.827Z",
+              "batchId" : 2,
+              "numInputRows" : 678,
+              "inputRowsPerSecond" : 10.0,
+              "processedRowsPerSecond" : 5.4,
+              "batchDuration": 5,
+              "durationMs" : {
+                "getBatch" : 0
+              },
+              "eventTime" : {
+                "min" : "2016-12-05T20:54:20.827Z",
+                "avg" : "2016-12-05T20:54:20.827Z",
+                "watermark" : "2016-12-05T20:54:20.827Z",
+                "max" : "2016-12-05T20:54:20.827Z"
+              },
+              "stateOperators" : [ {
+                "operatorName" : "op1",
+                "numRowsTotal" : 0,
+                "numRowsUpdated" : 1,
+                "allUpdatesTimeMs" : 1,
+                "numRowsRemoved" : 2,
+                "allRemovalsTimeMs" : 34,
+                "commitTimeMs" : 23,
+                "memoryUsedBytes" : 3,
+                "numRowsDroppedByWatermark" : 0,
+                "numShufflePartitions" : 2,
+                "numStateStoreInstances" : 2,
+                "customMetrics" : {
+                  "loadedMapCacheHitCount" : 1,
+                  "loadedMapCacheMissCount" : 0,
+                  "stateOnCurrentVersionSizeBytes" : 2
+                }
+              } ],
+              "sources" : [ {
+                "description" : "source",
+                "startOffset" : 123,
+                "endOffset" : 456,
+                "latestOffset" : 789,
+                "numInputRows" : 678,
+                "inputRowsPerSecond" : 10.0,
+                "processedRowsPerSecond" : 5.4,
+                "metrics": {}
+              } ],
+              "sink" : {
+                "description" : "sink",
+                "numOutputRows" : -1,
+                "metrics": {}
+              },
+              "observedMetrics" : {
+                "event1" : {
+                  "c1" : 1,
+                  "c2" : 3.0
+                },
+                "event2" : {
+                  "rc" : 1,
+                  "min_q" : "hello",
+                  "max_q" : "world"
+                }
+              }
+            }
+        """
+        progress = StreamingQueryProgress.fromJson(json.loads(progress_json))
+
+        self.check_streaming_query_progress(progress)
+
+        # checks for progress
+        self.assertEqual(progress.id, uuid.UUID("00000000-0000-0001-0000-000000000001"))
+        self.assertEqual(progress.runId, uuid.UUID("00000000-0000-0001-0000-000000000002"))
+        self.assertEqual(progress.name, "test")
+        self.assertEqual(progress.timestamp, "2016-12-05T20:54:20.827Z")
+        self.assertEqual(progress.batchId, 2)
+        self.assertEqual(progress.numInputRows, 678)
+        self.assertEqual(progress.inputRowsPerSecond, 10.0)
+        self.assertEqual(progress.batchDuration, 5)
+        self.assertEqual(progress.durationMs, {"getBatch": 0})
+        self.assertEqual(
+            progress.eventTime,
+            {
+                "min": "2016-12-05T20:54:20.827Z",
+                "avg": "2016-12-05T20:54:20.827Z",
+                "watermark": "2016-12-05T20:54:20.827Z",
+                "max": "2016-12-05T20:54:20.827Z",
+            },
+        )
+        self.assertEqual(
+            progress.observedMetrics,
+            {
+                "event1": Row("c1", "c2")(1, 3.0),
+                "event2": Row("rc", "min_q", "max_q")(1, "hello", "world"),
+            },
+        )
+
+        # Check stateOperators list
+        self.assertEqual(len(progress.stateOperators), 1)
+        state_operator = progress.stateOperators[0]
+        self.assertTrue(isinstance(state_operator, StateOperatorProgress))
+        self.assertEqual(state_operator.operatorName, "op1")
+        self.assertEqual(state_operator.numRowsTotal, 0)
+        self.assertEqual(state_operator.numRowsUpdated, 1)
+        self.assertEqual(state_operator.allUpdatesTimeMs, 1)
+        self.assertEqual(state_operator.numRowsRemoved, 2)
+        self.assertEqual(state_operator.allRemovalsTimeMs, 34)
+        self.assertEqual(state_operator.commitTimeMs, 23)
+        self.assertEqual(state_operator.memoryUsedBytes, 3)
+        self.assertEqual(state_operator.numRowsDroppedByWatermark, 0)
+        self.assertEqual(state_operator.numShufflePartitions, 2)
+        self.assertEqual(state_operator.numStateStoreInstances, 2)
+        self.assertEqual(
+            state_operator.customMetrics,
+            {
+                "loadedMapCacheHitCount": 1,
+                "loadedMapCacheMissCount": 0,
+                "stateOnCurrentVersionSizeBytes": 2,
+            },
+        )
+
+        # Check sources list
+        self.assertEqual(len(progress.sources), 1)
+        source = progress.sources[0]
+        self.assertTrue(isinstance(source, SourceProgress))
+        self.assertEqual(source.description, "source")
+        self.assertEqual(source.startOffset, "123")
+        self.assertEqual(source.endOffset, "456")
+        self.assertEqual(source.latestOffset, "789")
+        self.assertEqual(source.numInputRows, 678)
+        self.assertEqual(source.inputRowsPerSecond, 10.0)
+        self.assertEqual(source.processedRowsPerSecond, 5.4)
+        self.assertEqual(source.metrics, {})
+
+        # Check sink
+        sink = progress.sink
+        self.assertTrue(isinstance(sink, SinkProgress))
+        self.assertEqual(sink.description, "sink")
+        self.assertEqual(sink.numOutputRows, -1)
+        self.assertEqual(sink.metrics, {})
 
 
 if __name__ == "__main__":

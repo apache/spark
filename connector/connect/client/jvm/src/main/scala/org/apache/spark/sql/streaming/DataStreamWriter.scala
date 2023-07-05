@@ -30,7 +30,6 @@ import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, ForeachWriter}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
@@ -215,15 +214,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
    * @since 3.5.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-    // TODO [SPARK-43761] Update this once resolved UnboundRowEncoder serialization issue.
-    // ds.encoder equal to UnboundRowEncoder means type parameter T is Row,
-    // which is not able to be serialized. Server will detect this and use default encoder.
-    val rowEncoder = if (ds.encoder != UnboundRowEncoder) {
-      ds.encoder
-    } else {
-      null
-    }
-    val serialized = Utils.serialize(ForeachWriterPacket(writer, rowEncoder))
+    val serialized = Utils.serialize(ForeachWriterPacket(writer, ds.encoder))
     val scalaWriterBuilder = proto.ScalarScalaUDF
       .newBuilder()
       .setPayload(ByteString.copyFrom(serialized))

@@ -525,10 +525,21 @@ class MetastoreDataSourcesSuite extends QueryTest
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
-          val e = intercept[AnalysisException] {
-              sparkSession.catalog.createTable("createdJsonTable", jsonFilePath.toString)
+          Seq("true", "false").foreach { caseSensitive =>
+            withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+              val e = intercept[AnalysisException] {
+                sparkSession.catalog.createTable("createdJsonTable", tempPath.toString)
+              }
+              val expectedTableName = s"`$SESSION_CATALOG_NAME`.`default`." + {
+                if (caseSensitive.toBoolean) {
+                  "`createdJsonTable`"
+                } else {
+                  "`createdjsontable`"
+                }
+              }
+              checkErrorTableAlreadyExists(e, expectedTableName)
             }
-          checkErrorTableAlreadyExists(e, s"`$SESSION_CATALOG_NAME`.`default`.`createdJsonTable`")
+          }
         }
 
         // Data should not be deleted.

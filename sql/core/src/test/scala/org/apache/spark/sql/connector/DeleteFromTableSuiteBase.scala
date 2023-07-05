@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -447,19 +447,6 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         checkAnswer(sql("SELECT * FROM temp"), Nil)
       }
     }
-  }
-
-  test("delete with nondeterministic conditions") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
-
-    val e = intercept[AnalysisException] {
-      sql(s"DELETE FROM $tableNameAsString WHERE id <= 1 AND rand() > 0.5")
-    }
-    assert(e.message.contains("nondeterministic expressions are only allowed"))
   }
 
   test("delete without condition executed as delete with filters") {

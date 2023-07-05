@@ -137,6 +137,15 @@ object functions {
     case s: Symbol => new Column(s.name)
     case _ => createLiteral(create(literal))
   }
+
+  /**
+   * Creates a struct with the given field names and values.
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Sort functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -521,6 +530,34 @@ object functions {
   def first(columnName: String): Column = first(Column(columnName))
 
   /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column): Column = Column.fn("first_value", e)
+
+  /**
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def first_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("first_value", e, ignoreNulls)
+
+  /**
    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated or
    * not, returns 1 for aggregated or 0 for not aggregated in the result set.
    *
@@ -733,6 +770,34 @@ object functions {
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column): Column = Column.fn("last_value", e)
+
+  /**
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @note
+   *   The function is non-deterministic because its results depends on the order of the rows
+   *   which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def last_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("last_value", e, ignoreNulls)
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -848,6 +913,25 @@ object functions {
    */
   def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column =
     Column.fn("percentile_approx", e, percentage, accuracy)
+
+  /**
+   * Aggregate function: returns the approximate `percentile` of the numeric column `col` which is
+   * the smallest value in the ordered `col` values (sorted from least to greatest) such that no
+   * more than `percentage` of `col` values is less than the value or equal to that value.
+   *
+   * If percentage is an array, each value must be between 0.0 and 1.0. If it is a single floating
+   * point value, it must be between 0.0 and 1.0.
+   *
+   * The accuracy parameter is a positive numeric literal which controls approximation accuracy at
+   * the cost of memory. Higher value of accuracy yields better accuracy, 1.0/accuracy is the
+   * relative error of the approximation.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
+    Column.fn("approx_percentile", e, percentage, accuracy)
+  }
 
   /**
    * Aggregate function: returns the product of all numerical elements in a group.
@@ -1100,6 +1184,128 @@ object functions {
    * @since 3.5.0
    */
   def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column): Column = Column.fn("any_value", e)
+
+  /**
+   * Aggregate function: returns some value of `e` for a group of rows. If `isIgnoreNull` is true,
+   * returns only non-null values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def any_value(e: Column, ignoreNulls: Column): Column =
+    Column.fn("any_value", e, ignoreNulls)
+
+  /**
+   * Aggregate function: returns the number of `TRUE` values for the expression.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_if(e: Column): Column = Column.fn("count_if", e)
+
+  /**
+   * Aggregate function: computes a histogram on numeric 'expr' using nb bins. The return value is
+   * an array of (x,y) pairs representing the centers of the histogram's bins. As the value of
+   * 'nb' is increased, the histogram approximation gets finer-grained, but may yield artifacts
+   * around outliers. In practice, 20-40 histogram bins appear to work well, with more bins being
+   * required for skewed or smaller datasets. Note that this function creates a histogram with
+   * non-uniform bin widths. It offers no guarantees in terms of the mean-squared-error of the
+   * histogram, but in practice is comparable to the histograms produced by the R/S-Plus
+   * statistical computing packages. Note: the output type of the 'x' field in the return value is
+   * propagated from the input value consumed in the aggregate function.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def histogram_numeric(e: Column, nBins: Column): Column =
+    Column.fn("histogram_numeric", e, nBins)
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def every(e: Column): Column = Column.fn("every", e)
+
+  /**
+   * Aggregate function: returns true if all values of `e` are true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_and(e: Column): Column = Column.fn("bool_and", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def some(e: Column): Column = Column.fn("some", e)
+
+  /**
+   * Aggregate function: returns true if at least one value of `e` is true.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bool_or(e: Column): Column = Column.fn("bool_or", e)
+
+  /**
+   * Aggregate function: returns the bitwise AND of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_and(e: Column): Column = Column.fn("bit_and", e)
+
+  /**
+   * Aggregate function: returns the bitwise OR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_or(e: Column): Column = Column.fn("bit_or", e)
+
+  /**
+   * Aggregate function: returns the bitwise XOR of all non-null input values, or null if none.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def bit_xor(e: Column): Column = Column.fn("bit_xor", e)
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def array_agg(e: Column): Column = Column.fn("array_agg", e)
+
+  /**
+   * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
+   * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
+   * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
+   * space.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
+    Column.fn("count_min_sketch", e, eps, confidence, seed)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1634,6 +1840,58 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
+   * input types are the same with the `+` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_add(left: Column, right: Column): Column = Column.fn("try_add", left, right)
+
+  /**
+   * Returns the mean calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_avg(e: Column): Column = Column.fn("try_avg", e)
+
+  /**
+   * Returns `dividend``/``divisor`. It always performs floating point division. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
+
+  /**
+   * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `*` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
+
+  /**
+   * Returns `left``-``right` and the result is null on overflow. The acceptable input types are
+   * the same with the `-` operator.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_subtract(left: Column, right: Column): Column = Column.fn("try_subtract", left, right)
+
+  /**
+   * Returns the sum calculated from values of a group and the result is null on overflow.
+   *
+   * @group math_funcs
+   * @since 3.5.0
+   */
+  def try_sum(e: Column): Column = Column.fn("try_sum", e)
+
+  /**
    * Creates a new struct column. If the input column is a column in a `DataFrame`, or a derived
    * column expression that is named (i.e. aliased), its name would be retained as the
    * StructField's name, otherwise, the newly generated StructField's name would be auto generated
@@ -1700,6 +1958,33 @@ object functions {
    * @since 3.4.0
    */
   def bitwise_not(e: Column): Column = Column.fn("~", e)
+
+  /**
+   * Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
+   * or NULL if the argument is NULL.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_count(e: Column): Column = Column.fn("bit_count", e)
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position. The positions are numbered
+   * from right to left, starting at zero. The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def bit_get(e: Column, pos: Column): Column = Column.fn("bit_get", e, pos)
+
+  /**
+   * Returns the value of the bit (0 or 1) at the specified position. The positions are numbered
+   * from right to left, starting at zero. The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.5.0
+   */
+  def getbit(e: Column, pos: Column): Column = Column.fn("getbit", e, pos)
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -2836,6 +3121,38 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the current catalog.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_catalog(): Column = Column.fn("current_catalog")
+
+  /**
+   * Returns the current database.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_database(): Column = Column.fn("current_database")
+
+  /**
+   * Returns the current schema.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_schema(): Column = Column.fn("current_schema")
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def current_user(): Column = Column.fn("current_user")
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value as a 32 character hex
    * string.
    *
@@ -2988,6 +3305,267 @@ object functions {
       columnName2: String,
       allowDifferentLgConfigK: Boolean): Column =
     hll_union(Column(columnName1), Column(columnName2), allowDifferentLgConfigK)
+
+  /**
+   * Returns the user name of current execution context.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def user(): Column = Column.fn("user")
+
+  /**
+   * Returns an universally unique identifier (UUID) string. The value is returned as a canonical
+   * UUID 36-character string.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def uuid(): Column = Column.fn("uuid")
+
+  /**
+   * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
+   * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
+   * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization
+   * vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12
+   * bytes for GCM. If not provided, a random vector will be generated and prepended to the
+   * output. Optional additional authenticated data (AAD) is only supported for GCM. If provided
+   * for encryption, the identical AAD value must be provided for decryption. The default mode is
+   * GCM.
+   *
+   * @param input
+   *   The binary value to encrypt.
+   * @param key
+   *   The passphrase to use to encrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param iv
+   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
+   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      iv: Column,
+      aad: Column): Column = Column.fn("aes_encrypt", input, key, mode, padding, iv, aad)
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column, iv: Column): Column =
+    Column.fn("aes_encrypt", input, key, mode, padding, iv)
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
+    Column.fn("aes_encrypt", input, key, mode, padding)
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column, mode: Column): Column =
+    Column.fn("aes_encrypt", input, key, mode)
+
+  /**
+   * Returns an encrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_encrypt(Column, Column, Column, Column, Column,
+   *   Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_encrypt(input: Column, key: Column): Column =
+    Column.fn("aes_encrypt", input, key)
+
+  /**
+   * Returns a decrypted value of `input` using AES in `mode` with `padding`. Key lengths of 16,
+   * 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB',
+   * 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional additional authenticated data (AAD) is
+   * only supported for GCM. If provided for encryption, the identical AAD value must be provided
+   * for decryption. The default mode is GCM.
+   *
+   * @param input
+   *   The binary value to decrypt.
+   * @param key
+   *   The passphrase to use to decrypt the data.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(
+      input: Column,
+      key: Column,
+      mode: Column,
+      padding: Column,
+      aad: Column): Column =
+    Column.fn("aes_encrypt", input, key, mode, padding, aad)
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
+    Column.fn("aes_encrypt", input, key, mode, padding)
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column, mode: Column): Column =
+    Column.fn("aes_encrypt", input, key, mode)
+
+  /**
+   * Returns a decrypted value of `input`.
+   *
+   * @see
+   *   `org.apache.spark.sql.functions.aes_decrypt(Column, Column, Column, Column, Column)`
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def aes_decrypt(input: Column, key: Column): Column =
+    Column.fn("aes_encrypt", input, key)
+
+  /**
+   * Returns a sha1 hash value as a hex string of the `col`.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def sha(col: Column): Column = Column.fn("sha", col)
+
+  /**
+   * Returns the length of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_length(): Column = Column.fn("input_file_block_length")
+
+  /**
+   * Returns the start offset of the block being read, or -1 if not available.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def input_file_block_start(): Column = Column.fn("input_file_block_start")
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def reflect(cols: Column*): Column = Column.fn("reflect", cols: _*)
+
+  /**
+   * Calls a method with reflection.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
+
+  /**
+   * Returns the Spark version. The string contains 2 fields, the first being a release version
+   * and the second being a git revision.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def version(): Column = Column.fn("version")
+
+  /**
+   * Return DDL-formatted type string for the data type of the input.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def typeof(col: Column): Column = Column.fn("typeof", col)
+
+  /**
+   * Separates `col1`, ..., `colk` into `n` rows. Uses column names col0, col1, etc. by default
+   * unless specified otherwise.
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(seed: Column): Column = Column.fn("random", seed)
+
+  /**
+   * Returns a random value with independent and identically distributed (i.i.d.) uniformly
+   * distributed values in [0, 1).
+   *
+   * @group misc_funcs
+   * @since 3.5.0
+   */
+  def random(): Column = Column.fn("random")
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -3203,6 +3781,39 @@ object functions {
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
   /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def rlike(str: Column, regexp: Column): Column = Column.fn("rlike", str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp(str: Column, regexp: Column): Column = Column.fn("regexp", str, regexp)
+
+  /**
+   * Returns true if `str` matches `regexp`, or false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_like(str: Column, regexp: Column): Column = Column.fn("regexp_like", str, regexp)
+
+  /**
+   * Returns a count of the number of times that the regular expression pattern `regexp` is
+   * matched in the string `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_count(str: Column, regexp: Column): Column = Column.fn("regexp_count", str, regexp)
+
+  /**
    * Extract a specific group matched by a Java regex, from the specified string column. If the
    * regex did not match, or the specified group did not match, an empty string is returned. if
    * the specified group index exceeds the group count of regex, an IllegalArgumentException will
@@ -3213,6 +3824,26 @@ object functions {
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column =
     Column.fn("regexp_extract", e, lit(exp), lit(groupIdx))
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and corresponding to the
+   * first regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column): Column =
+    Column.fn("regexp_extract_all", str, regexp)
+
+  /**
+   * Extract all strings in the `str` that match the `regexp` expression and corresponding to the
+   * regex group index.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_extract_all(str: Column, regexp: Column, idx: Column): Column =
+    Column.fn("regexp_extract_all", str, regexp, idx)
 
   /**
    * Replace all substrings of the specified string value that match regexp with rep.
@@ -3231,6 +3862,36 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
+
+  /**
+   * Returns the substring that matches the regular expression `regexp` within the string `str`.
+   * If the regular expression is not found, the result is null.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_substr(str: Column, regexp: Column): Column = Column.fn("regexp_substr", str, regexp)
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates the
+   * beginning position of the matched substring. Positions are 1-based, not 0-based. If no match
+   * is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column): Column = Column.fn("regexp_instr", str, regexp)
+
+  /**
+   * Searches a string for a regular expression and returns an integer that indicates the
+   * beginning position of the matched substring. Positions are 1-based, not 0-based. If no match
+   * is found, returns 0.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def regexp_instr(str: Column, regexp: Column, idx: Column): Column =
+    Column.fn("regexp_instr", str, regexp, idx)
 
   /**
    * Decodes a BASE64 encoded string column and returns it as a binary column. This is the reverse
@@ -3495,6 +4156,424 @@ object functions {
    */
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column, replace: Column): Column =
+    Column.fn("replace", src, search, replace)
+
+  /**
+   * Replaces all occurrences of `search` with `replace`.
+   *
+   * @param src
+   *   A column of string to be replaced
+   * @param search
+   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def replace(src: Column, search: Column): Column = Column.fn("replace", src, search)
+
+  /**
+   * Splits `str` by delimiter and return requested part of the split (1-based). If any input is
+   * null, returns null. if `partNum` is out of range of split parts, returns empty string. If
+   * `partNum` is 0, throws an error. If `partNum` is negative, the parts are counted backward
+   * from the end of the string. If the `delimiter` is an empty string, the `str` is not split.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def split_part(str: Column, delimiter: Column, partNum: Column): Column =
+    Column.fn("split_part", str, delimiter, partNum)
+
+  /**
+   * Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of
+   * byte array that starts at `pos` and is of length `len`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column, len: Column): Column =
+    Column.fn("substr", str, pos, len)
+
+  /**
+   * Returns the substring of `str` that starts at `pos`, or the slice of byte array that starts
+   * at `pos`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("parse_url", url, partToExtract)
+
+  /**
+   * Formats the arguments in printf-style and returns the result as a string column.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def printf(format: Column, arguments: Column*): Column =
+    Column.fn("format_string", lit(format) +: arguments: _*)
+
+  /**
+   * Decodes a `str` in 'application/x-www-form-urlencoded' format using a specific encoding
+   * scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_decode(str: Column): Column = Column.fn("url_decode", str)
+
+  /**
+   * Translates a string into 'application/x-www-form-urlencoded' format using a specific encoding
+   * scheme.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def url_encode(str: Column): Column = Column.fn("url_encode", str)
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `start`. The
+   * given `start` and return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column, start: Column): Column =
+    Column.fn("position", substr, str, start)
+
+  /**
+   * Returns the position of the first occurrence of `substr` in `str` after position `1`. The
+   * return value are 1-based.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def position(substr: Column, str: Column): Column =
+    Column.fn("position", substr, str)
+
+  /**
+   * Returns a boolean. The value is True if str ends with suffix. Returns NULL if either input
+   * expression is NULL. Otherwise, returns False. Both str or suffix must be of STRING or BINARY
+   * type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def endswith(str: Column, suffix: Column): Column =
+    Column.fn("endswith", str, suffix)
+
+  /**
+   * Returns a boolean. The value is True if str starts with prefix. Returns NULL if either input
+   * expression is NULL. Otherwise, returns False. Both str or prefix must be of STRING or BINARY
+   * type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def startswith(str: Column, prefix: Column): Column =
+    Column.fn("startswith", str, prefix)
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the
+   * result is equivalent to char(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char(n: Column): Column = Column.fn("char", n)
+
+  /**
+   * Removes the leading and trailing space characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column): Column = Column.fn("btrim", str)
+
+  /**
+   * Remove the leading and trailing `trim` characters from `str`.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def btrim(str: Column, trim: Column): Column = Column.fn("btrim", str, trim)
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column, f: Column): Column = Column.fn("try_to_binary", e, f)
+
+  /**
+   * This is a special version of `to_binary` that performs the same operation, but returns a NULL
+   * value instead of raising an error if the conversion cannot be performed.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_binary(e: Column): Column = Column.fn("try_to_binary", e)
+
+  /**
+   * Convert string `e` to a number based on the string format `format`. Returns NULL if the
+   * string `e` does not match the expected format. The format follows the same semantics as the
+   * to_number function.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def try_to_number(e: Column, format: Column): Column = Column.fn("try_to_number", e, format)
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data. The length of
+   * string data includes the trailing spaces. The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def char_length(str: Column): Column = Column.fn("char_length", str)
+
+  /**
+   * Returns the character length of string data or number of bytes of binary data. The length of
+   * string data includes the trailing spaces. The length of binary data includes binary zeros.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def character_length(str: Column): Column = Column.fn("character_length", str)
+
+  /**
+   * Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the
+   * result is equivalent to chr(n % 256)
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def chr(n: Column): Column = Column.fn("chr", n)
+
+  /**
+   * Returns a boolean. The value is True if right is found inside left. Returns NULL if either
+   * input expression is NULL. Otherwise, returns False. Both left or right must be of STRING or
+   * BINARY type.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def contains(left: Column, right: Column): Column = Column.fn("contains", left, right)
+
+  /**
+   * Returns the `n`-th input, e.g., returns `input2` when `n` is 2. The function returns NULL if
+   * the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false. If
+   * `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException for invalid
+   * indices.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def elt(inputs: Column*): Column = Column.fn("elt", inputs: _*)
+
+  /**
+   * Returns the index (1-based) of the given string (`str`) in the comma-delimited list
+   * (`strArray`). Returns 0, if the string was not found or if the given string (`str`) contains
+   * a comma.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def find_in_set(str: Column, strArray: Column): Column = Column.fn("find_in_set", str, strArray)
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`, null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("like", str, pattern, escapeChar)
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\'), null if any arguments are null,
+   * false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def like(str: Column, pattern: Column): Column = Column.fn("like", str, pattern)
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar` case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column, escapeChar: Column): Column =
+    Column.fn("ilike", str, pattern, escapeChar)
+
+  /**
+   * Returns true if str matches `pattern` with `escapeChar`('\') case-insensitively, null if any
+   * arguments are null, false otherwise.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ilike(str: Column, pattern: Column): Column = Column.fn("ilike", str, pattern)
+
+  /**
+   * Returns `str` with all characters changed to lowercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def lcase(str: Column): Column = Column.fn("lcase", str)
+
+  /**
+   * Returns `str` with all characters changed to uppercase.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def ucase(str: Column): Column = Column.fn("ucase", str)
+
+  /**
+   * Returns the leftmost `len`(`len` can be string type) characters from the string `str`, if
+   * `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def left(str: Column, len: Column): Column = Column.fn("left", str, len)
+
+  /**
+   * Returns the rightmost `len`(`len` can be string type) characters from the string `str`, if
+   * `len` is less or equal than 0 the result is an empty string.
+   *
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def right(str: Column, len: Column): Column = Column.fn("right", str, len)
+
+  /**
+   * Masks the given string value. The function replaces characters with 'X' or 'x', and numbers
+   * with 'n'. This can be useful for creating copies of tables with sensitive information
+   * removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column): Column = Column.fn("mask", input)
+
+  /**
+   * Masks the given string value. The function replaces upper-case characters with specific
+   * character, lower-case characters with 'x', and numbers with 'n'. This can be useful for
+   * creating copies of tables with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column): Column =
+    Column.fn("mask", input, upperChar)
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters with
+   * specific characters, and numbers with 'n'. This can be useful for creating copies of tables
+   * with sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar)
+
+  /**
+   * Masks the given string value. The function replaces upper-case, lower-case characters and
+   * numbers with specific characters. This can be useful for creating copies of tables with
+   * sensitive information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar, digitChar)
+
+  /**
+   * Masks the given string value. This can be useful for creating copies of tables with sensitive
+   * information removed.
+   *
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param upperChar
+   *   character to replace upper-case characters with. Specify NULL to retain original character.
+   * @param lowerChar
+   *   character to replace lower-case characters with. Specify NULL to retain original character.
+   * @param digitChar
+   *   character to replace digit characters with. Specify NULL to retain original character.
+   * @param otherChar
+   *   character to replace all other characters with. Specify NULL to retain original character.
+   * @group string_funcs
+   * @since 3.5.0
+   */
+  def mask(
+      input: Column,
+      upperChar: Column,
+      lowerChar: Column,
+      digitChar: Column,
+      otherChar: Column): Column =
+    Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -3536,9 +4615,26 @@ object functions {
    * current_date within the same query return the same value.
    *
    * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def curdate(): Column = Column.fn("curdate")
+
+  /**
+   * Returns the current date at the start of query evaluation as a date column. All calls of
+   * current_date within the same query return the same value.
+   *
+   * @group datetime_funcs
    * @since 3.4.0
    */
   def current_date(): Column = Column.fn("current_date")
+
+  /**
+   * Returns the current session local timezone.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def current_timezone(): Column = Column.fn("current_timezone")
 
   /**
    * Returns the current timestamp at the start of query evaluation as a timestamp column. All
@@ -3548,6 +4644,14 @@ object functions {
    * @since 3.4.0
    */
   def current_timestamp(): Column = Column.fn("current_timestamp")
+
+  /**
+   * Returns the current timestamp at the start of query evaluation.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def now(): Column = Column.fn("now")
 
   /**
    * Returns the current timestamp without time zone at the start of query evaluation as a
@@ -3615,6 +4719,21 @@ object functions {
   def date_add(start: Column, days: Column): Column = Column.fn("date_add", start, days)
 
   /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days
+   *   A column of the number of days to add to `start`, can be negative to subtract days
+   * @return
+   *   A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def dateadd(start: Column, days: Column): Column = Column.fn("dateadd", start, days)
+
+  /**
    * Returns the date that is `days` days before `start`
    *
    * @param start
@@ -3669,6 +4788,37 @@ object functions {
   def datediff(end: Column, start: Column): Column = Column.fn("datediff", end, start)
 
   /**
+   * Returns the number of days from `start` to `end`.
+   *
+   * Only considers the date part of the input. For example:
+   * {{{
+   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * // returns 1
+   * }}}
+   *
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return
+   *   An integer, or null if either `end` or `start` were strings that could not be cast to a
+   *   date. Negative if `end` is before `start`
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_diff(end: Column, start: Column): Column = Column.fn("date_diff", end, start)
+
+  /**
+   * Create date from the number of `days` since 1970-01-01.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_from_unix_date(days: Column): Column = Column.fn("date_from_unix_date", days)
+
+  /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
@@ -3715,6 +4865,15 @@ object functions {
   def dayofmonth(e: Column): Column = Column.fn("dayofmonth", e)
 
   /**
+   * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @return
+   *   An integer, or null if the input was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def day(e: Column): Column = Column.fn("day", e)
+
+  /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
@@ -3731,6 +4890,56 @@ object functions {
    * @since 3.4.0
    */
   def hour(e: Column): Column = Column.fn("hour", e)
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def extract(field: Column, source: Column): Column = {
+    Column.fn("extract", field, source)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def date_part(field: Column, source: Column): Column = {
+    Column.fn("date_part", field, source)
+  }
+
+  /**
+   * Extracts a part of the date/timestamp or interval source.
+   *
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @return
+   *   a part of the date/timestamp or interval source
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def datepart(field: Column, source: Column): Column = {
+    Column.fn("datepart", field, source)
+  }
 
   /**
    * Returns the last day of the month which the given date belongs to. For example, input
@@ -3754,6 +4963,14 @@ object functions {
    * @since 3.4.0
    */
   def minute(e: Column): Column = Column.fn("minute", e)
+
+  /**
+   * Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def weekday(e: Column): Column = Column.fn("weekday", e)
 
   /**
    * @return
@@ -3980,6 +5197,27 @@ object functions {
    * @since 3.4.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
+
+  /**
+   * Parses the `s` with the `format` to a timestamp. The function always returns null on an
+   * invalid input with`/`without ANSI SQL mode enabled. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column, format: Column): Column =
+    Column.fn("try_to_timestamp", s, format)
+
+  /**
+   * Parses the `s` expression to a timestamp. The function always returns null on an invalid
+   * input with`/`without ANSI SQL mode enabled. It follows casting rules to a timestamp. The
+   * result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def try_to_timestamp(s: Column): Column = Column.fn("try_to_timestamp", s)
 
   /**
    * Converts the column into `DateType` by casting rules to `DateType`.
@@ -4369,6 +5607,22 @@ object functions {
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
   /**
+   * Creates timestamp from the number of milliseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_millis(e: Column): Column = Column.fn("timestamp_millis", e)
+
+  /**
+   * Creates timestamp from the number of microseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -4540,6 +5794,20 @@ object functions {
    * @since 3.4.0
    */
   def element_at(column: Column, value: Any): Column = Column.fn("element_at", column, lit(value))
+
+  /**
+   * (array, index) - Returns element of array at given (1-based) index. If Index is 0, Spark will
+   * throw an error. If index &lt; 0, accesses elements from the last to the first. The function
+   * always returns NULL if the index exceeds the length of the array.
+   *
+   * (map, key) - Returns value for given key. The function always returns NULL if the key is not
+   * contained in the map.
+   *
+   * @group map_funcs
+   * @since 3.5.0
+   */
+  def try_element_at(column: Column, value: Column): Column =
+    Column.fn("try_element_at", column, value)
 
   /**
    * Returns element of array at given (0-based) index. If the index points outside of the array
@@ -4928,6 +6196,55 @@ object functions {
    */
   def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
     aggregate(expr, initialValue, merge, c => c)
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array, and reduces this
+   * to a single state. The final state is converted into the final result by applying a finish
+   * function.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   * }}}
+   *
+   * @param expr
+   *   the input array column
+   * @param initialValue
+   *   the initial value
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value
+   * @param finish
+   *   combined_value => final_value, the lambda function to convert the combined value of all
+   *   inputs to final result
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(
+      expr: Column,
+      initialValue: Column,
+      merge: (Column, Column) => Column,
+      finish: Column => Column): Column =
+    Column.fn("reduce", expr, initialValue, createLambda(merge), createLambda(finish))
+
+  /**
+   * Applies a binary operator to an initial state and all elements in the array, and reduces this
+   * to a single state.
+   * {{{
+   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   * }}}
+   *
+   * @param expr
+   *   the input array column
+   * @param initialValue
+   *   the initial value
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def reduce(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
+    reduce(expr, initialValue, merge, c => c)
 
   /**
    * Merge two given arrays, element-wise, into a single array using a function. If one array is
@@ -5730,6 +7047,45 @@ object functions {
    */
   def to_csv(e: Column): Column = to_csv(e, Collections.emptyMap())
 
+  /**
+   * Returns the total number of elements in the array. The function returns null for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_size(e: Column): Column = Column.fn("array_size", e)
+
+  /**
+   * Returns length of array or map. This is an alias of `size` function.
+   *
+   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
+   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
+   * With the default settings, the function returns -1 for null input.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def cardinality(e: Column): Column = Column.fn("cardinality", e)
+
+  /**
+   * Returns the number of elements in the outermost JSON array. `NULL` is returned in case of any
+   * other valid JSON string, `NULL` or an invalid JSON.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_array_length(e: Column): Column = Column.fn("json_array_length", e)
+
+  /**
+   * Returns all the keys of the outermost JSON object as an array. If a valid JSON object is
+   * given, all the keys of the outermost object will be returned as an array. If it is any other
+   * valid JSON string, an invalid JSON string or an empty string, the function returns null.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Partition Transforms functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -5740,8 +7096,7 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def years(e: Column): Column =
-    Column.fn("years", e)
+  def years(e: Column): Column = Column.fn("years", e)
 
   /**
    * A transform for timestamps and dates to partition data into months.
@@ -5749,8 +7104,7 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def months(e: Column): Column =
-    Column.fn("months", e)
+  def months(e: Column): Column = Column.fn("months", e)
 
   /**
    * A transform for timestamps and dates to partition data into days.
@@ -5758,8 +7112,7 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def days(e: Column): Column =
-    Column.fn("days", e)
+  def days(e: Column): Column = Column.fn("days", e)
 
   /**
    * A transform for timestamps to partition data into hours.
@@ -5767,8 +7120,286 @@ object functions {
    * @group partition_transforms
    * @since 3.4.0
    */
-  def hours(e: Column): Column =
-    Column.fn("hours", e)
+  def hours(e: Column): Column = Column.fn("hours", e)
+
+  /**
+   * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
+   * `targetTz`.
+   *
+   * @param sourceTz
+   *   the time zone for the input timestamp. If it is missed, the current session time zone is
+   *   used as the source time zone.
+   * @param targetTz
+   *   the time zone to which the input timestamp should be converted.
+   * @param sourceTs
+   *   a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column =
+    Column.fn("convert_timezone", sourceTz, targetTz, sourceTs)
+
+  /**
+   * Converts the timestamp without time zone `sourceTs` from the current time zone to `targetTz`.
+   *
+   * @param targetTz
+   *   the time zone to which the input timestamp should be converted.
+   * @param sourceTs
+   *   a timestamp without time zone.
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def convert_timezone(targetTz: Column, sourceTs: Column): Column =
+    Column.fn("convert_timezone", targetTz, sourceTs)
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column =
+    Column.fn("make_dt_interval", days, hours, mins, secs)
+
+  /**
+   * Make DayTimeIntervalType duration from days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column, mins: Column): Column =
+    Column.fn("make_dt_interval", days, hours, mins)
+
+  /**
+   * Make DayTimeIntervalType duration from days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column, hours: Column): Column =
+    Column.fn("make_dt_interval", days, hours)
+
+  /**
+   * Make DayTimeIntervalType duration from days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(days: Column): Column =
+    Column.fn("make_dt_interval", days)
+
+  /**
+   * Make DayTimeIntervalType duration.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_dt_interval(): Column =
+    Column.fn("make_dt_interval")
+
+  /**
+   * Make interval from years, months, weeks, days, hours, mins and secs.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * Make interval from years, months, weeks, days, hours and mins.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours, mins)
+
+  /**
+   * Make interval from years, months, weeks, days and hours.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days, hours)
+
+  /**
+   * Make interval from years, months, weeks and days.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
+    Column.fn("make_interval", years, months, weeks, days)
+
+  /**
+   * Make interval from years, months and weeks.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column, weeks: Column): Column =
+    Column.fn("make_interval", years, months, weeks)
+
+  /**
+   * Make interval from years and months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column, months: Column): Column =
+    Column.fn("make_interval", years, months)
+
+  /**
+   * Make interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(years: Column): Column =
+    Column.fn("make_interval", years)
+
+  /**
+   * Make interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_interval(): Column =
+    Column.fn("make_interval")
+
+  /**
+   * Create timestamp from years, months, days, hours, mins, secs and timezone fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("make_timestamp", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Create timestamp from years, months, days, hours, mins and secs fields. The result data type
+   * is consistent with the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
+   * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
+   * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Create the current timestamp with local time zone from years, months, days, hours, mins and
+   * secs fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns
+   * NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs)
+
+  /**
+   * Create local date-time from years, months, days, hours, mins, secs fields. If the
+   * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
+   * Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Make year-month interval from years, months.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column, months: Column): Column =
+    Column.fn("make_ym_interval", years, months)
+
+  /**
+   * Make year-month interval from years.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(years: Column): Column = Column.fn("make_ym_interval", years)
+
+  /**
+   * Make year-month interval.
+   *
+   * @group datetime_funcs
+   * @since 3.5.0
+   */
+  def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
   /**
    * A transform for any type that partitions by a hash of the input column.
@@ -5787,6 +7418,59 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column =
     Column.fn("bucket", lit(numBuckets), e)
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // Predicates functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
+
+  /**
+   * Returns true if `col` is not null, or false otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
+
+  /**
+   * Returns same result as the EQUAL(=) operator for non-null operands, but returns true if both
+   * are null, false if one of the them is null.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
+
+  /**
+   * Returns null if `col1` equals to `col2`, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is null, or `col1` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
+
+  /**
+   * Returns `col2` if `col1` is not null, or `col3` otherwise.
+   *
+   * @group predicates_funcs
+   * @since 3.5.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions
