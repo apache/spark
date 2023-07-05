@@ -497,6 +497,12 @@ Failed parsing struct: `<raw>`.
 
 Failed to rename `<sourcePath>` to `<targetPath>` as destination already exists.
 
+### FIELDS_ALREADY_EXISTS
+
+SQLSTATE: none assigned
+
+Cannot `<op>` column, because `<fieldNames>` already exists in <struct>.
+
 ### FIELD_NOT_FOUND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1903,6 +1909,12 @@ You're using untyped Scala UDF, which does not have the input type information. 
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
+
+### UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED
+
+SQLSTATE: none assigned
+
+Cannot update `<table>` field `<fieldName>` type: update a struct by updating its fields.
 
 ### VIEW_ALREADY_EXISTS
 

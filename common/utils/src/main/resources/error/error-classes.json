@@ -729,6 +729,11 @@
     ],
     "sqlState" : "42K04"
   },
+  "FIELDS_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot <op> column, because <fieldNames> already exists in <struct>."
+    ]
+  },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
@@ -1357,6 +1362,16 @@
       "Invalid observed metrics."
     ],
     "subClass" : {
+      "AGGREGATE_EXPRESSION_WITH_DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "Aggregate expression with distinct are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED" : {
+        "message" : [
+          "Aggregate expression with filter predicate are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
       "MISSING_NAME" : {
         "message" : [
           "The observed metrics should be named: <operator>."
@@ -1365,6 +1380,11 @@
       "NESTED_AGGREGATES_UNSUPPORTED" : {
         "message" : [
           "Nested aggregates are not allowed in observed metrics, but found: <expr>."
+        ]
+      },
+      "NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE" : {
+        "message" : [
+          "Attribute <expr> can only be used as an argument to an aggregate function."
         ]
       },
       "NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC" : {
@@ -2927,6 +2947,11 @@
       "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.",
       "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.",
       "3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to \"true\" and use this API with caution."
+    ]
+  },
+  "UPDATE_FIELD_WITH_STRUCT_UNSUPPORTED" : {
+    "message" : [
+      "Cannot update <table> field <fieldName> type: update a struct by updating its fields."
     ]
   },
   "VIEW_ALREADY_EXISTS" : {
@@ -5650,31 +5675,6 @@
   "_LEGACY_ERROR_TEMP_2277" : {
     "message" : [
       "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2320" : {
-    "message" : [
-      "distinct aggregates are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2321" : {
-    "message" : [
-      "aggregates with filter predicate are not allowed in observed metrics, but found: <sqlExpr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2322" : {
-    "message" : [
-      "attribute <sqlExpr> can only be used as an argument to an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2323" : {
-    "message" : [
-      "Cannot <op> column, because <fieldNames> already exists in <struct>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2324" : {
-    "message" : [
-      "Cannot update <table> field <fieldName> type: update a struct by updating its fields."
     ]
   },
   "_LEGACY_ERROR_TEMP_2325" : {
