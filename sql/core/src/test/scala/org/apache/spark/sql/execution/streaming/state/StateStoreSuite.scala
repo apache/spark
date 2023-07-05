@@ -893,14 +893,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         provider.getStore(2)
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("Error reading delta file") &&
+      assert(e.getCause.getMessage.contains("Error reading streaming state file") &&
         e.getCause.getMessage.contains("does not exist"))
 
       e = intercept[SparkException] {
         getData(provider, 2)
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("Error reading delta file") &&
+      assert(e.getCause.getMessage.contains("Error reading streaming state file") &&
         e.getCause.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version

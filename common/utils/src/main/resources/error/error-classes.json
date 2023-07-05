@@ -153,6 +153,11 @@
           "Error reading snapshot file <fileToRead> of <clazz>: <message>"
         ]
       },
+      "CANNOT_READ_STREAMING_STATE_FILE" : {
+        "message" : [
+          "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
       "UNEXPECTED_FILE_SIZE" : {
         "message" : [
           "Copied <dfsFile> to <localFile>, expected <expectedSize> bytes, found <localFileSize> bytes."

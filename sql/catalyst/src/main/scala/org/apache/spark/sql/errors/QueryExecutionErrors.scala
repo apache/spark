@@ -2481,6 +2481,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
+  def failedToReadStreamingStateFileError(fileToRead: Path, f: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString()),
+      cause = f)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2260",
