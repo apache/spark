@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FixedArgumentType, FunctionSignature, NamedArgument, SupportsNamedArguments}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -275,7 +276,7 @@ case class Mask(
 
 case class MaskArgument(maskChar: Char, ignore: Boolean)
 
-object Mask {
+object Mask extends SupportsNamedArguments {
   // Default character to replace upper-case characters
   private val MASKED_UPPERCASE = 'X'
   // Default character to replace lower-case characters
@@ -319,5 +320,19 @@ object Mask {
       case Character.DECIMAL_DIGIT_NUMBER => maskedChar(c, maskDigit)
       case _ => maskedChar(c, maskOther)
     }
+  }
+  override def functionSignatures: Seq[FunctionSignature] = {
+    val strArg = NamedArgument("str", FixedArgumentType(StringType))
+    val upperCharArg = NamedArgument("upperChar",
+      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_UPPERCASE)))
+    val lowerCharArg = NamedArgument("lowerChar",
+      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_LOWERCASE)))
+    val digitCharArg = NamedArgument("digitChar",
+      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_DIGIT)))
+    val otherCharArg = NamedArgument("otherChar",
+      FixedArgumentType(StringType), Some(Literal(Mask.MASKED_IGNORE)))
+    val functionSignature: FunctionSignature = FunctionSignature(Seq(
+      strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
+    Seq(functionSignature)
   }
 }

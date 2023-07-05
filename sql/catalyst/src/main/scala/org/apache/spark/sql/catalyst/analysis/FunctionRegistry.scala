@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, OneRowRelation, Range, SupportsNamedArguments}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -880,7 +880,9 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val (expressionInfo, builder) = FunctionRegistryBase.build[T](name, since)
     val newBuilder = (expressions: Seq[Expression]) => {
-      val expr = builder(expressions)
+      val rearrangedExpressions =
+        SupportsNamedArguments.getRearrangedExpressions[T](expressions, name)
+      val expr = builder(rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
