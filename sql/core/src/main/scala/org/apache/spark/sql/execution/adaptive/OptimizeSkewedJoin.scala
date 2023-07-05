@@ -204,67 +204,66 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    */
   private def tryOptimizeBroadcastHashJoinStreamedPlan(
       shuffle: ShuffleQueryStageExec): Option[SparkPlan] = {
-    val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    shuffle.mapStats.flatMap(mapStats => {
-      val bytesByPartitionId = mapStats.bytesByPartitionId
-      val newPartitionsSpec = bytesByPartitionId.indices.flatMap { reduceIndex =>
-        val bytes = bytesByPartitionId(reduceIndex)
-        val shuffleId = mapStats.shuffleId
-        if (bytes > advisorySize) {
-          val newPartitionSpec = ShufflePartitionsUtil.createSkewPartitionSpecs(
-            shuffleId, reduceIndex, advisorySize)
-          if (newPartitionSpec.isEmpty) {
-            CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
-          } else {
-            logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
-              s"split it into ${newPartitionSpec.get.size} parts.")
-            newPartitionSpec.get
-          }
-        } else {
+    val mapStats = shuffle.mapStats.get
+    val bytesByPartitionId = mapStats.bytesByPartitionId
+    val medSize = Utils.median(bytesByPartitionId, false)
+    val skewThreshold = getSkewThreshold(medSize)
+    val streamedPlanTargetSize = targetSize(bytesByPartitionId, skewThreshold)
+
+    val newPartitionsSpec = bytesByPartitionId.indices.flatMap { reduceIndex =>
+      val bytes = bytesByPartitionId(reduceIndex)
+      val shuffleId = mapStats.shuffleId
+      if (bytes > skewThreshold) {
+        val newPartitionSpec = ShufflePartitionsUtil.createSkewPartitionSpecs(
+          shuffleId, reduceIndex, streamedPlanTargetSize)
+        if (newPartitionSpec.isEmpty) {
           CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
+        } else {
+          logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
+            s"split it into ${newPartitionSpec.get.size} parts.")
+          newPartitionSpec.get
         }
-      }
-      // return origin plan if we can not optimize partitions
-      if (newPartitionsSpec.length == bytesByPartitionId.length) {
-        None
       } else {
-        Some(SkewJoinChildWrapper(AQEShuffleReadExec(shuffle, newPartitionsSpec)))
+        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
       }
-    })
+    }
+    // return origin plan if we can not optimize partitions
+    if (newPartitionsSpec.length == bytesByPartitionId.length) {
+      None
+    } else {
+      Some(SkewJoinChildWrapper(AQEShuffleReadExec(shuffle, newPartitionsSpec)))
+    }
   }
 
-  def optimizeSkewJoin(plan: SparkPlan): SparkPlan = {
-    val localShuffleReaderEnabled = conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)
-    plan.transformUp {
-      case smj @ SortMergeJoinExec(_, _, joinType, _,
-          s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
-          s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
-        tryOptimizeJoinChildren(left, right, joinType).map {
-          case (newLeft, newRight) =>
-            smj.copy(
-              left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
-        }.getOrElse(smj)
+  def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case smj @ SortMergeJoinExec(_, _, joinType, _,
+        s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
+        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
+      tryOptimizeJoinChildren(left, right, joinType).map {
+        case (newLeft, newRight) =>
+          smj.copy(
+            left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
+      }.getOrElse(smj)
 
-      case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
-          ShuffleStage(left: ShuffleQueryStageExec),
-          ShuffleStage(right: ShuffleQueryStageExec), false) =>
-        tryOptimizeJoinChildren(left, right, joinType).map {
-          case (newLeft, newRight) =>
-            shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
-        }.getOrElse(shj)
+    case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
+        ShuffleStage(left: ShuffleQueryStageExec),
+        ShuffleStage(right: ShuffleQueryStageExec), false) =>
+      tryOptimizeJoinChildren(left, right, joinType).map {
+        case (newLeft, newRight) =>
+          shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
+      }.getOrElse(shj)
 
-      // Try to optimize BroadcastHashJoin skew when localShuffleReader is disabled.
-      case bhj @ BroadcastHashJoinExec(_, _, _, BuildRight, _,
-          ShuffleStage(left: ShuffleQueryStageExec), _, _) if !localShuffleReaderEnabled =>
-        tryOptimizeBroadcastHashJoinStreamedPlan(left).map {
-          case newLeft => bhj.copy(left = newLeft)
-        }.getOrElse(bhj)
-      case bhj @ BroadcastHashJoinExec(_, _, _, BuildLeft, _, _,
-          ShuffleStage(right: ShuffleQueryStageExec), _) if !localShuffleReaderEnabled =>
-        tryOptimizeBroadcastHashJoinStreamedPlan(right).map {
-          case newRight => bhj.copy(right = newRight)
-        }.getOrElse(bhj)
-    }
+    // Try to optimize BroadcastHashJoin skew when localShuffleReader is disabled.
+    case bhj @ BroadcastHashJoinExec(_, _, _, BuildRight, _,
+        ShuffleStage(left: ShuffleQueryStageExec), _, _, _) =>
+      tryOptimizeBroadcastHashJoinStreamedPlan(left).map {
+        case newLeft => bhj.copy(left = newLeft, isSkewJoin = true)
+      }.getOrElse(bhj)
+    case bhj @ BroadcastHashJoinExec(_, _, _, BuildLeft, _, _,
+        ShuffleStage(right: ShuffleQueryStageExec), _, _) =>
+      tryOptimizeBroadcastHashJoinStreamedPlan(right).map {
+        case newRight => bhj.copy(right = newRight, isSkewJoin = true)
+      }.getOrElse(bhj)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
