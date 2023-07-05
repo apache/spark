@@ -23,6 +23,7 @@ import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 import scala.util.Properties
 
 import org.apache.commons.io.output.ByteArrayOutputStream
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
@@ -50,26 +51,29 @@ class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
   }
 
   override def beforeAll(): Unit = {
-    super.beforeAll()
-    ammoniteOut = new ByteArrayOutputStream()
-    testSuiteOut = new PipedOutputStream()
-    // Connect the `testSuiteOut` and `ammoniteIn` pipes
-    ammoniteIn = new PipedInputStream(testSuiteOut)
-    errorStream = new ByteArrayOutputStream()
+    // TODO(SPARK-44121) Remove this check condition
+    if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      super.beforeAll()
+      ammoniteOut = new ByteArrayOutputStream()
+      testSuiteOut = new PipedOutputStream()
+      // Connect the `testSuiteOut` and `ammoniteIn` pipes
+      ammoniteIn = new PipedInputStream(testSuiteOut)
+      errorStream = new ByteArrayOutputStream()
 
-    val args = Array("--port", serverPort.toString)
-    val task = new Runnable {
-      override def run(): Unit = {
-        ConnectRepl.doMain(
-          args = args,
-          semaphore = Some(semaphore),
-          inputStream = ammoniteIn,
-          outputStream = ammoniteOut,
-          errorStream = errorStream)
+      val args = Array("--port", serverPort.toString)
+      val task = new Runnable {
+        override def run(): Unit = {
+          ConnectRepl.doMain(
+            args = args,
+            semaphore = Some(semaphore),
+            inputStream = ammoniteIn,
+            outputStream = ammoniteOut,
+            errorStream = errorStream)
+        }
       }
-    }
 
-    executorService.submit(task)
+      executorService.submit(task)
+    }
   }
 
   override def afterAll(): Unit = {
